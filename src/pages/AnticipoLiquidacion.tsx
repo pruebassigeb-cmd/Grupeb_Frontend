@@ -10,11 +10,8 @@ import {
 } from "../services/ventasservice";
 import type { Venta, VentaPago, MetodoPago } from "../types/ventas.types";
 
-// Estados reales en estado_administrativo_cat
-// 1 = Pendiente | 2 = En proceso (anticipo cubierto) | 6 = Pagado
 const ESTADO = { PENDIENTE: 1, EN_PROCESO: 2, PAGADO: 6 } as const;
 
-// ── helpers ───────────────────────────────────────────────────
 const fmt = (n: number) =>
   Number(n).toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -26,10 +23,9 @@ const fmtFecha = (iso: string) => {
   } catch { return iso; }
 };
 
-// Calcula el estado correcto basado en montos
 function calcularEstado(abono: number, anticipo: number, saldo: number): number {
-  if (saldo <= 0.01)        return ESTADO.PAGADO;
-  if (abono >= anticipo)    return ESTADO.EN_PROCESO;
+  if (saldo <= 0.01)     return ESTADO.PAGADO;
+  if (abono >= anticipo) return ESTADO.EN_PROCESO;
   return ESTADO.PENDIENTE;
 }
 
@@ -45,20 +41,20 @@ function EditarAntLiqReal({
   onClose:      () => void;
   onActualizar: (v: Venta) => void;
 }) {
-  const [monto,        setMonto]        = useState("");
-  const [metodoPagoId, setMetodoPagoId] = useState<number>(metodos[0]?.idmetodo_pago ?? 1);
-  const [esAnticipo,   setEsAnticipo]   = useState(false);
-  const [observacion,  setObservacion]  = useState("");
-  const [guardando,    setGuardando]    = useState(false);
-  const [eliminando,   setEliminando]   = useState<number | null>(null);
-  const [error,        setError]        = useState<string | null>(null);
+  const [monto,           setMonto]           = useState("");
+  const [metodoPagoId,    setMetodoPagoId]    = useState<number>(metodos[0]?.idmetodo_pago ?? 1);
+  const [esAnticipo,      setEsAnticipo]      = useState(false);
+  const [montoEsAnticipo, setMontoEsAnticipo] = useState(false);
+  const [observacion,     setObservacion]     = useState("");
+  const [guardando,       setGuardando]       = useState(false);
+  const [eliminando,      setEliminando]      = useState<number | null>(null);
+  const [error,           setError]           = useState<string | null>(null);
 
   const anticipo    = Number(venta.anticipo);
   const saldo       = Number(venta.saldo);
   const totalPagado = Number(venta.abono);
   const total       = Number(venta.total);
 
-  // Anticipo restante basado en total pagado
   const anticipoRestante = Math.max(anticipo - totalPagado, 0);
   const anticipoCubierto = anticipoRestante <= 0.01;
   const pagado           = saldo <= 0.01;
@@ -91,6 +87,7 @@ function EditarAntLiqReal({
       setMonto("");
       setObservacion("");
       setEsAnticipo(false);
+      setMontoEsAnticipo(false);
     } catch (e: any) {
       setError(e.response?.data?.error || "Error al registrar pago");
     } finally {
@@ -134,10 +131,10 @@ function EditarAntLiqReal({
       {/* Resumen financiero */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[
-          { label: "Subtotal",       value: fmt(venta.subtotal),           color: "text-gray-700"                 },
-          { label: "IVA 16%",        value: fmt(venta.iva),                color: "text-gray-500"                 },
-          { label: "Total con IVA",  value: fmt(total),                    color: "text-gray-900 font-bold"       },
-          { label: "Anticipo (50%)", value: fmt(anticipo),                 color: "text-blue-700 font-semibold"   },
+          { label: "Subtotal",       value: fmt(venta.subtotal),     color: "text-gray-700"               },
+          { label: "IVA 16%",        value: fmt(venta.iva),          color: "text-gray-500"               },
+          { label: "Total con IVA",  value: fmt(total),              color: "text-gray-900 font-bold"     },
+          { label: "Anticipo (50%)", value: fmt(anticipo),           color: "text-blue-700 font-semibold" },
         ].map(item => (
           <div key={item.label} className="bg-gray-50 rounded-xl p-3 text-center border border-gray-100">
             <p className="text-xs text-gray-400 mb-1">{item.label}</p>
@@ -153,7 +150,6 @@ function EditarAntLiqReal({
           <span className="text-sm font-bold text-gray-900">{pctPagado.toFixed(1)}%</span>
         </div>
         <div className="w-full bg-gray-200 rounded-full h-3 relative">
-          {/* Línea marcadora del anticipo (50%) */}
           <div className="absolute top-0 bottom-0 w-0.5 bg-blue-400 z-10" style={{ left: "50%" }} />
           <div
             className={`h-3 rounded-full transition-all duration-500 ${
@@ -254,9 +250,18 @@ function EditarAntLiqReal({
                   min="0.01"
                   step="0.01"
                   value={monto}
-                  onChange={e => setMonto(e.target.value)}
+                  readOnly={montoEsAnticipo}
+                  onChange={e => {
+                    setMonto(e.target.value);
+                    setEsAnticipo(false);
+                    setMontoEsAnticipo(false);
+                  }}
                   placeholder="0.00"
-                  className="w-full pl-7 pr-3 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white focus:ring-2 focus:ring-blue-400 text-sm"
+                  className={`w-full pl-7 pr-3 py-2 border border-gray-300 rounded-lg text-gray-900 focus:ring-2 focus:ring-blue-400 text-sm transition-colors ${
+                    montoEsAnticipo
+                      ? "bg-blue-50 border-blue-300 cursor-not-allowed"
+                      : "bg-white"
+                  }`}
                 />
               </div>
               {/* Accesos rápidos */}
@@ -264,7 +269,11 @@ function EditarAntLiqReal({
                 {!anticipoCubierto && (
                   <button
                     type="button"
-                    onClick={() => { setMonto(anticipoRestante.toFixed(2)); setEsAnticipo(true); }}
+                    onClick={() => {
+                      setMonto(anticipoRestante.toFixed(2));
+                      setEsAnticipo(true);
+                      setMontoEsAnticipo(true);
+                    }}
                     className="text-xs text-blue-600 hover:text-blue-800 underline"
                   >
                     Anticipo restante (${fmt(anticipoRestante)})
@@ -272,7 +281,11 @@ function EditarAntLiqReal({
                 )}
                 <button
                   type="button"
-                  onClick={() => setMonto(saldo.toFixed(2))}
+                  onClick={() => {
+                    setMonto(saldo.toFixed(2));
+                    setEsAnticipo(false);
+                    setMontoEsAnticipo(false);
+                  }}
                   className="text-xs text-emerald-600 hover:text-emerald-800 underline"
                 >
                   Saldo completo (${fmt(saldo)})
@@ -307,17 +320,20 @@ function EditarAntLiqReal({
             />
           </div>
 
-          {/* Checkbox anticipo — solo si no está cubierto */}
+          {/* Indicador de anticipo — solo visible/activo cuando vino del botón */}
           <div className="flex items-center justify-between">
             {!anticipoCubierto ? (
-              <label className="flex items-center gap-2 cursor-pointer">
+              <label className={`flex items-center gap-2 ${montoEsAnticipo ? "cursor-default" : "cursor-not-allowed opacity-40"}`}>
                 <input
                   type="checkbox"
                   checked={esAnticipo}
-                  onChange={e => setEsAnticipo(e.target.checked)}
+                  readOnly
+                  disabled={!montoEsAnticipo}
                   className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                 />
-                <span className="text-sm text-gray-600">Marcar como anticipo</span>
+                <span className={`text-sm ${montoEsAnticipo ? "text-blue-700 font-medium" : "text-gray-400"}`}>
+                  {montoEsAnticipo ? "✓ Anticipo" : "Anticipo"}
+                </span>
               </label>
             ) : (
               <span className="text-xs text-emerald-600 font-medium">
@@ -343,7 +359,6 @@ function EditarAntLiqReal({
           </div>
         </div>
       ) : (
-        /* Pedido pagado */
         <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-xl p-4">
           <svg className="w-6 h-6 text-emerald-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -420,7 +435,6 @@ export default function AnticipoLiquidacion() {
     );
   });
 
-  // Badge de estado usando la misma lógica que el backend
   const getEstadoBadge = (v: Venta) => {
     const abono    = Number(v.abono);
     const anticipo = Number(v.anticipo);
@@ -444,7 +458,6 @@ export default function AnticipoLiquidacion() {
       </div>
     );
 
-    // PENDIENTE
     return (
       <div className="flex flex-col gap-1">
         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">

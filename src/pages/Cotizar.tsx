@@ -222,7 +222,6 @@ export default function Cotizaciones() {
     });
   };
 
-  // ✅ FIX 1: Solo permite eliminar si NO está aprobada
   const handleEliminar = async (cot: Cotizacion) => {
     if (cot.estado === "Aprobada") return;
     if (!confirm("¿Estás seguro de eliminar esta cotización?")) return;
@@ -234,8 +233,16 @@ export default function Cotizaciones() {
 
   const handleEditar       = (cot: Cotizacion) => { setCotizacionEditando(cot); setModalEditarOpen(true); };
   const handleCerrarEditar = () => { setModalEditarOpen(false); setCotizacionEditando(null); };
-  const handleGuardarEdicion = (cot: Cotizacion) => {
-    setCotizaciones(prev => prev.map(c => c.no_cotizacion === cot.no_cotizacion ? cot : c));
+
+  // ✅ FIX: Si la cotización fue aprobada (se convirtió a pedido),
+  //         recargar desde el backend para que desaparezca de la tabla.
+  //         Si solo cambió estado (rechazada, pendiente), actualizar local.
+  const handleGuardarEdicion = async (cot: Cotizacion) => {
+    if (cot.tipo_documento === "pedido" || cot.estado === "Aprobada") {
+      await cargarCotizaciones();
+    } else {
+      setCotizaciones(prev => prev.map(c => c.no_cotizacion === cot.no_cotizacion ? cot : c));
+    }
     handleCerrarEditar();
   };
 
@@ -333,8 +340,7 @@ export default function Cotizaciones() {
                 <p className="mt-3 text-gray-500">Cargando cotizaciones...</p>
               </td></tr>
             ) : cotizacionesPagina.length > 0 ? cotizacionesPagina.map(cot => {
-              const expandida    = expandidas.has(cot.no_cotizacion);
-              // ✅ FIX 1: calcular si se puede eliminar
+              const expandida     = expandidas.has(cot.no_cotizacion);
               const puedeEliminar = cot.estado !== "Aprobada";
 
               return (
@@ -342,7 +348,6 @@ export default function Cotizaciones() {
                   <tr key={cot.no_cotizacion} className="hover:bg-gray-50">
                     <td className="px-6 py-4 text-sm font-semibold text-gray-900 whitespace-nowrap">
                       #{cot.no_cotizacion}
-                      {/* Badge si ya fue convertida a pedido */}
                       {cot.no_pedido && (
                         <span className="ml-2 text-xs text-blue-600 font-normal">→ Pedido #{cot.no_pedido}</span>
                       )}
@@ -380,8 +385,6 @@ export default function Cotizaciones() {
                         <button onClick={() => handleDescargarPdf(cot)} title="Descargar PDF" className="p-1.5 rounded-md text-green-600 hover:bg-green-50">
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
                         </button>
-
-                        {/* ✅ FIX 1: Deshabilitado y con tooltip si está aprobada */}
                         <button
                           onClick={() => puedeEliminar && handleEliminar(cot)}
                           title={puedeEliminar ? "Eliminar" : "No se puede eliminar una cotización aprobada"}
@@ -402,7 +405,6 @@ export default function Cotizaciones() {
                     <tr key={`det-${cot.no_cotizacion}`} className="bg-blue-50 border-t border-blue-100">
                       <td colSpan={8} className="px-8 py-4">
                         <div className="space-y-3">
-                          {/* ✅ FIX 2: Si está aprobada, solo mostrar detalles aprobados en el expandido */}
                           {cot.productos.map((p: any, i: number) => {
                             const detallesMostrar = cot.estado === "Aprobada"
                               ? p.detalles.filter((d: any) => d.aprobado === true)
