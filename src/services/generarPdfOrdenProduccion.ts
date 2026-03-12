@@ -8,25 +8,20 @@ export interface OrdenProduccionData {
   no_produccion:    string | null;
   fecha:            string;
   fecha_produccion: string | null;
-
-  // ✅ nuevo — fecha de aprobación individual del diseño
   fecha_aprobacion_diseno: string | null;
 
-  // Cliente
   cliente:   string;
   empresa:   string;
   telefono:  string;
   correo:    string;
   impresion: string | null;
 
-  // Producto
   nombre_producto: string;
   categoria:       string;
   material:        string;
   calibre:         string;
   medida:          string;
 
-  // Medidas individuales
   altura:        string;
   ancho:         string;
   fuelle_fondo:  string;
@@ -35,10 +30,8 @@ export interface OrdenProduccionData {
   refuerzo:      string;
   por_kilo:      string | null;
 
-  // Medidas para cálculo de rodillo
   medidas: Record<MedidaKey, string>;
 
-  // Características
   tintas:      number | null;
   caras:       number | null;
   bk:          boolean | null;
@@ -51,10 +44,12 @@ export interface OrdenProduccionData {
   asa_suaje:   string | null;
   observacion: string | null;
 
-  // Cantidad
   cantidad:      number | null;
   kilogramos:    number | null;
   modo_cantidad: string;
+
+  kilos_extruir?:  number | null;
+  metros_extruir?: number | null;
 }
 
 // ── Paleta ───────────────────────────────────────────────────
@@ -72,8 +67,8 @@ function celdaLabel(
   label: string,
   value: string,
   x: number, y: number, w: number, h: number,
-  labelSize = 5.5,
-  valueSize = 8,
+  labelSize = 8.25,   // 5.5 → 8.25
+  valueSize = 12,     // 8   → 12
   bold = false
 ) {
   doc.setDrawColor(...BLACK);
@@ -93,7 +88,7 @@ function celdaHeader(
   doc: jsPDF,
   label: string,
   x: number, y: number, w: number, h: number,
-  fontSize = 6.5
+  fontSize = 9.75   // 6.5 → 9.75
 ) {
   doc.setFillColor(...GRAY_DARK);
   doc.rect(x, y, w, h, "FD");
@@ -120,9 +115,9 @@ function bloqueOperativo(
   celdaHeader(doc, titulo, x, y, w, labelH);
 
   const dataY = y + labelH;
-  celdaLabel(doc, col1, "", x,            dataY, colW, filaH, 5.5, 8);
-  celdaLabel(doc, col2, "", x + colW,     dataY, colW, filaH, 5.5, 8);
-  celdaLabel(doc, col3, "", x + colW * 2, dataY, colW, filaH, 5.5, 8);
+  celdaLabel(doc, col1, "", x,            dataY, colW, filaH, 8.25, 12);
+  celdaLabel(doc, col2, "", x + colW,     dataY, colW, filaH, 8.25, 12);
+  celdaLabel(doc, col3, "", x + colW * 2, dataY, colW, filaH, 8.25, 12);
 
   const firmaY = dataY + filaH;
   const obsW   = w * 0.40;
@@ -133,13 +128,13 @@ function bloqueOperativo(
   doc.setLineWidth(0.2);
   doc.rect(x, firmaY, obsW, filaH);
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(5.5);
+  doc.setFontSize(8.25);   // 5.5 → 8.25
   doc.setTextColor(...GRAY_DARK);
   doc.text("Observación", x + 1.2, firmaY + 3.5);
   doc.setTextColor(...BLACK);
 
   doc.rect(x + obsW, firmaY, firmaW, filaH);
-  doc.setFontSize(5.5);
+  doc.setFontSize(8.25);   // 5.5 → 8.25
   doc.setTextColor(...GRAY_DARK);
   doc.text("Firma Encargado", x + obsW + firmaW / 2, firmaY + 3.5, { align: "center" });
   doc.setDrawColor(...GRAY_MED);
@@ -148,11 +143,66 @@ function bloqueOperativo(
 
   doc.setDrawColor(...BLACK);
   doc.rect(x + obsW + firmaW, firmaY, calW, filaH);
-  doc.setFontSize(5.5);
+  doc.setFontSize(8.25);   // 5.5 → 8.25
   doc.setTextColor(...GRAY_DARK);
   doc.text("Autorización Calidad", x + obsW + firmaW + calW / 2, firmaY + 3.5, { align: "center" });
   doc.setDrawColor(...GRAY_MED);
   doc.line(x + obsW + firmaW + 3, firmaY + filaH - 3, x + obsW + firmaW + calW - 3, firmaY + filaH - 3);
+  doc.setTextColor(...BLACK);
+}
+
+function bloqueExtrusionConMetros(
+  doc: jsPDF,
+  x: number, y: number, w: number, h: number,
+  kilos_extruir?: number | null,
+  metros_extruir?: number | null,
+) {
+  const labelH = 6;
+  const bodyH  = h - labelH;
+  const filaH  = bodyH / 2;
+  const colW   = w / 4;
+
+  celdaHeader(doc, "EXTRUSIÓN", x, y, w, labelH);
+
+  const dataY = y + labelH;
+
+  celdaLabel(doc, "Kilos a Extruir",    kilos_extruir  != null ? String(kilos_extruir)  : "", x,            dataY, colW, filaH, 8.25, 12, kilos_extruir  != null);
+  celdaLabel(doc, "Metros a Extruir",   metros_extruir != null ? String(metros_extruir) : "", x + colW,     dataY, colW, filaH, 8.25, 12, metros_extruir != null);
+  celdaLabel(doc, "Merma",              "",                                                   x + colW * 2, dataY, colW, filaH, 8.25, 12);
+  celdaLabel(doc, "Kilos p/ Impresión", "",                                                   x + colW * 3, dataY, colW, filaH, 8.25, 12);
+
+  const firmaY  = dataY + filaH;
+  const metExtW = w * 0.25;
+  const obsW    = w * 0.25;
+  const firmaW  = w * 0.25;
+  const calW    = w - metExtW - obsW - firmaW;
+
+  celdaLabel(doc, "Metros Extruidos", "", x, firmaY, metExtW, filaH, 8.25, 12);
+
+  doc.setDrawColor(...BLACK);
+  doc.setLineWidth(0.2);
+  doc.rect(x + metExtW, firmaY, obsW, filaH);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8.25);   // 5.5 → 8.25
+  doc.setTextColor(...GRAY_DARK);
+  doc.text("Observación", x + metExtW + 1.2, firmaY + 3.5);
+  doc.setTextColor(...BLACK);
+
+  doc.rect(x + metExtW + obsW, firmaY, firmaW, filaH);
+  doc.setFontSize(8.25);   // 5.5 → 8.25
+  doc.setTextColor(...GRAY_DARK);
+  doc.text("Firma Encargado", x + metExtW + obsW + firmaW / 2, firmaY + 3.5, { align: "center" });
+  doc.setDrawColor(...GRAY_MED);
+  doc.line(x + metExtW + obsW + 3, firmaY + filaH - 3, x + metExtW + obsW + firmaW - 3, firmaY + filaH - 3);
+  doc.setTextColor(...BLACK);
+
+  doc.setDrawColor(...BLACK);
+  doc.rect(x + metExtW + obsW + firmaW, firmaY, calW, filaH);
+  doc.setFontSize(8.25);   // 5.5 → 8.25
+  doc.setTextColor(...GRAY_DARK);
+  doc.text("Autorización Calidad", x + metExtW + obsW + firmaW + calW / 2, firmaY + 3.5, { align: "center" });
+  doc.setDrawColor(...GRAY_MED);
+  doc.line(x + metExtW + obsW + firmaW + 3, firmaY + filaH - 3, x + metExtW + obsW + firmaW + calW - 3, firmaY + filaH - 3);
   doc.setTextColor(...BLACK);
 }
 
@@ -197,7 +247,7 @@ export async function generarPdfOrdenProduccion(data: OrdenProduccionData): Prom
     doc.setLineWidth(0.2);
     doc.rect(sx, y, supW, supH);
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(6);
+    doc.setFontSize(9);   // 6 → 9
     doc.setTextColor(...GRAY_DARK);
     doc.text(s, sx + supW / 2, y + 4, { align: "center" });
     doc.setDrawColor(...GRAY_MED);
@@ -219,7 +269,7 @@ export async function generarPdfOrdenProduccion(data: OrdenProduccionData): Prom
   if (logoBase64) {
     try { doc.addImage(logoBase64, "PNG", M + 1, y + 1, logoW - 2, fila2H - 2); }
     catch {
-      doc.setFont("helvetica", "bold"); doc.setFontSize(14); doc.setTextColor(...BLACK);
+      doc.setFont("helvetica", "bold"); doc.setFontSize(21); doc.setTextColor(...BLACK);  // 14 → 21
       doc.text("EB", M + logoW / 2, y + fila2H / 2 + 2, { align: "center" });
     }
   }
@@ -227,7 +277,7 @@ export async function generarPdfOrdenProduccion(data: OrdenProduccionData): Prom
   const titleX = M + logoW;
   doc.rect(titleX, y, titleW, fila2H);
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(13);
+  doc.setFontSize(15);   // moderado — legible sin ser excesivo
   doc.setTextColor(...BLACK);
   doc.text("Orden de Producción de Plástico", titleX + titleW / 2, y + fila2H / 2 + 2, { align: "center" });
 
@@ -235,18 +285,18 @@ export async function generarPdfOrdenProduccion(data: OrdenProduccionData): Prom
   doc.rect(ordenX, y, ordenW, fila2H);
   doc.setFillColor(...GRAY_DARK);
   doc.rect(ordenX, y, ordenW, 5, "FD");
-  doc.setFont("helvetica", "bold"); doc.setFontSize(6.5); doc.setTextColor(...WHITE);
+  doc.setFont("helvetica", "bold"); doc.setFontSize(9.75); doc.setTextColor(...WHITE);  // 6.5 → 9.75
   doc.text("ORDEN", ordenX + ordenW / 2, y + 3.5, { align: "center" });
   doc.setTextColor(...BLACK);
-  doc.setFont("helvetica", "normal"); doc.setFontSize(5.5); doc.setTextColor(...GRAY_DARK);
+  doc.setFont("helvetica", "normal"); doc.setFontSize(8.25); doc.setTextColor(...GRAY_DARK);  // 5.5 → 8.25
   doc.text("No", ordenX + 2, y + 9);
-  doc.setFont("helvetica", "bold"); doc.setFontSize(10); doc.setTextColor(...BLACK);
+  doc.setFont("helvetica", "bold"); doc.setFontSize(15); doc.setTextColor(...BLACK);  // 10 → 15
   doc.text(f(data.no_produccion ?? `PED-${data.no_pedido}`), ordenX + ordenW / 2, y + 11, { align: "center" });
   doc.setDrawColor(...GRAY_MED); doc.setLineWidth(0.2);
   doc.line(ordenX, y + 13, ordenX + ordenW, y + 13);
-  doc.setFont("helvetica", "normal"); doc.setFontSize(5.5); doc.setTextColor(...GRAY_DARK);
+  doc.setFont("helvetica", "normal"); doc.setFontSize(8.25); doc.setTextColor(...GRAY_DARK);  // 5.5 → 8.25
   doc.text("FECHA", ordenX + 2, y + 16.5);
-  doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); doc.setTextColor(...BLACK);
+  doc.setFont("helvetica", "normal"); doc.setFontSize(11.25); doc.setTextColor(...BLACK);  // 7.5 → 11.25
   doc.text(formatFecha(data.fecha), ordenX + ordenW / 2, y + 19, { align: "center" });
 
   y += fila2H;
@@ -258,10 +308,10 @@ export async function generarPdfOrdenProduccion(data: OrdenProduccionData): Prom
   const priW   = CW * 0.18;
   const pedW   = CW - impW - entW - priW;
 
-  celdaLabel(doc, "Impresión",     f(data.impresion ?? data.cliente), M,                      y, impW, fila3H, 5.5, 7.5);
-  celdaLabel(doc, "Fecha Entrega", "",                                M + impW,               y, entW, fila3H, 5.5, 7.5);
-  celdaLabel(doc, "Prioridad",     "",                                M + impW + entW,        y, priW, fila3H, 5.5, 7.5);
-  celdaLabel(doc, "Pedido",        f(data.no_pedido),                 M + impW + entW + priW, y, pedW, fila3H, 5.5, 8, true);
+  celdaLabel(doc, "Impresión",     f(data.impresion ?? data.cliente), M,                      y, impW, fila3H, 8.25, 11.25);
+  celdaLabel(doc, "Fecha Entrega", "",                                M + impW,               y, entW, fila3H, 8.25, 11.25);
+  celdaLabel(doc, "Prioridad",     "",                                M + impW + entW,        y, priW, fila3H, 8.25, 11.25);
+  celdaLabel(doc, "Pedido",        f(data.no_pedido),                 M + impW + entW + priW, y, pedW, fila3H, 8.25, 12, true);
 
   y += fila3H;
 
@@ -279,17 +329,17 @@ export async function generarPdfOrdenProduccion(data: OrdenProduccionData): Prom
     ? data.cantidad.toLocaleString("es-MX")
     : "";
 
-  celdaLabel(doc, "Producto",  f(data.nombre_producto), M,                               y, prodW, fila4H, 5.5, 7.5);
-  celdaLabel(doc, "Cantidad",  cantDisplay,              M + prodW,                       y, cantW, fila4H, 5.5, 8, true);
-  celdaLabel(doc, "Medida",    f(data.medida),           M + prodW + cantW,               y, medW,  fila4H, 5.5, 7.5);
-  celdaLabel(doc, "Material",  f(data.material),         M + prodW + cantW + medW,        y, matW,  fila4H, 5.5, 7.5);
-  celdaLabel(doc, "Calibre",   f(data.calibre),          M + prodW + cantW + medW + matW, y, calW2, fila4H, 5.5, 8, true);
+  celdaLabel(doc, "Producto",  f(data.nombre_producto), M,                               y, prodW, fila4H, 8.25, 11.25);
+  celdaLabel(doc, "Cantidad",  cantDisplay,              M + prodW,                       y, cantW, fila4H, 8.25, 12, true);
+  celdaLabel(doc, "Medida",    f(data.medida),           M + prodW + cantW,               y, medW,  fila4H, 8.25, 11.25);
+  celdaLabel(doc, "Material",  f(data.material),         M + prodW + cantW + medW,        y, matW,  fila4H, 8.25, 11.25);
+  celdaLabel(doc, "Calibre",   f(data.calibre),          M + prodW + cantW + medW + matW, y, calW2, fila4H, 8.25, 12, true);
 
   y += fila4H;
 
   // ── FILA 5 — Asa / Suaje ──
   const fila5H = 9;
-  celdaLabel(doc, "Asa / Suaje", f(data.asa_suaje), M, y, CW, fila5H, 5.5, 7.5);
+  celdaLabel(doc, "Asa / Suaje", f(data.asa_suaje), M, y, CW, fila5H, 8.25, 11.25);
 
   y += fila5H;
 
@@ -304,20 +354,20 @@ export async function generarPdfOrdenProduccion(data: OrdenProduccionData): Prom
   doc.setLineWidth(0.2);
   doc.rect(M, y, repW, fila6H);
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(5.5);
+  doc.setFontSize(8.25);   // 5.5 → 8.25
   doc.setTextColor(...GRAY_DARK);
-  doc.text("Repetición", M + 1.2, y + 3.5);
+  doc.text("Repetición de Impresión", M + 1.2, y + 3.5);
   doc.setTextColor(...BLACK);
   if (repeticionStr) {
-    doc.setFontSize(5.5);
+    doc.setFontSize(8.25);   // 5.5 → 8.25
     doc.text(repeticionStr, M + repW / 2, y + fila6H - 2.5, {
       align: "center",
       maxWidth: repW - 2,
     });
   }
 
-  celdaLabel(doc, "Código",   "",                             M + repW,        y, codW, fila6H, 5.5, 7.5);
-  celdaLabel(doc, "Pantones", pantStr !== "—" ? pantStr : "", M + repW + codW, y, panW, fila6H, 5.5, 7.5);
+  celdaLabel(doc, "Código",   "",                             M + repW,        y, codW, fila6H, 8.25, 11.25);
+  celdaLabel(doc, "Pantones", pantStr !== "—" ? pantStr : "", M + repW + codW, y, panW, fila6H, 8.25, 11.25);
 
   y += fila6H;
 
@@ -334,7 +384,7 @@ export async function generarPdfOrdenProduccion(data: OrdenProduccionData): Prom
 
   let cx = M;
   medCols.forEach(col => {
-    celdaLabel(doc, col.label, col.value, cx, y, col.w, fila7H, 5.5, 8,
+    celdaLabel(doc, col.label, col.value, cx, y, col.w, fila7H, 8.25, 12,
       col.label === "Cantidad (kg)" || col.label === "Caras");
     cx += col.w;
   });
@@ -348,7 +398,7 @@ export async function generarPdfOrdenProduccion(data: OrdenProduccionData): Prom
   const bloqueH = 30;
   const bloqueY = y;
 
-  bloqueOperativo(doc, "EXTRUSIÓN",        "Kilos a Extruir",  "Merma", "Kilos p/ Impresión", M, y, colIzqW, bloqueH); y += bloqueH;
+  bloqueExtrusionConMetros(doc, M, y, colIzqW, bloqueH, data.kilos_extruir, data.metros_extruir); y += bloqueH;
   bloqueOperativo(doc, "IMPRESIÓN",        "Kilos Impresos",   "Merma", "Kilos p/ Bolseo",    M, y, colIzqW, bloqueH); y += bloqueH;
   bloqueOperativo(doc, "BOLSEO",           "Kilos Bolsear",    "Merma", "Producto Terminado", M, y, colIzqW, bloqueH); y += bloqueH;
   bloqueOperativo(doc, "PIEZAS RECIBIDAS", "Piezas Recibidas", "Merma", "Producto Terminado", M, y, colIzqW, bloqueH); y += bloqueH;
@@ -363,12 +413,11 @@ export async function generarPdfOrdenProduccion(data: OrdenProduccionData): Prom
   doc.rect(colDerX, bloqueY, colDerW, autDisenoH);
   celdaHeader(doc, "AUTORIZACIÓN DE DISEÑO", colDerX, bloqueY, colDerW, labelBloqH);
 
-  // ✅ Fecha de aprobación individual del diseño
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(5.5);
+  doc.setFontSize(8.25);   // 5.5 → 8.25
   doc.setTextColor(...GRAY_DARK);
   doc.text("Fecha aprobación:", colDerX + 3, bloqueY + labelBloqH + 7);
-  doc.setFontSize(7);
+  doc.setFontSize(10.5);   // 7 → 10.5
   doc.setTextColor(...BLACK);
   doc.text(
     formatFecha(data.fecha_aprobacion_diseno) || "—",
@@ -377,12 +426,11 @@ export async function generarPdfOrdenProduccion(data: OrdenProduccionData): Prom
     { align: "center" }
   );
 
-  doc.setFontSize(5.5);
+  doc.setFontSize(8.25);   // 5.5 → 8.25
   doc.setTextColor(...GRAY_DARK);
   doc.text("Observaciones:", colDerX + 3, bloqueY + labelBloqH + 21);
   doc.setTextColor(...BLACK);
 
-  // Línea de firma
   doc.setDrawColor(...GRAY_MED);
   doc.line(
     colDerX + 5,
@@ -390,7 +438,7 @@ export async function generarPdfOrdenProduccion(data: OrdenProduccionData): Prom
     colDerX + colDerW - 5,
     bloqueY + autDisenoH - 4
   );
-  doc.setFontSize(5.5);
+  doc.setFontSize(8.25);   // 5.5 → 8.25
   doc.setTextColor(...GRAY_MED);
   doc.text("Autorizó Diseño", colDerX + colDerW / 2, bloqueY + autDisenoH - 1, { align: "center" });
   doc.setTextColor(...BLACK);
@@ -405,7 +453,7 @@ export async function generarPdfOrdenProduccion(data: OrdenProduccionData): Prom
   // ── PIE DE PÁGINA ──
   const pieY = PH - M - 6;
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(6);
+  doc.setFontSize(9);   // 6 → 9
   doc.setTextColor(...GRAY_MED);
   const noOp = data.no_produccion ?? `Pedido #${data.no_pedido}`;
   doc.text("Generó Orden: Sistema",                  M,      pieY);

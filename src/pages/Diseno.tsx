@@ -3,6 +3,8 @@ import Modal from "../components/Modal";
 import { useState, useEffect } from "react";
 import { getDisenoByPedido, actualizarEstadoProductoDiseno } from "../services/disenoservice";
 import { getPedidos } from "../services/pedidosService";
+import { getOrdenProduccion } from "../services/seguimientoService";
+import { generarPdfOrdenProduccion } from "../services/generarPdfOrdenProduccion";
 import type { Diseno, DisenoProducto } from "../types/ventas.types";
 import type { Pedido } from "../types/cotizaciones.types";
 
@@ -22,6 +24,55 @@ function estadoLabel(estadoId: number): "pendiente" | "en_proceso" | "aprobado" 
   return "pendiente";
 }
 
+// ── Descarga PDF dado un folio ────────────────────────────────
+async function descargarPdfOrden(noPedido: number, noProduccion: string): Promise<void> {
+  const data = await getOrdenProduccion(noPedido);
+  const producto = data.productos.find((p: any) => p.no_produccion === noProduccion);
+  if (!producto) throw new Error(`Producto con folio ${noProduccion} no encontrado`);
+
+  await generarPdfOrdenProduccion({
+    no_pedido:               data.no_pedido,
+    no_produccion:           producto.no_produccion,
+    fecha:                   data.fecha,
+    fecha_produccion:        producto.fecha_produccion,
+    fecha_aprobacion_diseno: producto.fecha_aprobacion_diseno,
+    cliente:                 data.cliente,
+    empresa:                 data.empresa,
+    telefono:                data.telefono,
+    correo:                  data.correo,
+    impresion:               data.impresion,
+    nombre_producto:         producto.nombre_producto,
+    categoria:               producto.categoria,
+    material:                producto.material,
+    calibre:                 producto.calibre,
+    medida:                  producto.medida,
+    altura:                  producto.altura,
+    ancho:                   producto.ancho,
+    fuelle_fondo:            producto.fuelle_fondo,
+    fuelle_lat_iz:           producto.fuelle_lat_iz,
+    fuelle_lat_de:           producto.fuelle_lat_de,
+    refuerzo:                producto.refuerzo,
+    por_kilo:                producto.por_kilo,
+    medidas:                 producto.medidas,
+    tintas:                  producto.tintas,
+    caras:                   producto.caras,
+    bk:                      producto.bk,
+    foil:                    producto.foil,
+    alto_rel:                producto.alto_rel,
+    laminado:                producto.laminado,
+    uv_br:                   producto.uv_br,
+    pigmentos:               producto.pigmentos,
+    pantones:                producto.pantones,
+    asa_suaje:               producto.asa_suaje,
+    observacion:             producto.observacion,
+    cantidad:                producto.cantidad,
+    kilogramos:              producto.kilogramos,
+    modo_cantidad:           producto.modo_cantidad,
+    kilos_extruir:           producto.kilos_extruir ?? null,
+    metros_extruir:          producto.metros_extruir ?? null,
+  });
+}
+
 // ── Modal de gestión ─────────────────────────────────────────
 function EditarDisenoReal({
   pedido,
@@ -37,6 +88,11 @@ function EditarDisenoReal({
   const [guardando, setGuardando] = useState<number | null>(null);
   const [error,     setError]     = useState<string | null>(null);
   const [obsMap,    setObsMap]    = useState<Record<number, string>>({});
+
+  const [alertaPdf, setAlertaPdf] = useState<{ visible: boolean; folios: string[] }>({
+    visible: false,
+    folios:  [],
+  });
 
   useEffect(() => { cargar(); }, []);
 
@@ -61,18 +117,31 @@ function EditarDisenoReal({
   const handleCambiarEstado = async (id: number, estadoId: number) => {
     setGuardando(id);
     try {
+      // El backend devuelve directamente:
+      //   { orden_generada: true, no_produccion: "OP26020", ... }
+      // Solo si se aprobó y el anticipo ya estaba cubierto en ese momento.
+      // Si el anticipo no estaba cubierto, no_produccion viene null.
       const resultado = await actualizarEstadoProductoDiseno(id, {
         estadoId,
         observaciones: obsMap[id] || undefined,
       });
+
       const actualizado = await getDisenoByPedido(pedido.no_pedido);
       setDiseno(actualizado);
       onEstadoChange(pedido.no_pedido, resultado.estado_cabecera_id ?? actualizado.estado_id);
 
-      // Si se generó una orden de producción, notificar
-      if (resultado.orden_generada && resultado.no_produccion) {
-        console.log(`✅ Orden de producción generada: ${resultado.no_produccion}`);
+      // ── Auto-descarga ─────────────────────────────────────
+      // Solo descargamos si el backend confirmó que se creó una orden NUEVA ahora.
+      // Esto evita descargar órdenes viejas de diseños previamente aprobados.
+      if (estadoId === ESTADO.APROBADO && resultado.orden_generada && resultado.no_produccion) {
+        try {
+          await descargarPdfOrden(pedido.no_pedido, resultado.no_produccion);
+          setAlertaPdf({ visible: true, folios: [resultado.no_produccion] });
+        } catch (pdfErr) {
+          console.error("Error al generar PDF:", pdfErr);
+        }
       }
+
     } catch (e: any) {
       alert(e.response?.data?.error || "Error al actualizar estado");
     } finally {
@@ -114,6 +183,36 @@ function EditarDisenoReal({
   return (
     <div className="space-y-5">
 
+      {/* ── Alerta PDF ── */}
+      {alertaPdf.visible && (
+        <div className="flex items-start gap-3 bg-green-50 border-2 border-green-400 rounded-xl px-4 py-4 shadow-md">
+          <div className="flex-shrink-0 w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
+            <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+            </svg>
+          </div>
+          <div className="flex-1">
+            <p className="font-bold text-green-800 text-sm">
+              🎉 Orden{alertaPdf.folios.length > 1 ? "es" : ""} de Producción lista{alertaPdf.folios.length > 1 ? "s" : ""}
+            </p>
+            <div className="mt-1 space-y-0.5">
+              {alertaPdf.folios.map(folio => (
+                <p key={folio} className="text-green-700 text-xs font-semibold">📄 Folio: {folio}</p>
+              ))}
+            </div>
+            <p className="text-green-600 text-xs mt-1">El PDF se descargó automáticamente.</p>
+          </div>
+          <button
+            onClick={() => setAlertaPdf({ visible: false, folios: [] })}
+            className="flex-shrink-0 text-green-400 hover:text-green-600 transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      )}
+
       {/* Info cliente */}
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
         <p className="font-semibold text-gray-900">{pedido.cliente || "—"}</p>
@@ -124,7 +223,7 @@ function EditarDisenoReal({
         </p>
       </div>
 
-      {/* Banner anticipo */}
+      {/* Banner anticipo pendiente */}
       {!(diseno as any).anticipo_cubierto && (
         <div className="flex items-center gap-3 rounded-xl px-4 py-3 border bg-amber-50 border-amber-200">
           <span className="text-lg flex-shrink-0">⚠️</span>
@@ -133,7 +232,7 @@ function EditarDisenoReal({
             <p className="text-xs text-amber-600 mt-0.5">
               Pagado: ${Number((diseno as any).abono ?? 0).toFixed(2)} /
               Requerido: ${Number((diseno as any).anticipo ?? 0).toFixed(2)} —
-              Las órdenes de producción se generarán automáticamente al cubrir el anticipo.
+              Las órdenes se generarán automáticamente al cubrir el anticipo.
             </p>
           </div>
         </div>
@@ -142,10 +241,10 @@ function EditarDisenoReal({
       {/* Contadores */}
       <div className="grid grid-cols-4 gap-3">
         {[
-          { label: "Total",       value: total,            color: "text-gray-700"   },
-          { label: "Aprobados",   value: aprobados,        color: "text-green-700"  },
-          { label: "Pendientes",  value: diseno.pendientes, color: "text-orange-600" },
-          { label: "Con orden",   value: conOrden,          color: "text-blue-700"   },
+          { label: "Total",      value: total,             color: "text-gray-700"   },
+          { label: "Aprobados",  value: aprobados,         color: "text-green-700"  },
+          { label: "Pendientes", value: diseno.pendientes, color: "text-orange-600" },
+          { label: "Con orden",  value: conOrden,          color: "text-blue-700"   },
         ].map(item => (
           <div key={item.label} className="bg-gray-50 rounded-xl p-3 text-center border border-gray-100">
             <p className={`text-2xl font-bold ${item.color}`}>{item.value}</p>
@@ -156,8 +255,8 @@ function EditarDisenoReal({
 
       {/* Banner estado general */}
       <div className={`flex items-center gap-3 rounded-xl px-4 py-3 border ${
-        eg === "aprobado"   ? "bg-green-50 border-green-200"   :
-        eg === "en_proceso" ? "bg-blue-50 border-blue-200"     :
+        eg === "aprobado"   ? "bg-green-50 border-green-200"  :
+        eg === "en_proceso" ? "bg-blue-50 border-blue-200"    :
                               "bg-yellow-50 border-yellow-200"
       }`}>
         <span className="text-lg">
@@ -204,7 +303,6 @@ function EditarDisenoReal({
                 enProceso ? "border-blue-200"  : "border-gray-200"
               }`}
             >
-              {/* Cabecera producto */}
               <div className="flex items-start justify-between gap-3 mb-3">
                 <div className="flex items-center gap-2 flex-1 min-w-0">
                   <span>{aprobado ? "✓" : enProceso ? "🔄" : "⏱️"}</span>
@@ -218,7 +316,6 @@ function EditarDisenoReal({
                 </span>
               </div>
 
-              {/* Cantidad aprobada por el cliente */}
               {(producto.cantidad || producto.kilogramos) && (
                 <div className="mb-3 px-3 py-2 bg-gray-50 rounded-lg border border-gray-100">
                   <p className="text-xs text-gray-500 mb-1 font-medium">Cantidad aprobada por cliente:</p>
@@ -231,7 +328,6 @@ function EditarDisenoReal({
                 </div>
               )}
 
-              {/* Badge orden de producción — ya generada */}
               {producto.orden_generada && (
                 <div className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded-lg mb-3">
                   <svg className="w-4 h-4 text-green-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -243,7 +339,6 @@ function EditarDisenoReal({
                 </div>
               )}
 
-              {/* Aviso — diseño aprobado pero anticipo pendiente */}
               {aprobado && !producto.orden_generada && (
                 <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg mb-3">
                   <svg className="w-4 h-4 text-amber-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -255,7 +350,6 @@ function EditarDisenoReal({
                 </div>
               )}
 
-              {/* Observaciones */}
               <div className="mb-3">
                 <label className="block text-xs font-medium text-gray-500 mb-1">
                   Observaciones / cambios solicitados
@@ -271,7 +365,6 @@ function EditarDisenoReal({
                 />
               </div>
 
-              {/* Botones: En proceso | Aprobar | Reset */}
               <div className="flex gap-2">
                 <button
                   onClick={() => handleCambiarEstado(producto.iddiseno_producto, ESTADO.EN_PROCESO)}
@@ -309,7 +402,6 @@ function EditarDisenoReal({
                   {aprobado ? "Aprobado ✓" : "Aprobar"}
                 </button>
 
-                {/* Reset — solo si no está en Pendiente y no tiene orden generada */}
                 {producto.estado_id !== ESTADO.PENDIENTE && !producto.orden_generada && (
                   <button
                     onClick={() => handleCambiarEstado(producto.iddiseno_producto, ESTADO.PENDIENTE)}
@@ -329,10 +421,7 @@ function EditarDisenoReal({
       </div>
 
       <div className="flex justify-end pt-2 border-t border-gray-100">
-        <button
-          onClick={onClose}
-          className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm font-medium"
-        >
+        <button onClick={onClose} className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm font-medium">
           Cerrar
         </button>
       </div>
@@ -359,9 +448,7 @@ export default function Diseno() {
 
   const handleEstadoChange = (noPedido: number, estadoId: number) => {
     setPedidos(prev => prev.map(p =>
-      p.no_pedido === noPedido
-        ? { ...p, diseno_estado_id: estadoId } as any
-        : p
+      p.no_pedido === noPedido ? { ...p, diseno_estado_id: estadoId } as any : p
     ));
   };
 
@@ -384,8 +471,6 @@ export default function Diseno() {
   const getEstadoBadge = (ped: Pedido) => {
     const estadoId: number = (ped as any).diseno_estado_id ?? 1;
     const ef = estadoLabel(estadoId);
-    const todos = ped.productos.length;
-
     return (
       <div className="flex flex-col gap-1">
         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
@@ -393,11 +478,10 @@ export default function Diseno() {
           ef === "en_proceso" ? "bg-blue-100 text-blue-800"    :
                                 "bg-yellow-100 text-yellow-800"
         }`}>
-          {ef === "aprobado"   ? "✓ Aprobado"   :
-           ef === "en_proceso" ? "🔄 En proceso" : "⏱️ Pendiente"}
+          {ef === "aprobado" ? "✓ Aprobado" : ef === "en_proceso" ? "🔄 En proceso" : "⏱️ Pendiente"}
         </span>
         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-50 text-orange-700">
-          🎨 {todos} diseño(s)
+          🎨 {ped.productos.length} diseño(s)
         </span>
       </div>
     );
@@ -406,9 +490,7 @@ export default function Diseno() {
   return (
     <Dashboard userName="Administrador">
       <h1 className="text-2xl font-bold mb-4">Gestión de Diseños</h1>
-      <p className="text-slate-400 mb-6">
-        Administra y aprueba los diseños de productos de cada pedido.
-      </p>
+      <p className="text-slate-400 mb-6">Administra y aprueba los diseños de productos de cada pedido.</p>
 
       <div className="mb-6">
         <div className="relative">
@@ -443,18 +525,10 @@ export default function Diseno() {
               </td></tr>
             ) : filtrados.length > 0 ? filtrados.map(ped => (
               <tr key={ped.no_pedido} className="hover:bg-gray-50">
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                  #{ped.no_pedido}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {fmtFecha(ped.fecha)}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                  {ped.cliente || "—"}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {ped.empresa || "N/A"}
-                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">#{ped.no_pedido}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{fmtFecha(ped.fecha)}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{ped.cliente || "—"}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{ped.empresa || "N/A"}</td>
                 <td className="px-6 py-4 text-sm text-gray-500">
                   <div className="max-w-xs">
                     {ped.productos.length} producto(s)
@@ -471,23 +545,16 @@ export default function Diseno() {
                     </div>
                   </div>
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm">
-                  {getEstadoBadge(ped)}
-                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm">{getEstadoBadge(ped)}</td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                  <button
-                    onClick={() => handleEditar(ped)}
-                    className="text-blue-600 hover:text-blue-900 font-semibold"
-                  >
+                  <button onClick={() => handleEditar(ped)} className="text-blue-600 hover:text-blue-900 font-semibold">
                     Ver/Editar
                   </button>
                 </td>
               </tr>
             )) : (
               <tr><td colSpan={7} className="px-6 py-8 text-center text-gray-500">
-                {busqueda
-                  ? `No se encontraron pedidos para "${busqueda}"`
-                  : "No hay pedidos registrados"}
+                {busqueda ? `No se encontraron pedidos para "${busqueda}"` : "No hay pedidos registrados"}
               </td></tr>
             )}
           </tbody>

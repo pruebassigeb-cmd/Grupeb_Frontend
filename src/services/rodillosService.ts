@@ -37,24 +37,22 @@ const fmt = (v: any): string => {
 };
 
 // ── Calcular parámetro de búsqueda según tipo de fuelle ──────
+// Busca siempre la medida que va "sola", sin fuelles sumados:
+//   - Fuelle lateral → el alto va solo  → busca por alto
+//   - Fuelle de fondo → el ancho va solo → busca por ancho
 export const calcularParametroRodillo = (
   medidas: Record<MedidaKey, string>
 ): number => {
-  const altura      = limpiarNumero(medidas.altura);
-  const ancho       = limpiarNumero(medidas.ancho);
-  const fuelleFondo = limpiarNumero(medidas.fuelleFondo);
-  const fuelleLat   = limpiarNumero(medidas.fuelleLateral1);
-
-  console.log("🔍 Medidas para rodillo:", { altura, ancho, fuelleFondo, fuelleLat });
+  const altura    = limpiarNumero(medidas.altura);
+  const ancho     = limpiarNumero(medidas.ancho);
+  const fuelleLat = limpiarNumero(medidas.fuelleLateral1);
 
   if (fuelleLat > 0) {
-    const valor = altura + fuelleLat;
-    console.log(`🔍 Fuelle LATERAL → valor: ${altura} + ${fuelleLat} = ${valor}`);
-    return valor;
+    console.log(`🔍 Fuelle LATERAL → buscando por alto: ${altura}`);
+    return altura;
   } else {
-    const valor = ancho + fuelleFondo;
-    console.log(`🔍 Fuelle FONDO → valor: ${ancho} + ${fuelleFondo} = ${valor}`);
-    return valor;
+    console.log(`🔍 Fuelle FONDO → buscando por ancho: ${ancho}`);
+    return ancho;
   }
 };
 
@@ -83,6 +81,7 @@ const encontrarRepMasCercana = (
 };
 
 // ── Formatear resultado para el campo Repetición del PDF ─────
+// Ejemplo: "KIDDER: SG=34.2 | ~35.7 (1 rep)  /  SICOSA: SG=39.2 | ~40.0 (1 rep)"
 export const formatearRepeticionParaPdf = (
   resultados: ResultadoRodillo[],
   valorBuscado: number
@@ -91,13 +90,15 @@ export const formatearRepeticionParaPdf = (
 
   return resultados
     .map((r) => {
-      const sinGrabado = fmt(r.sin_grabado);
-      const prefijo    = r.es_exacto ? "" : "~";
-      const rep        = encontrarRepMasCercana(r, valorBuscado);
-      const repValor   = fmt(rep.valor);
-      return `${r.maquina}: ${prefijo}${sinGrabado} (${rep.label}: ${repValor})`;
+      const rep      = encontrarRepMasCercana(r, valorBuscado);
+      const repValor = fmt(rep.valor);
+      const sinGrab  = fmt(r.sin_grabado);
+      const esExacto = Math.abs(rep.valor - valorBuscado) < 0.001;
+      const prefijo  = esExacto ? "" : "~";
+
+      return `${r.maquina}: SG=${sinGrab} | ${prefijo}${repValor} (${rep.label})`;
     })
-    .join(" | ");
+    .join("  /  ");
 };
 
 // ── Llamada al endpoint ──────────────────────────────────────

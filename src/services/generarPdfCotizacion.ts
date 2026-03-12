@@ -110,21 +110,39 @@ export async function generarPdfCotizacion(cotizacion: CotizacionPdf): Promise<v
   const cantW      = Math.max((availW - fixedTotal) / numCantCols, 13);
   for (let i = 0; i < numCantCols; i++) colW[14 + i] = cantW;
 
+  // Columnas de cantidad: fontSize 12 (8 * 1.5)
+  const cantFontSize = 12;
+
+  const columnStyles: Parameters<typeof autoTable>[1]["columnStyles"] = {
+    0:  { cellWidth: colW[0],  halign: "left",   fontSize: 10.5 },  // Descripción  7 → 10.5
+    1:  { cellWidth: colW[1],  halign: "center", fontSize: 12   },  // Medida       8 → 12
+    2:  { cellWidth: colW[2],  halign: "center", fontSize: 9    },  // B/K          6 → 9
+    3:  { cellWidth: colW[3],  halign: "center", fontSize: 9    },  // Tintas       6 → 9
+    4:  { cellWidth: colW[4],  halign: "center", fontSize: 9    },  // Caras        6 → 9
+    5:  { cellWidth: colW[5],  halign: "center", fontSize: 10.5 },  // Material     7 → 10.5
+    6:  { cellWidth: colW[6],  halign: "center", fontSize: 9    },  // Calibre      6 → 9
+    7:  { cellWidth: colW[7],  halign: "center", fontSize: 9    },  // Foil         6 → 9
+    8:  { cellWidth: colW[8],  halign: "center", fontSize: 9    },  // Asa/Suaje    6 → 9
+    9:  { cellWidth: colW[9],  halign: "center", fontSize: 9    },  // Alto Rel     6 → 9
+    10: { cellWidth: colW[10], halign: "center", fontSize: 9    },  // Laminado     6 → 9
+    11: { cellWidth: colW[11], halign: "center", fontSize: 9    },  // UV/BR        6 → 9
+    12: { cellWidth: colW[12], halign: "left",   fontSize: 10.5 },  // Pantones     7 → 10.5
+    13: { cellWidth: colW[13], halign: "center", fontSize: 10.5 },  // Pigmento     7 → 10.5
+    ...(numCantCols >= 1 ? { 14: { cellWidth: colW[14], halign: "center" as const, fontSize: cantFontSize } } : {}),
+    ...(numCantCols >= 2 ? { 15: { cellWidth: colW[15], halign: "center" as const, fontSize: cantFontSize } } : {}),
+    ...(numCantCols >= 3 ? { 16: { cellWidth: colW[16], halign: "center" as const, fontSize: cantFontSize } } : {}),
+  };
+
   autoTable(doc, {
     startY: y,
     margin: { left: M, right: M },
     head:   [headAll],
     body:   bodyRows,
     theme:  "grid",
-    headStyles:         { fillColor: GRAY_DARK, textColor: WHITE, fontStyle: "bold", fontSize: 6, cellPadding: 1.2, halign: "center", valign: "middle" },
-    bodyStyles:         { fontSize: 6, textColor: BLACK, cellPadding: 1.2, valign: "middle", minCellHeight: 7 },
+    headStyles:         { fillColor: GRAY_DARK, textColor: WHITE, fontStyle: "bold", fontSize: 9, cellPadding: 1.2, halign: "center", valign: "middle" }, // 6 → 9
+    bodyStyles:         { fontSize: 9, textColor: BLACK, cellPadding: 1.2, valign: "middle", minCellHeight: 7 }, // 6 → 9
     alternateRowStyles: { fillColor: GRAY_ROW },
-    columnStyles: Object.fromEntries(
-      Object.entries(colW).map(([k, v]) => [
-        Number(k),
-        { cellWidth: v, halign: Number(k) === 0 || Number(k) === 12 ? "left" : "center" },
-      ])
-    ),
+    columnStyles,
     didParseCell(data) {
       if (data.section === "head" && data.column.index >= 14) {
         data.cell.styles.fillColor = GRAY_MED;
@@ -136,7 +154,7 @@ export async function generarPdfCotizacion(cotizacion: CotizacionPdf): Promise<v
             data.cell.colSpan          = headAll.length;
             data.cell.styles.fillColor = GRAY_LIGHT;
             data.cell.styles.fontStyle = "italic";
-            data.cell.styles.fontSize  = 6;
+            data.cell.styles.fontSize  = 9; // 6 → 9
             data.cell.styles.textColor = [80, 80, 80];
             data.cell.styles.halign    = "left";
           } else {

@@ -8,6 +8,8 @@ import {
   eliminarPago,
   getMetodosPago,
 } from "../services/ventasservice";
+import { getOrdenProduccion } from "../services/seguimientoService";
+import { generarPdfOrdenProduccion } from "../services/generarPdfOrdenProduccion";
 import type { Venta, VentaPago, MetodoPago } from "../types/ventas.types";
 
 const ESTADO = { PENDIENTE: 1, EN_PROCESO: 2, PAGADO: 6 } as const;
@@ -27,6 +29,55 @@ function calcularEstado(abono: number, anticipo: number, saldo: number): number 
   if (saldo <= 0.01)     return ESTADO.PAGADO;
   if (abono >= anticipo) return ESTADO.EN_PROCESO;
   return ESTADO.PENDIENTE;
+}
+
+// ── Descarga PDF dado un folio ────────────────────────────────
+async function descargarPdfOrden(noPedido: number, noProduccion: string): Promise<void> {
+  const data = await getOrdenProduccion(noPedido);
+  const producto = data.productos.find((p: any) => p.no_produccion === noProduccion);
+  if (!producto) throw new Error(`Producto con folio ${noProduccion} no encontrado`);
+
+  await generarPdfOrdenProduccion({
+    no_pedido:               data.no_pedido,
+    no_produccion:           producto.no_produccion,
+    fecha:                   data.fecha,
+    fecha_produccion:        producto.fecha_produccion,
+    fecha_aprobacion_diseno: producto.fecha_aprobacion_diseno,
+    cliente:                 data.cliente,
+    empresa:                 data.empresa,
+    telefono:                data.telefono,
+    correo:                  data.correo,
+    impresion:               data.impresion,
+    nombre_producto:         producto.nombre_producto,
+    categoria:               producto.categoria,
+    material:                producto.material,
+    calibre:                 producto.calibre,
+    medida:                  producto.medida,
+    altura:                  producto.altura,
+    ancho:                   producto.ancho,
+    fuelle_fondo:            producto.fuelle_fondo,
+    fuelle_lat_iz:           producto.fuelle_lat_iz,
+    fuelle_lat_de:           producto.fuelle_lat_de,
+    refuerzo:                producto.refuerzo,
+    por_kilo:                producto.por_kilo,
+    medidas:                 producto.medidas,
+    tintas:                  producto.tintas,
+    caras:                   producto.caras,
+    bk:                      producto.bk,
+    foil:                    producto.foil,
+    alto_rel:                producto.alto_rel,
+    laminado:                producto.laminado,
+    uv_br:                   producto.uv_br,
+    pigmentos:               producto.pigmentos,
+    pantones:                producto.pantones,
+    asa_suaje:               producto.asa_suaje,
+    observacion:             producto.observacion,
+    cantidad:                producto.cantidad,
+    kilogramos:              producto.kilogramos,
+    modo_cantidad:           producto.modo_cantidad,
+    kilos_extruir:           producto.kilos_extruir ?? null,
+    metros_extruir:          producto.metros_extruir ?? null,
+  });
 }
 
 // ── Modal de detalle / pagos ──────────────────────────────────
@@ -50,6 +101,11 @@ function EditarAntLiqReal({
   const [eliminando,      setEliminando]      = useState<number | null>(null);
   const [error,           setError]           = useState<string | null>(null);
 
+  const [alertaPdf, setAlertaPdf] = useState<{ visible: boolean; folios: string[] }>({
+    visible: false,
+    folios:  [],
+  });
+
   const anticipo    = Number(venta.anticipo);
   const saldo       = Number(venta.saldo);
   const totalPagado = Number(venta.abono);
@@ -62,6 +118,7 @@ function EditarAntLiqReal({
   const recargar = async () => {
     const actualizada = await getVentaByPedido(venta.no_pedido);
     onActualizar(actualizada);
+    return actualizada;
   };
 
   const handleRegistrarPago = async () => {
@@ -74,20 +131,48 @@ function EditarAntLiqReal({
       setError(`El monto excede el saldo pendiente ($${fmt(saldo)})`);
       return;
     }
+
     setGuardando(true);
     setError(null);
+
     try {
-      await registrarPago(venta.idventas, {
+      // El backend devuelve ordenes_generadas: string[]
+      // Contiene SOLO los folios creados en este momento,
+      // con diseño actualmente aprobado. Nunca incluye historial.
+      const response = await registrarPago(venta.idventas, {
         metodoPagoId,
         monto:       montoNum,
         esAnticipo,
         observacion: observacion.trim() || undefined,
       });
+
       await recargar();
+
       setMonto("");
       setObservacion("");
       setEsAnticipo(false);
       setMontoEsAnticipo(false);
+
+      // ── Auto-descarga de PDF ──────────────────────────────
+      const foliosNuevos: string[] = response?.ordenes_generadas ?? [];
+
+      if (foliosNuevos.length > 0) {
+        const foliosDescargados: string[] = [];
+
+        for (const folio of foliosNuevos) {
+          try {
+            await descargarPdfOrden(venta.no_pedido, folio);
+            foliosDescargados.push(folio);
+          } catch (pdfErr) {
+            console.error(`Error al generar PDF de ${folio}:`, pdfErr);
+          }
+        }
+
+        if (foliosDescargados.length > 0) {
+          setAlertaPdf({ visible: true, folios: foliosDescargados });
+        }
+      }
+
     } catch (e: any) {
       setError(e.response?.data?.error || "Error al registrar pago");
     } finally {
@@ -113,6 +198,36 @@ function EditarAntLiqReal({
   return (
     <div className="space-y-6">
 
+      {/* ── Alerta PDF ── */}
+      {alertaPdf.visible && (
+        <div className="flex items-start gap-3 bg-green-50 border-2 border-green-400 rounded-xl px-4 py-4 shadow-md">
+          <div className="flex-shrink-0 w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
+            <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+            </svg>
+          </div>
+          <div className="flex-1">
+            <p className="font-bold text-green-800 text-sm">
+              🎉 Orden{alertaPdf.folios.length > 1 ? "es" : ""} de Producción lista{alertaPdf.folios.length > 1 ? "s" : ""}
+            </p>
+            <div className="mt-1 space-y-0.5">
+              {alertaPdf.folios.map(folio => (
+                <p key={folio} className="text-green-700 text-xs font-semibold">📄 Folio: {folio}</p>
+              ))}
+            </div>
+            <p className="text-green-600 text-xs mt-1">El PDF se descargó automáticamente.</p>
+          </div>
+          <button
+            onClick={() => setAlertaPdf({ visible: false, folios: [] })}
+            className="flex-shrink-0 text-green-400 hover:text-green-600 transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      )}
+
       {/* Encabezado cliente */}
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
         <p className="font-semibold text-gray-900">{venta.cliente || "—"}</p>
@@ -131,10 +246,10 @@ function EditarAntLiqReal({
       {/* Resumen financiero */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[
-          { label: "Subtotal",       value: fmt(venta.subtotal),     color: "text-gray-700"               },
-          { label: "IVA 16%",        value: fmt(venta.iva),          color: "text-gray-500"               },
-          { label: "Total con IVA",  value: fmt(total),              color: "text-gray-900 font-bold"     },
-          { label: "Anticipo (50%)", value: fmt(anticipo),           color: "text-blue-700 font-semibold" },
+          { label: "Subtotal",       value: fmt(venta.subtotal), color: "text-gray-700"               },
+          { label: "IVA 16%",        value: fmt(venta.iva),      color: "text-gray-500"               },
+          { label: "Total con IVA",  value: fmt(total),          color: "text-gray-900 font-bold"     },
+          { label: "Anticipo (50%)", value: fmt(anticipo),       color: "text-blue-700 font-semibold" },
         ].map(item => (
           <div key={item.label} className="bg-gray-50 rounded-xl p-3 text-center border border-gray-100">
             <p className="text-xs text-gray-400 mb-1">{item.label}</p>
@@ -197,9 +312,7 @@ function EditarAntLiqReal({
                         <span className="text-xs px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded font-medium">Anticipo</span>
                       )}
                     </div>
-                    <p className="text-xs text-gray-400">
-                      {pago.metodo_pago} · {fmtFecha(pago.fecha)}
-                    </p>
+                    <p className="text-xs text-gray-400">{pago.metodo_pago} · {fmtFecha(pago.fecha)}</p>
                     {pago.observacion && (
                       <p className="text-xs text-gray-500 italic">{pago.observacion}</p>
                     )}
@@ -209,7 +322,6 @@ function EditarAntLiqReal({
                   onClick={() => handleEliminarPago(pago)}
                   disabled={eliminando === pago.idventa_pago}
                   className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
-                  title="Eliminar pago"
                 >
                   {eliminando === pago.idventa_pago
                     ? <div className="w-4 h-4 rounded-full border-2 border-red-400 border-t-transparent animate-spin" />
@@ -240,7 +352,6 @@ function EditarAntLiqReal({
           )}
 
           <div className="grid grid-cols-2 gap-3 mb-3">
-            {/* Monto */}
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Monto *</label>
               <div className="relative">
@@ -258,13 +369,10 @@ function EditarAntLiqReal({
                   }}
                   placeholder="0.00"
                   className={`w-full pl-7 pr-3 py-2 border border-gray-300 rounded-lg text-gray-900 focus:ring-2 focus:ring-blue-400 text-sm transition-colors ${
-                    montoEsAnticipo
-                      ? "bg-blue-50 border-blue-300 cursor-not-allowed"
-                      : "bg-white"
+                    montoEsAnticipo ? "bg-blue-50 border-blue-300 cursor-not-allowed" : "bg-white"
                   }`}
                 />
               </div>
-              {/* Accesos rápidos */}
               <div className="flex gap-2 mt-1 flex-wrap">
                 {!anticipoCubierto && (
                   <button
@@ -293,7 +401,6 @@ function EditarAntLiqReal({
               </div>
             </div>
 
-            {/* Método */}
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Método de pago *</label>
               <select
@@ -308,7 +415,6 @@ function EditarAntLiqReal({
             </div>
           </div>
 
-          {/* Observación */}
           <div className="mb-3">
             <label className="block text-xs font-medium text-gray-600 mb-1">Observación (opcional)</label>
             <input
@@ -320,7 +426,6 @@ function EditarAntLiqReal({
             />
           </div>
 
-          {/* Indicador de anticipo — solo visible/activo cuando vino del botón */}
           <div className="flex items-center justify-between">
             {!anticipoCubierto ? (
               <label className={`flex items-center gap-2 ${montoEsAnticipo ? "cursor-default" : "cursor-not-allowed opacity-40"}`}>
@@ -368,8 +473,7 @@ function EditarAntLiqReal({
       )}
 
       <div className="flex justify-end pt-2 border-t border-gray-100">
-        <button onClick={onClose}
-          className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm font-medium">
+        <button onClick={onClose} className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm font-medium">
           Cerrar
         </button>
       </div>
@@ -446,7 +550,6 @@ export default function AnticipoLiquidacion() {
         ✓ Pagado
       </span>
     );
-
     if (estado === ESTADO.EN_PROCESO) return (
       <div className="flex flex-col gap-1">
         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
@@ -457,15 +560,14 @@ export default function AnticipoLiquidacion() {
         </span>
       </div>
     );
-
     return (
       <div className="flex flex-col gap-1">
         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
           ⏱️ Pendiente
         </span>
-        {abono > 0 && (
+        {Number(v.abono) > 0 && (
           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-            💰 ${fmt(abono)} abonados
+            💰 ${fmt(Number(v.abono))} abonados
           </span>
         )}
       </div>
@@ -475,9 +577,7 @@ export default function AnticipoLiquidacion() {
   return (
     <Dashboard userName="Administrador">
       <h1 className="text-2xl font-bold mb-2">Anticipo y Liquidación</h1>
-      <p className="text-slate-400 mb-6">
-        Gestiona los anticipos y liquidaciones de los pedidos activos.
-      </p>
+      <p className="text-slate-400 mb-6">Gestiona los anticipos y liquidaciones de los pedidos activos.</p>
 
       <div className="mb-6 relative">
         <input
@@ -516,29 +616,17 @@ export default function AnticipoLiquidacion() {
                     <span className="ml-1 text-xs text-gray-400 font-normal">Cot.#{v.no_cotizacion}</span>
                   )}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {fmtFecha(v.fecha_pedido)}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                  {v.cliente || "—"}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {v.empresa || "—"}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-green-700">
-                  ${fmt(v.total)}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-blue-700">
-                  ${fmt(v.abono)}
-                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{fmtFecha(v.fecha_pedido)}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{v.cliente || "—"}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{v.empresa || "—"}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-green-700">${fmt(v.total)}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-blue-700">${fmt(v.abono)}</td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold">
                   <span className={Number(v.saldo) > 0.01 ? "text-red-600" : "text-emerald-600"}>
                     ${Number(v.saldo) > 0.01 ? fmt(v.saldo) : "0.00"}
                   </span>
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm">
-                  {getEstadoBadge(v)}
-                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm">{getEstadoBadge(v)}</td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                   <button
                     onClick={() => handleEditar(v)}
