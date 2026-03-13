@@ -75,8 +75,15 @@ async function descargarPdfOrden(noPedido: number, noProduccion: string): Promis
     cantidad:                producto.cantidad,
     kilogramos:              producto.kilogramos,
     modo_cantidad:           producto.modo_cantidad,
-    kilos_extruir:           producto.kilos_extruir ?? null,
-    metros_extruir:          producto.metros_extruir ?? null,
+    repeticion_extrusion:    producto.repeticion_extrusion    ?? null,
+    repeticion_metro:        producto.repeticion_metro        ?? null,
+    metros:                  producto.metros                  ?? null,
+    ancho_bobina:            producto.ancho_bobina            ?? null,
+    kilos:                   producto.kilos                   ?? null,
+    repeticion_kidder:       producto.repeticion_kidder       ?? null,
+    repeticion_sicosa:       producto.repeticion_sicosa       ?? null,
+    kilos_extruir:           producto.kilos_extruir           ?? null,
+    metros_extruir:          producto.metros_extruir          ?? null,
   });
 }
 
@@ -136,9 +143,6 @@ function EditarAntLiqReal({
     setError(null);
 
     try {
-      // El backend devuelve ordenes_generadas: string[]
-      // Contiene SOLO los folios creados en este momento,
-      // con diseño actualmente aprobado. Nunca incluye historial.
       const response = await registrarPago(venta.idventas, {
         metodoPagoId,
         monto:       montoNum,
@@ -153,7 +157,6 @@ function EditarAntLiqReal({
       setEsAnticipo(false);
       setMontoEsAnticipo(false);
 
-      // ── Auto-descarga de PDF ──────────────────────────────
       const foliosNuevos: string[] = response?.ordenes_generadas ?? [];
 
       if (foliosNuevos.length > 0) {

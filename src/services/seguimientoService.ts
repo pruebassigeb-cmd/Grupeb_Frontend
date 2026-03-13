@@ -54,7 +54,13 @@ export interface OrdenProduccionProducto {
   cantidad:                number | null;
   kilogramos:              number | null;
   modo_cantidad:           string;
-  // ✅ calculados automáticamente
+  repeticion_extrusion:    number | null;
+  repeticion_metro:        number | null;
+  metros:                  number | null;
+  ancho_bobina:            number | null;
+  kilos:                   number | null;
+  repeticion_kidder:       string | null;
+  repeticion_sicosa:       string | null;
   kilos_extruir:           number | null;
   metros_extruir:          number | null;
 }
@@ -73,13 +79,15 @@ export interface ProcesoRegistro {
 }
 
 export interface ProcesosOrdenRespuesta {
-  idproduccion:   number;
-  no_produccion:  string;
-  no_pedido:      number;
-  proceso_actual: number | null;
-  estado_id:      number;
-  estado_nombre:  string;
-  procesos:       ProcesoRegistro[];
+  idproduccion:      number;
+  no_produccion:     string;
+  no_pedido:         number;
+  proceso_actual:    number | null;
+  estado_id:         number;
+  estado_nombre:     string;
+  repeticion_kidder: string | null;
+  repeticion_sicosa: string | null;
+  procesos:          ProcesoRegistro[];
 }
 
 export const getProcesosOrden = async (idproduccion: number): Promise<ProcesosOrdenRespuesta> => {
@@ -87,8 +95,11 @@ export const getProcesosOrden = async (idproduccion: number): Promise<ProcesosOr
   return response.data;
 };
 
-export const iniciarProceso = async (idproduccion: number) => {
-  const response = await api.post(`/procesos/${idproduccion}/iniciar`);
+export const iniciarProceso = async (
+  idproduccion: number,
+  datos?: Record<string, any>
+) => {
+  const response = await api.post(`/procesos/${idproduccion}/iniciar`, datos ?? {});
   return response.data;
 };
 

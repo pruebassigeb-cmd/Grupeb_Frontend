@@ -68,8 +68,15 @@ async function descargarPdfOrden(noPedido: number, noProduccion: string): Promis
     cantidad:                producto.cantidad,
     kilogramos:              producto.kilogramos,
     modo_cantidad:           producto.modo_cantidad,
-    kilos_extruir:           producto.kilos_extruir ?? null,
-    metros_extruir:          producto.metros_extruir ?? null,
+    repeticion_extrusion:    producto.repeticion_extrusion    ?? null,
+    repeticion_metro:        producto.repeticion_metro        ?? null,
+    metros:                  producto.metros                  ?? null,
+    ancho_bobina:            producto.ancho_bobina            ?? null,
+    kilos:                   producto.kilos                   ?? null,
+    repeticion_kidder:       producto.repeticion_kidder       ?? null,
+    repeticion_sicosa:       producto.repeticion_sicosa       ?? null,
+    kilos_extruir:           producto.kilos_extruir           ?? null,
+    metros_extruir:          producto.metros_extruir          ?? null,
   });
 }
 
@@ -117,10 +124,6 @@ function EditarDisenoReal({
   const handleCambiarEstado = async (id: number, estadoId: number) => {
     setGuardando(id);
     try {
-      // El backend devuelve directamente:
-      //   { orden_generada: true, no_produccion: "OP26020", ... }
-      // Solo si se aprobó y el anticipo ya estaba cubierto en ese momento.
-      // Si el anticipo no estaba cubierto, no_produccion viene null.
       const resultado = await actualizarEstadoProductoDiseno(id, {
         estadoId,
         observaciones: obsMap[id] || undefined,
@@ -130,9 +133,6 @@ function EditarDisenoReal({
       setDiseno(actualizado);
       onEstadoChange(pedido.no_pedido, resultado.estado_cabecera_id ?? actualizado.estado_id);
 
-      // ── Auto-descarga ─────────────────────────────────────
-      // Solo descargamos si el backend confirmó que se creó una orden NUEVA ahora.
-      // Esto evita descargar órdenes viejas de diseños previamente aprobados.
       if (estadoId === ESTADO.APROBADO && resultado.orden_generada && resultado.no_produccion) {
         try {
           await descargarPdfOrden(pedido.no_pedido, resultado.no_produccion);
