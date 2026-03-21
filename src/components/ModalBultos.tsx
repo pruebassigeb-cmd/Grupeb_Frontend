@@ -44,7 +44,7 @@ export default function ModalBultos({
     setGuardando(true);
     setError(null);
     try {
-      const nuevo = await agregarBulto(pedido.idproduccion!, cantidad);
+      const nuevo = await agregarBulto(pedido.idproduccion!, { cantidad_unidades: cantidad });
       setBultos(prev => [...prev, nuevo]);
       setTotalUnidades(prev => prev + nuevo.cantidad_unidades);
       setNuevaCantidad("");
