@@ -1,18 +1,11 @@
 import api from "./api";
 import type { RespuestaActualizarEstado, RespuestaCrearCotizacion } from "../types/cotizaciones.types";
 
-// ============================================================
-// OBTENER COTIZACIONES
-// ============================================================
 export const getCotizaciones = async () => {
   const response = await api.get("/cotizaciones");
   return response.data;
 };
 
-// ============================================================
-// CREAR COTIZACIÓN O PEDIDO DIRECTO
-// El campo `tipo` determina si se guarda como 'cotizacion' o 'pedido'
-// ============================================================
 export const crearCotizacion = async (datos: {
   clienteId?: number;
   tipo?:      "cotizacion" | "pedido";
@@ -84,9 +77,6 @@ export const crearCotizacion = async (datos: {
   return response.data;
 };
 
-// ============================================================
-// APROBAR O RECHAZAR UN DETALLE INDIVIDUAL
-// ============================================================
 export const aprobarDetalle = async (detalleId: number, aprobado: boolean) => {
   const response = await api.patch(
     `/cotizaciones/detalle/${detalleId}/aprobar`,
@@ -95,9 +85,6 @@ export const aprobarDetalle = async (detalleId: number, aprobado: boolean) => {
   return response.data;
 };
 
-// ============================================================
-// ACTUALIZAR OBSERVACIÓN DE UN PRODUCTO
-// ============================================================
 export const actualizarObservacion = async (productoId: number, observacion: string) => {
   const response = await api.patch(
     `/cotizaciones/producto/${productoId}/observacion`,
@@ -106,13 +93,8 @@ export const actualizarObservacion = async (productoId: number, observacion: str
   return response.data;
 };
 
-// ============================================================
-// ACTUALIZAR ESTADO DE LA COTIZACIÓN
-// Si el estado es APROBADO (3), el backend convierte automáticamente
-// la cotización a pedido y devuelve convertida_a_pedido + no_pedido
-// ============================================================
 export const actualizarEstado = async (
-  noCotizacion: number,
+  noCotizacion: string,   // ← string
   estadoId: number
 ): Promise<RespuestaActualizarEstado> => {
   const response = await api.patch(
@@ -122,10 +104,7 @@ export const actualizarEstado = async (
   return response.data;
 };
 
-// ============================================================
-// ELIMINAR COTIZACIÓN
-// ============================================================
-export const eliminarCotizacion = async (noCotizacion: number) => {
+export const eliminarCotizacion = async (noCotizacion: string) => {  // ← string
   const response = await api.delete(`/cotizaciones/${noCotizacion}`);
   return response.data;
 };

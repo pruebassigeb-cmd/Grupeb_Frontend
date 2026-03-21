@@ -1,26 +1,23 @@
 export interface PedidoSeguimiento {
-  no_pedido:          number;
+  no_pedido:          string;
+  no_cotizacion:      string | null;
   fecha:              string;
   cliente:            string;
   tipo_producto:      string;
-
   anticipo_requerido: number;
   anticipo_pagado:    number;
   anticipo_cubierto:  boolean;
   pago_completo:      boolean;
-
+  saldo_venta:        number | null;
   diseno_estado_id:   number;
   diseno_aprobado:    boolean;
-
   no_produccion:      string | null;
   idproduccion:       number | null;
   puede_pdf:          boolean;
-
   extrusion_estado:    string;
   impresion_estado:    string;
   bolseo_estado:       string;
   asa_flexible_estado: string;
-
   // Datos del producto para el operador
   nombre_producto:  string;
   medida:           string;
@@ -43,7 +40,6 @@ export interface PedidoSeguimiento {
   cantidad_orden:   number | null;
   kilogramos_orden: number | null;
   modo_cantidad:    string;
-
   // ── Campos de merma ──────────────────────────────────────
   kilos:        number | null;
   kilos_merma:  number | null;

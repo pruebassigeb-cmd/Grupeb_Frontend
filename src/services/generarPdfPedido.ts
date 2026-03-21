@@ -11,8 +11,8 @@ import {
 import type { ProductoPdf, TotalesPdf } from "./Pdfutils";
 
 interface PedidoPdf {
-  no_pedido:      number;
-  no_cotizacion?: number | null;
+  no_pedido:      string;        // ← string: "P26001"
+  no_cotizacion?: string | null; // ← string: "COT26001"
   fecha:          string;
   cliente:        string;
   empresa:        string;
@@ -36,7 +36,6 @@ export async function generarPdfPedido(pedido: PedidoPdf): Promise<void> {
   const PW  = 297;
   const M   = 8;
 
-  // ── Encabezado ────────────────────────────────────────────────────────────
   const y = dibujarEncabezado({
     doc,
     logoBase64,
@@ -44,7 +43,7 @@ export async function generarPdfPedido(pedido: PedidoPdf): Promise<void> {
     labelFolio:     "No P",
     folio:          pedido.no_pedido,
     refTexto:       pedido.no_cotizacion
-      ? `Ref. Cot. #${pedido.no_cotizacion}`
+      ? `Ref. Cot. ${pedido.no_cotizacion}`
       : undefined,
     fecha:          pedido.fecha,
     empresa:        pedido.empresa,
@@ -54,7 +53,6 @@ export async function generarPdfPedido(pedido: PedidoPdf): Promise<void> {
     correo:         pedido.correo,
   });
 
-  // ── Tabla de productos ────────────────────────────────────────────────────
   const headAll = [
     "Descripción", "Medida", "B/K", "Tintas", "Caras",
     "Material", "Calibre", "Foil", "Asa/Suaje", "Alto Rel",
@@ -96,30 +94,32 @@ export async function generarPdfPedido(pedido: PedidoPdf): Promise<void> {
   });
 
   const availW = PW - M * 2;
+
+  // Anchos +25% proporcional
   const colW: Record<number, number> = {
-    0: 32, 1: 16, 2: 7, 3: 9, 4: 9,
-    5: 16, 6: 11, 7: 9, 8: 14, 9: 11,
-    10: 13, 11: 11, 12: 28, 13: 18,
+    0: 36, 1: 18, 2:  9, 3: 11, 4: 11,
+    5: 18, 6: 13, 7: 11, 8: 16, 9: 13,
+    10: 15, 11: 13, 12: 32, 13: 20,
   };
   const fixedTotal = Object.values(colW).reduce((a, b) => a + b, 0);
-  colW[14] = Math.max(availW - fixedTotal, 18);
+  colW[14] = Math.max(availW - fixedTotal, 20);
 
   const columnStyles: Parameters<typeof autoTable>[1]["columnStyles"] = {
-    0:  { cellWidth: colW[0],  halign: "left",   fontSize: 10.5 },  // Descripción  7 → 10.5
-    1:  { cellWidth: colW[1],  halign: "center", fontSize: 12   },  // Medida       8 → 12
-    2:  { cellWidth: colW[2],  halign: "center", fontSize: 9    },  // B/K          6 → 9
-    3:  { cellWidth: colW[3],  halign: "center", fontSize: 9    },  // Tintas       6 → 9
-    4:  { cellWidth: colW[4],  halign: "center", fontSize: 9    },  // Caras        6 → 9
-    5:  { cellWidth: colW[5],  halign: "center", fontSize: 10.5 },  // Material     7 → 10.5
-    6:  { cellWidth: colW[6],  halign: "center", fontSize: 9    },  // Calibre      6 → 9
-    7:  { cellWidth: colW[7],  halign: "center", fontSize: 9    },  // Foil         6 → 9
-    8:  { cellWidth: colW[8],  halign: "center", fontSize: 9    },  // Asa/Suaje    6 → 9
-    9:  { cellWidth: colW[9],  halign: "center", fontSize: 9    },  // Alto Rel     6 → 9
-    10: { cellWidth: colW[10], halign: "center", fontSize: 9    },  // Laminado     6 → 9
-    11: { cellWidth: colW[11], halign: "center", fontSize: 9    },  // UV/BR        6 → 9
-    12: { cellWidth: colW[12], halign: "left",   fontSize: 10.5 },  // Pantones     7 → 10.5
-    13: { cellWidth: colW[13], halign: "center", fontSize: 10.5 },  // Pigmento     7 → 10.5
-    14: { cellWidth: colW[14], halign: "center", fontSize: 12   },  // Cantidad     8 → 12
+    0:  { cellWidth: colW[0],  halign: "left",   fontSize: 11   },
+    1:  { cellWidth: colW[1],  halign: "center", fontSize: 12   },
+    2:  { cellWidth: colW[2],  halign: "center", fontSize: 11   },
+    3:  { cellWidth: colW[3],  halign: "center", fontSize: 11   },
+    4:  { cellWidth: colW[4],  halign: "center", fontSize: 11   },
+    5:  { cellWidth: colW[5],  halign: "center", fontSize: 11   },
+    6:  { cellWidth: colW[6],  halign: "center", fontSize: 11   },
+    7:  { cellWidth: colW[7],  halign: "center", fontSize: 11   },
+    8:  { cellWidth: colW[8],  halign: "center", fontSize: 11   },
+    9:  { cellWidth: colW[9],  halign: "center", fontSize: 11   },
+    10: { cellWidth: colW[10], halign: "center", fontSize: 11   },
+    11: { cellWidth: colW[11], halign: "center", fontSize: 11   },
+    12: { cellWidth: colW[12], halign: "left",   fontSize: 11   },
+    13: { cellWidth: colW[13], halign: "center", fontSize: 11   },
+    14: { cellWidth: colW[14], halign: "center", fontSize: 15   },
   };
 
   autoTable(doc, {
@@ -128,8 +128,10 @@ export async function generarPdfPedido(pedido: PedidoPdf): Promise<void> {
     head:   [headAll],
     body:   bodyRows,
     theme:  "grid",
-    headStyles:         { fillColor: GRAY_DARK, textColor: WHITE, fontStyle: "bold", fontSize: 9, cellPadding: 1.2, halign: "center", valign: "middle" },  // 6 → 9
-    bodyStyles:         { fontSize: 9, textColor: BLACK, cellPadding: 1.2, valign: "middle", minCellHeight: 7 },  // 6 → 9
+    // Header: 11pt  (antes 9pt)
+    headStyles:         { fillColor: GRAY_DARK, textColor: WHITE, fontStyle: "bold", fontSize: 11, cellPadding: 1.5, halign: "center", valign: "middle" },
+    // Body: 11pt, minCellHeight 9  (antes 9pt, 7)
+    bodyStyles:         { fontSize: 11, textColor: BLACK, cellPadding: 1.5, valign: "middle", minCellHeight: 9 },
     alternateRowStyles: { fillColor: GRAY_ROW },
     columnStyles,
     didParseCell(data) {
@@ -143,7 +145,8 @@ export async function generarPdfPedido(pedido: PedidoPdf): Promise<void> {
             data.cell.colSpan          = headAll.length;
             data.cell.styles.fillColor = GRAY_LIGHT;
             data.cell.styles.fontStyle = "italic";
-            data.cell.styles.fontSize  = 9;  // 6 → 9
+            // Obs: 11pt (antes 9pt)
+            data.cell.styles.fontSize  = 11;
             data.cell.styles.textColor = [80, 80, 80];
             data.cell.styles.halign    = "left";
           } else {

@@ -7,8 +7,8 @@ export const getSeguimiento = async (): Promise<PedidoSeguimiento[]> => {
 };
 
 export interface OrdenProduccionRespuesta {
-  no_pedido:       number;
-  no_cotizacion:   number | null;
+  no_pedido:       string;
+  no_cotizacion:   string | null;
   fecha:           string;
   cliente:         string;
   empresa:         string;
@@ -62,18 +62,16 @@ export interface OrdenProduccionProducto {
   repeticion_kidder:       string | null;
   repeticion_sicosa:       string | null;
   fecha_entrega:           string | null;
-  // ── Campos de merma ───────────────────────────────────────
   kilos:                   number | null;
   kilos_merma:             number | null;
   pzas:                    number | null;
   pzas_merma:              number | null;
   metros_merma:            number | null;
-  // ── Progreso real de extrusión ────────────────────────────
   kilos_extruir:           number | null;
   metros_extruir:          number | null;
 }
 
-export const getOrdenProduccion = async (noPedido: number): Promise<OrdenProduccionRespuesta> => {
+export const getOrdenProduccion = async (noPedido: string): Promise<OrdenProduccionRespuesta> => {
   const response = await api.get(`/seguimiento/${noPedido}/orden-produccion`);
   return response.data;
 };
@@ -91,7 +89,7 @@ export interface ProcesoRegistro {
 export interface ProcesosOrdenRespuesta {
   idproduccion:      number;
   no_produccion:     string;
-  no_pedido:         number;
+  no_pedido:         string;
   proceso_actual:    number | null;
   estado_id:         number;
   estado_nombre:     string;
@@ -119,17 +117,22 @@ export const finalizarProceso = async (idproduccion: number, datos: Record<strin
 };
 
 // ─────────────────────────────────────────────
-// BULTOS
+// BULTOS — tipos actualizados con dimensiones
 // ─────────────────────────────────────────────
 export interface Bulto {
   idbulto:           number;
   cantidad_unidades: number;
   fecha_creacion:    string;
   proceso_origen:    "bolseo" | "asa_flexible";
+  // Campos nuevos de dimensiones y peso
+  peso:   number | null;
+  alto:   number | null;
+  largo:  number | null;
+  ancho:  number | null;
 }
 
 export interface BultosRespuesta {
-  bultos_finalizado: boolean;       // ← flag de cierre
+  bultos_finalizado: boolean;
   bultos:            Bulto[];
   total_bultos:      number;
   total_unidades:    number;
@@ -140,11 +143,19 @@ export const getBultos = async (idproduccion: number): Promise<BultosRespuesta> 
   return data;
 };
 
+export interface NuevoBultoPayload {
+  cantidad_unidades: number;
+  peso?:  number | null;
+  alto?:  number | null;
+  largo?: number | null;
+  ancho?: number | null;
+}
+
 export const agregarBulto = async (
   idproduccion: number,
-  cantidad_unidades: number
+  payload: NuevoBultoPayload
 ): Promise<Bulto> => {
-  const { data } = await api.post(`/seguimiento/${idproduccion}/bultos`, { cantidad_unidades });
+  const { data } = await api.post(`/seguimiento/${idproduccion}/bultos`, payload);
   return data;
 };
 
@@ -157,4 +168,55 @@ export const eliminarBulto = async (
 
 export const finalizarBultos = async (idproduccion: number): Promise<void> => {
   await api.patch(`/seguimiento/${idproduccion}/bultos/finalizar`);
+};
+
+// ─────────────────────────────────────────────
+// ETIQUETAS PDF
+// ─────────────────────────────────────────────
+export interface BultoEtiqueta {
+  idbulto:           number;
+  cantidad_unidades: number;
+  fecha_creacion:    string;
+  proceso_origen:    "bolseo" | "asa_flexible";
+  peso:   number | null;
+  alto:   number | null;
+  largo:  number | null;
+  ancho:  number | null;
+}
+
+export interface EtiquetaData {
+  // Pedido
+  no_pedido:         string;
+  no_produccion:     string;
+  fecha:             string;
+  fecha_entrega:     string | null;
+  // Cliente
+  cliente:           string;
+  empresa:           string;
+  telefono:          string;
+  celular:           string;
+  correo:            string;
+  cliente_impresion: string;
+  // Domicilio del cliente
+  calle:         string;
+  numero:        string;
+  colonia:       string;
+  codigo_postal: string;
+  poblacion:     string;
+  estado:        string;
+  // Producto
+  nombre_producto: string;
+  medida:          string;
+  material:        string;
+  cantidad_total:  number | null;
+  kilogramos:      number | null;
+  modo_cantidad:   string;
+  // Bultos
+  total_bultos: number;
+  bultos:       BultoEtiqueta[];
+}
+
+export const getBultosEtiqueta = async (idproduccion: number): Promise<EtiquetaData> => {
+  const { data } = await api.get(`/seguimiento/${idproduccion}/bultos/etiqueta`);
+  return data;
 };

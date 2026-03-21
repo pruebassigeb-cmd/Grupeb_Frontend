@@ -45,8 +45,8 @@ export default function Dashboard({ children }: DashboardProps) {
       name: "Dar alta productos",
       subItems: [
         { name: "Plástico", path: "/plastico" },
-        { name: "Papel", path: "/papel" },
-        { name: "Cartón", path: "/carton" },
+        // { name: "Papel", path: "/papel" },
+        // { name: "Cartón", path: "/carton" },
       ],
     },
     { name: "Cotización", path: "/cotizar", subItems: [] },
@@ -58,8 +58,8 @@ export default function Dashboard({ children }: DashboardProps) {
       name: "Precios productos",
       subItems: [
         { name: "Plástico", path: "/precioplastico" },
-        { name: "Papel", path: "/papelP" },
-        { name: "Cartón", path: "/cartonP" },
+        // { name: "Papel", path: "/papelP" },
+        // { name: "Cartón", path: "/cartonP" },
       ],
     },
   ];

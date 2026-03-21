@@ -46,6 +46,7 @@ export interface ClienteBusqueda {
   atencion: string | null;
   celular: string | null;
   razon_social: string | null;
+  impresion: string | null;
 }
 
 // ====================================

@@ -16,25 +16,22 @@ export default function Pedidos() {
   const [pedidos,      setPedidos]      = useState<Pedido[]>([]);
   const [loadingPeds,  setLoadingPeds]  = useState(false);
   const [busqueda,     setBusqueda]     = useState("");
-
   const [modalOpen,    setModalOpen]    = useState(false);
   const [guardando,    setGuardando]    = useState(false);
   const [errorGuardar, setErrorGuardar] = useState<string | null>(null);
-
   const [catalogos,         setCatalogos]         = useState<CatalogosPlastico>({ tiposProducto: [], materiales: [], calibres: [] });
   const [cargandoCatalogos, setCargandoCatalogos] = useState(false);
   const [errorCatalogos,    setErrorCatalogos]    = useState("");
-
-  const [expandidas,   setExpandidas]   = useState<Set<number>>(new Set());
+  const [expandidas,   setExpandidas]   = useState<Set<string>>(new Set());
   const [paginaActual, setPaginaActual] = useState(1);
 
   useEffect(() => { cargarCatalogos(); cargarPedidos(); }, []);
   useEffect(() => { setPaginaActual(1); }, [busqueda]);
 
-  const toggleExpandida = (no: number) => {
+  const toggleExpandida = (folio: string) => {
     setExpandidas(prev => {
       const s = new Set(prev);
-      s.has(no) ? s.delete(no) : s.add(no);
+      s.has(folio) ? s.delete(folio) : s.add(folio);
       return s;
     });
   };
@@ -67,16 +64,16 @@ export default function Pedidos() {
       normalizar(p.empresa  ?? "").includes(t) ||
       normalizar(p.correo   ?? "").includes(t) ||
       normalizar(p.telefono ?? "").includes(t) ||
-      p.no_pedido.toString().includes(t)       ||
-      (p.no_cotizacion?.toString() ?? "").includes(t)
+      (p.no_pedido ?? "").toLowerCase().includes(t) ||
+      (p.no_cotizacion ?? "").toLowerCase().includes(t)
     );
   });
 
-  const totalPaginas       = Math.max(1, Math.ceil(pedidosFiltrados.length / ITEMS_POR_PAGINA));
-  const paginaSegura       = Math.min(paginaActual, totalPaginas);
-  const inicio             = (paginaSegura - 1) * ITEMS_POR_PAGINA;
-  const pedidosPagina      = pedidosFiltrados.slice(inicio, inicio + ITEMS_POR_PAGINA);
-  const irAPagina          = (p: number) => setPaginaActual(Math.max(1, Math.min(p, totalPaginas)));
+  const totalPaginas  = Math.max(1, Math.ceil(pedidosFiltrados.length / ITEMS_POR_PAGINA));
+  const paginaSegura  = Math.min(paginaActual, totalPaginas);
+  const inicio        = (paginaSegura - 1) * ITEMS_POR_PAGINA;
+  const pedidosPagina = pedidosFiltrados.slice(inicio, inicio + ITEMS_POR_PAGINA);
+  const irAPagina     = (p: number) => setPaginaActual(Math.max(1, Math.min(p, totalPaginas)));
 
   const resolverCalibre = (p: any): string => {
     const mat = (p.material || "").toUpperCase();
@@ -117,17 +114,13 @@ export default function Pedidos() {
       })),
     }));
 
-  // ── CREAR PEDIDO DIRECTO ──────────────────────────────────
   const handleSubmit = async (datos: any) => {
     setGuardando(true);
     setErrorGuardar(null);
     try {
-      // ✅ tipo: "pedido" → el backend asigna no_pedido y no_cotizacion queda null
       const respuesta = await crearCotizacion({ ...datos, tipo: "pedido" });
       await cargarPedidos();
       setModalOpen(false);
-
-      // PDF inmediato
       const productosPdf = datos.productos.map((prod: any) => {
         const modo = prod.modoCantidad || "unidad";
         return {
@@ -160,12 +153,13 @@ export default function Pedidos() {
             .filter(Boolean),
         };
       });
-
       try {
-        // ✅ Traer subtotal/iva/total del backend — no calcular en frontend
-        const venta = await getVentaByPedido(respuesta.no_pedido!);
+        // FIX: garantizar que no_pedido sea string antes de pasarlo
+        const noPedido = respuesta.no_pedido ?? "";
+        if (!noPedido) throw new Error("No se recibió no_pedido del servidor");
+        const venta = await getVentaByPedido(noPedido);
         await generarPdfPedido({
-          no_pedido:     respuesta.no_pedido!,
+          no_pedido:     noPedido,
           no_cotizacion: null,
           fecha:         new Date().toISOString(),
           cliente:       datos.cliente  || "",
@@ -181,17 +175,14 @@ export default function Pedidos() {
           productos:     productosPdf,
         });
       } catch (pdfErr) { console.warn("⚠️ PDF:", pdfErr); }
-
     } catch (e: any) {
       console.error("❌ Error al guardar pedido:", e);
       setErrorGuardar(e.message || e.response?.data?.error || "Error al guardar");
     } finally { setGuardando(false); }
   };
 
-  // ── DESCARGAR PDF ─────────────────────────────────────────
   const handleDescargarPdf = async (ped: Pedido) => {
     try {
-      // ✅ subtotal/iva/total vienen del backend — no calcular en frontend
       const venta = await getVentaByPedido(ped.no_pedido);
       await generarPdfPedido({
         no_pedido:     ped.no_pedido,
@@ -215,30 +206,27 @@ export default function Pedidos() {
     }
   };
 
-  // ── CANCELAR PEDIDO ───────────────────────────────────────
   const handleEliminar = async (ped: Pedido) => {
     const origen = ped.no_cotizacion
-      ? `\nOrigen: Cotización #${ped.no_cotizacion} (también será eliminada).`
+      ? `\nOrigen: ${ped.no_cotizacion} (también será eliminada).`
       : "";
-
     const confirmar = confirm(
-      `⚠️ CANCELAR PEDIDO #${ped.no_pedido}\n\n` +
+      `⚠️ CANCELAR PEDIDO ${ped.no_pedido}\n\n` +
       `Esta acción eliminará permanentemente:\n` +
       `• El pedido y todos sus productos\n` +
       `• Los detalles de cantidad y precio${origen}\n\n` +
       `Esta operación NO se puede deshacer. ¿Confirmar cancelación?`
     );
     if (!confirmar) return;
-
     try {
       await eliminarPedido(ped.no_pedido);
       setPedidos(prev => prev.filter(p => p.no_pedido !== ped.no_pedido));
     } catch (e: any) {
       const data = e.response?.data;
       if (data?.motivo === "pagos") {
-        alert(`🚫 No se puede cancelar el Pedido #${ped.no_pedido}\n\n${data.detalle}`);
+        alert(`🚫 No se puede cancelar el Pedido ${ped.no_pedido}\n\n${data.detalle}`);
       } else if (data?.motivo === "diseno") {
-        alert(`🚫 No se puede cancelar el Pedido #${ped.no_pedido}\n\n${data.detalle}`);
+        alert(`🚫 No se puede cancelar el Pedido ${ped.no_pedido}\n\n${data.detalle}`);
       } else {
         alert(data?.error || "Error al cancelar el pedido");
       }
@@ -261,7 +249,6 @@ export default function Pedidos() {
   const productoTieneKilos = (p: any): boolean =>
     (p.detalles || []).some((d: any) => d.modo_cantidad === "kilo");
 
-  // ── Badge de origen del pedido ────────────────────────────
   const origenBadge = (ped: Pedido) => {
     if (ped.es_directo) {
       return (
@@ -272,7 +259,7 @@ export default function Pedidos() {
     }
     return (
       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700">
-        De Cot. #{ped.no_cotizacion}
+        De {ped.no_cotizacion}
       </span>
     );
   };
@@ -318,18 +305,12 @@ export default function Pedidos() {
   return (
     <Dashboard>
       <h1 className="text-2xl font-bold mb-2">Pedidos</h1>
-      <p className="text-slate-400 mb-6">
-        Gestión de pedidos activos — incluye pedidos directos y cotizaciones aprobadas.
-      </p>
+      <p className="text-slate-400 mb-6">Gestión de pedidos activos — incluye pedidos directos y cotizaciones aprobadas.</p>
 
       <div className="mb-6 relative">
-        <input
-          type="text"
-          value={busqueda}
-          onChange={e => setBusqueda(e.target.value)}
-          placeholder="Buscar por cliente, empresa, correo, teléfono, N° pedido o N° cotización..."
-          className="w-full px-4 py-3 pl-12 border border-gray-300 rounded-lg text-gray-900 bg-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-        />
+        <input type="text" value={busqueda} onChange={e => setBusqueda(e.target.value)}
+          placeholder="Buscar por cliente, empresa, folio (ej: P26001), N° cotización..."
+          className="w-full px-4 py-3 pl-12 border border-gray-300 rounded-lg text-gray-900 bg-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
         <svg className="w-5 h-5 text-gray-400 absolute left-4 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
         </svg>
@@ -356,67 +337,33 @@ export default function Pedidos() {
               return (
                 <>
                   <tr key={ped.no_pedido} className="hover:bg-gray-50">
-                    {/* N° Pedido */}
                     <td className="px-6 py-4 text-sm font-semibold text-gray-900 whitespace-nowrap">
-                      #{ped.no_pedido}
+                      {ped.no_pedido}
                     </td>
-
-                    {/* Origen */}
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      {origenBadge(ped)}
-                    </td>
-
-                    {/* Fecha */}
-                    <td className="px-6 py-4 text-sm text-gray-500 whitespace-nowrap">
-                      {formatFecha(ped.fecha)}
-                    </td>
-
-                    {/* Cliente */}
+                    <td className="px-6 py-4 whitespace-nowrap">{origenBadge(ped)}</td>
+                    <td className="px-6 py-4 text-sm text-gray-500 whitespace-nowrap">{formatFecha(ped.fecha)}</td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <p className="text-sm font-medium text-gray-900">{ped.cliente || "—"}</p>
                       {ped.telefono && <p className="text-xs text-gray-400">{ped.telefono}</p>}
                     </td>
-
-                    {/* Empresa */}
-                    <td className="px-6 py-4 text-sm text-gray-500 whitespace-nowrap">
-                      {ped.empresa || "—"}
-                    </td>
-
-                    {/* Productos (expandible) */}
+                    <td className="px-6 py-4 text-sm text-gray-500 whitespace-nowrap">{ped.empresa || "—"}</td>
                     <td className="px-6 py-4 text-sm text-gray-500">
                       <button onClick={() => toggleExpandida(ped.no_pedido)} className="flex items-center gap-2 group">
-                        <span className="font-medium text-gray-700 group-hover:text-blue-600">
-                          {ped.productos.length} producto(s)
-                        </span>
+                        <span className="font-medium text-gray-700 group-hover:text-blue-600">{ped.productos.length} producto(s)</span>
                         <svg className={`w-4 h-4 text-gray-400 transition-transform ${expandida ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                         </svg>
                       </button>
                     </td>
-
-                    {/* Total */}
-                    <td className="px-6 py-4 text-sm font-semibold text-gray-900 whitespace-nowrap">
-                      ${ped.total.toFixed(2)}
-                    </td>
-
-                    {/* Acciones */}
+                    <td className="px-6 py-4 text-sm font-semibold text-gray-900 whitespace-nowrap">${ped.total.toFixed(2)}</td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => handleDescargarPdf(ped)}
-                          title="Descargar PDF"
-                          className="p-1.5 rounded-md text-green-600 hover:bg-green-50"
-                        >
+                        <button onClick={() => handleDescargarPdf(ped)} title="Descargar PDF" className="p-1.5 rounded-md text-green-600 hover:bg-green-50">
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                           </svg>
                         </button>
-                        {/* ✅ Cancelar pedido — habilitado para todos, cascade completo en backend */}
-                        <button
-                          onClick={() => handleEliminar(ped)}
-                          title="Cancelar pedido"
-                          className="p-1.5 rounded-md text-red-500 hover:bg-red-50"
-                        >
+                        <button onClick={() => handleEliminar(ped)} title="Cancelar pedido" className="p-1.5 rounded-md text-red-500 hover:bg-red-50">
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                           </svg>
@@ -424,23 +371,17 @@ export default function Pedidos() {
                       </div>
                     </td>
                   </tr>
-
-                  {/* Detalle expandido */}
                   {expandida && (
                     <tr key={`det-${ped.no_pedido}`} className="bg-blue-50 border-t border-blue-100">
                       <td colSpan={8} className="px-8 py-4">
                         <div className="space-y-3">
-                          {/* Info contacto */}
                           <div className="grid grid-cols-2 gap-3 mb-2">
                             {ped.correo   && <p className="text-xs text-gray-500">📧 {ped.correo}</p>}
                             {ped.telefono && <p className="text-xs text-gray-500">📞 {ped.telefono}</p>}
                           </div>
-
                           {ped.productos.map((p: any, i: number) => (
                             <div key={i} className="flex items-start gap-4 bg-white rounded-lg px-4 py-3 shadow-sm border border-gray-100">
-                              <span className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-100 text-blue-700 text-xs font-bold flex items-center justify-center mt-0.5">
-                                {i + 1}
-                              </span>
+                              <span className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-100 text-blue-700 text-xs font-bold flex items-center justify-center mt-0.5">{i + 1}</span>
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2">
                                   <p className="text-sm font-medium text-gray-800 truncate">{p.nombre}</p>
@@ -454,8 +395,8 @@ export default function Pedidos() {
                                   {p.tintas   && <span>Tintas: {p.tintas}</span>}
                                   {p.caras    && <span>Caras: {p.caras}</span>}
                                 </div>
-                                {p.pantones  && <p className="text-xs text-purple-600 mt-0.5">🎨 {Array.isArray(p.pantones) ? p.pantones.join(", ") : p.pantones}</p>}
-                                {p.pigmentos && <p className="text-xs text-orange-600 mt-0.5">🧪 {p.pigmentos}</p>}
+                                {p.pantones   && <p className="text-xs text-purple-600 mt-0.5">🎨 {Array.isArray(p.pantones) ? p.pantones.join(", ") : p.pantones}</p>}
+                                {p.pigmentos  && <p className="text-xs text-orange-600 mt-0.5">🧪 {p.pigmentos}</p>}
                                 {p.observacion && <p className="text-xs text-gray-500 mt-1 italic">Obs: {p.observacion}</p>}
                               </div>
                               <div className="flex flex-wrap gap-2 flex-shrink-0">
@@ -476,9 +417,7 @@ export default function Pedidos() {
               );
             }) : (
               <tr><td colSpan={8} className="px-6 py-12 text-center text-gray-500">
-                {busqueda
-                  ? `No se encontraron pedidos para "${busqueda}"`
-                  : "No hay pedidos registrados"}
+                {busqueda ? `No se encontraron pedidos para "${busqueda}"` : "No hay pedidos registrados"}
               </td></tr>
             )}
           </tbody>
@@ -486,10 +425,8 @@ export default function Pedidos() {
         {!loadingPeds && pedidosFiltrados.length > 0 && <Paginador />}
       </div>
 
-      <button
-        onClick={() => { setErrorGuardar(null); setModalOpen(true); }}
-        className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-6 rounded-lg shadow transition"
-      >
+      <button onClick={() => { setErrorGuardar(null); setModalOpen(true); }}
+        className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-6 rounded-lg shadow transition">
         + Nuevo Pedido
       </button>
 
@@ -507,24 +444,14 @@ export default function Pedidos() {
           </div>
         ) : (
           <div>
-            {errorGuardar && (
-              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
-                <p className="text-red-700 text-sm">❌ {errorGuardar}</p>
-              </div>
-            )}
+            {errorGuardar && <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg"><p className="text-red-700 text-sm">❌ {errorGuardar}</p></div>}
             {guardando && (
               <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-center gap-3">
                 <div className="animate-spin rounded-full h-5 w-5 border-2 border-blue-600 border-t-transparent" />
                 <p className="text-blue-700 text-sm">Guardando pedido y generando PDF...</p>
               </div>
             )}
-            {/* ✅ modo="pedido" → botón dice "Crear Pedido", envía tipo: "pedido" al backend */}
-            <FormularioCotizacion
-              onSubmit={handleSubmit}
-              onCancel={() => setModalOpen(false)}
-              catalogos={catalogos}
-              modo="pedido"
-            />
+            <FormularioCotizacion onSubmit={handleSubmit} onCancel={() => setModalOpen(false)} catalogos={catalogos} modo="pedido" />
           </div>
         )}
       </Modal>

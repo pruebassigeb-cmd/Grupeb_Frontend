@@ -8,13 +8,15 @@ interface PrecioRow {
   idkilogramos: number;
   tarifas: {
     [key: number]: {
-      // key es cantidad_tintas (1, 2, 3, 4)
       id: number;
       precio: number;
       merma: number;
     };
   };
 }
+
+// Texto intermedio por celda: clave = `${kilos}-${tintas}-precio` | `${kilos}-${tintas}-merma`
+type TextoMap = Record<string, string>;
 
 export default function PrecioPlastico() {
   const [editando, setEditando] = useState(false);
@@ -24,17 +26,31 @@ export default function PrecioPlastico() {
 
   const [precios, setPrecios] = useState<PrecioRow[]>([]);
   const [preciosBackup, setPreciosBackup] = useState<PrecioRow[]>([]);
+  const [textos, setTextos] = useState<TextoMap>({});
+  const [textosBackup, setTextosBackup] = useState<TextoMap>({});
 
   useEffect(() => {
     cargarTarifas();
   }, []);
+
+  const buildTextos = (rows: PrecioRow[]): TextoMap => {
+    const map: TextoMap = {};
+    rows.forEach((row) => {
+      [1, 2, 3, 4].forEach((t) => {
+        const tarifa = row.tarifas[t];
+        if (!tarifa) return;
+        map[`${row.kilos}-${t}-precio`] = tarifa.precio === 0 ? "" : String(tarifa.precio);
+        map[`${row.kilos}-${t}-merma`]  = tarifa.merma  === 0 ? "" : String(tarifa.merma);
+      });
+    });
+    return map;
+  };
 
   const cargarTarifas = async () => {
     try {
       setLoading(true);
       const tarifas = await getTarifas();
 
-      // Transformar tarifas planas a estructura de tabla
       const preciosMap = new Map<number, PrecioRow>();
 
       tarifas.forEach((tarifa: Tarifa) => {
@@ -45,7 +61,6 @@ export default function PrecioPlastico() {
             tarifas: {},
           });
         }
-
         const row = preciosMap.get(tarifa.kilogramos)!;
         row.tarifas[tarifa.cantidad_tintas] = {
           id: tarifa.idtarifas_produccion,
@@ -56,6 +71,7 @@ export default function PrecioPlastico() {
 
       const preciosArray = Array.from(preciosMap.values()).sort((a, b) => a.kilos - b.kilos);
       setPrecios(preciosArray);
+      setTextos(buildTextos(preciosArray));
     } catch (error) {
       console.error("Error al cargar tarifas:", error);
       alert("Error al cargar tarifas");
@@ -64,33 +80,40 @@ export default function PrecioPlastico() {
     }
   };
 
-  const actualizarCampo = (
+  const actualizarTexto = (
     kilos: number,
     cantidadTintas: number,
     campo: "precio" | "merma",
-    valor: number
+    valor: string
   ) => {
+    // Precio: hasta 4 decimales | Merma: hasta 2 decimales
+    const regex = campo === "precio" ? /^\d*\.?\d{0,4}$/ : /^\d*\.?\d{0,2}$/;
+    if (!regex.test(valor)) return;
+
+    const clave = `${kilos}-${cantidadTintas}-${campo}`;
+    setTextos((prev) => ({ ...prev, [clave]: valor }));
+
+    // Actualizar valor numérico en precios
     setPrecios((prev) =>
       prev.map((p) => {
-        if (p.kilos === kilos) {
-          return {
-            ...p,
-            tarifas: {
-              ...p.tarifas,
-              [cantidadTintas]: {
-                ...p.tarifas[cantidadTintas],
-                [campo]: valor,
-              },
+        if (p.kilos !== kilos) return p;
+        return {
+          ...p,
+          tarifas: {
+            ...p.tarifas,
+            [cantidadTintas]: {
+              ...p.tarifas[cantidadTintas],
+              [campo]: valor === "" ? 0 : Number(valor),
             },
-          };
-        }
-        return p;
+          },
+        };
       })
     );
   };
 
   const iniciarEdicion = () => {
     setPreciosBackup(JSON.parse(JSON.stringify(precios)));
+    setTextosBackup({ ...textos });
     setEditando(true);
   };
 
@@ -100,6 +123,7 @@ export default function PrecioPlastico() {
 
   const cancelarCambios = () => {
     setPrecios(preciosBackup);
+    setTextos(textosBackup);
     setEditando(false);
     setMostrarConfirmacion(false);
   };
@@ -108,7 +132,6 @@ export default function PrecioPlastico() {
     try {
       setGuardando(true);
 
-      // Convertir estructura de precios a array de actualizaciones
       const tarifasParaActualizar = precios.flatMap((row) =>
         Object.values(row.tarifas).map((tarifa) => ({
           id: tarifa.id,
@@ -175,18 +198,10 @@ export default function PrecioPlastico() {
                 <th className="border px-3 py-2" rowSpan={2}>
                   Kg
                 </th>
-                <th className="border px-3 py-2" colSpan={2}>
-                  1 tinta
-                </th>
-                <th className="border px-3 py-2" colSpan={2}>
-                  2 tintas
-                </th>
-                <th className="border px-3 py-2" colSpan={2}>
-                  3 tintas
-                </th>
-                <th className="border px-3 py-2" colSpan={2}>
-                  4 tintas
-                </th>
+                <th className="border px-3 py-2" colSpan={2}>1 tinta</th>
+                <th className="border px-3 py-2" colSpan={2}>2 tintas</th>
+                <th className="border px-3 py-2" colSpan={2}>3 tintas</th>
+                <th className="border px-3 py-2" colSpan={2}>4 tintas</th>
               </tr>
               <tr className="bg-blue-500 text-white">
                 <th className="border px-2 py-1 text-xs">Precio</th>
@@ -211,38 +226,40 @@ export default function PrecioPlastico() {
                     const tarifa = row.tarifas[cantidadTintas];
                     if (!tarifa) return null;
 
+                    const clavePrecio = `${row.kilos}-${cantidadTintas}-precio`;
+                    const claveMerma  = `${row.kilos}-${cantidadTintas}-merma`;
+
                     return (
                       <>
                         <td key={`precio-${cantidadTintas}`} className="border px-3 py-2 text-center">
                           {editando ? (
                             <input
-                              type="number"
-                              value={tarifa.precio}
+                              type="text"
+                              inputMode="decimal"
+                              value={textos[clavePrecio] ?? ""}
                               onChange={(e) =>
-                                actualizarCampo(row.kilos, cantidadTintas, "precio", Number(e.target.value))
+                                actualizarTexto(row.kilos, cantidadTintas, "precio", e.target.value)
                               }
                               onKeyDown={handleKeyDown}
-                              className="w-20 text-center border rounded-lg px-2 py-1
-                                       focus:border-blue-500 focus:outline-none"
+                              className="w-20 text-center border rounded-lg px-2 py-1 focus:border-blue-500 focus:outline-none"
+                              placeholder="0.0000"
                             />
                           ) : (
                             <span className="font-semibold text-gray-700">${tarifa.precio}</span>
                           )}
                         </td>
-                        <td
-                          key={`merma-${cantidadTintas}`}
-                          className="border px-3 py-2 text-center bg-amber-50"
-                        >
+                        <td key={`merma-${cantidadTintas}`} className="border px-3 py-2 text-center bg-amber-50">
                           {editando ? (
                             <input
-                              type="number"
-                              value={tarifa.merma}
+                              type="text"
+                              inputMode="decimal"
+                              value={textos[claveMerma] ?? ""}
                               onChange={(e) =>
-                                actualizarCampo(row.kilos, cantidadTintas, "merma", Number(e.target.value))
+                                actualizarTexto(row.kilos, cantidadTintas, "merma", e.target.value)
                               }
                               onKeyDown={handleKeyDown}
-                              className="w-16 text-center border rounded-lg px-2 py-1
-                                       focus:border-blue-500 focus:outline-none"
+                              className="w-16 text-center border rounded-lg px-2 py-1 focus:border-blue-500 focus:outline-none"
+                              placeholder="0.00"
                             />
                           ) : (
                             <span className="font-semibold text-amber-700">{tarifa.merma}%</span>
@@ -269,30 +286,23 @@ export default function PrecioPlastico() {
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl shadow-xl p-6 w-[380px]">
             <h3 className="text-lg font-bold text-red-600 mb-2">Confirmar cambios</h3>
-
             <p className="text-sm text-gray-700 mb-4">
               Estás a punto de modificar los costos y mermas.
               <br />
               <strong>¿Deseas continuar?</strong>
             </p>
-
             <div className="flex justify-end gap-3">
               <button
                 onClick={cancelarCambios}
                 disabled={guardando}
-                className="px-4 py-2 rounded-lg border
-                           border-gray-300 text-gray-700
-                           hover:bg-gray-100 disabled:opacity-50"
+                className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100 disabled:opacity-50"
               >
                 Cancelar
               </button>
-
               <button
                 onClick={confirmarCambios}
                 disabled={guardando}
-                className="px-4 py-2 rounded-lg
-                           bg-red-600 text-white
-                           hover:bg-red-700 disabled:opacity-50"
+                className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
               >
                 {guardando ? "Guardando..." : "Confirmar"}
               </button>

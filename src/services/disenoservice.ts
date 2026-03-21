@@ -3,7 +3,7 @@ import api from "./api";
 // ============================================================
 // OBTENER DISEÑO DE UN PEDIDO (cabecera + productos)
 // ============================================================
-export const getDisenoByPedido = async (noPedido: number) => {
+export const getDisenoByPedido = async (noPedido: string) => {
   const response = await api.get(`/diseno/pedido/${noPedido}`);
   return response.data;
 };
@@ -29,7 +29,7 @@ export const actualizarEstadoProductoDiseno = async (
 // ============================================================
 // VERIFICAR SI EL PEDIDO PUEDE PASAR A PRODUCCIÓN
 // ============================================================
-export const verificarCondicionesProduccion = async (noPedido: number) => {
+export const verificarCondicionesProduccion = async (noPedido: string) => {
   const response = await api.get(`/diseno/pedido/${noPedido}/produccion`);
   return response.data;
 };

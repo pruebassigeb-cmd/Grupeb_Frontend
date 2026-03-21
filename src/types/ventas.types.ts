@@ -33,8 +33,8 @@ export interface Venta {
   fecha_creacion:        string;
   estado_id:             number;
   estado_nombre:         string;
-  no_pedido:             number;
-  no_cotizacion:         number | null;
+  no_pedido:             string;
+  no_cotizacion:         string | null;
   fecha_pedido:          string;
   cliente:               string;
   empresa:               string;

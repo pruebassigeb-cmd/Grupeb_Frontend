@@ -162,7 +162,7 @@ export default function EditarCotizacion({
   };
 
   // ── Descarga automática del PDF de pedido ─────────────────
-  const descargarPdfPedido = async (noPedido: number) => {
+  const descargarPdfPedido = async (noPedido: string) => {
     try {
       const venta = await getVentaByPedido(noPedido);
       await generarPdfPedido({

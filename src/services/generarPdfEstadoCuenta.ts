@@ -43,7 +43,8 @@ function celda(
     alignLeft?: boolean;
   }
 ) {
-  const { bold = false, valueSize = 11, color = BLACK, fill, alignLeft = false } = opts ?? {};
+  // valueSize por defecto: 13pt (antes 11pt)
+  const { bold = false, valueSize = 13, color = BLACK, fill, alignLeft = false } = opts ?? {};
   doc.setDrawColor(...BLACK);
   doc.setLineWidth(0.2);
   if (fill) {
@@ -53,16 +54,17 @@ function celda(
     doc.rect(x, y, w, h);
   }
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(7.5);
+  // Label: 9.5pt (antes 7.5pt)
+  doc.setFontSize(9.5);
   doc.setTextColor(...GRAY_MED);
-  doc.text(label, x + 1.5, y + 3.5);
+  doc.text(label, x + 1.5, y + 4.5);
   doc.setFont("helvetica", bold ? "bold" : "normal");
   doc.setFontSize(valueSize);
   doc.setTextColor(...color);
   if (alignLeft) {
-    doc.text(value, x + 1.5, y + h - 2.5, { maxWidth: w - 3 });
+    doc.text(value, x + 1.5, y + h - 3, { maxWidth: w - 3 });
   } else {
-    doc.text(value, x + w / 2, y + h - 2.5, { align: "center" });
+    doc.text(value, x + w / 2, y + h - 3, { align: "center" });
   }
   doc.setTextColor(...BLACK);
 }
@@ -70,14 +72,15 @@ function celda(
 function seccionHeader(
   doc: jsPDF,
   label: string,
-  x: number, y: number, w: number, h = 7
+  x: number, y: number, w: number, h = 9  // antes 7
 ) {
   doc.setFillColor(...GRAY_XDARK);
   doc.rect(x, y, w, h, "FD");
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(9);
+  // Header sección: 11pt (antes 9pt)
+  doc.setFontSize(11);
   doc.setTextColor(...WHITE);
-  doc.text(label, x + w / 2, y + h / 2 + 1.5, { align: "center" });
+  doc.text(label, x + w / 2, y + h / 2 + 2, { align: "center" });
   doc.setTextColor(...BLACK);
 }
 
@@ -96,10 +99,11 @@ export async function generarPdfEstadoCuenta(
   // ════════════════════════════════════════════════════════════
   // ENCABEZADO
   // ════════════════════════════════════════════════════════════
-  const logoW   = 28;
-  const folioW  = 45;
+  const logoW   = 32;
+  const folioW  = 52;
   const tituW   = CW - logoW - folioW;
-  const headerH = 22;
+  // headerH: 28 (antes 22)
+  const headerH = 28;
 
   doc.setDrawColor(...BLACK);
   doc.setLineWidth(0.3);
@@ -108,55 +112,63 @@ export async function generarPdfEstadoCuenta(
     try { doc.addImage(logoBase64, "PNG", M + 1, y + 1, logoW - 2, headerH - 2); }
     catch {
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(18);
+      doc.setFontSize(22);
       doc.setTextColor(...BLACK);
-      doc.text("EB", M + logoW / 2, y + headerH / 2 + 2, { align: "center" });
+      doc.text("EB", M + logoW / 2, y + headerH / 2 + 3, { align: "center" });
     }
   }
 
   const tituX = M + logoW;
   doc.rect(tituX, y, tituW, headerH);
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(14);
+  // Título principal: 17pt (antes 14pt)
+  doc.setFontSize(17);
   doc.setTextColor(...BLACK);
-  doc.text("Estado de Cuenta", tituX + tituW / 2, y + 9, { align: "center" });
+  doc.text("Estado de Cuenta", tituX + tituW / 2, y + 11, { align: "center" });
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(8.5);
+  // Subtítulo: 10.5pt (antes 8.5pt)
+  doc.setFontSize(10.5);
   doc.setTextColor(...GRAY_DARK);
-  doc.text("Resumen financiero de producción real", tituX + tituW / 2, y + 15, { align: "center" });
+  doc.text("Resumen financiero de producción real", tituX + tituW / 2, y + 19, { align: "center" });
   doc.setTextColor(...BLACK);
 
   const folioX = M + logoW + tituW;
   doc.rect(folioX, y, folioW, headerH);
   doc.setFillColor(...GRAY_XDARK);
-  doc.rect(folioX, y, folioW, 6, "FD");
+  // Banda "PEDIDO": altura 8 (antes 6)
+  doc.rect(folioX, y, folioW, 8, "FD");
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(8.5);
+  // "PEDIDO" label: 10.5pt (antes 8.5pt)
+  doc.setFontSize(10.5);
   doc.setTextColor(...WHITE);
-  doc.text("PEDIDO", folioX + folioW / 2, y + 4.2, { align: "center" });
+  doc.text("PEDIDO", folioX + folioW / 2, y + 5.5, { align: "center" });
   doc.setTextColor(...BLACK);
-  doc.setFontSize(15);
-  doc.text(`#${datos.no_pedido}`, folioX + folioW / 2, y + 12, { align: "center" });
+  // Número pedido: 18pt (antes 15pt)
+  doc.setFontSize(18);
+  doc.text(`#${datos.no_pedido}`, folioX + folioW / 2, y + 15, { align: "center" });
   doc.setDrawColor(...GRAY_MED);
-  doc.line(folioX, y + 14, folioX + folioW, y + 14);
+  doc.line(folioX, y + 17, folioX + folioW, y + 17);
   doc.setDrawColor(...BLACK);
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(7.5);
+  // "FECHA" label: 9.5pt (antes 7.5pt)
+  doc.setFontSize(9.5);
   doc.setTextColor(...GRAY_DARK);
-  doc.text("FECHA", folioX + 2, y + 17.5);
-  doc.setFontSize(9);
+  doc.text("FECHA", folioX + 2, y + 21.5);
+  // Fecha valor: 11pt (antes 9pt)
+  doc.setFontSize(11);
   doc.setTextColor(...BLACK);
-  doc.text(formatFecha(datos.fecha), folioX + folioW / 2, y + 21, { align: "center" });
+  doc.text(formatFecha(datos.fecha), folioX + folioW / 2, y + 26, { align: "center" });
 
-  y += headerH + 3;
+  y += headerH + 4;
 
   // ════════════════════════════════════════════════════════════
   // DATOS DEL CLIENTE
   // ════════════════════════════════════════════════════════════
   seccionHeader(doc, "DATOS DEL CLIENTE", M, y, CW);
-  y += 7;
+  y += 9;
 
-  const clienteH = 10;
+  // clienteH: 13 (antes 10)
+  const clienteH = 13;
   const c1 = CW * 0.28;
   const c2 = CW * 0.20;
   const c3 = CW * 0.22;
@@ -165,15 +177,15 @@ export async function generarPdfEstadoCuenta(
   celda(doc, "Cliente",  f(datos.cliente),  M,                y, c1, clienteH);
   celda(doc, "Empresa",  f(datos.empresa),  M + c1,           y, c2, clienteH);
   celda(doc, "Teléfono", f(datos.telefono), M + c1 + c2,      y, c3, clienteH);
-  celda(doc, "Correo",   f(datos.correo),   M + c1 + c2 + c3, y, c4, clienteH, { valueSize: 8 });
+  celda(doc, "Correo",   f(datos.correo),   M + c1 + c2 + c3, y, c4, clienteH, { valueSize: 10 });
 
-  y += clienteH + 4;
+  y += clienteH + 5;
 
   // ════════════════════════════════════════════════════════════
   // TABLA COMPARATIVA DE PRODUCTOS
   // ════════════════════════════════════════════════════════════
   seccionHeader(doc, "COMPARATIVA POR PRODUCTO — CANTIDAD Y PRECIO", M, y, CW);
-  y += 7;
+  y += 9;
 
   const colNom    = CW * 0.24;
   const colOrden  = CW * 0.12;
@@ -195,7 +207,8 @@ export async function generarPdfEstadoCuenta(
     { label: "Dif. Precio",    w: colDifPre },
   ];
 
-  const tabHeaderH = 8;
+  // tabHeaderH: 10 (antes 8)
+  const tabHeaderH = 10;
   let hx = M;
   tabHeaders.forEach(h => {
     doc.setFillColor(...GRAY_LIGHT);
@@ -204,15 +217,17 @@ export async function generarPdfEstadoCuenta(
     doc.setLineWidth(0.2);
     doc.rect(hx, y, h.w, tabHeaderH);
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(7);
+    // Header tabla: 9pt (antes 7pt)
+    doc.setFontSize(9);
     doc.setTextColor(...GRAY_DARK);
-    doc.text(h.label, hx + h.w / 2, y + tabHeaderH / 2 + 1.5, { align: "center" });
+    doc.text(h.label, hx + h.w / 2, y + tabHeaderH / 2 + 2, { align: "center" });
     hx += h.w;
   });
   y += tabHeaderH;
   doc.setTextColor(...BLACK);
 
-  const rowH = 9;
+  // rowH: 11 (antes 9)
+  const rowH = 11;
   datos.productos.forEach((prod, idx) => {
     const diffPzas   = prod.diferencia_piezas;
     const diffPrecio = prod.diferencia_precio;
@@ -239,12 +254,13 @@ export async function generarPdfEstadoCuenta(
       doc.setLineWidth(0.15);
       doc.rect(rx, y, col.w, rowH);
       doc.setFont("helvetica", col.bold ? "bold" : "normal");
-      doc.setFontSize(col.left ? 7 : 8);
+      // Texto filas: nombre 9pt, resto 10pt  (antes 7/8pt)
+      doc.setFontSize(col.left ? 9 : 10);
       doc.setTextColor(...col.color);
       if (col.left) {
-        doc.text(col.value, rx + 1.5, y + rowH / 2 + 1.5, { maxWidth: col.w - 3 });
+        doc.text(col.value, rx + 1.5, y + rowH / 2 + 2, { maxWidth: col.w - 3 });
       } else {
-        doc.text(col.value, rx + col.w / 2, y + rowH / 2 + 1.5, { align: "center" });
+        doc.text(col.value, rx + col.w / 2, y + rowH / 2 + 2, { align: "center" });
       }
       rx += col.w;
     });
@@ -253,15 +269,16 @@ export async function generarPdfEstadoCuenta(
     y += rowH;
   });
 
-  y += 4;
+  y += 5;
 
   // ════════════════════════════════════════════════════════════
   // RESUMEN FINANCIERO
   // ════════════════════════════════════════════════════════════
   seccionHeader(doc, "RESUMEN FINANCIERO", M, y, CW);
-  y += 7;
+  y += 9;
 
-  const finH   = 10;
+  // finH: 13 (antes 10)
+  const finH   = 13;
   const colFin = CW / 6;
 
   const finCols: {
@@ -302,14 +319,14 @@ export async function generarPdfEstadoCuenta(
     { bold: true, color: datos.saldo <= 0 ? GRAY_DARK : BLACK, fill: datos.saldo <= 0 ? GRAY_LIGHT : GRAY_SOFT }
   );
 
-  y += finH + 4;
+  y += finH + 5;
 
   // ════════════════════════════════════════════════════════════
   // HISTORIAL DE PAGOS
   // ════════════════════════════════════════════════════════════
   if (pagos && pagos.length > 0) {
     seccionHeader(doc, "HISTORIAL DE PAGOS", M, y, CW);
-    y += 7;
+    y += 9;
 
     const pColFecha  = CW * 0.18;
     const pColMonto  = CW * 0.18;
@@ -325,7 +342,8 @@ export async function generarPdfEstadoCuenta(
       { label: "Observación", w: pColObs    },
     ];
 
-    const pagoHeaderH = 7;
+    // pagoHeaderH: 9 (antes 7)
+    const pagoHeaderH = 9;
     let phx = M;
     pagoHeaders.forEach(h => {
       doc.setFillColor(...GRAY_LIGHT);
@@ -334,15 +352,17 @@ export async function generarPdfEstadoCuenta(
       doc.setLineWidth(0.2);
       doc.rect(phx, y, h.w, pagoHeaderH);
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(7.5);
+      // Header pagos: 9.5pt (antes 7.5pt)
+      doc.setFontSize(9.5);
       doc.setTextColor(...GRAY_DARK);
-      doc.text(h.label, phx + h.w / 2, y + pagoHeaderH / 2 + 1.5, { align: "center" });
+      doc.text(h.label, phx + h.w / 2, y + pagoHeaderH / 2 + 2, { align: "center" });
       phx += h.w;
     });
     y += pagoHeaderH;
     doc.setTextColor(...BLACK);
 
-    const pagoRowH = 8;
+    // pagoRowH: 10 (antes 8)
+    const pagoRowH = 10;
     let totalAcumulado = 0;
 
     pagos.forEach((pago, idx) => {
@@ -363,12 +383,13 @@ export async function generarPdfEstadoCuenta(
         doc.setLineWidth(0.15);
         doc.rect(prx, y, pv.w, pagoRowH);
         doc.setFont("helvetica", pv.bold ? "bold" : "normal");
-        doc.setFontSize(8);
+        // Texto filas pagos: 10pt (antes 8pt)
+        doc.setFontSize(10);
         doc.setTextColor(...pv.color);
         if (pv.center) {
-          doc.text(pv.value, prx + pv.w / 2, y + pagoRowH / 2 + 1.5, { align: "center" });
+          doc.text(pv.value, prx + pv.w / 2, y + pagoRowH / 2 + 2, { align: "center" });
         } else {
-          doc.text(pv.value, prx + 1.5, y + pagoRowH / 2 + 1.5, { maxWidth: pv.w - 3 });
+          doc.text(pv.value, prx + 1.5, y + pagoRowH / 2 + 2, { maxWidth: pv.w - 3 });
         }
         prx += pv.w;
       });
@@ -378,85 +399,94 @@ export async function generarPdfEstadoCuenta(
       y += pagoRowH;
     });
 
-    const totRowH = 9;
+    // totRowH: 11 (antes 9)
+    const totRowH = 11;
     doc.setFillColor(...GRAY_LIGHT);
     doc.rect(M, y, CW, totRowH, "FD");
     doc.setDrawColor(...BLACK);
     doc.setLineWidth(0.2);
     doc.rect(M, y, CW, totRowH);
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(9);
+    // Total pagado: 11pt (antes 9pt)
+    doc.setFontSize(11);
     doc.setTextColor(...GRAY_DARK);
-    doc.text(`Total pagado (${pagos.length} pago${pagos.length !== 1 ? "s" : ""})`, M + 3, y + totRowH / 2 + 1.5);
+    doc.text(`Total pagado (${pagos.length} pago${pagos.length !== 1 ? "s" : ""})`, M + 3, y + totRowH / 2 + 2);
     doc.setTextColor(...GRAY_XDARK);
-    doc.text(fmtMoney(totalAcumulado), M + CW - 3, y + totRowH / 2 + 1.5, { align: "right" });
+    doc.text(fmtMoney(totalAcumulado), M + CW - 3, y + totRowH / 2 + 2, { align: "right" });
     doc.setTextColor(...BLACK);
     y += totRowH;
   }
 
   // ════════════════════════════════════════════════════════════
   // DATOS BANCARIOS Y CONTACTO
-  // Fluye naturalmente después del contenido, sin anclarse al fondo
   // ════════════════════════════════════════════════════════════
-  y += 10;
+  y += 12;
 
+  // Texto depósito: 10.5pt (antes 8.5pt)
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(8.5);
+  doc.setFontSize(10.5);
   doc.setTextColor(...GRAY_DARK);
   doc.text(
     "Favor de hacer su depósito a cualquiera de las siguientes cuentas:",
     PW / 2, y, { align: "center", maxWidth: CW }
   );
-  y += 8;
+  y += 10;
 
+  // Nombre banco: 12pt (antes 9.5pt)
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(9.5);
+  doc.setFontSize(12);
   doc.setTextColor(...BLACK);
   doc.text("Banamex", PW / 2, y, { align: "center" });
-  y += 5;
-
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(9);
-  doc.setTextColor(...BLACK);
-  doc.text("Cuenta # 70010708964", PW / 2, y, { align: "center" });
-  y += 5;
-  doc.text("Grupeb S.A. de C.V.", PW / 2, y, { align: "center" });
-  y += 9;
-
-  doc.setFont("helvetica", "italic");
-  doc.setFontSize(8.5);
-  doc.setTextColor(...GRAY_DARK);
-  doc.text("Estoy a sus órdenes para cualquier duda o aclaración.", PW / 2, y, { align: "center" });
   y += 6;
 
+  // Número cuenta: 11pt (antes 9pt)
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(11);
+  doc.setTextColor(...BLACK);
+  doc.text("Cuenta # 70010708964", PW / 2, y, { align: "center" });
+  y += 6;
+  doc.text("Grupeb S.A. de C.V.", PW / 2, y, { align: "center" });
+  y += 11;
+
+  // Frase aclaración: 10.5pt (antes 8.5pt)
+  doc.setFont("helvetica", "italic");
+  doc.setFontSize(10.5);
+  doc.setTextColor(...GRAY_DARK);
+  doc.text("Estoy a sus órdenes para cualquier duda o aclaración.", PW / 2, y, { align: "center" });
+  y += 7;
+
+  // Nombre vendedora: 12.5pt (antes 10pt)
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(10);
+  doc.setFontSize(12.5);
   doc.setTextColor(...BLACK);
   doc.text("Yesenia Zúñiga", PW / 2, y, { align: "center" });
-  y += 5;
+  y += 6;
 
+  // Dept. ventas: 10pt (antes 8pt)
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(8);
+  doc.setFontSize(10);
   doc.setTextColor(...GRAY_MED);
   doc.text("Departamento de Ventas", PW / 2, y, { align: "center" });
-  y += 9;
+  y += 11;
 
+  // Web: 11pt (antes 9pt)
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(9);
+  doc.setFontSize(11);
   doc.setTextColor(...BLACK);
   doc.text("www.grupoeb.com.mx", PW / 2, y, { align: "center" });
-  y += 5;
+  y += 6;
 
+  // Dirección/teléfono/correo: 10pt (antes 8pt)
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(8);
+  doc.setFontSize(10);
   doc.setTextColor(...GRAY_DARK);
   doc.text(
     "Rogelio Ledesma # 102   Col. Cruz Vieja   45644   Tlajomulco de Zuñiga, Jalisco. México",
     PW / 2, y, { align: "center" }
   );
-  y += 5;
+  y += 6;
   doc.text("Tels. (33) 3180-3373, 3125-9595, 3180-1460", PW / 2, y, { align: "center" });
-  y += 5;
+  y += 6;
   doc.text("ventas@grupoeb.com.mx", PW / 2, y, { align: "center" });
 
   doc.setTextColor(...BLACK);

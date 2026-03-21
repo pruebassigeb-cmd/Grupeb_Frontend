@@ -203,3 +203,35 @@ export const crearOObtenerProducto = async (
     throw error;
   }
 };
+
+// ── Agrega esto a productosPlasticoService.ts ──────────────────────────────
+
+interface CheckDuplicadoParams {
+  tipo_producto_plastico_id: number;
+  material_plastico_id:      number;
+  calibre_id:                number;
+  altura:       number;
+  ancho:        number;
+  fuelle_fondo?: number;
+  fuelle_latIz?: number;
+  fuelle_latDe?: number;
+  refuerzo?:     number;
+}
+
+interface CheckDuplicadoResult {
+  existe:  boolean;
+  detalle?: string;
+  producto_existente?: { id: number; medida: string };
+}
+
+export const checkProductoDuplicado = async (
+  params: CheckDuplicadoParams
+): Promise<CheckDuplicadoResult> => {
+  const queryString = new URLSearchParams(
+    Object.entries(params)
+      .filter(([, v]) => v !== undefined)
+      .map(([k, v]) => [k, String(v)])
+  ).toString();
+  const response = await api.get(`/productos-plastico/check-duplicado?${queryString}`);
+  return response.data;
+};

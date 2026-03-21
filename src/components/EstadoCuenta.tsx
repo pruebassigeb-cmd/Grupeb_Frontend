@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import Dashboard from "../layouts/Sidebar";
-import Modal from "../components/Modal";
+import Modal from "./Modal";
 import {
   getListaEstadoCuenta,
   getEstadoCuenta,
@@ -22,7 +22,7 @@ function DetalleEstadoCuenta({
   noPedido,
   onClose,
 }: {
-  noPedido: number;
+  noPedido: string;
   onClose: () => void;
 }) {
   const [datos, setDatos]       = useState<EstadoCuenta | null>(null);
@@ -80,54 +80,36 @@ function DetalleEstadoCuenta({
 
       {/* Productos */}
       <div className="space-y-3">
-        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-          Productos
-        </p>
+        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Productos</p>
         {datos.productos.map(prod => {
-          const diffPzas  = prod.diferencia_piezas;
+          const diffPzas   = prod.diferencia_piezas;
           const diffPrecio = prod.diferencia_precio;
           return (
             <div key={prod.idsolicitud_producto} className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <p className="text-sm font-semibold text-gray-900">{prod.nombre}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">
-                    {prod.no_produccion} · {prod.tintas} tinta(s) · {prod.caras} cara(s)
-                  </p>
-                </div>
+              <div>
+                <p className="text-sm font-semibold text-gray-900">{prod.nombre}</p>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  {prod.no_produccion} · {prod.tintas} tinta(s) · {prod.caras} cara(s)
+                </p>
               </div>
-
-              {/* Comparativa cantidad */}
               <div className="grid grid-cols-3 gap-2">
                 <div className="bg-gray-50 rounded-lg p-2.5 text-center border border-gray-100">
                   <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-0.5">Cant. ordenada</p>
-                  <p className="text-sm font-bold text-gray-700">
-                    {Number(prod.cantidad_original).toLocaleString("es-MX")}
-                  </p>
+                  <p className="text-sm font-bold text-gray-700">{Number(prod.cantidad_original).toLocaleString("es-MX")}</p>
                 </div>
                 <div className="bg-blue-50 rounded-lg p-2.5 text-center border border-blue-100">
                   <p className="text-[10px] text-blue-500 uppercase tracking-wide mb-0.5">Cant. real</p>
-                  <p className="text-sm font-bold text-blue-700">
-                    {Number(prod.cantidad_real).toLocaleString("es-MX")}
-                  </p>
+                  <p className="text-sm font-bold text-blue-700">{Number(prod.cantidad_real).toLocaleString("es-MX")}</p>
                 </div>
                 <div className={`rounded-lg p-2.5 text-center border ${
-                  diffPzas === 0
-                    ? "bg-gray-50 border-gray-100"
-                    : diffPzas > 0
-                      ? "bg-green-50 border-green-100"
-                      : "bg-red-50 border-red-100"
+                  diffPzas === 0 ? "bg-gray-50 border-gray-100" : diffPzas > 0 ? "bg-green-50 border-green-100" : "bg-red-50 border-red-100"
                 }`}>
                   <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-0.5">Diferencia</p>
-                  <p className={`text-sm font-bold ${
-                    diffPzas === 0 ? "text-gray-500" : diffPzas > 0 ? "text-green-700" : "text-red-700"
-                  }`}>
+                  <p className={`text-sm font-bold ${diffPzas === 0 ? "text-gray-500" : diffPzas > 0 ? "text-green-700" : "text-red-700"}`}>
                     {diffPzas > 0 ? "+" : ""}{Number(diffPzas).toLocaleString("es-MX")}
                   </p>
                 </div>
               </div>
-
-              {/* Comparativa precio */}
               <div className="grid grid-cols-3 gap-2">
                 <div className="bg-gray-50 rounded-lg p-2.5 text-center border border-gray-100">
                   <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-0.5">Precio original</p>
@@ -138,27 +120,17 @@ function DetalleEstadoCuenta({
                   <p className="text-sm font-bold text-blue-700">${fmt(prod.precio_total_real)}</p>
                 </div>
                 <div className={`rounded-lg p-2.5 text-center border ${
-                  diffPrecio === 0
-                    ? "bg-gray-50 border-gray-100"
-                    : diffPrecio > 0
-                      ? "bg-green-50 border-green-100"
-                      : "bg-red-50 border-red-100"
+                  diffPrecio === 0 ? "bg-gray-50 border-gray-100" : diffPrecio > 0 ? "bg-green-50 border-green-100" : "bg-red-50 border-red-100"
                 }`}>
                   <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-0.5">Diferencia</p>
-                  <p className={`text-sm font-bold ${
-                    diffPrecio === 0 ? "text-gray-500" : diffPrecio > 0 ? "text-green-700" : "text-red-700"
-                  }`}>
+                  <p className={`text-sm font-bold ${diffPrecio === 0 ? "text-gray-500" : diffPrecio > 0 ? "text-green-700" : "text-red-700"}`}>
                     {diffPrecio > 0 ? "+" : ""}${fmt(diffPrecio)}
                   </p>
                 </div>
               </div>
-
-              {/* Precio unitario real */}
               <div className="flex justify-end">
                 <span className="text-xs text-gray-400">
-                  Precio unitario real: <span className="font-semibold text-gray-600">
-                    ${prod.precio_unitario_real.toFixed(6)}
-                  </span>
+                  Precio unitario real: <span className="font-semibold text-gray-600">${prod.precio_unitario_real.toFixed(6)}</span>
                 </span>
               </div>
             </div>
@@ -172,74 +144,36 @@ function DetalleEstadoCuenta({
           <p className="text-xs font-bold text-white uppercase tracking-wide">Resumen financiero</p>
         </div>
         <div className="p-4 space-y-2">
-
-          {/* Original vs Real */}
           <div className="grid grid-cols-2 gap-3 pb-3 border-b border-gray-200">
             <div>
               <p className="text-xs text-gray-400 mb-1 font-medium">Original</p>
               <div className="space-y-1 text-xs">
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Subtotal</span>
-                  <span className="text-gray-700">${fmt(datos.subtotal_original)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">IVA 16%</span>
-                  <span className="text-gray-700">${fmt(datos.iva_original)}</span>
-                </div>
-                <div className="flex justify-between font-semibold">
-                  <span className="text-gray-600">Total</span>
-                  <span className="text-gray-800">${fmt(datos.total_original)}</span>
-                </div>
+                <div className="flex justify-between"><span className="text-gray-500">Subtotal</span><span className="text-gray-700">${fmt(datos.subtotal_original)}</span></div>
+                <div className="flex justify-between"><span className="text-gray-500">IVA 16%</span><span className="text-gray-700">${fmt(datos.iva_original)}</span></div>
+                <div className="flex justify-between font-semibold"><span className="text-gray-600">Total</span><span className="text-gray-800">${fmt(datos.total_original)}</span></div>
               </div>
             </div>
             <div>
               <p className="text-xs text-blue-500 mb-1 font-medium">Real (recalculado)</p>
               <div className="space-y-1 text-xs">
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Subtotal</span>
-                  <span className="text-blue-700">${fmt(datos.subtotal_real)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">IVA 16%</span>
-                  <span className="text-blue-700">${fmt(datos.iva_real)}</span>
-                </div>
-                <div className="flex justify-between font-semibold">
-                  <span className="text-gray-600">Total</span>
-                  <span className="text-blue-800">${fmt(datos.total_real)}</span>
-                </div>
+                <div className="flex justify-between"><span className="text-gray-500">Subtotal</span><span className="text-blue-700">${fmt(datos.subtotal_real)}</span></div>
+                <div className="flex justify-between"><span className="text-gray-500">IVA 16%</span><span className="text-blue-700">${fmt(datos.iva_real)}</span></div>
+                <div className="flex justify-between font-semibold"><span className="text-gray-600">Total</span><span className="text-blue-800">${fmt(datos.total_real)}</span></div>
               </div>
             </div>
           </div>
-
-          {/* Diferencia global */}
           <div className={`flex justify-between items-center px-3 py-2 rounded-lg ${
-            datos.diferencia_total === 0
-              ? "bg-gray-100"
-              : diferenciaPositiva
-                ? "bg-green-50 border border-green-200"
-                : "bg-red-50 border border-red-200"
+            datos.diferencia_total === 0 ? "bg-gray-100" : diferenciaPositiva ? "bg-green-50 border border-green-200" : "bg-red-50 border border-red-200"
           }`}>
             <span className="text-xs font-semibold text-gray-600">Diferencia total</span>
-            <span className={`text-sm font-bold ${
-              datos.diferencia_total === 0
-                ? "text-gray-500"
-                : diferenciaPositiva ? "text-green-700" : "text-red-700"
-            }`}>
+            <span className={`text-sm font-bold ${datos.diferencia_total === 0 ? "text-gray-500" : diferenciaPositiva ? "text-green-700" : "text-red-700"}`}>
               {diferenciaPositiva ? "+" : ""}${fmt(datos.diferencia_total)}
             </span>
           </div>
-
-          {/* Pagos */}
           <div className="pt-2 space-y-1.5">
-            <div className="flex justify-between text-xs">
-              <span className="text-gray-500">Anticipo requerido</span>
-              <span className="text-gray-700">${fmt(datos.anticipo)}</span>
-            </div>
-            <div className="flex justify-between text-xs">
-              <span className="text-gray-500">Total abonado</span>
-              <span className="text-green-700 font-semibold">${fmt(datos.abono)}</span>
-            </div>
-            <div className={`flex justify-between text-sm font-bold pt-1 border-t border-gray-200`}>
+            <div className="flex justify-between text-xs"><span className="text-gray-500">Anticipo requerido</span><span className="text-gray-700">${fmt(datos.anticipo)}</span></div>
+            <div className="flex justify-between text-xs"><span className="text-gray-500">Total abonado</span><span className="text-green-700 font-semibold">${fmt(datos.abono)}</span></div>
+            <div className="flex justify-between text-sm font-bold pt-1 border-t border-gray-200">
               <span className="text-gray-700">Saldo pendiente</span>
               <span className={datos.saldo <= 0 ? "text-green-600" : "text-red-600"}>
                 {datos.saldo <= 0 ? "✓ Liquidado" : `$${fmt(datos.saldo)}`}
@@ -263,7 +197,7 @@ export default function EstadoCuenta() {
   const [loading,      setLoading]      = useState(true);
   const [busqueda,     setBusqueda]     = useState("");
   const [modalOpen,    setModalOpen]    = useState(false);
-  const [pedidoActivo, setPedidoActivo] = useState<number | null>(null);
+  const [pedidoActivo, setPedidoActivo] = useState<string | null>(null);
 
   useEffect(() => { cargar(); }, []);
 
@@ -283,11 +217,11 @@ export default function EstadoCuenta() {
     return (
       normalizarTexto(p.cliente ?? "").includes(t) ||
       normalizarTexto(p.empresa ?? "").includes(t) ||
-      p.no_pedido.toString().includes(t)
+      normalizarTexto(p.no_pedido ?? "").includes(t)
     );
   });
 
-  const handleVer = (noPedido: number) => {
+  const handleVer = (noPedido: string) => {
     setPedidoActivo(noPedido);
     setModalOpen(true);
   };
@@ -295,7 +229,7 @@ export default function EstadoCuenta() {
   const handleCerrar = () => {
     setModalOpen(false);
     setPedidoActivo(null);
-    cargar(); // recargar lista por si se actualizó el total
+    cargar();
   };
 
   return (
@@ -304,8 +238,6 @@ export default function EstadoCuenta() {
       <p className="text-slate-400 mb-6">
         Consulta el precio final real por pedido basado en la producción terminada.
       </p>
-
-      {/* Buscador */}
       <div className="mb-6">
         <div className="relative">
           <input
@@ -321,16 +253,12 @@ export default function EstadoCuenta() {
         </div>
         {busqueda && <p className="mt-2 text-sm text-gray-600">{filtrados.length} resultado(s)</p>}
       </div>
-
-      {/* Tabla */}
       <div className="overflow-x-auto bg-white rounded-lg shadow">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
               {["N° Pedido", "Fecha", "Cliente", "Empresa", "Total", "Abonado", "Saldo", "Producción", "Acciones"].map(h => (
-                <th key={h} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  {h}
-                </th>
+                <th key={h} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{h}</th>
               ))}
             </tr>
           </thead>
@@ -344,7 +272,7 @@ export default function EstadoCuenta() {
               </tr>
             ) : filtrados.length > 0 ? filtrados.map(p => (
               <tr key={p.no_pedido} className="hover:bg-gray-50">
-                <td className="px-6 py-4 text-sm font-medium text-gray-900">#{p.no_pedido}</td>
+                <td className="px-6 py-4 text-sm font-medium text-gray-900">{p.no_pedido}</td>
                 <td className="px-6 py-4 text-sm text-gray-500">{fmtFecha(p.fecha)}</td>
                 <td className="px-6 py-4 text-sm text-gray-900">{p.cliente}</td>
                 <td className="px-6 py-4 text-sm text-gray-500">{p.empresa}</td>
@@ -357,9 +285,7 @@ export default function EstadoCuenta() {
                 </td>
                 <td className="px-6 py-4 text-sm">
                   {p.produccion_completa ? (
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                      ✓ Completa
-                    </span>
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">✓ Completa</span>
                   ) : (
                     <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
                       ⏳ {p.ordenes_completas}/{p.total_ordenes} listas
@@ -368,10 +294,7 @@ export default function EstadoCuenta() {
                 </td>
                 <td className="px-6 py-4 text-sm font-medium">
                   {p.produccion_completa ? (
-                    <button
-                      onClick={() => handleVer(p.no_pedido)}
-                      className="text-blue-600 hover:text-blue-900 font-semibold"
-                    >
+                    <button onClick={() => handleVer(p.no_pedido)} className="text-blue-600 hover:text-blue-900 font-semibold">
                       Ver estado de cuenta
                     </button>
                   ) : (
@@ -389,13 +312,9 @@ export default function EstadoCuenta() {
           </tbody>
         </table>
       </div>
-
-      <Modal isOpen={modalOpen} onClose={handleCerrar} title={`Estado de Cuenta — Pedido #${pedidoActivo}`}>
+      <Modal isOpen={modalOpen} onClose={handleCerrar} title={`Estado de Cuenta — Pedido ${pedidoActivo}`}>
         {pedidoActivo && (
-          <DetalleEstadoCuenta
-            noPedido={pedidoActivo}
-            onClose={handleCerrar}
-          />
+          <DetalleEstadoCuenta noPedido={pedidoActivo} onClose={handleCerrar} />
         )}
       </Modal>
     </Dashboard>

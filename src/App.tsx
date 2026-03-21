@@ -12,7 +12,7 @@ import Diseno from "./pages/Diseno";
 import AnticipoLiquidacion from "./pages/AnticipoLiquidacion";
 import Seguimiento from "./pages/Seguimiento";
 import Pedido from "./pages/Pedido";
-import EstadoCuenta from "./pages/EstadoCuenta";
+import EstadoCuenta from "./components/EstadoCuenta.tsx";
 
 function App() {
   return (

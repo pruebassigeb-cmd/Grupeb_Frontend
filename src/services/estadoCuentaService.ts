@@ -4,6 +4,10 @@ export interface ProductoEstadoCuenta {
   idsolicitud_producto:  number;
   no_produccion:         string;
   nombre:                string;
+  medida:                string | null;
+  material:              string | null;
+  alta_densidad:         boolean | null;
+  impresion:             string | null;
   tintas:                number;
   caras:                 number;
   modo_cantidad:         string;
@@ -18,8 +22,8 @@ export interface ProductoEstadoCuenta {
 }
 
 export interface EstadoCuenta {
-  no_pedido:         number;
-  no_cotizacion:     number | null;
+  no_pedido:         string;
+  no_cotizacion:     string | null;
   fecha:             string;
   cliente:           string;
   empresa:           string;
@@ -40,11 +44,13 @@ export interface EstadoCuenta {
   saldo:             number;
   // ── Diferencia guardada en BD ─────────────────────────────
   diferencia_total:  number;
+  // ── Estado actualizado ────────────────────────────────────
+  estado_id:         number;
 }
 
 export interface ResumenEstadoCuenta {
-  no_pedido:           number;
-  no_cotizacion:       number | null;
+  no_pedido:           string;
+  no_cotizacion:       string | null;
   fecha:               string;
   cliente:             string;
   empresa:             string;
@@ -64,7 +70,7 @@ export const getListaEstadoCuenta = async (): Promise<ResumenEstadoCuenta[]> => 
   return response.data;
 };
 
-export const getEstadoCuenta = async (noPedido: number): Promise<EstadoCuenta> => {
+export const getEstadoCuenta = async (noPedido: string): Promise<EstadoCuenta> => {
   const response = await api.get(`/estado-cuenta/${noPedido}`);
   return response.data;
 };

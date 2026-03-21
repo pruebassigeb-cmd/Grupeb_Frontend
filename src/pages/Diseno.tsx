@@ -9,6 +9,7 @@ import type { Diseno, DisenoProducto } from "../types/ventas.types";
 import type { Pedido } from "../types/cotizaciones.types";
 
 const ESTADO = { PENDIENTE: 1, EN_PROCESO: 2, APROBADO: 3 } as const;
+const POR_PAGINA = 10;
 
 const fmtFecha = (iso: string) => {
   try {
@@ -24,7 +25,7 @@ function estadoLabel(estadoId: number): "pendiente" | "en_proceso" | "aprobado" 
   return "pendiente";
 }
 
-async function descargarPdfOrden(noPedido: number, noProduccion: string): Promise<void> {
+async function descargarPdfOrden(noPedido: string, noProduccion: string): Promise<void> {
   const data = await getOrdenProduccion(noPedido);
   const producto = data.productos.find((p: any) => p.no_produccion === noProduccion);
   if (!producto) throw new Error(`Producto con folio ${noProduccion} no encontrado`);
@@ -84,6 +85,70 @@ async function descargarPdfOrden(noPedido: number, noProduccion: string): Promis
   });
 }
 
+// ─────────────────────────────────────────────
+// PAGINADOR
+// ─────────────────────────────────────────────
+function Paginador({
+  total, pagina, porPagina, onChange,
+}: {
+  total: number; pagina: number; porPagina: number; onChange: (p: number) => void;
+}) {
+  const totalPaginas = Math.ceil(total / porPagina);
+  if (totalPaginas <= 1) return null;
+
+  const desde = (pagina - 1) * porPagina + 1;
+  const hasta = Math.min(pagina * porPagina, total);
+
+  return (
+    <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 bg-white">
+      <p className="text-sm text-gray-500">
+        Mostrando <span className="font-medium">{desde}–{hasta}</span> de{" "}
+        <span className="font-medium">{total}</span>
+      </p>
+      <div className="flex items-center gap-1">
+        <button
+          onClick={() => onChange(pagina - 1)}
+          disabled={pagina === 1}
+          className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        >
+          ‹ Anterior
+        </button>
+        {Array.from({ length: totalPaginas }, (_, i) => i + 1)
+          .filter(p => p === 1 || p === totalPaginas || Math.abs(p - pagina) <= 1)
+          .reduce<(number | "...")[]>((acc, p, idx, arr) => {
+            if (idx > 0 && p - (arr[idx - 1] as number) > 1) acc.push("...");
+            acc.push(p);
+            return acc;
+          }, [])
+          .map((p, idx) =>
+            p === "..." ? (
+              <span key={`e${idx}`} className="px-2 text-gray-400 text-sm">…</span>
+            ) : (
+              <button
+                key={p}
+                onClick={() => onChange(p as number)}
+                className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
+                  p === pagina
+                    ? "bg-blue-600 text-white border-blue-600 font-semibold"
+                    : "border-gray-300 text-gray-600 hover:bg-gray-50"
+                }`}
+              >
+                {p}
+              </button>
+            )
+          )}
+        <button
+          onClick={() => onChange(pagina + 1)}
+          disabled={pagina === totalPaginas}
+          className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        >
+          Siguiente ›
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function EditarDisenoReal({
   pedido,
   onClose,
@@ -91,7 +156,7 @@ function EditarDisenoReal({
 }: {
   pedido:         Pedido;
   onClose:        () => void;
-  onEstadoChange: (noPedido: number, estadoId: number) => void;
+  onEstadoChange: (noPedido: string, estadoId: number) => void;
 }) {
   const [diseno,    setDiseno]    = useState<Diseno | null>(null);
   const [loading,   setLoading]   = useState(true);
@@ -429,6 +494,7 @@ export default function Diseno() {
   const [pedidos,      setPedidos]      = useState<Pedido[]>([]);
   const [loading,      setLoading]      = useState(false);
   const [busqueda,     setBusqueda]     = useState("");
+  const [pagina,       setPagina]       = useState(1);
   const [modalOpen,    setModalOpen]    = useState(false);
   const [pedidoActivo, setPedidoActivo] = useState<Pedido | null>(null);
 
@@ -441,7 +507,7 @@ export default function Diseno() {
     finally { setLoading(false); }
   };
 
-  const handleEstadoChange = (noPedido: number, estadoId: number) => {
+  const handleEstadoChange = (noPedido: string, estadoId: number) => {
     setPedidos(prev => prev.map(p =>
       p.no_pedido === noPedido ? { ...p, diseno_estado_id: estadoId } as any : p
     ));
@@ -462,6 +528,11 @@ export default function Diseno() {
       p.no_pedido.toString().includes(t)
     );
   });
+
+  // Resetear a página 1 cuando cambia la búsqueda
+  useEffect(() => { setPagina(1); }, [busqueda]);
+
+  const paginados = filtrados.slice((pagina - 1) * POR_PAGINA, pagina * POR_PAGINA);
 
   const getEstadoBadge = (ped: Pedido) => {
     const estadoId: number = (ped as any).diseno_estado_id ?? 1;
@@ -518,7 +589,7 @@ export default function Diseno() {
                 <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-blue-500 border-t-transparent" />
                 <p className="mt-3 text-gray-500">Cargando pedidos...</p>
               </td></tr>
-            ) : filtrados.length > 0 ? filtrados.map(ped => (
+            ) : paginados.length > 0 ? paginados.map(ped => (
               <tr key={ped.no_pedido} className="hover:bg-gray-50">
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">#{ped.no_pedido}</td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{fmtFecha(ped.fecha)}</td>
@@ -554,6 +625,12 @@ export default function Diseno() {
             )}
           </tbody>
         </table>
+        <Paginador
+          total={filtrados.length}
+          pagina={pagina}
+          porPagina={POR_PAGINA}
+          onChange={setPagina}
+        />
       </div>
 
       <Modal isOpen={modalOpen} onClose={handleCerrar} title="Gestionar Diseños">

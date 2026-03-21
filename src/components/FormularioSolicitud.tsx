@@ -3,7 +3,7 @@ import SelectorProducto, { CONFIG_PRODUCTOS } from "./ConfigurarProducto";
 import type { DatosProducto, MedidaKey } from "../types/productos-plastico.types";
 import { FORMATO_MEDIDAS } from "../types/productos-plastico.types";
 import { searchClientes, createClienteLigero } from "../services/clientesService";
-import { searchProductosPlastico, crearOObtenerProducto } from "../services/productosPlasticoService";
+import { searchProductosPlastico, crearOObtenerProducto, checkProductoDuplicado } from "../services/productosPlasticoService";
 import { getCatalogosProduccion } from "../services/catalogosProduccionService";
 import { usePreciosBatch } from "../hooks/usePrecioCalculado";
 import { calcularPorKilo } from "../utils/calcularPorKilo";
@@ -48,13 +48,14 @@ interface Producto {
   modoCantidad:  "unidad" | "kilo";
 }
 
-// ✅ CAMBIO 5: tipo agregado a DatosCotizacion
+// ✅ CAMBIO 5: tipo agregado a DatosCotizacion + impresion agregado
 interface DatosCotizacion {
   clienteId?:    number;
   cliente:       string;
   telefono:      string;
   correo:        string;
   empresa:       string;
+  impresion?:    string | null;
   productos:     Producto[];
   observaciones: string;
   tipo?:         "cotizacion" | "pedido";
@@ -73,6 +74,7 @@ export default function FormularioCotizacion({
     telefono:      "",
     correo:        "",
     empresa:       "",
+    impresion:     null,
     productos:     [],
     observaciones: "",
   });
@@ -100,6 +102,8 @@ export default function FormularioCotizacion({
   const [mostrarDropdownTintas, setMostrarDropdownTintas] = useState(false);
   const [mostrarDropdownSuaje,  setMostrarDropdownSuaje]  = useState(false);
   const [guardandoProducto,     setGuardandoProducto]     = useState(false);
+  const [advertenciaDuplicado,  setAdvertenciaDuplicado]  = useState<string | null>(null);
+  const [verificandoDuplicado,  setVerificandoDuplicado]  = useState(false);
 
   const [preciosEditadosManualmente, setPreciosEditadosManualmente] = useState<[boolean, boolean, boolean]>([false, false, false]);
   const [preciosTexto,               setPreciosTexto]               = useState<[string, string, string]>(["", "", ""]);
@@ -306,10 +310,11 @@ export default function FormularioCotizacion({
     setDatos({
       ...datos,
       clienteId: cliente.idclientes,
-      cliente:   cliente.atencion || "",
-      telefono:  cliente.telefono || "",
-      correo:    cliente.correo   || "",
-      empresa:   cliente.empresa  || "",
+      cliente:   cliente.atencion  || "",
+      telefono:  cliente.telefono  || "",
+      correo:    cliente.correo    || "",
+      empresa:   cliente.empresa   || "",
+      impresion: cliente.impresion ?? null,
     });
     setMostrarModalClientes(false);
     setBusquedaCliente("");
@@ -402,6 +407,43 @@ export default function FormularioCotizacion({
     }
   };
 
+  const verificarDuplicadoAntesDeConfirmar = async () => {
+    const m = datosProductoNuevo.medidas;
+    if (
+      !datosProductoNuevo.tipoProductoId ||
+      !datosProductoNuevo.materialId     ||
+      !datosProductoNuevo.calibreId      ||
+      !m.altura || !m.ancho
+    ) {
+      setProductoNuevoListo(true);
+      setAdvertenciaDuplicado(null);
+      return;
+    }
+    setVerificandoDuplicado(true);
+    setAdvertenciaDuplicado(null);
+    try {
+      const resultado = await checkProductoDuplicado({
+        tipo_producto_plastico_id: datosProductoNuevo.tipoProductoId,
+        material_plastico_id:      datosProductoNuevo.materialId,
+        calibre_id:                datosProductoNuevo.calibreId,
+        altura:       Number(m.altura)         || 0,
+        ancho:        Number(m.ancho)          || 0,
+        fuelle_fondo: Number(m.fuelleFondo)    || 0,
+        fuelle_latIz: Number(m.fuelleLateral1) || 0,
+        fuelle_latDe: Number(m.fuelleLateral2) || 0,
+        refuerzo:     Number(m.refuerzo)       || 0,
+      });
+      if (resultado.existe) {
+        setAdvertenciaDuplicado(resultado.detalle ?? null);
+      }
+    } catch {
+      // Si falla la verificación, no bloqueamos — el usuario puede continuar
+    } finally {
+      setVerificandoDuplicado(false);
+      setProductoNuevoListo(true);
+    }
+  };
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setDatos({ ...datos, [name]: value });
@@ -409,6 +451,7 @@ export default function FormularioCotizacion({
 
   const handleProductoNuevoChange = (nuevosDatos: DatosProducto) => {
     setDatosProductoNuevo(nuevosDatos);
+    setAdvertenciaDuplicado(null);
     const porKiloCalculado = calcularPorKilo(nuevosDatos, catalogos.materiales);
     const porKiloStr = porKiloCalculado !== null
       ? parseFloat(porKiloCalculado.toFixed(3)).toString()
@@ -424,7 +467,14 @@ export default function FormularioCotizacion({
     }));
   };
 
+  // Helper: valida que el string sea un número entero positivo (sin decimales)
+  const esNumeroEnteroValido = (val: string) => /^\d*$/.test(val);
+
+  // Helper: valida que el string sea un número decimal con hasta 4 decimales
+  const esDecimalValido = (val: string) => /^\d*\.?\d{0,4}$/.test(val);
+
   const handleCantidadChange = (index: number, value: string) => {
+    if (!esNumeroEnteroValido(value)) return;
     const nuevasTexto = [...cantidadesTexto] as [string, string, string];
     nuevasTexto[index] = value;
     setCantidadesTexto(nuevasTexto);
@@ -437,6 +487,7 @@ export default function FormularioCotizacion({
   };
 
   const handlePrecioChange = (index: number, value: string) => {
+    if (!esDecimalValido(value)) return;
     const nuevosTextos = [...preciosTexto] as [string, string, string];
     nuevosTextos[index] = value;
     setPreciosTexto(nuevosTextos);
@@ -604,6 +655,7 @@ export default function FormularioCotizacion({
     setMostrarDropdownSuaje(false);
     setModoColor(null);
     setInputsPantones([]);
+    setAdvertenciaDuplicado(null);
   };
 
   const handleEliminarProducto = (index: number) => {
@@ -696,6 +748,8 @@ export default function FormularioCotizacion({
   };
 
   const setMedidaInline = (key: MedidaKey, value: string) => {
+    // Solo permite enteros para medidas
+    if (!/^\d*$/.test(value)) return;
     const v = value.trim();
     const prev = datosProductoNuevo.medidas as Record<MedidaKey, string>;
     let nuevas = { ...prev, [key]: v };
@@ -726,6 +780,7 @@ export default function FormularioCotizacion({
       medidasFormateadas,
       porKilo:            porKiloStr,
     }));
+    setAdvertenciaDuplicado(null);
   };
 
   const getEsAsaFlexible = (): boolean => {
@@ -876,8 +931,8 @@ export default function FormularioCotizacion({
         <h3 className="text-lg font-semibold text-gray-900 mb-6">Agregar Productos</h3>
 
         <div className="mb-6 flex gap-4 bg-gray-100 p-1 rounded-lg w-fit">
-          <button type="button" onClick={() => setModoProducto("registrado")} className={`px-6 py-2 rounded-md font-medium transition-all ${modoProducto === "registrado" ? "bg-white text-blue-600 shadow" : "text-gray-600 hover:text-gray-900"}`}>Producto Registrado</button>
-          <button type="button" onClick={() => setModoProducto("nuevo")} className={`px-6 py-2 rounded-md font-medium transition-all ${modoProducto === "nuevo" ? "bg-white text-blue-600 shadow" : "text-gray-600 hover:text-gray-900"}`}>Producto Nuevo</button>
+          <button type="button" onClick={() => { setModoProducto("registrado"); setAdvertenciaDuplicado(null); }} className={`px-6 py-2 rounded-md font-medium transition-all ${modoProducto === "registrado" ? "bg-white text-blue-600 shadow" : "text-gray-600 hover:text-gray-900"}`}>Producto Registrado</button>
+          <button type="button" onClick={() => { setModoProducto("nuevo"); setAdvertenciaDuplicado(null); }} className={`px-6 py-2 rounded-md font-medium transition-all ${modoProducto === "nuevo" ? "bg-white text-blue-600 shadow" : "text-gray-600 hover:text-gray-900"}`}>Producto Nuevo</button>
         </div>
 
         <div className="bg-gray-50 p-6 rounded-lg mb-4">
@@ -957,7 +1012,8 @@ export default function FormularioCotizacion({
                             )}
                           </label>
                           <input
-                            type="number"
+                            type="text"
+                            inputMode="numeric"
                             value={(datosProductoNuevo.medidas as Record<MedidaKey, string>)[m.key]}
                             onChange={(e) => !bloqueado && setMedidaInline(m.key, e.target.value)}
                             disabled={bloqueado}
@@ -975,6 +1031,29 @@ export default function FormularioCotizacion({
                 </div>
               )}
 
+              {productoNuevoListo && advertenciaDuplicado && (
+                <div className="flex items-start gap-3 bg-amber-50 border border-amber-300 rounded-lg px-4 py-3 mb-2">
+                  <svg className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                      d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                  </svg>
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-amber-800">Producto ya registrado en el catálogo</p>
+                    <p className="text-xs text-amber-700 mt-0.5">{advertenciaDuplicado}</p>
+                    <p className="text-xs text-amber-600 mt-1 italic">Puedes continuar — se usará el producto existente.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setAdvertenciaDuplicado(null)}
+                    className="flex-shrink-0 text-amber-400 hover:text-amber-600"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              )}
+
               {productoNuevoListo && (
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-start justify-between gap-3">
                   <div>
@@ -988,7 +1067,7 @@ export default function FormularioCotizacion({
                   </div>
                   <button
                     type="button"
-                    onClick={() => setProductoNuevoListo(false)}
+                    onClick={() => { setProductoNuevoListo(false); setAdvertenciaDuplicado(null); }}
                     className="flex-shrink-0 text-xs text-blue-600 hover:text-blue-800 underline whitespace-nowrap"
                   >
                     ← Editar
@@ -1167,7 +1246,7 @@ export default function FormularioCotizacion({
                 )}
               </div>
 
-              {/* ✅ FIX 3: Cantidades — en modo pedido solo 1 campo, en cotización los 3 */}
+              {/* Cantidades */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   {modo === "pedido"
@@ -1176,59 +1255,39 @@ export default function FormularioCotizacion({
                   }
                 </label>
                 {modo === "pedido" ? (
-                  // ── Pedido directo: solo 1 campo ──
                   <div className="space-y-1 max-w-xs">
                     <input
-                      type="number" min="0"
+                      type="text"
+                      inputMode="numeric"
                       value={cantidadesTexto[0]}
                       onChange={(e) => handleCantidadChange(0, e.target.value)}
-                      className={`w-full px-4 py-2 border rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-2 ${
-                        getErrorKg(0)
-                          ? "border-red-400 focus:ring-red-400"
-                          : modoCantidad === "kilo"
-                            ? "border-emerald-300 focus:ring-emerald-400"
-                            : "border-gray-300 focus:ring-blue-500"
-                      }`}
+                      className={`w-full px-4 py-2 border rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-2 ${getErrorKg(0) ? "border-red-400 focus:ring-red-400" : modoCantidad === "kilo" ? "border-emerald-300 focus:ring-emerald-400" : "border-gray-300 focus:ring-blue-500"}`}
                       placeholder={modoCantidad === "kilo" ? "Ingresa los kilos" : "Ingresa la cantidad"}
                     />
-                    {getEquivalente(0) && !getErrorKg(0) && (
-                      <p className="text-xs text-gray-400">{getEquivalente(0)}</p>
-                    )}
-                    {getErrorKg(0) && (
-                      <p className="text-xs text-red-500 font-medium">⚠ {getErrorKg(0)}</p>
-                    )}
+                    {getEquivalente(0) && !getErrorKg(0) && <p className="text-xs text-gray-400">{getEquivalente(0)}</p>}
+                    {getErrorKg(0) && <p className="text-xs text-red-500 font-medium">⚠ {getErrorKg(0)}</p>}
                   </div>
                 ) : (
-                  // ── Cotización: 3 campos ──
                   <div className="grid grid-cols-3 gap-3">
                     {cantidadesTexto.map((valor, index) => (
                       <div key={index} className="space-y-1">
                         <input
-                          type="number" min="0"
+                          type="text"
+                          inputMode="numeric"
                           value={valor}
                           onChange={(e) => handleCantidadChange(index, e.target.value)}
-                          className={`w-full px-4 py-2 border rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-2 ${
-                            getErrorKg(index)
-                              ? "border-red-400 focus:ring-red-400"
-                              : modoCantidad === "kilo"
-                                ? "border-emerald-300 focus:ring-emerald-400"
-                                : "border-gray-300 focus:ring-blue-500"
-                          }`}
+                          className={`w-full px-4 py-2 border rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-2 ${getErrorKg(index) ? "border-red-400 focus:ring-red-400" : modoCantidad === "kilo" ? "border-emerald-300 focus:ring-emerald-400" : "border-gray-300 focus:ring-blue-500"}`}
                           placeholder={modoCantidad === "kilo" ? `Kilos ${index + 1}` : `Cantidad ${index + 1}`}
                         />
-                        {getEquivalente(index) && !getErrorKg(index) && (
-                          <p className="text-xs text-gray-400">{getEquivalente(index)}</p>
-                        )}
-                        {getErrorKg(index) && (
-                          <p className="text-xs text-red-500 font-medium">⚠ {getErrorKg(index)}</p>
-                        )}
+                        {getEquivalente(index) && !getErrorKg(index) && <p className="text-xs text-gray-400">{getEquivalente(index)}</p>}
+                        {getErrorKg(index) && <p className="text-xs text-red-500 font-medium">⚠ {getErrorKg(index)}</p>}
                       </div>
                     ))}
                   </div>
                 )}
               </div>
 
-              {/* ✅ FIX 3: Precios — en modo pedido solo 1 campo, en cotización los 3 */}
+              {/* Precios */}
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <label className="block text-sm font-medium text-gray-700">
@@ -1242,11 +1301,11 @@ export default function FormularioCotizacion({
                 {errorCalculo && <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-lg"><p className="text-red-700 text-sm">⚠️ {errorCalculo}</p></div>}
 
                 {modo === "pedido" ? (
-                  // ── Pedido directo: solo 1 precio ──
                   <div className="space-y-1 max-w-xs">
                     <div className="relative">
                       <input
-                        type="number" step="0.0001" min="0"
+                        type="text"
+                        inputMode="decimal"
                         value={preciosTexto[0]}
                         onChange={(e) => handlePrecioChange(0, e.target.value)}
                         onBlur={() => handlePrecioBlur(0)}
@@ -1256,29 +1315,21 @@ export default function FormularioCotizacion({
                       {calculandoPrecios && !preciosEditadosManualmente[0] && cantidadesEnBolsas[0] > 0 && (
                         <div className="absolute right-2 top-1/2 -translate-y-1/2"><div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-500 border-t-transparent"></div></div>
                       )}
-                      {preciosEditadosManualmente[0] && (
-                        <div className="absolute right-2 top-1/2 -translate-y-1/2 text-sm text-orange-500" title="Editado manualmente">✏️</div>
-                      )}
+                      {preciosEditadosManualmente[0] && <div className="absolute right-2 top-1/2 -translate-y-1/2 text-sm text-orange-500" title="Editado manualmente">✏️</div>}
                     </div>
                     {productoActual.precios[0] > 0 && productoActual.porKilo && Number(productoActual.porKilo) > 0 && (
-                      <p className="text-xs text-gray-400">
-                        {modoCantidad === "kilo"
-                          ? `≈ $${productoActual.precios[0].toFixed(4)}/bolsa`
-                          : `≈ $${(productoActual.precios[0] * Number(productoActual.porKilo)).toFixed(4)}/kg`}
-                      </p>
+                      <p className="text-xs text-gray-400">{modoCantidad === "kilo" ? `≈ $${productoActual.precios[0].toFixed(4)}/bolsa` : `≈ $${(productoActual.precios[0] * Number(productoActual.porKilo)).toFixed(4)}/kg`}</p>
                     )}
-                    {preciosEditadosManualmente[0] && (
-                      <button type="button" onClick={() => handleRestaurarPrecioAuto(0)} className="text-xs text-blue-500 hover:text-blue-700 underline">↺ Usar automático</button>
-                    )}
+                    {preciosEditadosManualmente[0] && <button type="button" onClick={() => handleRestaurarPrecioAuto(0)} className="text-xs text-blue-500 hover:text-blue-700 underline">↺ Usar automático</button>}
                   </div>
                 ) : (
-                  // ── Cotización: 3 precios ──
                   <div className="grid grid-cols-3 gap-3">
                     {productoActual.precios.map((_, index) => (
                       <div key={index} className="space-y-1">
                         <div className="relative">
                           <input
-                            type="number" step="0.0001" min="0"
+                            type="text"
+                            inputMode="decimal"
                             value={preciosTexto[index]}
                             onChange={(e) => handlePrecioChange(index, e.target.value)}
                             onBlur={() => handlePrecioBlur(index)}
@@ -1288,20 +1339,12 @@ export default function FormularioCotizacion({
                           {calculandoPrecios && !preciosEditadosManualmente[index] && cantidadesEnBolsas[index] > 0 && (
                             <div className="absolute right-2 top-1/2 -translate-y-1/2"><div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-500 border-t-transparent"></div></div>
                           )}
-                          {preciosEditadosManualmente[index] && (
-                            <div className="absolute right-2 top-1/2 -translate-y-1/2 text-sm text-orange-500" title="Editado manualmente">✏️</div>
-                          )}
+                          {preciosEditadosManualmente[index] && <div className="absolute right-2 top-1/2 -translate-y-1/2 text-sm text-orange-500" title="Editado manualmente">✏️</div>}
                         </div>
                         {productoActual.precios[index] > 0 && productoActual.porKilo && Number(productoActual.porKilo) > 0 && (
-                          <p className="text-xs text-gray-400">
-                            {modoCantidad === "kilo"
-                              ? `≈ $${productoActual.precios[index].toFixed(4)}/bolsa`
-                              : `≈ $${(productoActual.precios[index] * Number(productoActual.porKilo)).toFixed(4)}/kg`}
-                          </p>
+                          <p className="text-xs text-gray-400">{modoCantidad === "kilo" ? `≈ $${productoActual.precios[index].toFixed(4)}/bolsa` : `≈ $${(productoActual.precios[index] * Number(productoActual.porKilo)).toFixed(4)}/kg`}</p>
                         )}
-                        {preciosEditadosManualmente[index] && (
-                          <button type="button" onClick={() => handleRestaurarPrecioAuto(index)} className="text-xs text-blue-500 hover:text-blue-700 underline">↺ Usar automático</button>
-                        )}
+                        {preciosEditadosManualmente[index] && <button type="button" onClick={() => handleRestaurarPrecioAuto(index)} className="text-xs text-blue-500 hover:text-blue-700 underline">↺ Usar automático</button>}
                       </div>
                     ))}
                   </div>
@@ -1388,13 +1431,21 @@ export default function FormularioCotizacion({
 
           {!productoNuevoListo && datosProductoNuevo.tipoProducto && datosProductoNuevo.material && datosProductoNuevo.calibre && (
             <div className="flex justify-end">
-              <button type="button" onClick={() => setProductoNuevoListo(true)} className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium flex items-center gap-2">
-                Confirmar producto →
+              <button
+                type="button"
+                onClick={verificarDuplicadoAntesDeConfirmar}
+                disabled={verificandoDuplicado}
+                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium flex items-center gap-2 disabled:bg-blue-400"
+              >
+                {verificandoDuplicado ? (
+                  <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Verificando...</>
+                ) : (
+                  "Confirmar producto →"
+                )}
               </button>
             </div>
           )}
 
-          {/* ✅ CAMBIO 4: texto dinámico según modo */}
           {datos.productos.length > 0 && (
             <button
               type="button"

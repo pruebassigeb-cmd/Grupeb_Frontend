@@ -63,10 +63,8 @@ export interface ProductoCotizacion {
 // COTIZACIÓN COMPLETA
 // ============================================================
 export interface Cotizacion {
-  no_cotizacion:  number;
-  // ✅ Si ya fue convertida a pedido, tendrá este campo
-  no_pedido?:     number | null;
-  // ✅ 'cotizacion' mientras no se aprueba, 'pedido' cuando se aprueba o fue creado directo
+  no_cotizacion:  string;        // ← VARCHAR en BD: "COT26001"
+  no_pedido?:     string | null; // ← VARCHAR en BD: "P26001"
   tipo_documento: "cotizacion" | "pedido";
   fecha:          string;
   estado_id:      number;
@@ -83,13 +81,10 @@ export interface Cotizacion {
 
 // ============================================================
 // PEDIDO
-// Puede venir de una cotización aprobada (tiene no_cotizacion)
-// o ser un pedido directo (no_cotizacion es null)
 // ============================================================
 export interface Pedido {
-  no_pedido:      number;
-  no_cotizacion?: number | null;
-  // ✅ true = fue creado directamente como pedido, false = vino de cotización
+  no_pedido:      string;        // ← VARCHAR en BD: "P26001"
+  no_cotizacion?: string | null; // ← VARCHAR en BD: "COT26001"
   es_directo:     boolean;
   fecha:          string;
   estado_id:      number;
@@ -127,10 +122,10 @@ export interface ProductoEnviarCotizacion {
 }
 
 export interface RespuestaCrearCotizacion {
-  message:       string;
-  no_cotizacion?: number;
-  no_pedido?:    number;
-  tipo:          "cotizacion" | "pedido";
+  message:        string;
+  no_cotizacion?: string; // ← string
+  no_pedido?:     string; // ← string
+  tipo:           "cotizacion" | "pedido";
 }
 
 // ============================================================
@@ -139,5 +134,5 @@ export interface RespuestaCrearCotizacion {
 export interface RespuestaActualizarEstado {
   message:             string;
   convertida_a_pedido: boolean;
-  no_pedido:           number | null;
+  no_pedido:           string | null; // ← string
 }

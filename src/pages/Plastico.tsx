@@ -15,25 +15,11 @@ import { calcularPorKiloStr, calcularCelofanBopp } from "../utils/calcularPorKil
 
 // ✅ Hardcodeado temporal para celofán hasta que se construya su tabla en BD
 const COSTOS_CELOFAN: Record<number, number> = {
-  30: 250,
-  50: 200,
-  75: 180,
-  100: 150,
-  200: 120,
-  300: 95,
-  500: 90,
-  1000: 90,
+  30: 250, 50: 200, 75: 180, 100: 150, 200: 120, 300: 95, 500: 90, 1000: 90,
 };
 
 const MERMA_CELOFAN: Record<number, number> = {
-  30: 20,
-  50: 10,
-  75: 8,
-  100: 7,
-  200: 5,
-  300: 4,
-  500: 3,
-  1000: 1,
+  30: 20, 50: 10, 75: 8, 100: 7, 200: 5, 300: 4, 500: 3, 1000: 1,
 };
 
 const kilosReferencia = [30, 50, 75, 100, 200, 300, 500, 1000];
@@ -48,29 +34,24 @@ export default function Plastico() {
     calibreId: 0,
     gramos: undefined,
     medidas: {
-      altura: "",
-      ancho: "",
-      fuelleFondo: "",
-      fuelleLateral1: "",
-      fuelleLateral2: "",
-      refuerzo: "",
-      solapa: "",
+      altura: "", ancho: "", fuelleFondo: "",
+      fuelleLateral1: "", fuelleLateral2: "", refuerzo: "", solapa: "",
     },
     medidasFormateadas: "",
     nombreCompleto: "",
   });
 
   const [catalogos, setCatalogos] = useState<CatalogosPlastico>({
-    tiposProducto: [],
-    materiales: [],
-    calibres: [],
+    tiposProducto: [], materiales: [], calibres: [],
   });
 
   const [tarifasPlastico, setTarifasPlastico] = useState<Record<number, { precio: number; merma: number }>>({});
-
   const [cargandoCatalogos, setCargandoCatalogos] = useState(true);
-  const [errorCatalogos, setErrorCatalogos]       = useState("");
-  const [guardando, setGuardando]                 = useState(false);
+  const [errorCatalogos,    setErrorCatalogos]    = useState("");
+  const [guardando,         setGuardando]         = useState(false);
+
+  // ── Estado para error de duplicado ──────────────────────────
+  const [errorDuplicado, setErrorDuplicado] = useState<string | null>(null);
 
   const esCelofanBopp =
     datosProducto.tipoProducto === "Bolsa celofán" &&
@@ -87,9 +68,7 @@ export default function Plastico() {
 
   const pesoPorBolsa = resultadoCelofan?.pesoPorBolsa ?? null;
 
-  useEffect(() => {
-    cargarDatos();
-  }, []);
+  useEffect(() => { cargarDatos(); }, []);
 
   const cargarDatos = async () => {
     try {
@@ -103,7 +82,6 @@ export default function Plastico() {
 
       setCatalogos(datosCatalogos);
 
-      // ✅ Filtrar tinta 1 y convertir precio/merma a número
       const tarifasMap: Record<number, { precio: number; merma: number }> = {};
       tarifas.forEach((tarifa: Tarifa) => {
         if (Number(tarifa.cantidad_tintas) === 1) {
@@ -115,12 +93,9 @@ export default function Plastico() {
       });
 
       setTarifasPlastico(tarifasMap);
-
     } catch (error: any) {
       console.error("❌ Error al cargar datos:", error);
-      setErrorCatalogos(
-        error.response?.data?.error || "Error al cargar los catálogos"
-      );
+      setErrorCatalogos(error.response?.data?.error || "Error al cargar los catálogos");
     } finally {
       setCargandoCatalogos(false);
     }
@@ -128,14 +103,12 @@ export default function Plastico() {
 
   const handleProductoChange = (datos: DatosProducto) => {
     setDatosProducto(datos);
+    // Limpiar error de duplicado al cambiar características
+    setErrorDuplicado(null);
   };
 
   const guardarProducto = async () => {
-    if (
-      !datosProducto.tipoProductoId ||
-      !datosProducto.materialId ||
-      !datosProducto.calibreId
-    ) {
+    if (!datosProducto.tipoProductoId || !datosProducto.materialId || !datosProducto.calibreId) {
       alert("Por favor completa todos los campos requeridos");
       return;
     }
@@ -151,6 +124,7 @@ export default function Plastico() {
     }
 
     setGuardando(true);
+    setErrorDuplicado(null);
 
     try {
       const payload = {
@@ -169,37 +143,40 @@ export default function Plastico() {
 
       const response = await createProductoPlastico(payload);
 
-      alert(
-        `✅ Producto creado exitosamente\n\n🔖 Identificador: ${response.producto.identificador}\n📦 Bolsas por kilo: ${response.producto.por_kilo}`
-      );
+const prod = response.producto as typeof response.producto & { identificador?: string };
 
+alert(
+  `✅ Producto creado exitosamente\n\n🔖 Identificador: ${prod.identificador ?? "—"}\n📦 Bolsas por kilo: ${prod.por_kilo}`
+);
+
+      // Reset formulario
       setDatosProducto({
-        tipoProducto: "",
-        tipoProductoId: 0,
-        material: "",
-        materialId: 0,
-        calibre: "",
-        calibreId: 0,
+        tipoProducto: "", tipoProductoId: 0,
+        material: "", materialId: 0,
+        calibre: "", calibreId: 0,
         gramos: undefined,
         medidas: {
-          altura: "",
-          ancho: "",
-          fuelleFondo: "",
-          fuelleLateral1: "",
-          fuelleLateral2: "",
-          refuerzo: "",
-          solapa: "",
+          altura: "", ancho: "", fuelleFondo: "",
+          fuelleLateral1: "", fuelleLateral2: "", refuerzo: "", solapa: "",
         },
         medidasFormateadas: "",
         nombreCompleto: "",
       });
     } catch (error: any) {
       console.error("❌ Error al guardar producto:", error);
-      const errorMessage =
-        error.response?.data?.error ||
-        error.response?.data?.details?.join(", ") ||
-        "Error al guardar el producto";
-      alert(`❌ Error: ${errorMessage}`);
+      const status = error.response?.status;
+      const data   = error.response?.data;
+
+      if (status === 409 && data?.detalle) {
+        // ── Producto duplicado — mostrar inline en lugar de alert ──
+        setErrorDuplicado(data.detalle);
+      } else {
+        const errorMessage =
+          data?.error ||
+          data?.details?.join(", ") ||
+          "Error al guardar el producto";
+        alert(`❌ Error: ${errorMessage}`);
+      }
     } finally {
       setGuardando(false);
     }
@@ -214,7 +191,6 @@ export default function Plastico() {
       if (!precio || merma === undefined) return null;
       return { precio, merma };
     }
-
     const tarifa = tarifasPlastico[kilos];
     if (!tarifa) return null;
     return tarifa;
@@ -228,15 +204,12 @@ export default function Plastico() {
 
   const calcularBolsasConMerma = (kilos: number) => {
     if (!bolsasPorKilo) return "--";
-
     const costoMerma = getCostoMerma(kilos);
     if (!costoMerma) return "--";
-
     const bpk         = parseFloat(bolsasPorKilo);
     const bolsasBase  = redondearACentenas(bpk * kilos);
     const bolsasMerma = Math.ceil(bolsasBase * (costoMerma.merma / 100));
     const total       = bolsasBase + bolsasMerma;
-
     return { porcentajeMerma: costoMerma.merma, bolsasMerma, total };
   };
 
@@ -289,7 +262,8 @@ export default function Plastico() {
               <input
                 value={bolsasPorKilo || "--"}
                 readOnly
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-700 font-medium bg-gray-50"
+                disabled
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-700 font-medium bg-gray-50 cursor-default"
               />
             </div>
 
@@ -301,11 +275,34 @@ export default function Plastico() {
                 <input
                   value={pesoPorBolsa}
                   readOnly
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-700 font-medium bg-gray-50"
+                  disabled
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-700 font-medium bg-gray-50 cursor-default"
                 />
               </div>
             )}
           </div>
+
+          {/* ── Error de producto duplicado — inline, claro y visible ── */}
+          {errorDuplicado && (
+            <div className="mt-4 flex items-start gap-3 bg-amber-50 border border-amber-300 rounded-lg px-4 py-3">
+              <svg className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+              </svg>
+              <div className="flex-1">
+                <p className="text-sm font-semibold text-amber-800">Producto ya registrado</p>
+                <p className="text-sm text-amber-700 mt-0.5">{errorDuplicado}</p>
+              </div>
+              <button
+                onClick={() => setErrorDuplicado(null)}
+                className="flex-shrink-0 text-amber-400 hover:text-amber-600"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          )}
 
           <div className="mt-6 flex justify-end">
             <button
@@ -363,7 +360,6 @@ export default function Plastico() {
                 {kilosReferencia.map((kilos) => {
                   const costoMerma = getCostoMerma(kilos);
                   const bpk        = parseFloat(bolsasPorKilo);
-
                   if (!costoMerma || !bpk) {
                     return (
                       <td key={kilos} className="px-4 py-3 text-center border border-gray-300 text-gray-400">
@@ -371,7 +367,6 @@ export default function Plastico() {
                       </td>
                     );
                   }
-
                   return (
                     <td key={kilos} className="px-4 py-3 text-center border border-gray-300 text-green-600 font-semibold">
                       ${(costoMerma.precio / bpk).toFixed(2)}

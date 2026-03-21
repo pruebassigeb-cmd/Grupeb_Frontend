@@ -258,16 +258,17 @@ export default function SelectorProducto({
 
   // ✅ Sincronizar fuelles laterales entre sí
   // ✅ Exclusividad: fuelle lateral <-> refuerzo/fuelle fondo
+  // ✅ Permite decimales con hasta 2 decimales en medidas
   const setMedida = (key: MedidaKey, value: string) => {
+    if (!/^\d*\.?\d{0,2}$/.test(value)) return;
+
     setMedidas((prev) => {
       const nuevo = { ...prev, [key]: value };
       const v = value.trim();
 
       if (key === "fuelleLateral1" || key === "fuelleLateral2") {
-        // Sincronizar ambos laterales
         nuevo.fuelleLateral1 = v;
         nuevo.fuelleLateral2 = v;
-        // Si tiene valor, limpiar refuerzo y fuelle fondo
         if (v !== "" && Number(v) > 0) {
           nuevo.refuerzo    = "0";
           nuevo.fuelleFondo = "0";
@@ -275,7 +276,6 @@ export default function SelectorProducto({
       }
 
       if (key === "refuerzo" || key === "fuelleFondo") {
-        // Si tiene valor, limpiar fuelles laterales
         if (v !== "" && Number(v) > 0) {
           nuevo.fuelleLateral1 = "0";
           nuevo.fuelleLateral2 = "0";
@@ -561,7 +561,6 @@ export default function SelectorProducto({
                 />
 
                 {CONFIG_PRODUCTOS[tipoProducto].medidas.map((m) => {
-                  // Determinar si este campo está bloqueado por exclusividad
                   const esLateral = m.key === "fuelleLateral1" || m.key === "fuelleLateral2";
                   const esFondoORefuerzo = m.key === "fuelleFondo" || m.key === "refuerzo";
                   const bloqueado = (esLateral && tieneFondoORefuerzo) || (esFondoORefuerzo && tieneLateral);
@@ -587,13 +586,13 @@ export default function SelectorProducto({
                     >
                       <label className={`text-xs font-medium whitespace-nowrap ${bloqueado ? "text-gray-300" : "text-gray-700"}`}>
                         {m.label}
-                        {/* Sincronización lateral */}
                         {(m.key === "fuelleLateral1" || m.key === "fuelleLateral2") && !bloqueado && (
                           <span className="ml-1 text-blue-400 text-xs" title="Se sincroniza con el otro fuelle lateral">⇄</span>
                         )}
                       </label>
                       <input
-                        type="number"
+                        type="text"
+                        inputMode="decimal"
                         value={medidas[m.key]}
                         onChange={(e) => !bloqueado && setMedida(m.key, e.target.value)}
                         disabled={bloqueado}

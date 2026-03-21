@@ -30,48 +30,75 @@ interface FormularioPedidoProps {
   onCancel: () => void;
 }
 
-export default function FormularioPedido({ 
-  pedido, 
-  onSave, 
-  onCancel 
+export default function FormularioPedido({
+  pedido,
+  onSave,
+  onCancel,
 }: FormularioPedidoProps) {
   const [form, setForm] = useState<Pedido>(pedido);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  // Texto intermedio para los inputs (evita perder el punto mientras se escribe)
+  const [cantidadesTexto, setCantidadesTexto] = useState<string[][]>(
+    pedido.productos.map((p) =>
+      p.cantidades.map((c) => (c === 0 ? "" : String(c)))
+    )
+  );
+  const [preciosTexto, setPreciosTexto] = useState<string[][]>(
+    pedido.productos.map((p) =>
+      p.precios.map((pr) => (pr === 0 ? "" : String(pr)))
+    )
+  );
+
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+  ) => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
-  const handleProductoChange = (indexProducto: number, field: keyof Producto, value: any) => {
+  const handleCantidadChange = (
+    indexProd: number,
+    indexCant: number,
+    value: string
+  ) => {
+    // Permite enteros o decimales con hasta 4 decimales
+    if (!/^\d*\.?\d{0,4}$/.test(value)) return;
+
+    // Actualizar texto intermedio
+    const nuevosTextos = cantidadesTexto.map((row) => [...row]);
+    nuevosTextos[indexProd][indexCant] = value;
+    setCantidadesTexto(nuevosTextos);
+
+    // Actualizar valores numéricos en form
     const nuevosProductos = [...form.productos];
-    nuevosProductos[indexProducto] = {
-      ...nuevosProductos[indexProducto],
-      [field]: value
+    const nuevasCantidades = [...nuevosProductos[indexProd].cantidades] as [number, number, number];
+    nuevasCantidades[indexCant] = value === "" ? 0 : Number(value);
+    nuevosProductos[indexProd] = {
+      ...nuevosProductos[indexProd],
+      cantidades: nuevasCantidades,
     };
     setForm({ ...form, productos: nuevosProductos });
   };
 
-  const handleCantidadChange = (indexProducto: number, indexCantidad: number, value: string) => {
-    const nuevosProductos = [...form.productos];
-    const cantidad = value === "" ? 0 : Number(value);
-    const nuevasCantidades = [...nuevosProductos[indexProducto].cantidades];
-    nuevasCantidades[indexCantidad] = cantidad;
-    
-    nuevosProductos[indexProducto] = {
-      ...nuevosProductos[indexProducto],
-      cantidades: nuevasCantidades as [number, number, number]
-    };
-    setForm({ ...form, productos: nuevosProductos });
-  };
+  const handlePrecioChange = (
+    indexProd: number,
+    indexPrecio: number,
+    value: string
+  ) => {
+    // Permite enteros o decimales con hasta 4 decimales
+    if (!/^\d*\.?\d{0,4}$/.test(value)) return;
 
-  const handlePrecioChange = (indexProducto: number, indexPrecio: number, value: string) => {
+    // Actualizar texto intermedio
+    const nuevosTextos = preciosTexto.map((row) => [...row]);
+    nuevosTextos[indexProd][indexPrecio] = value;
+    setPreciosTexto(nuevosTextos);
+
+    // Actualizar valores numéricos en form
     const nuevosProductos = [...form.productos];
-    const precio = value === "" ? 0 : Number(value);
-    const nuevosPrecios = [...nuevosProductos[indexProducto].precios];
-    nuevosPrecios[indexPrecio] = precio;
-    
-    nuevosProductos[indexProducto] = {
-      ...nuevosProductos[indexProducto],
-      precios: nuevosPrecios as [number, number, number]
+    const nuevosPrecios = [...nuevosProductos[indexProd].precios] as [number, number, number];
+    nuevosPrecios[indexPrecio] = value === "" ? 0 : Number(value);
+    nuevosProductos[indexProd] = {
+      ...nuevosProductos[indexProd],
+      precios: nuevosPrecios,
     };
     setForm({ ...form, productos: nuevosProductos });
   };
@@ -91,7 +118,7 @@ export default function FormularioPedido({
     return form.productos.reduce((total, prod) => {
       const subtotal = prod.cantidades.reduce((sum, cant, idx) => {
         const precio = Number(prod.precios[idx]) || 0;
-        return sum + (cant * precio);
+        return sum + cant * precio;
       }, 0);
       return total + subtotal;
     }, 0);
@@ -171,94 +198,94 @@ export default function FormularioPedido({
 
         <div className="p-4">
           <div className="space-y-4">
-            {form.productos.map((producto, indexProd) => {
-              return (
-                <div 
-                  key={indexProd} 
-                  className="bg-white p-4 rounded-lg border-2 border-gray-200"
-                >
-                  {/* Encabezado del Producto */}
-                  <div className="mb-3">
-                    <h4 className="font-semibold text-gray-900 text-lg">{producto.nombre}</h4>
-                    <div className="mt-2 grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
-                      <div>
-                        <span className="text-gray-500">Calibre:</span>
-                        <span className="ml-1 font-medium text-gray-900">{producto.calibre}</span>
-                      </div>
-                      <div>
-                        <span className="text-gray-500">Tintas:</span>
-                        <span className="ml-1 font-medium text-gray-900">{producto.tintas}</span>
-                      </div>
-                      <div>
-                        <span className="text-gray-500">Caras:</span>
-                        <span className="ml-1 font-medium text-gray-900">{producto.caras}</span>
-                      </div>
+            {form.productos.map((producto, indexProd) => (
+              <div
+                key={indexProd}
+                className="bg-white p-4 rounded-lg border-2 border-gray-200"
+              >
+                <div className="mb-3">
+                  <h4 className="font-semibold text-gray-900 text-lg">{producto.nombre}</h4>
+                  <div className="mt-2 grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
+                    <div>
+                      <span className="text-gray-500">Calibre:</span>
+                      <span className="ml-1 font-medium text-gray-900">{producto.calibre}</span>
                     </div>
-                  </div>
-
-                  {/* Opciones de Cantidades y Precios */}
-                  <div className="bg-gradient-to-r from-green-50 to-emerald-50 p-4 rounded-lg border border-green-200">
-                    <div className="flex items-center justify-between mb-3">
-                      <h5 className="text-sm font-bold text-gray-900 flex items-center gap-2">
-                        <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                        </svg>
-                        Cantidades y Precios
-                      </h5>
+                    <div>
+                      <span className="text-gray-500">Tintas:</span>
+                      <span className="ml-1 font-medium text-gray-900">{producto.tintas}</span>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                      {producto.cantidades.map((cantidad, indexCant) => {
-                        const subtotal = calcularSubtotalPorCantidad(producto, indexCant);
-                        
-                        return (
-                          <div
-                            key={indexCant}
-                            className="p-3 rounded-lg border-2 bg-white border-gray-300"
-                          >
-                            <div className="flex items-center justify-between mb-2">
-                              <span className="text-xs font-bold px-2 py-1 rounded bg-gray-200 text-gray-600">
-                                Opción {indexCant + 1}
-                              </span>
-                            </div>
-                            <div className="space-y-2">
-                              <div>
-                                <label className="text-xs text-gray-600 block mb-1">Cantidad:</label>
-                                <input
-                                  type="number"
-                                  min="0"
-                                  value={cantidad === 0 ? "" : cantidad}
-                                  onChange={(e) => handleCantidadChange(indexProd, indexCant, e.target.value)}
-                                  className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500"
-                                  placeholder="0"
-                                />
-                              </div>
-                              <div>
-                                <label className="text-xs text-gray-600 block mb-1">Precio c/u:</label>
-                                <input
-                                  type="number"
-                                  min="0"
-                                  step="0.01"
-                                  value={producto.precios[indexCant] === 0 ? "" : producto.precios[indexCant]}
-                                  onChange={(e) => handlePrecioChange(indexProd, indexCant, e.target.value)}
-                                  className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500"
-                                  placeholder="0.00"
-                                />
-                              </div>
-                              <div className="pt-2 border-t border-gray-200 mt-2">
-                                <div className="flex justify-between items-center">
-                                  <span className="text-sm font-semibold text-gray-700">Subtotal:</span>
-                                  <span className="text-lg font-bold text-green-700">${subtotal.toFixed(2)}</span>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
+                    <div>
+                      <span className="text-gray-500">Caras:</span>
+                      <span className="ml-1 font-medium text-gray-900">{producto.caras}</span>
                     </div>
                   </div>
                 </div>
-              );
-            })}
+
+                <div className="bg-gradient-to-r from-green-50 to-emerald-50 p-4 rounded-lg border border-green-200">
+                  <div className="flex items-center justify-between mb-3">
+                    <h5 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                      <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                      </svg>
+                      Cantidades y Precios
+                    </h5>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    {producto.cantidades.map((_, indexCant) => {
+                      const subtotal = calcularSubtotalPorCantidad(producto, indexCant);
+                      return (
+                        <div
+                          key={indexCant}
+                          className="p-3 rounded-lg border-2 bg-white border-gray-300"
+                        >
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs font-bold px-2 py-1 rounded bg-gray-200 text-gray-600">
+                              Opción {indexCant + 1}
+                            </span>
+                          </div>
+                          <div className="space-y-2">
+                            <div>
+                              <label className="text-xs text-gray-600 block mb-1">Cantidad:</label>
+                              <input
+                                type="text"
+                                inputMode="decimal"
+                                value={cantidadesTexto[indexProd]?.[indexCant] ?? ""}
+                                onChange={(e) =>
+                                  handleCantidadChange(indexProd, indexCant, e.target.value)
+                                }
+                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500"
+                                placeholder="0"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-xs text-gray-600 block mb-1">Precio c/u:</label>
+                              <input
+                                type="text"
+                                inputMode="decimal"
+                                value={preciosTexto[indexProd]?.[indexCant] ?? ""}
+                                onChange={(e) =>
+                                  handlePrecioChange(indexProd, indexCant, e.target.value)
+                                }
+                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500"
+                                placeholder="0.0000"
+                              />
+                            </div>
+                            <div className="pt-2 border-t border-gray-200 mt-2">
+                              <div className="flex justify-between items-center">
+                                <span className="text-sm font-semibold text-gray-700">Subtotal:</span>
+                                <span className="text-lg font-bold text-green-700">
+                                  ${subtotal.toFixed(2)}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </div>
@@ -281,7 +308,6 @@ export default function FormularioPedido({
               Diseño Aprobado
             </label>
           </div>
-
           <div className="flex items-center bg-white p-3 rounded-lg border-2 border-gray-200">
             <input
               type="checkbox"
@@ -318,7 +344,9 @@ export default function FormularioPedido({
         <div className="space-y-2">
           <div className="flex justify-between items-center pt-2">
             <span className="text-gray-900 font-semibold text-lg">Total del Pedido:</span>
-            <span className="text-2xl font-bold text-gray-900">${calcularTotalPedido().toFixed(2)}</span>
+            <span className="text-2xl font-bold text-gray-900">
+              ${calcularTotalPedido().toFixed(2)}
+            </span>
           </div>
         </div>
       </div>
