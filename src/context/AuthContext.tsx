@@ -33,12 +33,12 @@ const clearUser = () => localStorage.removeItem("user");
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true); // 👈 NUEVO
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const savedUser = getSavedUser();
     setUser(savedUser);
-    setLoading(false); // 👈 IMPORTANTE
+    setLoading(false);
   }, []);
 
   const login = async (correo: string, codigo: string) => {
@@ -63,4 +63,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       {children}
     </AuthContext.Provider>
   );
+};
+
+// 👇 ESTO ES LO QUE TE FALTABA
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (!context) throw new Error("useAuth debe usarse dentro de AuthProvider");
+  return context;
 };
