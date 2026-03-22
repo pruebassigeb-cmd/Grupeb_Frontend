@@ -12,6 +12,7 @@ export const loginService = async (correo: string, codigo: string) => {
 export const logoutService = async () => {
   const response = await api.post("/auth/logout");
   localStorage.removeItem("token");
+  localStorage.removeItem("user");
   return response.data;
 };
 

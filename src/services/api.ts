@@ -28,11 +28,17 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
-      localStorage.removeItem("usuario");
+    const url = error.config?.url || "";
+    const is401 = error.response?.status === 401;
+    const isAuthRoute = url.includes("/auth/");
+
+    // Solo limpiar y redirigir si el 401 no viene de rutas de auth
+    if (is401 && !isAuthRoute) {
+      localStorage.removeItem("user");
       localStorage.removeItem("token");
       window.location.href = "/";
     }
+
     return Promise.reject(error);
   }
 );
