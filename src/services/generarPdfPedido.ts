@@ -30,7 +30,7 @@ interface PedidoPdf {
 
 export async function generarPdfPedido(pedido: PedidoPdf): Promise<void> {
   const logoBase64 = pedido.logoBase64
-    ?? await cargarLogoBase64("/src/assets/logogrupeb.png");
+    ?? await cargarLogoBase64("../assets/logogrupeb.png");
 
   const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
   const PW  = 297;

@@ -27,7 +27,7 @@ function formatFecha(iso: string | null): string {
 export async function generarPdfEstadoCuentaSimple(
   datos: EstadoCuenta
 ): Promise<void> {
-  const logoBase64 = await cargarLogoBase64("/src/assets/logogrupeb.png");
+  const logoBase64 = await cargarLogoBase64("../assets/logogrupeb.png");
 
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   const PW = 210;
@@ -237,7 +237,7 @@ export async function generarPdfEstadoCuentaSimple(
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10);
-  doc.text("Estoy a sus órdenes para cualquier duda o aclaración.", PW / 2, y, { align: "center" });
+  doc.text("Estamos a sus órdenes para cualquier duda o aclaración.", PW / 2, y, { align: "center" });
   y += 8;
 
   // doc.setFont("helvetica", "bold");
@@ -247,7 +247,7 @@ export async function generarPdfEstadoCuentaSimple(
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(11);
-  doc.setTextColor(...GRAY_DARK);
+  doc.setTextColor(...BLACK);
   doc.text("Departamento de Ventas", PW / 2, y, { align: "center" });
   y += 6;
 

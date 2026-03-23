@@ -78,7 +78,7 @@ function seccionHeader(
 }
 
 export async function generarPdfHistorialPagos(venta: Venta): Promise<void> {
-  const logoBase64 = await cargarLogoBase64("/src/assets/logogrupeb.png");
+  const logoBase64 = await cargarLogoBase64("../assets/logogrupeb.png");
 
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   const PW = 210;
@@ -338,7 +338,7 @@ export async function generarPdfHistorialPagos(venta: Venta): Promise<void> {
   doc.setFont("helvetica", "italic");
   doc.setFontSize(8.5);
   doc.setTextColor(...GRAY_DARK);
-  doc.text("Estoy a sus órdenes para cualquier duda o aclaración.", PW / 2, y, { align: "center" });
+  doc.text("Estamos a sus órdenes para cualquier duda o aclaración.", PW / 2, y, { align: "center" });
   y += 6;
 
   // doc.setFont("helvetica", "bold");
@@ -349,7 +349,7 @@ export async function generarPdfHistorialPagos(venta: Venta): Promise<void> {
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(10);
-  doc.setTextColor(...GRAY_MED);
+  doc.setTextColor(...BLACK);
   doc.text("Departamento de Ventas", PW / 2, y, { align: "center" });
   y += 5;
 

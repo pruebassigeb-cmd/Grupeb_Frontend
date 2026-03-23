@@ -26,7 +26,7 @@ interface CotizacionPdf {
 
 export async function generarPdfCotizacion(cotizacion: CotizacionPdf): Promise<void> {
   const logoBase64 = cotizacion.logoBase64
-    ?? await cargarLogoBase64("/src/assets/logogrupeb.png");
+    ?? await cargarLogoBase64("../assets/logogrupeb.png");
 
   const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
   const PW  = 297;
