@@ -456,18 +456,18 @@ export async function generarPdfEstadoCuenta(
   y += 7;
 
   // Nombre vendedora: 12.5pt (antes 10pt)
+  // doc.setFont("helvetica", "bold");
+  // doc.setFontSize(12.5);
+  // doc.setTextColor(...BLACK);
+  // doc.text("Yesenia Zúñiga", PW / 2, y, { align: "center" });
+  // y += 6;
+
+  // Dept. ventas: 10pt (antes 8pt)
   doc.setFont("helvetica", "bold");
   doc.setFontSize(12.5);
   doc.setTextColor(...BLACK);
-  doc.text("Yesenia Zúñiga", PW / 2, y, { align: "center" });
-  y += 6;
-
-  // Dept. ventas: 10pt (antes 8pt)
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(10);
-  doc.setTextColor(...GRAY_MED);
   doc.text("Departamento de Ventas", PW / 2, y, { align: "center" });
-  y += 11;
+  y += 6;
 
   // Web: 11pt (antes 9pt)
   doc.setFont("helvetica", "bold");

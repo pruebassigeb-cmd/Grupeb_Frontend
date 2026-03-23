@@ -240,16 +240,16 @@ export async function generarPdfEstadoCuentaSimple(
   doc.text("Estoy a sus órdenes para cualquier duda o aclaración.", PW / 2, y, { align: "center" });
   y += 8;
 
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(11);
-  doc.text("Yesenia Zúñiga", PW / 2, y, { align: "center" });
-  y += 6;
+  // doc.setFont("helvetica", "bold");
+  // doc.setFontSize(11);
+  // doc.text("Yesenia Zúñiga", PW / 2, y, { align: "center" });
+  // y += 6;
 
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(10);
+  doc.setFontSize(11);
   doc.setTextColor(...GRAY_DARK);
   doc.text("Departamento de Ventas", PW / 2, y, { align: "center" });
-  y += 11;
+  y += 6;
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(10);

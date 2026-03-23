@@ -341,17 +341,17 @@ export async function generarPdfHistorialPagos(venta: Venta): Promise<void> {
   doc.text("Estoy a sus órdenes para cualquier duda o aclaración.", PW / 2, y, { align: "center" });
   y += 6;
 
+  // doc.setFont("helvetica", "bold");
+  // doc.setFontSize(10);
+  // doc.setTextColor(...BLACK);
+  // doc.text("Yesenia Zúñiga", PW / 2, y, { align: "center" });
+  // y += 5;
+
   doc.setFont("helvetica", "bold");
   doc.setFontSize(10);
-  doc.setTextColor(...BLACK);
-  doc.text("Yesenia Zúñiga", PW / 2, y, { align: "center" });
-  y += 5;
-
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(8);
   doc.setTextColor(...GRAY_MED);
   doc.text("Departamento de Ventas", PW / 2, y, { align: "center" });
-  y += 9;
+  y += 5;
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(9);
