@@ -9,6 +9,8 @@ import {
   GRAY_DARK, GRAY_MED, GRAY_LIGHT, GRAY_ROW, BLACK, WHITE,
 } from "./Pdfutils";
 import type { ProductoPdf, TotalesPdf } from "./Pdfutils";
+import logoUrl from "../assets/logogrupeb.png";
+
 
 interface PedidoPdf {
   no_pedido:      string;        // ← string: "P26001"
@@ -30,7 +32,7 @@ interface PedidoPdf {
 
 export async function generarPdfPedido(pedido: PedidoPdf): Promise<void> {
   const logoBase64 = pedido.logoBase64
-    ?? await cargarLogoBase64("../assets/logogrupeb.png");
+  ?? await cargarLogoBase64(logoUrl);
 
   const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
   const PW  = 297;

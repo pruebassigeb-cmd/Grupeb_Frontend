@@ -1,6 +1,8 @@
 import jsPDF from "jspdf";
 import { cargarLogoBase64 } from "./Pdfutils";
 import type { Venta, VentaPago } from "../types/ventas.types";
+import logoUrl from "../assets/logogrupeb.png";
+
 
 // ── Paleta monocromática ─────────────────────────────────────
 const BLACK:      [number, number, number] = [0,   0,   0  ];
@@ -78,7 +80,7 @@ function seccionHeader(
 }
 
 export async function generarPdfHistorialPagos(venta: Venta): Promise<void> {
-  const logoBase64 = await cargarLogoBase64("../assets/logogrupeb.png");
+const logoBase64 = await cargarLogoBase64(logoUrl);
 
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   const PW = 210;

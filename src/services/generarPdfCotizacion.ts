@@ -9,6 +9,8 @@ import {
   GRAY_DARK, GRAY_MED, GRAY_LIGHT, GRAY_ROW, BLACK, WHITE,
 } from "./Pdfutils";
 import type { ProductoPdf } from "./Pdfutils";
+import logoUrl from "../assets/logogrupeb.png";
+
 
 interface CotizacionPdf {
   no_cotizacion: string;       // ← string: "COT26001"
@@ -26,7 +28,7 @@ interface CotizacionPdf {
 
 export async function generarPdfCotizacion(cotizacion: CotizacionPdf): Promise<void> {
   const logoBase64 = cotizacion.logoBase64
-    ?? await cargarLogoBase64("../assets/logogrupeb.png");
+  ?? await cargarLogoBase64(logoUrl);
 
   const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
   const PW  = 297;

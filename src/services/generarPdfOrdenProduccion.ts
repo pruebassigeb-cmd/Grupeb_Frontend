@@ -1,6 +1,8 @@
 import jsPDF from "jspdf";
 import { cargarLogoBase64, parsePantones } from "./Pdfutils";
 import type { MedidaKey } from "../types/productos-plastico.types";
+import logoUrl from "../assets/logogrupeb.png";
+
 
 export interface OrdenProduccionData {
   no_pedido:        string;
@@ -321,8 +323,8 @@ function construirRepeticionStr(data: OrdenProduccionData): string {
 }
 
 export async function generarPdfOrdenProduccion(data: OrdenProduccionData): Promise<void> {
-  const logoBase64 = await cargarLogoBase64("../assets/logogrupeb.png");
-  const repeticionStr = construirRepeticionStr(data);
+const logoBase64 = await cargarLogoBase64(logoUrl);
+const repeticionStr = construirRepeticionStr(data);
 
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   const PW = 210;

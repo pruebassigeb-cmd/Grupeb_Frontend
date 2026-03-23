@@ -2,6 +2,8 @@ import jsPDF from "jspdf";
 import { cargarLogoBase64 } from "./Pdfutils";
 import type { EstadoCuenta } from "./estadoCuentaService";
 import type { VentaPago } from "../types/ventas.types";
+import logoUrl from "../assets/logogrupeb.png";
+
 
 // ── Paleta monocromática ─────────────────────────────────────
 const BLACK:      [number, number, number] = [0,   0,   0  ];
@@ -88,7 +90,7 @@ export async function generarPdfEstadoCuenta(
   datos: EstadoCuenta,
   pagos: VentaPago[]
 ): Promise<void> {
-  const logoBase64 = await cargarLogoBase64("../assets/logogrupeb.png");
+const logoBase64 = await cargarLogoBase64(logoUrl);
 
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   const PW = 210;

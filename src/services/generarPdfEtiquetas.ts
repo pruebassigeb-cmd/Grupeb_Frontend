@@ -1,6 +1,8 @@
 import jsPDF from "jspdf";
 import { cargarLogoBase64 } from "./Pdfutils";
 import type { EtiquetaData } from "./seguimientoService";
+import logoUrl from "../assets/logogrupeb.png";
+
 
 // ── Paleta B/N ───────────────────────────────────────────────
 const BLACK:      [number, number, number] = [0,   0,   0  ];
@@ -214,7 +216,7 @@ function dibujarEtiqueta(
 
 // ── Función principal exportada ──────────────────────────────
 export async function generarPdfEtiquetas(data: EtiquetaData): Promise<void> {
-  const logoBase64 = await cargarLogoBase64("/src/assets/logogrupeb.png");
+const logoBase64 = await cargarLogoBase64(logoUrl);
 
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
 
