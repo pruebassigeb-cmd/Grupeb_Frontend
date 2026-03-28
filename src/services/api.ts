@@ -1,9 +1,11 @@
 import axios from "axios";
 
-// URL base de API
-const API_URL = import.meta.env.VITE_API_URL || /*"https://grupeb-backend.onrender.com/api"*/ "http://localhost:3000/api";
+// Detectar entorno automáticamente
+const API_URL = import.meta.env.DEV
+  ? "http://localhost:3000/api"
+  : "https://grupeb-backend.onrender.com/api";
 
-// instancia de axios
+// Instancia de axios
 const api = axios.create({
   baseURL: API_URL,
   withCredentials: false,
