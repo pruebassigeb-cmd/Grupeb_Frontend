@@ -7,6 +7,7 @@ import {
   registrarPago,
   eliminarPago,
   getMetodosPago,
+  autorizarAnticipoCredito,  // 👈 nueva importación
 } from "../services/ventasservice";
 import { getOrdenProduccion } from "../services/seguimientoService";
 import { generarPdfOrdenProduccion } from "../services/generarPdfOrdenProduccion";
@@ -53,6 +54,7 @@ async function descargarPdfOrden(noPedido: string, noProduccion: string): Promis
     telefono:                data.telefono,
     correo:                  data.correo,
     impresion:               data.impresion,
+    prioridad: data.prioridad ?? false,
     nombre_producto:         producto.nombre_producto,
     categoria:               producto.categoria,
     material:                producto.material,
@@ -76,6 +78,7 @@ async function descargarPdfOrden(noPedido: string, noProduccion: string): Promis
     pigmentos:               producto.pigmentos,
     pantones:                producto.pantones,
     asa_suaje:               producto.asa_suaje,
+    color_asa_nombre: producto.color_asa_nombre ?? null,
     observacion:             producto.observacion,
     cantidad:                producto.cantidad,
     kilogramos:              producto.kilogramos,
@@ -466,7 +469,7 @@ function SeccionEstadoCuenta({
 // ════════════════════════════════════════════════════════════
 // MODAL DETALLE / PAGOS
 // ════════════════════════════════════════════════════════════
-function EditarAntLiqReal({
+export function EditarAntLiqReal({
   venta: ventaInicial,
   metodos,
   onClose,
@@ -487,6 +490,7 @@ function EditarAntLiqReal({
   const [eliminando,      setEliminando]      = useState<number | null>(null);
   const [error,           setError]           = useState<string | null>(null);
   const [descargandoHist, setDescargandoHist] = useState(false);
+  const [autorizando,     setAutorizando]     = useState(false); // 👈 nuevo estado
   const [alertaPdf, setAlertaPdf] = useState<{ visible: boolean; folios: string[] }>({
     visible: false, folios: [],
   });
@@ -542,6 +546,36 @@ function EditarAntLiqReal({
     } catch (e: any) {
       setError(e.response?.data?.error || "Error al registrar pago");
     } finally { setGuardando(false); }
+  };
+
+  // 👈 nuevo handler para autorizar anticipo por crédito
+  const handleAutorizarCredito = async () => {
+    if (!confirm(
+      `¿Autorizar el anticipo de $${fmt(anticipoRestante)} por crédito?\n\n` +
+      `Esto activará la producción sin registrar movimiento de dinero.\n` +
+      `El saldo pendiente seguirá siendo $${fmt(saldo)}.`
+    )) return;
+
+    setAutorizando(true);
+    setError(null);
+    try {
+      const response = await autorizarAnticipoCredito(venta.idventas);
+      await recargar();
+
+      const foliosNuevos: string[] = response?.ordenes_generadas ?? [];
+      if (foliosNuevos.length > 0) {
+        const foliosDescargados: string[] = [];
+        for (const folio of foliosNuevos) {
+          try { await descargarPdfOrden(venta.no_pedido, folio); foliosDescargados.push(folio); }
+          catch (pdfErr) { console.error(`Error al generar PDF de ${folio}:`, pdfErr); }
+        }
+        if (foliosDescargados.length > 0) setAlertaPdf({ visible: true, folios: foliosDescargados });
+      }
+    } catch (e: any) {
+      setError(e.response?.data?.error || "Error al autorizar anticipo por crédito");
+    } finally {
+      setAutorizando(false);
+    }
   };
 
   const handleEliminarPago = async (pago: VentaPago) => {
@@ -804,6 +838,7 @@ function EditarAntLiqReal({
           </div>
 
           <div className="flex items-center justify-between">
+            {/* Lado izquierdo: checkbox o mensaje de anticipo */}
             {!anticipoCubierto ? (
               <label className={`flex items-center gap-2 ${montoEsAnticipo ? "cursor-default" : "cursor-not-allowed opacity-40"}`}>
                 <input type="checkbox" checked={esAnticipo} readOnly disabled={!montoEsAnticipo}
@@ -818,18 +853,35 @@ function EditarAntLiqReal({
               </span>
             )}
 
-            <button onClick={handleRegistrarPago} disabled={guardando || !monto}
-              className="flex items-center gap-2 px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-              {guardando
-                ? <><div className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" />Guardando...</>
-                : <>
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                    </svg>
-                    Registrar pago
-                  </>
-              }
-            </button>
+            {/* Lado derecho: botones de acción */}
+            <div className="flex items-center gap-2">
+              {!anticipoCubierto && (
+                <button
+                  type="button"
+                  onClick={handleAutorizarCredito}
+                  disabled={autorizando}
+                  className="flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 disabled:bg-amber-300 text-white rounded-lg font-medium text-sm transition-colors"
+                >
+                  {autorizando
+                    ? <><div className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" />Autorizando...</>
+                    : <>🤝 Autorizar anticipo por crédito</>
+                  }
+                </button>
+              )}
+
+              <button onClick={handleRegistrarPago} disabled={guardando || !monto}
+                className="flex items-center gap-2 px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                {guardando
+                  ? <><div className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" />Guardando...</>
+                  : <>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                      </svg>
+                      Registrar pago
+                    </>
+                }
+              </button>
+            </div>
           </div>
         </div>
       ) : (
@@ -978,7 +1030,7 @@ export default function AnticipoLiquidacion() {
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              {["N° Pedido", "Fecha", "Cliente", "Empresa", "Total", "Pagado", "Saldo", "Estado", "Acciones"].map(h => (
+              {["N° Pedido", "Fecha", "Impresión", "Empresa", "Total", "Pagado", "Saldo", "Estado", "Acciones"].map(h => (
                 <th key={h} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{h}</th>
               ))}
             </tr>
@@ -996,7 +1048,7 @@ export default function AnticipoLiquidacion() {
                   {v.no_cotizacion && <span className="ml-1 text-xs text-gray-400 font-normal">Cot.#{v.no_cotizacion}</span>}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{fmtFecha(v.fecha_pedido)}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{v.cliente || "—"}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{v.impresion || "—"}</td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{v.empresa || "—"}</td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-green-700">${fmt(v.total)}</td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-blue-700">${fmt(v.abono)}</td>

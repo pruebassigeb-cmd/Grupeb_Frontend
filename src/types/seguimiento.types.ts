@@ -2,8 +2,10 @@ export interface PedidoSeguimiento {
   no_pedido:          string;
   no_cotizacion:      string | null;
   fecha:              string;
+  prioridad: boolean;
   cliente:            string;
   tipo_producto:      string;
+  impresion:          string;
   anticipo_requerido: number;
   anticipo_pagado:    number;
   anticipo_cubierto:  boolean;
@@ -18,7 +20,6 @@ export interface PedidoSeguimiento {
   impresion_estado:    string;
   bolseo_estado:       string;
   asa_flexible_estado: string;
-  // Datos del producto para el operador
   nombre_producto:  string;
   medida:           string;
   altura:           string;
@@ -37,10 +38,11 @@ export interface PedidoSeguimiento {
   bk:               boolean | null;
   foil:             boolean | null;
   asa_suaje:        string | null;
+  id_color?:    number | null;    // ← nuevo
+  color_asa_nombre?: string | null;   // ← nuevo
   cantidad_orden:   number | null;
   kilogramos_orden: number | null;
   modo_cantidad:    string;
-  // ── Campos de merma ──────────────────────────────────────
   kilos:        number | null;
   kilos_merma:  number | null;
   pzas:         number | null;

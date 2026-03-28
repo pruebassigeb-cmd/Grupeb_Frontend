@@ -3,7 +3,6 @@ import { cargarLogoBase64, parsePantones } from "./Pdfutils";
 import type { MedidaKey } from "../types/productos-plastico.types";
 import logoUrl from "../assets/logogrupeb.png";
 
-
 export interface OrdenProduccionData {
   no_pedido:        string;
   no_produccion:    string | null;
@@ -12,6 +11,8 @@ export interface OrdenProduccionData {
   fecha_aprobacion_diseno: string | null;
   observaciones_diseno:    string | null;
   fecha_entrega:    string | null;
+
+  prioridad?: boolean;
 
   cliente:   string;
   empresa:   string;
@@ -45,6 +46,7 @@ export interface OrdenProduccionData {
   pigmentos:   string | null;
   pantones:    string[] | null;
   asa_suaje:   string | null;
+  color_asa_nombre?: string | null;   // ← nuevo
   observacion: string | null;
 
   cantidad:      number | null;
@@ -63,22 +65,22 @@ export interface OrdenProduccionData {
   pzas:        number | null;
   pzas_merma:  number | null;
 
-  kilos_extruir?:       number | null;
-  metros_extruir?:      number | null;
-  ext_merma?:           number | null;
-  k_para_impresion?:    number | null;
-  metros_extruidos?:    number | null;
-  kilos_imprimir?:      number | null;
-  imp_merma?:           number | null;
-  kilos_impresos?:      number | null;
-  metros_imprimir?:     number | null;
-  metros_impresos?:     number | null;
-  imp_maquina?:         string | null;
-  kilos_bolsear?:       number | null;
-  bol_merma?:           number | null;
-  piezas_bolseadas?:    number | null;
-  kilos_bolseados?:     number | null;
-  bol_piezas_merma?:    number | null;
+  kilos_extruir?:        number | null;
+  metros_extruir?:       number | null;
+  ext_merma?:            number | null;
+  k_para_impresion?:     number | null;
+  metros_extruidos?:     number | null;
+  kilos_imprimir?:       number | null;
+  imp_merma?:            number | null;
+  kilos_impresos?:       number | null;
+  metros_imprimir?:      number | null;
+  metros_impresos?:      number | null;
+  imp_maquina?:          string | null;
+  kilos_bolsear?:        number | null;
+  bol_merma?:            number | null;
+  piezas_bolseadas?:     number | null;
+  kilos_bolseados?:      number | null;
+  bol_piezas_merma?:     number | null;
   asa_piezas_recibidas?: number | null;
   asa_merma?:            number | null;
 }
@@ -88,12 +90,11 @@ const WHITE:       [number, number, number] = [255, 255, 255];
 const GRAY_DARK:   [number, number, number] = [60,  60,  60];
 const GRAY_MED:    [number, number, number] = [140, 140, 140];
 const GRAY_LIGHT2: [number, number, number] = [240, 240, 240];
+const RED:         [number, number, number] = [200, 0,   0];
 
 const f = (v: any) =>
   v === null || v === undefined || String(v).trim() === "" ? "" : String(v).trim();
 
-// labelSize: 10pt (antes 8.25pt)
-// valueSize: 15pt (antes 12pt)
 function celdaLabel(
   doc: jsPDF,
   label: string,
@@ -116,7 +117,6 @@ function celdaLabel(
   doc.text(f(value), x + w / 2, y + h - 3, { align: "center" });
 }
 
-// fontSize header: 12pt (antes 9.75pt)
 function celdaHeader(
   doc: jsPDF,
   label: string,
@@ -146,7 +146,6 @@ function bloqueOperativo(
   const n = (v?: number | null) => v != null ? String(v) : "";
   const b = (v?: number | null) => v != null;
 
-  // labelH: 8 (antes 6)
   const labelH = 8;
   const bodyH  = h - labelH;
   const filaH  = bodyH / 2;
@@ -168,7 +167,6 @@ function bloqueOperativo(
   doc.setLineWidth(0.2);
   doc.rect(x, firmaY, obsW, filaH);
   doc.setFont("helvetica", "normal");
-  // Label firma: 10pt (antes 8.25pt)
   doc.setFontSize(10);
   doc.setTextColor(GRAY_DARK[0], GRAY_DARK[1], GRAY_DARK[2]);
   doc.text("Observación", x + 1.5, firmaY + 4.5);
@@ -177,7 +175,7 @@ function bloqueOperativo(
   doc.rect(x + obsW, firmaY, firmaW, filaH);
   doc.setFontSize(10);
   doc.setTextColor(GRAY_DARK[0], GRAY_DARK[1], GRAY_DARK[2]);
-  doc.text("Firma Encargado", x + obsW + firmaW / 2, firmaY + 4.5, { align: "center" });
+  doc.text("Autorización Calidad", x + obsW + firmaW / 2, firmaY + 4.5, { align: "center" });
   doc.setDrawColor(GRAY_MED[0], GRAY_MED[1], GRAY_MED[2]);
   doc.line(x + obsW + 3, firmaY + filaH - 3.5, x + obsW + firmaW - 3, firmaY + filaH - 3.5);
   doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);
@@ -186,7 +184,7 @@ function bloqueOperativo(
   doc.rect(x + obsW + firmaW, firmaY, calW, filaH);
   doc.setFontSize(10);
   doc.setTextColor(GRAY_DARK[0], GRAY_DARK[1], GRAY_DARK[2]);
-  doc.text("Autorización Calidad", x + obsW + firmaW + calW / 2, firmaY + 4.5, { align: "center" });
+  doc.text("Firma Encargado", x + obsW + firmaW + calW / 2, firmaY + 4.5, { align: "center" });
   doc.setDrawColor(GRAY_MED[0], GRAY_MED[1], GRAY_MED[2]);
   doc.line(x + obsW + firmaW + 3, firmaY + filaH - 3.5, x + obsW + firmaW + calW - 3, firmaY + filaH - 3.5);
   doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);
@@ -204,7 +202,6 @@ function bloqueExtrusionConMetros(
   const n = (v?: number | null) => v != null ? String(v) : "";
   const b = (v?: number | null) => v != null;
 
-  // labelH: 8 (antes 6)
   const labelH = 8;
   const bodyH  = h - labelH;
   const filaH  = bodyH / 2;
@@ -238,7 +235,7 @@ function bloqueExtrusionConMetros(
   doc.rect(x + metExtW + obsW, firmaY, firmaW, filaH);
   doc.setFontSize(10);
   doc.setTextColor(GRAY_DARK[0], GRAY_DARK[1], GRAY_DARK[2]);
-  doc.text("Firma Encargado", x + metExtW + obsW + firmaW / 2, firmaY + 4.5, { align: "center" });
+  doc.text("Autorización Calidad", x + metExtW + obsW + firmaW / 2, firmaY + 4.5, { align: "center" });
   doc.setDrawColor(GRAY_MED[0], GRAY_MED[1], GRAY_MED[2]);
   doc.line(x + metExtW + obsW + 3, firmaY + filaH - 3.5, x + metExtW + obsW + firmaW - 3, firmaY + filaH - 3.5);
   doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);
@@ -247,7 +244,7 @@ function bloqueExtrusionConMetros(
   doc.rect(x + metExtW + obsW + firmaW, firmaY, calW, filaH);
   doc.setFontSize(10);
   doc.setTextColor(GRAY_DARK[0], GRAY_DARK[1], GRAY_DARK[2]);
-  doc.text("Autorización Calidad", x + metExtW + obsW + firmaW + calW / 2, firmaY + 4.5, { align: "center" });
+  doc.text("Firma Encargado", x + metExtW + obsW + firmaW + calW / 2, firmaY + 4.5, { align: "center" });
   doc.setDrawColor(GRAY_MED[0], GRAY_MED[1], GRAY_MED[2]);
   doc.line(x + metExtW + obsW + firmaW + 3, firmaY + filaH - 3.5, x + metExtW + obsW + firmaW + calW - 3, firmaY + filaH - 3.5);
   doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);
@@ -261,7 +258,6 @@ function bloqueMerma(
   pzas:        number | null,
   pzas_merma:  number | null,
 ) {
-  // headerH: 8 (antes 6)
   const headerH = 8;
   const colW    = w / 4;
   const bodyH   = h - headerH;
@@ -270,7 +266,6 @@ function bloqueMerma(
   doc.setFillColor(GRAY_DARK[0], GRAY_DARK[1], GRAY_DARK[2]);
   doc.rect(x, y, w, headerH, "FD");
   doc.setFont("helvetica", "bold");
-  // MERMA header: 11pt (antes 9pt)
   doc.setFontSize(11);
   doc.setTextColor(WHITE[0], WHITE[1], WHITE[2]);
   doc.text("MERMA", x + w / 2, y + headerH / 2 + 2, { align: "center" });
@@ -294,12 +289,10 @@ function bloqueMerma(
       doc.rect(cx, dataY, colW, bodyH);
     }
     doc.setFont("helvetica", "normal");
-    // Label merma: 9.5pt (antes 7.5pt)
     doc.setFontSize(9.5);
     doc.setTextColor(GRAY_DARK[0], GRAY_DARK[1], GRAY_DARK[2]);
     doc.text(campo.label, cx + colW / 2, dataY + 4.5, { align: "center" });
     doc.setFont("helvetica", "bold");
-    // Valor merma: 15pt (antes 12pt)
     doc.setFontSize(15);
     doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);
     doc.text(campo.value, cx + colW / 2, dataY + bodyH - 3, { align: "center" });
@@ -323,8 +316,8 @@ function construirRepeticionStr(data: OrdenProduccionData): string {
 }
 
 export async function generarPdfOrdenProduccion(data: OrdenProduccionData): Promise<void> {
-const logoBase64 = await cargarLogoBase64(logoUrl);
-const repeticionStr = construirRepeticionStr(data);
+  const logoBase64 = await cargarLogoBase64(logoUrl);
+  const repeticionStr = construirRepeticionStr(data);
 
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   const PW = 210;
@@ -336,7 +329,6 @@ const repeticionStr = construirRepeticionStr(data);
   // ── FILA 1 — Supervisores ──
   const supervisores = ["Ventas", "Diseño", "Logística", "Extrusión", "Impresión", "Bolseo"];
   const supW = CW / supervisores.length;
-  // supH: 15 (antes 12)
   const supH = 15;
   supervisores.forEach((s, i) => {
     const sx = M + i * supW;
@@ -344,7 +336,6 @@ const repeticionStr = construirRepeticionStr(data);
     doc.setLineWidth(0.2);
     doc.rect(sx, y, supW, supH);
     doc.setFont("helvetica", "bold");
-    // Supervisor label: 11pt (antes 9pt)
     doc.setFontSize(11);
     doc.setTextColor(GRAY_DARK[0], GRAY_DARK[1], GRAY_DARK[2]);
     doc.text(s, sx + supW / 2, y + 5.5, { align: "center" });
@@ -358,7 +349,6 @@ const repeticionStr = construirRepeticionStr(data);
   const logoW  = 36;
   const ordenW = 52;
   const titleW = CW - logoW - ordenW;
-  // fila2H: 25 (antes 20)
   const fila2H = 25;
 
   doc.setDrawColor(BLACK[0], BLACK[1], BLACK[2]);
@@ -377,7 +367,6 @@ const repeticionStr = construirRepeticionStr(data);
   const titleX = M + logoW;
   doc.rect(titleX, y, titleW, fila2H);
   doc.setFont("helvetica", "bold");
-  // Título: 18pt (antes 15pt)
   doc.setFontSize(18);
   doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);
   doc.text("Orden de Producción de Plástico", titleX + titleW / 2, y + fila2H / 2 + 3, { align: "center" });
@@ -385,21 +374,17 @@ const repeticionStr = construirRepeticionStr(data);
   const ordenX = M + logoW + titleW;
   doc.rect(ordenX, y, ordenW, fila2H);
   doc.setFillColor(GRAY_DARK[0], GRAY_DARK[1], GRAY_DARK[2]);
-  // Header "ORDEN": altura 6 (antes 5)
   doc.rect(ordenX, y, ordenW, 6, "FD");
   doc.setFont("helvetica", "bold");
-  // "ORDEN" label: 12pt (antes 9.75pt)
   doc.setFontSize(12);
   doc.setTextColor(WHITE[0], WHITE[1], WHITE[2]);
   doc.text("ORDEN", ordenX + ordenW / 2, y + 4.5, { align: "center" });
   doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);
   doc.setFont("helvetica", "normal");
-  // "No" label: 10pt (antes 8.25pt)
   doc.setFontSize(10);
   doc.setTextColor(GRAY_DARK[0], GRAY_DARK[1], GRAY_DARK[2]);
   doc.text("No", ordenX + 2, y + 11);
   doc.setFont("helvetica", "bold");
-  // Número orden: 18pt (antes 15pt)
   doc.setFontSize(18);
   doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);
   doc.text(f(data.no_produccion ?? `PED-${data.no_pedido}`), ordenX + ordenW / 2, y + 14, { align: "center" });
@@ -407,31 +392,47 @@ const repeticionStr = construirRepeticionStr(data);
   doc.setLineWidth(0.2);
   doc.line(ordenX, y + 16, ordenX + ordenW, y + 16);
   doc.setFont("helvetica", "normal");
-  // "FECHA" label: 10pt (antes 8.25pt)
   doc.setFontSize(10);
   doc.setTextColor(GRAY_DARK[0], GRAY_DARK[1], GRAY_DARK[2]);
   doc.text("FECHA", ordenX + 2, y + 20);
-  // Fecha: 13pt (antes 11.25pt)
   doc.setFontSize(13);
   doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);
   doc.text(formatFecha(data.fecha), ordenX + ordenW / 2, y + 23.5, { align: "center" });
   y += fila2H;
 
   // ── FILA 3 — Impresión | Fecha Entrega | Prioridad | Pedido ──
-  // fila3H: 13 (antes 10)
   const fila3H = 13;
   const impW   = CW * 0.36;
   const entW   = CW * 0.28;
   const priW   = CW * 0.18;
   const pedW   = CW - impW - entW - priW;
-  celdaLabel(doc, "Impresión",     f(data.impresion ?? data.cliente), M,                      y, impW, fila3H, 10, 13);
-  celdaLabel(doc, "Fecha Entrega", formatFecha(data.fecha_entrega),   M + impW,               y, entW, fila3H, 10, 13);
-  celdaLabel(doc, "Prioridad",     "",                                M + impW + entW,        y, priW, fila3H, 10, 13);
-  celdaLabel(doc, "Pedido",        f(data.no_pedido),                 M + impW + entW + priW, y, pedW, fila3H, 10, 15, true);
+
+  celdaLabel(doc, "Impresión",     f(data.impresion ?? data.cliente), M,          y, impW, fila3H, 10, 13);
+  celdaLabel(doc, "Fecha Entrega", formatFecha(data.fecha_entrega),   M + impW,   y, entW, fila3H, 10, 13);
+
+  const prioridadTexto = data.prioridad ? "URGENTE" : "Normal";
+  doc.setDrawColor(BLACK[0], BLACK[1], BLACK[2]);
+  doc.setLineWidth(0.2);
+  doc.rect(M + impW + entW, y, priW, fila3H);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(10);
+  doc.setTextColor(GRAY_DARK[0], GRAY_DARK[1], GRAY_DARK[2]);
+  doc.text("Prioridad", M + impW + entW + 1.5, y + 4.5);
+  doc.setFont("helvetica", data.prioridad ? "bold" : "normal");
+  doc.setFontSize(13);
+  doc.setTextColor(
+    data.prioridad ? RED[0] : BLACK[0],
+    data.prioridad ? RED[1] : BLACK[1],
+    data.prioridad ? RED[2] : BLACK[2]
+  );
+  doc.text(prioridadTexto, M + impW + entW + priW / 2, y + fila3H - 3, { align: "center" });
+  doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);
+
+  celdaLabel(doc, "Pedido", data.no_pedido ? data.no_pedido.trim() : "—",
+    M + impW + entW + priW, y, pedW, fila3H, 10, 11, true);
   y += fila3H;
 
   // ── FILA 4 — Producto | Cantidad | Medida | Material | Calibre ──
-  // fila4H: 14 (antes 11)
   const fila4H = 14;
   const prodW  = CW * 0.28;
   const cantW  = CW * 0.14;
@@ -449,7 +450,6 @@ const repeticionStr = construirRepeticionStr(data);
   y += fila4H;
 
   // ── FILA 5 — Repetición de Impresión ──
-  // fila5H: 11 (antes 9)
   const fila5H = 11;
   doc.setDrawColor(BLACK[0], BLACK[1], BLACK[2]);
   doc.setLineWidth(0.2);
@@ -465,21 +465,22 @@ const repeticionStr = construirRepeticionStr(data);
   }
   y += fila5H;
 
-  // ── FILA 6 — Asa / Suaje | Código | Pantones ──
-  // fila6H: 13 (antes 10)
-  const fila6H = 13;
-  const repW   = CW * 0.50;
-  const codW   = CW * 0.15;
-  const panW   = CW - repW - codW;
+  // ── FILA 6 — Asa/Suaje | Color Asa | Código | Pantones ──
+  // Distribucion: suaje 30% | color asa 20% | código 13% | pantones resto
+  const fila6H  = 13;
+  const asaW    = CW * 0.30;
+  const colorW  = CW * 0.20;
+  const codW    = CW * 0.13;
+  const panW    = CW - asaW - colorW - codW;
   const pantStr = parsePantones(data.pantones);
 
-  celdaLabel(doc, "Asa / Suaje", f(data.asa_suaje),              M,               y, repW, fila6H, 10, 13);
-  celdaLabel(doc, "Código",      "",                             M + repW,        y, codW, fila6H, 10, 13);
-  celdaLabel(doc, "Pantones",    pantStr !== "—" ? pantStr : "", M + repW + codW, y, panW, fila6H, 10, 13);
+  celdaLabel(doc, "Asa / Suaje",  f(data.asa_suaje),              M,                      y, asaW,  fila6H, 10, 13);
+  celdaLabel(doc, "Color Asa",    f(data.color_asa_nombre ?? ""), M + asaW,               y, colorW, fila6H, 10, 13);
+  celdaLabel(doc, "Código",       "",                             M + asaW + colorW,      y, codW,  fila6H, 10, 13);
+  celdaLabel(doc, "Pantones",     pantStr !== "—" ? pantStr : "", M + asaW + colorW + codW, y, panW, fila6H, 10, 13);
   y += fila6H;
 
   // ── FILA 7 — Altura | Muelle Fondo | Ancho | Pigmento | Caras ──
-  // fila7H: 14 (antes 11)
   const fila7H = 14;
   const medCols = [
     { label: "Altura",       value: f(data.altura),       w: CW * 0.11 },
@@ -504,7 +505,6 @@ const repeticionStr = construirRepeticionStr(data);
   const colIzqW = CW * 0.62;
   const colDerW = CW - colIzqW;
   const colDerX = M + colIzqW;
-  // bloqueH ajustado para que los 4 bloques quepan en la página
   const bloqueH = 34;
   const bloqueY = y;
 
@@ -535,60 +535,69 @@ const repeticionStr = construirRepeticionStr(data);
     data.asa_piezas_recibidas, data.asa_merma, null
   ); y += bloqueH;
 
-  // ── Columna derecha — Autorización de Diseño ──
+  // ── Columna derecha ──
   const totalBloques = bloqueH * 4;
-  const autDisenoH   = totalBloques * 0.50;
-  // labelBloqH: 8 (antes 6)
   const labelBloqH   = 8;
+  const autDisenoH   = totalBloques * 0.50;
+  const graficaH     = totalBloques - autDisenoH;
 
   doc.setDrawColor(BLACK[0], BLACK[1], BLACK[2]);
   doc.setLineWidth(0.2);
   doc.rect(colDerX, bloqueY, colDerW, autDisenoH);
   celdaHeader(doc, "AUTORIZACIÓN DE DISEÑO", colDerX, bloqueY, colDerW, labelBloqH);
+
   doc.setFont("helvetica", "normal");
-  // Labels diseño: 10pt (antes 8.25pt)
   doc.setFontSize(10);
   doc.setTextColor(GRAY_DARK[0], GRAY_DARK[1], GRAY_DARK[2]);
   doc.text("Fecha aprobación:", colDerX + 3, bloqueY + labelBloqH + 9);
-  // Fecha diseño: 13pt (antes 10.5pt)
   doc.setFontSize(13);
   doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);
   doc.text(
     formatFecha(data.fecha_aprobacion_diseno) || "—",
     colDerX + colDerW / 2, bloqueY + labelBloqH + 17, { align: "center" }
   );
+
   doc.setFontSize(10);
   doc.setTextColor(GRAY_DARK[0], GRAY_DARK[1], GRAY_DARK[2]);
-  doc.text("Observaciones:", colDerX + 3, bloqueY + labelBloqH + 26);
+  doc.text("Obs. Diseño:", colDerX + 3, bloqueY + labelBloqH + 26);
   if (data.observaciones_diseno) {
     doc.setFont("helvetica", "normal");
-    // Obs diseño: 9.5pt (antes 7.5pt)
     doc.setFontSize(9.5);
     doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);
     doc.text(data.observaciones_diseno, colDerX + 3, bloqueY + labelBloqH + 33, {
       maxWidth: colDerW - 6,
     });
   }
-  doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(10);
+  doc.setTextColor(GRAY_DARK[0], GRAY_DARK[1], GRAY_DARK[2]);
+  doc.text("Obs. Pedido:", colDerX + 3, bloqueY + labelBloqH + 47);
+  if (data.observacion) {
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9.5);
+    doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);
+    doc.text(data.observacion, colDerX + 3, bloqueY + labelBloqH + 54, {
+      maxWidth: colDerW - 6,
+    });
+  }
+
   doc.setDrawColor(GRAY_MED[0], GRAY_MED[1], GRAY_MED[2]);
   doc.line(colDerX + 5, bloqueY + autDisenoH - 5, colDerX + colDerW - 5, bloqueY + autDisenoH - 5);
-  // "Autorizó Diseño": 10pt (antes 8.25pt)
   doc.setFontSize(10);
   doc.setTextColor(GRAY_MED[0], GRAY_MED[1], GRAY_MED[2]);
   doc.text("Autorizó Diseño", colDerX + colDerW / 2, bloqueY + autDisenoH - 1.5, { align: "center" });
   doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);
 
-  // ── Columna derecha — Gráfica de Rendimiento ──
-  const grafY = bloqueY + autDisenoH;
-  const grafH = totalBloques - autDisenoH;
+  const graficaY = bloqueY + autDisenoH;
   doc.setDrawColor(BLACK[0], BLACK[1], BLACK[2]);
-  doc.rect(colDerX, grafY, colDerW, grafH);
-  celdaHeader(doc, "Gráfica de Rendimiento", colDerX, grafY, colDerW, labelBloqH);
+  doc.setLineWidth(0.2);
+  doc.rect(colDerX, graficaY, colDerW, graficaH);
+  celdaHeader(doc, "GRÁFICA DE RENDIMIENTO", colDerX, graficaY, colDerW, labelBloqH);
 
   // ── PIE DE PÁGINA ──
   const pieY = PH - M - 7;
   doc.setFont("helvetica", "normal");
-  // Pie: 11pt (antes 9pt)
   doc.setFontSize(11);
   doc.setTextColor(GRAY_MED[0], GRAY_MED[1], GRAY_MED[2]);
   const noOp = data.no_produccion ?? `Pedido #${data.no_pedido}`;

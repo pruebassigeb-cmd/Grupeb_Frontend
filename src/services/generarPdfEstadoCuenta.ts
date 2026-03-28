@@ -274,56 +274,6 @@ const logoBase64 = await cargarLogoBase64(logoUrl);
   y += 5;
 
   // ════════════════════════════════════════════════════════════
-  // RESUMEN FINANCIERO
-  // ════════════════════════════════════════════════════════════
-  seccionHeader(doc, "RESUMEN FINANCIERO", M, y, CW);
-  y += 9;
-
-  // finH: 13 (antes 10)
-  const finH   = 13;
-  const colFin = CW / 6;
-
-  const finCols: {
-    label: string; value: string;
-    bold?: boolean; color?: [number,number,number]; fill?: [number,number,number];
-  }[] = [
-    { label: "Subtotal Original", value: fmtMoney(datos.subtotal_original), fill: WHITE },
-    { label: "IVA 16% Original",  value: fmtMoney(datos.iva_original),      fill: WHITE },
-    { label: "Total Original",    value: fmtMoney(datos.total_original),    bold: true, fill: WHITE },
-    { label: "Subtotal Real",     value: fmtMoney(datos.subtotal_real),     color: GRAY_XDARK, fill: GRAY_LIGHT },
-    { label: "IVA 16% Real",      value: fmtMoney(datos.iva_real),          color: GRAY_XDARK, fill: GRAY_LIGHT },
-    { label: "Total Real",        value: fmtMoney(datos.total_real),        bold: true, color: BLACK, fill: GRAY_SOFT },
-  ];
-
-  finCols.forEach((col, i) => {
-    celda(doc, col.label, col.value, M + i * colFin, y, colFin, finH,
-      { bold: col.bold, color: col.color ?? BLACK, fill: col.fill });
-  });
-  y += finH;
-
-  const difVal  = datos.diferencia_total;
-  const difStr  = (difVal > 0 ? "+" : "") + fmtMoney(difVal);
-  const difFill:  [number,number,number] = difVal !== 0 ? GRAY_SOFT  : GRAY_LIGHT;
-  const difColor: [number,number,number] = difVal !== 0 ? GRAY_XDARK : GRAY_MED;
-
-  const difW   = colFin * 2;
-  const anticW = colFin;
-  const abonoW = colFin;
-  const saldoW = CW - difW - anticW - abonoW;
-
-  celda(doc, "Diferencia Total",   difStr,                   M,                       y, difW,   finH, { bold: true, color: difColor, fill: difFill });
-  celda(doc, "Anticipo Requerido", fmtMoney(datos.anticipo), M + difW,                y, anticW, finH, { fill: GRAY_LIGHT });
-  celda(doc, "Total Abonado",      fmtMoney(datos.abono),    M + difW + anticW,       y, abonoW, finH, { bold: true, color: GRAY_XDARK, fill: GRAY_SOFT });
-  celda(
-    doc, "Saldo Pendiente",
-    datos.saldo <= 0 ? "LIQUIDADO" : fmtMoney(datos.saldo),
-    M + difW + anticW + abonoW, y, saldoW, finH,
-    { bold: true, color: datos.saldo <= 0 ? GRAY_DARK : BLACK, fill: datos.saldo <= 0 ? GRAY_LIGHT : GRAY_SOFT }
-  );
-
-  y += finH + 5;
-
-  // ════════════════════════════════════════════════════════════
   // HISTORIAL DE PAGOS
   // ════════════════════════════════════════════════════════════
   if (pagos && pagos.length > 0) {
@@ -420,6 +370,56 @@ const logoBase64 = await cargarLogoBase64(logoUrl);
   }
 
   // ════════════════════════════════════════════════════════════
+  // RESUMEN FINANCIERO
+  // ════════════════════════════════════════════════════════════
+  seccionHeader(doc, "RESUMEN FINANCIERO", M, y, CW);
+  y += 9;
+
+  // finH: 13 (antes 10)
+  const finH   = 13;
+  const colFin = CW / 6;
+
+  const finCols: {
+    label: string; value: string;
+    bold?: boolean; color?: [number,number,number]; fill?: [number,number,number];
+  }[] = [
+    { label: "Subtotal Original", value: fmtMoney(datos.subtotal_original), fill: WHITE },
+    { label: "IVA 16% Original",  value: fmtMoney(datos.iva_original),      fill: WHITE },
+    { label: "Total Original",    value: fmtMoney(datos.total_original),    bold: true, fill: WHITE },
+    { label: "Subtotal Real",     value: fmtMoney(datos.subtotal_real),     color: GRAY_XDARK, fill: GRAY_LIGHT },
+    { label: "IVA 16% Real",      value: fmtMoney(datos.iva_real),          color: GRAY_XDARK, fill: GRAY_LIGHT },
+    { label: "Total Real",        value: fmtMoney(datos.total_real),        bold: true, color: BLACK, fill: GRAY_SOFT },
+  ];
+
+  finCols.forEach((col, i) => {
+    celda(doc, col.label, col.value, M + i * colFin, y, colFin, finH,
+      { bold: col.bold, color: col.color ?? BLACK, fill: col.fill });
+  });
+  y += finH;
+
+  const difVal  = datos.diferencia_total;
+  const difStr  = (difVal > 0 ? "+" : "") + fmtMoney(difVal);
+  const difFill:  [number,number,number] = difVal !== 0 ? GRAY_SOFT  : GRAY_LIGHT;
+  const difColor: [number,number,number] = difVal !== 0 ? GRAY_XDARK : GRAY_MED;
+
+  const difW   = colFin * 2;
+  const anticW = colFin;
+  const abonoW = colFin;
+  const saldoW = CW - difW - anticW - abonoW;
+
+  celda(doc, "Diferencia Total",   difStr,                   M,                       y, difW,   finH, { bold: true, color: difColor, fill: difFill });
+  celda(doc, "Anticipo Requerido", fmtMoney(datos.anticipo), M + difW,                y, anticW, finH, { fill: GRAY_LIGHT });
+  celda(doc, "Total Abonado",      fmtMoney(datos.abono),    M + difW + anticW,       y, abonoW, finH, { bold: true, color: GRAY_XDARK, fill: GRAY_SOFT });
+  celda(
+    doc, "Saldo Pendiente",
+    datos.saldo <= 0 ? "LIQUIDADO" : fmtMoney(datos.saldo),
+    M + difW + anticW + abonoW, y, saldoW, finH,
+    { bold: true, color: datos.saldo <= 0 ? GRAY_DARK : BLACK, fill: datos.saldo <= 0 ? GRAY_LIGHT : GRAY_SOFT }
+  );
+
+  y += finH + 5;
+
+  // ════════════════════════════════════════════════════════════
   // DATOS BANCARIOS Y CONTACTO
   // ════════════════════════════════════════════════════════════
   y += 12;
@@ -446,6 +446,8 @@ const logoBase64 = await cargarLogoBase64(logoUrl);
   doc.setFontSize(11);
   doc.setTextColor(...BLACK);
   doc.text("Cuenta # 70010708964", PW / 2, y, { align: "center" });
+  y += 6;
+  doc.text("Clabe # 002320700107089643", PW / 2, y, { align: "center" });
   y += 6;
   doc.text("Grupeb S.A. de C.V.", PW / 2, y, { align: "center" });
   y += 11;

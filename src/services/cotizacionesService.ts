@@ -17,6 +17,7 @@ export const crearCotizacion = async (datos: {
     tintasId:      number;
     carasId:       number;
     idsuaje?:      number | null;
+    colorAsaId?:   number | null;
     observacion?:  string;
     pantones?:     string | null;
     pigmentos?:    string | null;
@@ -60,6 +61,7 @@ export const crearCotizacion = async (datos: {
       tintasId:    prod.tintasId,
       carasId:     prod.carasId,
       idsuaje:     prod.idsuaje     ?? null,
+      colorAsaId:  prod.colorAsaId  ?? null,
       observacion: prod.observacion || null,
       pantones:    prod.pantones    ?? null,
       pigmentos:   prod.pigmentos   ?? null,
@@ -68,9 +70,12 @@ export const crearCotizacion = async (datos: {
     };
   });
 
+  console.log("🔍 prioridad antes de enviar:", datos.prioridad);
+
   const response = await api.post("/cotizaciones", {
     clienteId: datos.clienteId,
     tipo:      datos.tipo ?? "cotizacion",
+    prioridad: datos.prioridad ?? false,
     productos,
   });
 
@@ -94,7 +99,7 @@ export const actualizarObservacion = async (productoId: number, observacion: str
 };
 
 export const actualizarEstado = async (
-  noCotizacion: string,   // ← string
+  noCotizacion: string,
   estadoId: number
 ): Promise<RespuestaActualizarEstado> => {
   const response = await api.patch(
@@ -104,7 +109,7 @@ export const actualizarEstado = async (
   return response.data;
 };
 
-export const eliminarCotizacion = async (noCotizacion: string) => {  // ← string
+export const eliminarCotizacion = async (noCotizacion: string) => {
   const response = await api.delete(`/cotizaciones/${noCotizacion}`);
   return response.data;
 };

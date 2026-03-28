@@ -10,6 +10,7 @@ export interface OrdenProduccionRespuesta {
   no_pedido:       string;
   no_cotizacion:   string | null;
   fecha:           string;
+  prioridad:       boolean;
   cliente:         string;
   empresa:         string;
   telefono:        string;
@@ -51,6 +52,8 @@ export interface OrdenProduccionProducto {
   pigmentos:               string | null;
   pantones:                string[] | null;
   asa_suaje:               string | null;
+  id_color?:           number | null;   // ← nuevo
+  color_asa_nombre?:       string | null;   // ← nuevo
   observacion:             string | null;
   cantidad:                number | null;
   kilogramos:              number | null;
@@ -124,7 +127,6 @@ export interface Bulto {
   cantidad_unidades: number;
   fecha_creacion:    string;
   proceso_origen:    "bolseo" | "asa_flexible";
-  // Campos nuevos de dimensiones y peso
   peso:   number | null;
   alto:   number | null;
   largo:  number | null;
@@ -185,33 +187,28 @@ export interface BultoEtiqueta {
 }
 
 export interface EtiquetaData {
-  // Pedido
   no_pedido:         string;
   no_produccion:     string;
   fecha:             string;
   fecha_entrega:     string | null;
-  // Cliente
   cliente:           string;
   empresa:           string;
   telefono:          string;
   celular:           string;
   correo:            string;
   cliente_impresion: string;
-  // Domicilio del cliente
   calle:         string;
   numero:        string;
   colonia:       string;
   codigo_postal: string;
   poblacion:     string;
   estado:        string;
-  // Producto
   nombre_producto: string;
   medida:          string;
   material:        string;
   cantidad_total:  number | null;
   kilogramos:      number | null;
   modo_cantidad:   string;
-  // Bultos
   total_bultos: number;
   bultos:       BultoEtiqueta[];
 }
@@ -219,4 +216,15 @@ export interface EtiquetaData {
 export const getBultosEtiqueta = async (idproduccion: number): Promise<EtiquetaData> => {
   const { data } = await api.get(`/seguimiento/${idproduccion}/bultos/etiqueta`);
   return data;
+};
+
+// ─────────────────────────────────────────────
+// EDITAR PROCESO TERMINADO
+// ─────────────────────────────────────────────
+export const editarProceso = async (
+  idproduccion: number,
+  tabla: string,
+  datos: Record<string, any>
+): Promise<void> => {
+  await api.put(`/procesos/${idproduccion}/editar/${tabla}`, datos);
 };

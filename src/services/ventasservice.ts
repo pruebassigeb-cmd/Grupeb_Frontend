@@ -10,7 +10,7 @@ export const getVentaById = async (idventas: number) => {
   return response.data;
 };
 
-export const getVentaByPedido = async (noPedido: string) => {  // ← string
+export const getVentaByPedido = async (noPedido: string) => {
   const response = await api.get(`/ventas/pedido/${noPedido}`);
   return response.data;
 };
@@ -35,5 +35,10 @@ export const eliminarPago = async (idventa_pago: number) => {
 
 export const getMetodosPago = async () => {
   const response = await api.get("/ventas/metodos-pago");
+  return response.data;
+};
+
+export const autorizarAnticipoCredito = async (idVenta: number) => {
+  const response = await api.post(`/ventas/${idVenta}/anticipo-credito`);
   return response.data;
 };

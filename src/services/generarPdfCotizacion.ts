@@ -103,7 +103,7 @@ export async function generarPdfCotizacion(cotizacion: CotizacionPdf): Promise<v
 
   const availW = PW - M * 2;
 
-  // Anchos de columna +25% para las columnas más angostas, recalculando proporcionalmente
+  // Anchos base de columnas fijas
   const colW: Record<number, number> = {
     0: 36, 1: 18, 2:  9, 3: 11, 4: 11,
     5: 18, 6: 13, 7: 11, 8: 16, 9: 13,
@@ -113,7 +113,15 @@ export async function generarPdfCotizacion(cotizacion: CotizacionPdf): Promise<v
   const cantW      = Math.max((availW - fixedTotal) / numCantCols, 16);
   for (let i = 0; i < numCantCols; i++) colW[14 + i] = cantW;
 
-  // Fuentes tabla: header 11pt, body 11pt, cant 15pt  (antes 9/9/12)
+  // FIX: escalar proporcionalmente si la suma supera availW
+  const totalColW = Object.values(colW).reduce((a, b) => a + b, 0);
+  if (totalColW > availW) {
+    const scale = availW / totalColW;
+    Object.keys(colW).forEach(k => {
+      colW[+k] = colW[+k] * scale;
+    });
+  }
+
   const cantFontSize = 15;
 
   const columnStyles: Parameters<typeof autoTable>[1]["columnStyles"] = {
@@ -142,9 +150,7 @@ export async function generarPdfCotizacion(cotizacion: CotizacionPdf): Promise<v
     head:   [headAll],
     body:   bodyRows,
     theme:  "grid",
-    // Header tabla: 11pt bold  (antes 9pt)
     headStyles:         { fillColor: GRAY_DARK, textColor: WHITE, fontStyle: "bold", fontSize: 11, cellPadding: 1.5, halign: "center", valign: "middle" },
-    // Body: 11pt, altura mínima 9  (antes 9pt, 7)
     bodyStyles:         { fontSize: 11, textColor: BLACK, cellPadding: 1.5, valign: "middle", minCellHeight: 9 },
     alternateRowStyles: { fillColor: GRAY_ROW },
     columnStyles,
@@ -159,7 +165,6 @@ export async function generarPdfCotizacion(cotizacion: CotizacionPdf): Promise<v
             data.cell.colSpan          = headAll.length;
             data.cell.styles.fillColor = GRAY_LIGHT;
             data.cell.styles.fontStyle = "italic";
-            // Obs row: 11pt (antes 9pt)
             data.cell.styles.fontSize  = 11;
             data.cell.styles.textColor = [80, 80, 80];
             data.cell.styles.halign    = "left";

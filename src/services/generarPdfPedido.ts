@@ -97,7 +97,7 @@ export async function generarPdfPedido(pedido: PedidoPdf): Promise<void> {
 
   const availW = PW - M * 2;
 
-  // Anchos +25% proporcional
+  // Anchos base de columnas fijas
   const colW: Record<number, number> = {
     0: 36, 1: 18, 2:  9, 3: 11, 4: 11,
     5: 18, 6: 13, 7: 11, 8: 16, 9: 13,
@@ -105,6 +105,15 @@ export async function generarPdfPedido(pedido: PedidoPdf): Promise<void> {
   };
   const fixedTotal = Object.values(colW).reduce((a, b) => a + b, 0);
   colW[14] = Math.max(availW - fixedTotal, 20);
+
+  // FIX: escalar proporcionalmente si la suma supera availW
+  const totalColW = Object.values(colW).reduce((a, b) => a + b, 0);
+  if (totalColW > availW) {
+    const scale = availW / totalColW;
+    Object.keys(colW).forEach(k => {
+      colW[+k] = colW[+k] * scale;
+    });
+  }
 
   const columnStyles: Parameters<typeof autoTable>[1]["columnStyles"] = {
     0:  { cellWidth: colW[0],  halign: "left",   fontSize: 11   },
@@ -130,9 +139,7 @@ export async function generarPdfPedido(pedido: PedidoPdf): Promise<void> {
     head:   [headAll],
     body:   bodyRows,
     theme:  "grid",
-    // Header: 11pt  (antes 9pt)
     headStyles:         { fillColor: GRAY_DARK, textColor: WHITE, fontStyle: "bold", fontSize: 11, cellPadding: 1.5, halign: "center", valign: "middle" },
-    // Body: 11pt, minCellHeight 9  (antes 9pt, 7)
     bodyStyles:         { fontSize: 11, textColor: BLACK, cellPadding: 1.5, valign: "middle", minCellHeight: 9 },
     alternateRowStyles: { fillColor: GRAY_ROW },
     columnStyles,
@@ -147,7 +154,6 @@ export async function generarPdfPedido(pedido: PedidoPdf): Promise<void> {
             data.cell.colSpan          = headAll.length;
             data.cell.styles.fillColor = GRAY_LIGHT;
             data.cell.styles.fontStyle = "italic";
-            // Obs: 11pt (antes 9pt)
             data.cell.styles.fontSize  = 11;
             data.cell.styles.textColor = [80, 80, 80];
             data.cell.styles.halign    = "left";

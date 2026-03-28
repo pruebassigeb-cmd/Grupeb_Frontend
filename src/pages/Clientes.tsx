@@ -7,10 +7,10 @@ import type { Cliente } from "../types/clientes.types";
 import type { CreateClienteRequest, UpdateClienteRequest } from "../types/clientes.types";
 
 export default function Clientes() {
-  const [modalOpen, setModalOpen] = useState(false);
-  const [busqueda, setBusqueda] = useState("");
-  const [clientes, setClientes] = useState<Cliente[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [modalOpen,     setModalOpen]     = useState(false);
+  const [busqueda,      setBusqueda]      = useState("");
+  const [clientes,      setClientes]      = useState<Cliente[]>([]);
+  const [loading,       setLoading]       = useState(true);
   const [clienteEditar, setClienteEditar] = useState<Cliente | null>(null);
 
   useEffect(() => {
@@ -109,7 +109,7 @@ export default function Clientes() {
   };
 
   return (
-<Dashboard>
+    <Dashboard>
       <h1 className="text-2xl font-bold mb-4">Clientes</h1>
 
       <p className="text-slate-400 mb-6">
@@ -155,8 +155,9 @@ export default function Clientes() {
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Empresa
               </th>
+              {/* ✅ Cambiado de "Atención" a "Impresión" */}
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Atención
+                Impresión
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Correo
@@ -186,8 +187,9 @@ export default function Clientes() {
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                     {cliente.empresa}
                   </td>
+                  {/* ✅ Cambiado de cliente.atencion a cliente.impresion */}
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {cliente.atencion || "—"}
+                    {cliente.impresion || "—"}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {cliente.correo}

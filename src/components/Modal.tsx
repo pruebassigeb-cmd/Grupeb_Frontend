@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useRef } from "react";
 
 interface ModalProps {
   isOpen: boolean;
@@ -10,8 +10,18 @@ interface ModalProps {
 export default function Modal({ isOpen, onClose, title, children }: ModalProps) {
   if (!isOpen) return null;
 
+  const mouseDownTarget = useRef<EventTarget | null>(null);
+
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    mouseDownTarget.current = e.target;
+  };
+
   const handleOverlayClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (e.target === e.currentTarget) {
+    // Solo cierra si el mousedown Y el mouseup fueron en el overlay
+    if (
+      e.target === e.currentTarget &&
+      mouseDownTarget.current === e.currentTarget
+    ) {
       onClose();
     }
   };
@@ -19,9 +29,10 @@ export default function Modal({ isOpen, onClose, title, children }: ModalProps) 
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      onMouseDown={handleMouseDown}
       onClick={handleOverlayClick}
     >
-      {/* Overlay – opaca y desenfoca sin negro sólido */}
+      {/* Overlay */}
       <div className="absolute inset-0 bg-gray-900/30 backdrop-blur-sm transition-opacity" />
 
       {/* Modal */}

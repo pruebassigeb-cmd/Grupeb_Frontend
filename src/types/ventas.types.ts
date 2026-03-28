@@ -31,6 +31,7 @@ export interface Venta {
   saldo:                 number;
   abono:                 number;
   fecha_creacion:        string;
+  fecha_liquidacion?:    string | null;
   estado_id:             number;
   estado_nombre:         string;
   no_pedido:             string;
@@ -40,6 +41,7 @@ export interface Venta {
   empresa:               string;
   telefono:              string;
   correo:                string;
+  impresion?:            string | null;
   pagos:                 VentaPago[];
 }
 
@@ -54,21 +56,21 @@ export interface DisenoProducto {
 }
 
 export interface Diseno {
-  iddiseno:               number;
-  solicitud_idsolicitud:  number;
-  estado_id:              number;
-  estado_nombre:          string;
-  estado_diseno:          string;
-  fecha:                  string;
-  no_pedido:              number;
-  no_cotizacion:          number | null;
-  productos:              DisenoProducto[];
-  total_productos:        number;
-  aprobados:              number;
-  rechazados:             number;
-  pendientes:             number;
-  diseno_completado:      boolean;
-  tiene_rechazados:       boolean;
+  iddiseno:              number;
+  solicitud_idsolicitud: number;
+  estado_id:             number;
+  estado_nombre:         string;
+  estado_diseno:         string;
+  fecha:                 string;
+  no_pedido:             number;
+  no_cotizacion:         number | null;
+  productos:             DisenoProducto[];
+  total_productos:       number;
+  aprobados:             number;
+  rechazados:            number;
+  pendientes:            number;
+  diseno_completado:     boolean;
+  tiene_rechazados:      boolean;
 }
 
 export interface CondicionesProduccion {

@@ -52,6 +52,9 @@ export interface ProductoCotizacion {
   idsuaje?:   number | null;
   asa_suaje?: string | null;
 
+  color_asa_id?:    number | null;
+  color_asa_nombre?: string | null;
+
   observacion?: string | null;
   por_kilo?:    string | null;
 
@@ -63,8 +66,8 @@ export interface ProductoCotizacion {
 // COTIZACIÓN COMPLETA
 // ============================================================
 export interface Cotizacion {
-  no_cotizacion:  string;        // ← VARCHAR en BD: "COT26001"
-  no_pedido?:     string | null; // ← VARCHAR en BD: "P26001"
+  no_cotizacion:  string;
+  no_pedido?:     string | null;
   tipo_documento: "cotizacion" | "pedido";
   fecha:          string;
   estado_id:      number;
@@ -83,12 +86,13 @@ export interface Cotizacion {
 // PEDIDO
 // ============================================================
 export interface Pedido {
-  no_pedido:      string;        // ← VARCHAR en BD: "P26001"
-  no_cotizacion?: string | null; // ← VARCHAR en BD: "COT26001"
+  no_pedido:      string;
+  no_cotizacion?: string | null;
   es_directo:     boolean;
   fecha:          string;
   estado_id:      number;
   estado:         string;
+  prioridad:      boolean;
   cliente_id:     number;
   cliente:        string;
   telefono:       string;
@@ -110,21 +114,22 @@ export interface DetalleCrearCotizacion {
 }
 
 export interface ProductoEnviarCotizacion {
-  productoId:   number;
-  tintasId:     number;
-  carasId:      number;
-  idsuaje?:     number | null;
-  observacion?: string | null;
-  pigmentos?:   string | null;
-  pantones?:    string | null;
-  porKilo?:     string | null;
-  detalles:     DetalleCrearCotizacion[];
+  productoId:    number;
+  tintasId:      number;
+  carasId:       number;
+  idsuaje?:      number | null;
+  colorAsaId?:   number | null;
+  observacion?:  string | null;
+  pigmentos?:    string | null;
+  pantones?:     string | null;
+  porKilo?:      string | null;
+  detalles:      DetalleCrearCotizacion[];
 }
 
 export interface RespuestaCrearCotizacion {
   message:        string;
-  no_cotizacion?: string; // ← string
-  no_pedido?:     string; // ← string
+  no_cotizacion?: string;
+  no_pedido?:     string;
   tipo:           "cotizacion" | "pedido";
 }
 
@@ -134,5 +139,5 @@ export interface RespuestaCrearCotizacion {
 export interface RespuestaActualizarEstado {
   message:             string;
   convertida_a_pedido: boolean;
-  no_pedido:           string | null; // ← string
+  no_pedido:           string | null;
 }

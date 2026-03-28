@@ -321,7 +321,8 @@ export default function Pedidos() {
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              {["N° Pedido", "Origen", "Fecha", "Cliente", "Empresa", "Productos", "Total", "Acciones"].map(h => (
+              {/* ✅ "Cliente" cambiado a "Impresión" */}
+              {["N° Pedido", "Origen", "Fecha", "Impresión", "Empresa", "Productos", "Total", "Acciones"].map(h => (
                 <th key={h} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{h}</th>
               ))}
             </tr>
@@ -342,8 +343,9 @@ export default function Pedidos() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">{origenBadge(ped)}</td>
                     <td className="px-6 py-4 text-sm text-gray-500 whitespace-nowrap">{formatFecha(ped.fecha)}</td>
+                    {/* ✅ ped.cliente → ped.impresion */}
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <p className="text-sm font-medium text-gray-900">{ped.cliente || "—"}</p>
+                      <p className="text-sm font-medium text-gray-900">{ped.impresion || "—"}</p>
                       {ped.telefono && <p className="text-xs text-gray-400">{ped.telefono}</p>}
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-500 whitespace-nowrap">{ped.empresa || "—"}</td>

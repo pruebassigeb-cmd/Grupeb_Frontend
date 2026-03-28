@@ -42,6 +42,7 @@ async function descargarPdfOrden(noPedido: string, noProduccion: string): Promis
     telefono:                data.telefono,
     correo:                  data.correo,
     impresion:               data.impresion,
+    prioridad: data.prioridad ?? false,
     nombre_producto:         producto.nombre_producto,
     categoria:               producto.categoria,
     material:                producto.material,
@@ -65,6 +66,7 @@ async function descargarPdfOrden(noPedido: string, noProduccion: string): Promis
     pigmentos:               producto.pigmentos,
     pantones:                producto.pantones,
     asa_suaje:               producto.asa_suaje,
+    color_asa_nombre:        producto.color_asa_nombre ?? null,
     observacion:             producto.observacion,
     cantidad:                producto.cantidad,
     kilogramos:              producto.kilogramos,
@@ -149,7 +151,7 @@ function Paginador({
   );
 }
 
-function EditarDisenoReal({
+export function EditarDisenoReal({
   pedido,
   onClose,
   onEstadoChange,
@@ -578,7 +580,7 @@ export default function Diseno() {
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              {["N° Pedido", "Fecha", "Cliente", "Empresa", "Productos", "Estado", "Acciones"].map(h => (
+              {["N° Pedido", "Fecha", "Impresión", "Empresa", "Productos", "Estado", "Acciones"].map(h => (
                 <th key={h} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{h}</th>
               ))}
             </tr>
@@ -593,7 +595,7 @@ export default function Diseno() {
               <tr key={ped.no_pedido} className="hover:bg-gray-50">
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">#{ped.no_pedido}</td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{fmtFecha(ped.fecha)}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{ped.cliente || "—"}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{ped.impresion || "—"}</td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{ped.empresa || "N/A"}</td>
                 <td className="px-6 py-4 text-sm text-gray-500">
                   <div className="max-w-xs">
