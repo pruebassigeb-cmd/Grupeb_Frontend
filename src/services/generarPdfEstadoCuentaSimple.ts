@@ -34,17 +34,15 @@ function formatFecha(iso: string | null): string {
 }
 
 // ─── Fila de totales ─────────────────────────────────────────
-// totX  = borde izquierdo del bloque totales (para que la caja del saldo sea exacta)
-// totW  = ancho total del bloque totales
 function filaTotales(
   doc:    jsPDF,
   label:  string,
   value:  string,
   y:      number,
-  labelX: number,   // X donde empieza el texto de la etiqueta
-  valueX: number,   // X del valor (right-aligned)
-  totX:   number,   // borde izquierdo del bloque (para la caja destacado)
-  totW:   number,   // ancho total del bloque (para la caja destacado)
+  labelX: number,
+  valueX: number,
+  totX:   number,
+  totW:   number,
   opts?: {
     bold?:      boolean;
     gris?:      boolean;
@@ -61,7 +59,6 @@ function filaTotales(
   }
 
   if (destacado) {
-    // ✅ Caja que cubre exactamente el ancho del bloque (de totX a totX+totW)
     const boxH = 9;
     doc.setFillColor(...GRAY_90);
     doc.rect(totX, y - 6, totW, boxH, "F");
@@ -96,6 +93,9 @@ export async function generarPdfEstadoCuentaSimple(
   const PH  = 297;
   const M   = 13;
   const CW  = PW - M * 2; // 184mm
+
+  const herramentalTotal = datos.herramental_total ?? 0;
+  const tieneHerramental = herramentalTotal > 0;
 
   // ══════════════════════════════════════════════════════════
   // BANDA SUPERIOR NEGRA
@@ -232,7 +232,7 @@ export async function generarPdfEstadoCuentaSimple(
 
   y += thH;
 
-  const rowH      = 9;
+  const rowH      = 12;
   const tabYStart = y;
 
   datos.productos.forEach((prod, idx) => {
@@ -268,7 +268,7 @@ export async function generarPdfEstadoCuentaSimple(
       doc.setFontSize(8.5);
       doc.setTextColor(...GRAY_90);
       const tx = col.right ? rx + col.w - 2 : rx + 2;
-      doc.text(col.value, tx, y + rowH / 2 + 1.8, {
+      doc.text(col.value, tx, y + rowH / 2 + 1, {
         align:    col.right ? "right" : "left",
         maxWidth: col.w - 4,
       });
@@ -276,11 +276,50 @@ export async function generarPdfEstadoCuentaSimple(
     });
 
     y += rowH;
+
+    // ── Fila herramental del producto — con descripción del concepto ────────
+    if (prod.herramental_aprobado === true && prod.herramental_precio != null && prod.herramental_precio > 0) {
+      const herrH = 16;
+
+      // Fondo cálido
+      doc.setFillColor(250, 246, 235);
+      doc.rect(M, y, CW, herrH, "F");
+      doc.setDrawColor(200, 170, 120);
+      doc.setLineWidth(0.15);
+      doc.line(M, y + herrH, M + CW, y + herrH);
+
+      // Nombre del herramental
+      const nombreHerr = prod.herramental_descripcion?.trim()
+        ? `Herramental: ${prod.herramental_descripcion}`
+        : "Herramental / molde";
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(8.5);
+      doc.setTextColor(110, 55, 0);
+      doc.text(nombreHerr, M + 2, y + 5.5);
+
+      // Explicación del concepto en pequeño
+      doc.setFont("helvetica", "italic");
+      doc.setFontSize(7.5);
+      doc.setTextColor(140, 90, 30);
+      doc.text(
+        "Cargo único por fabricación del molde o troquel. No forma parte del precio unitario del producto ni se repetirá en futuros pedidos.",
+        M + 2, y + 11,
+        { maxWidth: CW - colTot - 4 }
+      );
+
+      // Precio
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9);
+      doc.setTextColor(110, 55, 0);
+      doc.text(fmtMoney(prod.herramental_precio), M + CW - 2, y + herrH / 2 + 2, { align: "right" });
+      doc.setTextColor(...BLACK);
+      y += herrH;
+    }
   });
 
   doc.setDrawColor(...GRAY_30);
   doc.setLineWidth(0.3);
-  doc.rect(M, tabYStart - thH, CW, thH + rowH * datos.productos.length);
+  doc.rect(M, tabYStart - thH, CW, thH + y - tabYStart);
 
   y += 12;
 
@@ -288,19 +327,20 @@ export async function generarPdfEstadoCuentaSimple(
   // BLOQUE TOTALES
   // ══════════════════════════════════════════════════════════
   const totW         = 76;
-  const totX         = M + CW - totW;  // borde izquierdo exacto del bloque
-  const totLX        = totX + 4;       // X etiqueta (padding 4mm del borde izq)
-  const totVX        = totX + totW - 4; // X valor (padding 4mm del borde der)
+  const totX         = M + CW - totW;
+  const totLX        = totX + 4;
+  const totVX        = totX + totW - 4;
   const totalesLineH = 7.5;
-  // header(8) + padding(4) + 5 filas(37.5) + padding bottom(8)
-  const totBlockH    = 8 + 4 + totalesLineH * 5 + 8;
 
-  // Marco exterior
+  // Altura dinámica: base 5 líneas + 2 si hay herramental (línea + nota)
+  const lineasBase  = 5;
+  const lineasExtra = tieneHerramental ? 2 : 0;
+  const totBlockH   = 8 + 4 + totalesLineH * (lineasBase + lineasExtra) + 8;
+
   doc.setDrawColor(...GRAY_30);
   doc.setLineWidth(0.3);
   doc.rect(totX, y, totW, totBlockH);
 
-  // Header del bloque
   doc.setFillColor(...GRAY_90);
   doc.rect(totX, y, totW, 8, "F");
   doc.setFont("helvetica", "bold");
@@ -311,7 +351,6 @@ export async function generarPdfEstadoCuentaSimple(
 
   let ty = y + 8 + 4 + totalesLineH;
 
-  // Pasamos totX y totW para que la caja del destacado sea exacta
   filaTotales(doc, "Sub-Total",     fmtMoney(datos.subtotal_real), ty, totLX, totVX, totX, totW);
   ty += totalesLineH;
 
@@ -320,6 +359,26 @@ export async function generarPdfEstadoCuentaSimple(
 
   filaTotales(doc, "Total",         fmtMoney(datos.total_real),    ty, totLX, totVX, totX, totW, { bold: true, separador: true });
   ty += totalesLineH;
+
+  // ── Herramental en bloque totales — con nota ────────────────
+  /*if (tieneHerramental) {
+    // Línea principal con monto
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.setTextColor(110, 55, 0);
+    doc.text("Herramental", totLX, ty);
+    doc.text(fmtMoney(herramentalTotal), totVX, ty, { align: "right" });
+    doc.setTextColor(...BLACK);
+    ty += totalesLineH - 1;
+
+    // Nota explicativa dentro del bloque
+    doc.setFont("helvetica", "italic");
+    doc.setFontSize(7);
+    doc.setTextColor(...GRAY_60);
+    doc.text("Cargo único. No se repite en reordenes.", totLX, ty, { maxWidth: totW - 8 });
+    doc.setTextColor(...BLACK);
+    ty += totalesLineH + 1;
+  }*/
 
   filaTotales(doc, "Anticipo req.", fmtMoney(datos.anticipo),      ty, totLX, totVX, totX, totW, { gris: true });
   ty += totalesLineH + 2;
@@ -337,9 +396,21 @@ export async function generarPdfEstadoCuentaSimple(
   doc.setFontSize(8);
   doc.setTextColor(...GRAY_60);
   doc.text(
-    "Los montos reflejan la cantidad\ny producción real entregada.",
+    "Los montos reflejan la cantidad\ny producción real producida.",
     M, y + 8 + 8, { maxWidth: totX - M - 4 }
   );
+
+  // Nota herramental a la izquierda si aplica
+  if (tieneHerramental) {
+    doc.setFont("helvetica", "italic");
+    doc.setFontSize(7.5);
+    doc.setTextColor(150, 100, 40);
+    doc.text(
+      "* El herramental es un cargo único por\nla fabricación del molde o troquel.\nNo se cobra en pedidos futuros\ndel mismo artículo.",
+      M, y + 8 + 20, { maxWidth: totX - M - 4 }
+    );
+    doc.setTextColor(...BLACK);
+  }
 
   y += totBlockH + 14;
 
@@ -357,7 +428,7 @@ export async function generarPdfEstadoCuentaSimple(
   // ══════════════════════════════════════════════════════════
   const colBancoW    = CW * 0.52;
   const colContactoX = M + colBancoW + 8;
-  const yPieStart    = y; // guarda el y de inicio del pie para alinear col derecha
+  const yPieStart    = y;
 
   // ── Columna izquierda ──
   doc.setFont("helvetica", "bold");
@@ -404,7 +475,7 @@ export async function generarPdfEstadoCuentaSimple(
   datoBancario("CLABE",        "002320700107089643",   y); y += 6;
   datoBancario("A nombre de",  "Grupeb S.A. de C.V.", y);
 
-  // ── Columna derecha — arranca exactamente al mismo y que la columna izquierda ──
+  // ── Columna derecha ──
   let yc = yPieStart;
 
   doc.setFont("helvetica", "bold");

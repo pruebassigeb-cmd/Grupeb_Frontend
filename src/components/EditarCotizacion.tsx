@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { Cotizacion, ProductoCotizacion } from "../types/cotizaciones.types";
 import {
   aprobarDetalle,
+  aprobarHerramental,
   actualizarObservacion,
   actualizarEstado,
 } from "../services/cotizacionesService";
@@ -28,7 +29,6 @@ function normalizarEstado(estado: string): "Pendiente" | "Aprobada" | "Rechazada
   return "Pendiente";
 }
 
-// ── Helpers para construir productos PDF ─────────────────────
 function resolverCalibre(p: any): string {
   const mat = (p.material || "").toUpperCase();
   const esBopp = mat.includes("BOPP") || mat.includes("CELOFAN") || mat.includes("CELOFÁN");
@@ -54,13 +54,15 @@ function buildProductosPdf(productos: ProductoCotizacion[]) {
     bk:                 p.bk                  || null,
     foil:               p.foil                || null,
     laminado:           p.laminado            || null,
-    uvBr:               p.uv_br                || null,
-    pigmentos:          p.pigmentos            || null,
-    pantones:           p.pantones             || null,
-    asa_suaje:          p.asa_suaje            || null,
-    observacion:        p.observacion          || null,
-    por_kilo:           p.por_kilo             || null,
-    // Solo los detalles aprobados van al PDF de pedido
+    uvBr:               p.uv_br               || null,
+    pigmentos:          p.pigmentos           || null,
+    pantones:           p.pantones            || null,
+    asa_suaje:          p.asa_suaje           || null,
+    observacion:        p.observacion         || null,
+    por_kilo:           p.por_kilo            || null,
+    herramental_descripcion: p.herramental_descripcion ?? null,
+    herramental_precio:      p.herramental_precio      ?? null,
+    herramental_aprobado:    p.herramental_aprobado    ?? null,
     detalles: (p.detalles || [])
       .filter((d: any) => d.aprobado === true)
       .map((d: any) => ({
@@ -85,10 +87,11 @@ export default function EditarCotizacion({
     cotizacion.productos.map((p) => ({ ...p, detalles: [...p.detalles] }))
   );
 
-  const [guardando,      setGuardando]      = useState(false);
-  const [error,          setError]          = useState<string | null>(null);
-  const [mensajeExito,   setMensajeExito]   = useState<string | null>(null);
-  const [loadingDetalle, setLoadingDetalle] = useState<number | null>(null);
+  const [guardando,        setGuardando]        = useState(false);
+  const [error,            setError]            = useState<string | null>(null);
+  const [mensajeExito,     setMensajeExito]     = useState<string | null>(null);
+  const [loadingDetalle,   setLoadingDetalle]   = useState<number | null>(null);
+  const [loadingHerramental, setLoadingHerramental] = useState<number | null>(null);
 
   const [modalConfirmarOpen, setModalConfirmarOpen] = useState(false);
 
@@ -102,6 +105,24 @@ export default function EditarCotizacion({
     estadoActual === "Pendiente" && totalDetallesAprobados === 0
       ? "Aprobar Cotización"
       : "Guardar Cambios";
+
+  const handleToggleHerramental = async (indexProd: number, herramentalId: number, valorActual: boolean | null) => {
+    const nuevoValor = valorActual !== true;
+    setLoadingHerramental(herramentalId);
+    setError(null);
+    try {
+      await aprobarHerramental(herramentalId, nuevoValor);
+      setProductos((prev) => {
+        const copia = [...prev];
+        copia[indexProd] = { ...copia[indexProd], herramental_aprobado: nuevoValor };
+        return copia;
+      });
+    } catch {
+      setError("No se pudo actualizar el herramental. Intenta de nuevo.");
+    } finally {
+      setLoadingHerramental(null);
+    }
+  };
 
   const handleToggleDetalle = async (
     indexProd:   number,
@@ -161,7 +182,6 @@ export default function EditarCotizacion({
     handleCambiarEstado(ESTADO_ID.APROBADO);
   };
 
-  // ── Descarga automática del PDF de pedido ─────────────────
   const descargarPdfPedido = async (noPedido: string) => {
     try {
       const venta = await getVentaByPedido(noPedido);
@@ -205,12 +225,10 @@ export default function EditarCotizacion({
       const estadoNombre = estadoId === ESTADO_ID.APROBADO ? "Aprobada" : "Rechazada";
       setEstadoActual(estadoNombre);
 
-      // ✅ Conversión exitosa → descargar PDF de pedido automáticamente
       if (respuesta.convertida_a_pedido && respuesta.no_pedido) {
         setMensajeExito(
           `✓ Cotización aprobada y convertida al Pedido #${respuesta.no_pedido} — descargando PDF...`
         );
-        // No bloqueamos el flujo — va en paralelo con el onSave
         descargarPdfPedido(respuesta.no_pedido);
       } else {
         setMensajeExito(
@@ -238,13 +256,19 @@ export default function EditarCotizacion({
 
   const calcularTotal = () =>
     productos.reduce(
-      (sum, prod) =>
-        sum +
-        prod.detalles
+      (sum, prod) => {
+        const subtotalDetalles = prod.detalles
           .filter((d) => d.aprobado === true)
-          .reduce((s, d) => s + d.precio_total, 0),
+          .reduce((s, d) => s + d.precio_total, 0);
+        const herramental = prod.herramental_aprobado === true ? (prod.herramental_precio ?? 0) : 0;
+        return sum + subtotalDetalles + herramental;
+      },
       0
     );
+
+  const totalHerramental = productos.reduce(
+    (sum, p) => sum + (p.herramental_aprobado === true ? (p.herramental_precio ?? 0) : 0), 0
+  );
 
   const estadoColor = {
     Aprobada:  "text-green-600",
@@ -264,7 +288,7 @@ export default function EditarCotizacion({
   return (
     <div className="space-y-5">
 
-      {/* ── MODAL DE CONFIRMACIÓN DE CONVERSIÓN A PEDIDO ── */}
+      {/* ── MODAL CONFIRMACIÓN ── */}
       {modalConfirmarOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 p-6 space-y-4">
@@ -333,7 +357,7 @@ export default function EditarCotizacion({
         </div>
       )}
 
-      {/* Badge si ya es pedido */}
+      {/* Badge pedido */}
       {cotizacion.tipo_documento === "pedido" && cotizacion.no_pedido && (
         <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
           <svg className="w-4 h-4 text-blue-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -406,6 +430,62 @@ export default function EditarCotizacion({
                       <span className="text-xs font-semibold text-orange-700 uppercase tracking-wide">🧪 Pigmento:</span>
                       <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-orange-100 text-orange-800 text-xs font-medium border border-orange-200">
                         {prod.pigmentos}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* ── Herramental (toggle aprobación) ── */}
+                  {prod.herramental_precio != null && prod.herramental_precio > 0 && prod.herramental_id != null && (
+                    <div
+                      onClick={() => !loadingHerramental && handleToggleHerramental(iProd, prod.herramental_id!, prod.herramental_aprobado ?? null)}
+                      className={`mt-2 flex items-center gap-3 px-3 py-2.5 rounded-lg border-2 cursor-pointer transition-all select-none ${
+                        loadingHerramental === prod.herramental_id ? "opacity-50 cursor-wait" : ""
+                      } ${
+                        prod.herramental_aprobado === true
+                          ? "bg-orange-100 border-orange-500 shadow-md"
+                          : prod.herramental_aprobado === false
+                            ? "bg-red-50 border-red-300 opacity-60 hover:opacity-80"
+                            : "bg-white border-gray-300 hover:border-orange-400 hover:shadow"
+                      }`}
+                    >
+                      {/* Checkbox visual */}
+                      <div className={`flex-shrink-0 w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                        loadingHerramental === prod.herramental_id ? "border-gray-300 bg-gray-100" :
+                        prod.herramental_aprobado === true ? "bg-orange-500 border-orange-500" :
+                        "border-gray-400 bg-white"
+                      }`}>
+                        {loadingHerramental === prod.herramental_id ? (
+                          <div className="w-3 h-3 rounded-full border-2 border-gray-400 border-t-transparent animate-spin" />
+                        ) : prod.herramental_aprobado === true ? (
+                          <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                          </svg>
+                        ) : null}
+                      </div>
+
+                      {/* Info */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm">🔧</span>
+                          <span className="text-xs font-semibold text-gray-800">Herramental</span>
+                          <span className={`text-xs font-bold px-2 py-0.5 rounded ${
+                            prod.herramental_aprobado === true
+                              ? "bg-orange-500 text-white"
+                              : prod.herramental_aprobado === false
+                                ? "bg-red-200 text-red-700"
+                                : "bg-gray-100 text-gray-500"
+                          }`}>
+                            {prod.herramental_aprobado === true ? "✓ Aprobado" : prod.herramental_aprobado === false ? "✕ Rechazado" : "Sin aprobar"}
+                          </span>
+                        </div>
+                        {prod.herramental_descripcion && (
+                          <p className="text-xs text-gray-500 mt-0.5 truncate">{prod.herramental_descripcion}</p>
+                        )}
+                      </div>
+
+                      {/* Precio */}
+                      <span className="flex-shrink-0 text-sm font-bold text-orange-700">
+                        +${Number(prod.herramental_precio).toFixed(2)}
                       </span>
                     </div>
                   )}
@@ -520,6 +600,14 @@ export default function EditarCotizacion({
             <span className="font-semibold text-gray-900">Total aprobado:</span>
             <span className="text-2xl font-bold text-gray-900">${calcularTotal().toFixed(2)}</span>
           </div>
+          {totalHerramental > 0 && (
+            <div className="flex justify-between items-center text-sm">
+              <span className="text-orange-700 flex items-center gap-1">
+                <span>🔧</span> Herramental incluido:
+              </span>
+              <span className="font-semibold text-orange-700">+${totalHerramental.toFixed(2)}</span>
+            </div>
+          )}
           {totalDetallesAprobados === 0 && (
             <p className="text-xs text-orange-500 mt-1">⚠️ Ninguna cantidad seleccionada aún</p>
           )}

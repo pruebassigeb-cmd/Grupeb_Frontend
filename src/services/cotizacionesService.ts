@@ -10,19 +10,21 @@ export const crearCotizacion = async (datos: {
   clienteId?: number;
   tipo?:      "cotizacion" | "pedido";
   productos: {
-    productoId?:   number;
-    cantidades:    [number, number, number];
-    kilogramos:    [number, number, number];
-    precios:       [number, number, number];
-    tintasId:      number;
-    carasId:       number;
-    idsuaje?:      number | null;
-    colorAsaId?:   number | null;
-    observacion?:  string;
-    pantones?:     string | null;
-    pigmentos?:    string | null;
-    modoCantidad?: "unidad" | "kilo";
-    porKilo?:      string | null;
+    productoId?:              number;
+    cantidades:               [number, number, number];
+    kilogramos:               [number, number, number];
+    precios:                  [number, number, number];
+    tintasId:                 number;
+    carasId:                  number;
+    idsuaje?:                 number | null;
+    colorAsaId?:              number | null;
+    observacion?:             string;
+    pantones?:                string | null;
+    pigmentos?:               string | null;
+    modoCantidad?:            "unidad" | "kilo";
+    porKilo?:                 string | null;
+    herramental_descripcion?: string | null;
+    herramental_precio?:      number | null;
     [key: string]: any;
   }[];
   [key: string]: any;
@@ -57,15 +59,18 @@ export const crearCotizacion = async (datos: {
     }
 
     return {
-      productoId:  prod.productoId,
-      tintasId:    prod.tintasId,
-      carasId:     prod.carasId,
-      idsuaje:     prod.idsuaje     ?? null,
-      colorAsaId:  prod.colorAsaId  ?? null,
-      observacion: prod.observacion || null,
-      pantones:    prod.pantones    ?? null,
-      pigmentos:   prod.pigmentos   ?? null,
-      porKilo:     prod.porKilo     ?? null,
+      productoId:              prod.productoId,
+      tintasId:                prod.tintasId,
+      carasId:                 prod.carasId,
+      idsuaje:                 prod.idsuaje         ?? null,
+      colorAsaId:              prod.colorAsaId      ?? null,
+      idMedidaTroquel:         prod.idMedidaTroquel ?? null,
+      observacion:             prod.observacion     || null,
+      pantones:                prod.pantones        ?? null,
+      pigmentos:               prod.pigmentos       ?? null,
+      porKilo:                 prod.porKilo         ?? null,
+      herramental_descripcion: prod.herramental_descripcion ?? null,
+      herramental_precio:      prod.herramental_precio      ?? null,
       detalles,
     };
   });
@@ -85,6 +90,14 @@ export const crearCotizacion = async (datos: {
 export const aprobarDetalle = async (detalleId: number, aprobado: boolean) => {
   const response = await api.patch(
     `/cotizaciones/detalle/${detalleId}/aprobar`,
+    { aprobado }
+  );
+  return response.data;
+};
+
+export const aprobarHerramental = async (herramentalId: number, aprobado: boolean) => {
+  const response = await api.patch(
+    `/cotizaciones/herramental/${herramentalId}/aprobar`,
     { aprobado }
   );
   return response.data;

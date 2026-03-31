@@ -19,12 +19,12 @@ export default function Cotizaciones() {
   const [cotizaciones,  setCotizaciones]  = useState<Cotizacion[]>([]);
   const [loadingCots,   setLoadingCots]   = useState(false);
   const [busqueda,      setBusqueda]      = useState("");
-  const [modalOpen,    setModalOpen]    = useState(false);
-  const [guardando,    setGuardando]    = useState(false);
-  const [errorGuardar, setErrorGuardar] = useState<string | null>(null);
+  const [modalOpen,     setModalOpen]     = useState(false);
+  const [guardando,     setGuardando]     = useState(false);
+  const [errorGuardar,  setErrorGuardar]  = useState<string | null>(null);
   const [modalEditarOpen,    setModalEditarOpen]    = useState(false);
   const [cotizacionEditando, setCotizacionEditando] = useState<Cotizacion | null>(null);
-  const [catalogos, setCatalogos] = useState<CatalogosPlastico>({
+  const [catalogos,         setCatalogos]         = useState<CatalogosPlastico>({
     tiposProducto: [], materiales: [], calibres: [],
   });
   const [cargandoCatalogos, setCargandoCatalogos] = useState(false);
@@ -113,6 +113,9 @@ export default function Cotizaciones() {
       asa_suaje:          p.asa_suaje            || null,
       observacion:        p.observacion          || null,
       por_kilo:           p.por_kilo             || null,
+      herramental_descripcion: p.herramental_descripcion ?? null,
+      herramental_precio:      p.herramental_precio      != null ? Number(p.herramental_precio) : null,
+      herramental_aprobado:    p.herramental_aprobado     ?? null,
       detalles: (p.detalles || []).map((d: any) => ({
         cantidad:      d.cantidad,
         precio_total:  d.precio_total,
@@ -147,6 +150,9 @@ export default function Cotizaciones() {
           asa_suaje:          prod.suajeTipo || null,
           observacion:        prod.observacion || null,
           por_kilo:           prod.porKilo    || null,
+          herramental_descripcion: prod.herramental_descripcion ?? null,
+          herramental_precio:      prod.herramental_precio      != null ? Number(prod.herramental_precio) : null,
+          herramental_aprobado:    prod.herramental_aprobado     ?? null,
           detalles: prod.cantidades
             .map((cant: number, i: number) => {
               if (cant <= 0 || prod.precios[i] <= 0) return null;
@@ -310,7 +316,6 @@ export default function Cotizaciones() {
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              {/* ✅ "Cliente" cambiado a "Impresión" */}
               {["Folio","Fecha","Impresión","Empresa","Productos","Total","Estado","Acciones"].map(h => (
                 <th key={h} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{h}</th>
               ))}
@@ -335,7 +340,6 @@ export default function Cotizaciones() {
                       )}
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-500 whitespace-nowrap">{formatFecha(cot.fecha)}</td>
-                    {/* ✅ cot.cliente → cot.impresion */}
                     <td className="px-6 py-4 whitespace-nowrap">
                       <p className="text-sm font-medium text-gray-900">{cot.impresion || "—"}</p>
                       {cot.telefono && <p className="text-xs text-gray-400">{cot.telefono}</p>}
@@ -353,14 +357,19 @@ export default function Cotizaciones() {
                     <td className="px-6 py-4 whitespace-nowrap">{estadoBadge(cot.estado)}</td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-2">
-                        <button onClick={() => puedeEliminar && handleEditar(cot)} title={puedeEliminar ? "Gestionar" : "No se puede modificar una cotización aprobada"} disabled={!puedeEliminar}
+                        <button onClick={() => puedeEliminar && handleEditar(cot)}
+                          title={puedeEliminar ? "Gestionar" : "No se puede modificar una cotización aprobada"}
+                          disabled={!puedeEliminar}
                           className={`p-1.5 rounded-md transition-colors ${puedeEliminar ? "text-blue-600 hover:bg-blue-50 cursor-pointer" : "text-gray-300 cursor-not-allowed"}`}>
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
                         </button>
-                        <button onClick={() => handleDescargarPdf(cot)} title="Descargar PDF" className="p-1.5 rounded-md text-green-600 hover:bg-green-50">
+                        <button onClick={() => handleDescargarPdf(cot)} title="Descargar PDF"
+                          className="p-1.5 rounded-md text-green-600 hover:bg-green-50">
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
                         </button>
-                        <button onClick={() => puedeEliminar && handleEliminar(cot)} title={puedeEliminar ? "Eliminar" : "No se puede eliminar una cotización aprobada"} disabled={!puedeEliminar}
+                        <button onClick={() => puedeEliminar && handleEliminar(cot)}
+                          title={puedeEliminar ? "Eliminar" : "No se puede eliminar una cotización aprobada"}
+                          disabled={!puedeEliminar}
                           className={`p-1.5 rounded-md transition-colors ${puedeEliminar ? "text-red-500 hover:bg-red-50 cursor-pointer" : "text-gray-300 cursor-not-allowed"}`}>
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                         </button>
@@ -389,6 +398,11 @@ export default function Cotizaciones() {
                                   {p.medidasFormateadas && <p className="text-xs text-gray-400 mt-0.5">Medidas: {p.medidasFormateadas}</p>}
                                   {p.pantones  && <p className="text-xs text-purple-600 mt-0.5">🎨 {Array.isArray(p.pantones) ? p.pantones.join(", ") : p.pantones}</p>}
                                   {p.pigmentos && <p className="text-xs text-orange-600 mt-0.5">🧪 {p.pigmentos}</p>}
+                                  {p.herramental_precio != null && p.herramental_precio > 0 && (
+                                    <p className="text-xs text-amber-700 mt-0.5">
+                                      🔧 Herramental{p.herramental_descripcion ? `: ${p.herramental_descripcion}` : ""} — ${Number(p.herramental_precio).toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                                    </p>
+                                  )}
                                 </div>
                                 <div className="flex flex-wrap gap-2 flex-shrink-0">
                                   {detallesMostrar.map((d: any, j: number) => (

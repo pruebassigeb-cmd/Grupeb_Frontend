@@ -67,6 +67,7 @@ async function descargarPdfOrden(noPedido: string, noProduccion: string): Promis
     pantones:                producto.pantones,
     asa_suaje:               producto.asa_suaje,
     color_asa_nombre:        producto.color_asa_nombre ?? null,
+    medida_troquel:          producto.medida_troquel ?? null,
     observacion:             producto.observacion,
     cantidad:                producto.cantidad,
     kilogramos:              producto.kilogramos,

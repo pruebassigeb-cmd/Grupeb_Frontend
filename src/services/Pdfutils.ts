@@ -44,6 +44,10 @@ export interface ProductoPdf {
   observacion?: string | null;
   por_kilo?:    string | number | null;
   detalles:     DetallePdf[];
+  // ── Herramental ──────────────────────────────────────────
+  herramental_descripcion?: string | null;
+  herramental_precio?:      number | null;
+  herramental_aprobado?:    boolean | null;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -132,7 +136,6 @@ export function dibujarEncabezado(opts: OpcionesEncabezado): number {
 
   const PW = 297; const M = 8;
 
-  // +25% vs original (24 → 30, 9 → 11, 9 → 11)
   const row1H = 30;
   const row2H = 11;
   const row3H = 11;
@@ -157,7 +160,6 @@ export function dibujarEncabezado(opts: OpcionesEncabezado): number {
     }
   }
 
-  // Datos de contacto: 10pt (antes 8pt)
   doc.setFont("helvetica", "normal"); doc.setFontSize(10); doc.setTextColor(...BLACK);
   let ty = y + 6;
   [
@@ -172,7 +174,6 @@ export function dibujarEncabezado(opts: OpcionesEncabezado): number {
 
   doc.rect(cotBoxX, y, cotBoxW, totalHeaderH);
 
-  // Label documento: 15pt (antes 12pt)
   doc.setFillColor(...GRAY_MED);
   doc.rect(cotBoxX, y, cotBoxW, hH, "F");
   doc.setFont("helvetica", "bold"); doc.setFontSize(15); doc.setTextColor(...BLACK);
@@ -182,17 +183,14 @@ export function dibujarEncabezado(opts: OpcionesEncabezado): number {
   doc.line(cotBoxX + cotBoxW / 2, y + hH, cotBoxX + cotBoxW / 2, y + totalHeaderH);
   doc.line(cotBoxX, y + hH * 2,  cotBoxX + cotBoxW, y + hH * 2);
 
-  // Label folio: 9.5pt (antes 7.5pt)
   doc.setFont("helvetica", "normal"); doc.setFontSize(9.5); doc.setTextColor(...GRAY_DARK);
   doc.text(labelFolio, cotBoxX + cotBoxW / 4, y + hH + 5.5, { align: "center" });
-  // Número folio: 15pt (antes 12pt)
   doc.setFont("helvetica", "bold"); doc.setFontSize(15); doc.setTextColor(...BLACK);
   doc.text(String(folio), cotBoxX + cotBoxW * 0.75, y + hH + hH / 2 + 3, { align: "center" });
 
   const fecY = y + hH * 2;
-  doc.setFont("helvetica", "normal"); doc.setFontSize(9.5); doc.setTextColor(...GRAY_DARK);
+  doc.setFont("helvetica", "normal"); doc.setFontSize(5); doc.setTextColor(...GRAY_DARK);
   doc.text("FECHA", cotBoxX + cotBoxW / 4, fecY + 5.5, { align: "center" });
-  // Fecha: 12pt (antes 9.5pt)
   doc.setFont("helvetica", "normal"); doc.setFontSize(12); doc.setTextColor(...BLACK);
   doc.text(val(formatFecha(fecha)), cotBoxX + cotBoxW * 0.75, fecY + hH / 2 + 3, { align: "center" });
 
@@ -202,7 +200,6 @@ export function dibujarEncabezado(opts: OpcionesEncabezado): number {
   const midY2 = row2H / 2 + 1;
 
   doc.rect(M, y, infoW, row2H);
-  // Labels fila empresa: 10pt (antes 8pt)
   doc.setFont("helvetica", "bold"); doc.setFontSize(10); doc.setTextColor(...BLACK);
   doc.text("Empresa:", M + 2, y + midY2 + 2);
   doc.setFont("helvetica", "normal"); doc.setFontSize(10.5);
@@ -259,7 +256,6 @@ export function dibujarPiePagina(
   const total = (doc as any).internal.getNumberOfPages();
   for (let p = 1; p <= total; p++) {
     doc.setPage(p);
-    // Pie: 10pt (antes 8pt)
     doc.setFont("helvetica", "normal"); doc.setFontSize(10); doc.setTextColor(150, 150, 150);
     doc.text(
       `${labelDocumento} ${folio}  ·  ${val(formatFecha(fecha))}  ·  Página ${p} de ${total}`,
@@ -284,15 +280,15 @@ export function dibujarCajasPie(
   totales?:  TotalesPdf
 ): void {
   const PW = 297; const PH = 210; const M = 8;
-  // Footer más alto: 65 (antes 52)
   const FOOTER_H      = 65;
   const fY            = PH - M - FOOTER_H;
-  // Header de sección: 9pt (antes 7pt)
   const footerHeaderH = 9;
-  const boxH          = FOOTER_H;
 
   doc.setDrawColor(...BLACK); doc.setLineWidth(0.3);
   doc.setTextColor(...BLACK);
+
+  const fmtN = (n: number) =>
+    `$${n.toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   if (!totales) {
     const obsText = productos
@@ -307,7 +303,6 @@ export function dibujarCajasPie(
     doc.rect(M, fY, halfW - 1, cotBoxH);
     doc.setFillColor(...GRAY_DARK);
     doc.rect(M, fY, halfW - 1, footerHeaderH, "F");
-    // Header sección: 11pt (antes 9pt)
     doc.setFont("helvetica", "bold"); doc.setFontSize(11); doc.setTextColor(...WHITE);
     doc.text("Observaciones", M + (halfW - 1) / 2, fY + footerHeaderH - 2, { align: "center" });
     doc.setTextColor(...BLACK); doc.setFont("helvetica", "normal"); doc.setFontSize(10.5);
@@ -316,6 +311,25 @@ export function dibujarCajasPie(
     } else {
       doc.setTextColor(...GRAY_MED);
       doc.text("—", M + 2, fY + footerHeaderH + 6);
+      doc.setTextColor(...BLACK);
+    }
+
+    // ── Herramental en observaciones (cotizacion) ──────────────────────────
+    const prodConHerr = productos.filter(
+      p => p.herramental_precio != null && p.herramental_precio > 0
+    );
+    if (prodConHerr.length > 0) {
+      let herrY = fY + footerHeaderH + 6 + (obsText ? (obsText.split("\n").length) * 5 + 4 : 5);
+      doc.setFont("helvetica", "bold"); doc.setFontSize(10); doc.setTextColor(100, 60, 0);
+      doc.text("Herramental:", M + 2, herrY);
+      herrY += 5;
+      doc.setFont("helvetica", "normal"); doc.setFontSize(9.5);
+      prodConHerr.forEach(p => {
+        const desc  = p.herramental_descripcion?.trim() || p.nombre;
+        const precio = fmtN(p.herramental_precio!);
+        doc.text(`• ${desc}: ${precio}`, M + 4, herrY);
+        herrY += 5;
+      });
       doc.setTextColor(...BLACK);
     }
 
@@ -331,10 +345,7 @@ export function dibujarCajasPie(
     return;
   }
 
-  const fmtN = (n: number) =>
-    `$${n.toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
-  // Footer pedido más alto: 80 (antes 64)
+  // ── Footer pedido ─────────────────────────────────────────────────────────
   const PED_FOOTER_H = 80;
   const pfY          = PH - M - PED_FOOTER_H;
 
@@ -367,26 +378,26 @@ export function dibujarCajasPie(
       doc.setFillColor(...GRAY_LIGHT);
       doc.rect(tvX, ry, tvW, lineH, "F");
     }
+    // Etiqueta
     doc.setFillColor(...GRAY_DARK);
     doc.rect(tvX, ry, etW, lineH, "F");
     doc.line(tvX + etW, ry, tvX + etW, ry + lineH);
-    // Label totales: 13pt (antes 11pt)
     doc.setFont("helvetica", row.bold ? "bold" : "normal");
     doc.setFontSize(13); doc.setTextColor(...WHITE);
     doc.text(row.label, tvX + etW / 2, ry + lineH / 2 + 2.5, { align: "center" });
-    // Valor totales: 17pt (antes 14pt)
+    // Valor
     doc.setFont("helvetica", row.bold ? "bold" : "normal");
-    doc.setFontSize(17); doc.setTextColor(...BLACK);
+    doc.setFontSize(17);
+    doc.setTextColor(...BLACK);
     doc.text(row.value, tvX + tvW - 2, ry + lineH / 2 + 3.5, { align: "right" });
+    doc.setTextColor(...BLACK);
   });
 
   const lX = M;
   const lW = LEFT_W;
 
-  // Bloque banco: altura 25 (antes 20)
   const BANCO_H = 25;
   doc.rect(lX, pfY, lW, BANCO_H);
-  // Texto banco: 10.5pt (antes 8.5pt)
   doc.setFont("helvetica", "normal"); doc.setFontSize(10.5); doc.setTextColor(...BLACK);
   doc.text("Favor de depositar en Banamex  —  A nombre de Grupeb S.A. de C.V.", lX + lW / 2, pfY + 7, { align: "center" });
   doc.setFont("helvetica", "bold"); doc.setFontSize(15);
@@ -406,7 +417,6 @@ export function dibujarCajasPie(
     const sy = F2_Y + i * subH;
     if (i > 0) doc.line(lX, sy, lX + COL1_W, sy);
     doc.setFont("helvetica", i === 3 ? "normal" : "bold");
-    // Labels anticipo: 10.5pt (antes 8.5pt)
     doc.setFontSize(10.5); doc.setTextColor(...BLACK);
     const textY = i === 3 ? sy + subH - 3 : sy + subH / 2 + 2.5;
     doc.text(label, lX + 2.5, textY);
@@ -421,8 +431,8 @@ export function dibujarCajasPie(
     "* Todo cheque devuelto causará un 20% por daños y perjuicios según el art. 193 de la Ley de Títulos y Operaciones de Crédito.",
     "* Flete por cuenta del Cliente.",
     "* Su pedido puede tener una variación de un 20% más o un 20% menos en la cantidad final.",
+    "* Tiempo de entrega: 30-35 días después de autorizado el diseño.",
   ];
-  // Texto legal: 9.5pt (antes 7.5pt)
   doc.setFont("helvetica", "normal"); doc.setFontSize(9.5); doc.setTextColor(...BLACK);
   const maxLy = F2_Y + F2_H - 2;
   let ly = F2_Y + 6;
@@ -439,7 +449,6 @@ export function dibujarCajasPie(
   const col3X = col2X + COL2_W;
   doc.rect(col3X, F2_Y, COL3_W, F2_H);
 
-  // Header condiciones pago: 11pt (antes 8.5pt)
   const CON_H = 11;
   doc.setFillColor(...GRAY_DARK);
   doc.rect(col3X, F2_Y, COL3_W, CON_H, "F");
@@ -449,7 +458,6 @@ export function dibujarCajasPie(
 
   const AUT_H = (F2_H - CON_H) / 2;
   doc.rect(col3X, F2_Y + CON_H, COL3_W, AUT_H);
-  // Labels firma: 10.5pt (antes 8.5pt)
   doc.setFont("helvetica", "normal"); doc.setFontSize(10.5); doc.setTextColor(...GRAY_DARK);
   doc.text("Autorización", col3X + COL3_W / 2, F2_Y + CON_H + AUT_H - 3, { align: "center" });
 

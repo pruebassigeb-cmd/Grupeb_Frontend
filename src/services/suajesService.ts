@@ -12,6 +12,11 @@ export interface ColorAsa {
   color:    string;
 }
 
+export interface MedidaTroquel {
+  id_medidatro: number;
+  medida:       string;
+}
+
 export const getSuajes = async (): Promise<Suaje[]> => {
   const response = await api.get("/suajes");
   return response.data;
@@ -19,5 +24,10 @@ export const getSuajes = async (): Promise<Suaje[]> => {
 
 export const getColoresAsa = async (): Promise<ColorAsa[]> => {
   const response = await api.get("/cotizaciones/colores-asa");
+  return response.data;
+};
+
+export const getMedidasTroquel = async (): Promise<MedidaTroquel[]> => {
+  const response = await api.get("/cotizaciones/medidas-troquel");
   return response.data;
 };

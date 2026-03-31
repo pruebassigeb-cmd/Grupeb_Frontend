@@ -183,8 +183,8 @@ export default function Usuarios() {
               usuariosFiltrados.map((usuario) => (
                 <tr key={usuario.idusuario} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                    {usuario.nombre}
-                  </td>
+  {`${usuario.nombre} ${usuario.apellido}`}
+</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {usuario.apellido}
                   </td>

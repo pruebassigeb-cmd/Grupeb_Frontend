@@ -106,6 +106,9 @@ export default function Pedidos() {
       asa_suaje:          p.asa_suaje            || null,
       observacion:        p.observacion          || null,
       por_kilo:           p.por_kilo             || null,
+      herramental_descripcion: p.herramental_descripcion ?? null,
+      herramental_precio:      p.herramental_precio      != null ? Number(p.herramental_precio) : null,
+      herramental_aprobado:    p.herramental_aprobado     ?? null,
       detalles: (p.detalles || []).map((d: any) => ({
         cantidad:      d.cantidad,
         precio_total:  d.precio_total,
@@ -140,6 +143,9 @@ export default function Pedidos() {
           asa_suaje:          prod.suajeTipo || null,
           observacion:        prod.observacion || null,
           por_kilo:           prod.porKilo    || null,
+          herramental_descripcion: prod.herramental_descripcion ?? null,
+          herramental_precio:      prod.herramental_precio      != null ? Number(prod.herramental_precio) : null,
+          herramental_aprobado:    prod.herramental_aprobado     ?? null,
           detalles: prod.cantidades
             .map((cant: number, i: number) => {
               if (cant <= 0 || prod.precios[i] <= 0) return null;
@@ -154,7 +160,6 @@ export default function Pedidos() {
         };
       });
       try {
-        // FIX: garantizar que no_pedido sea string antes de pasarlo
         const noPedido = respuesta.no_pedido ?? "";
         if (!noPedido) throw new Error("No se recibió no_pedido del servidor");
         const venta = await getVentaByPedido(noPedido);
@@ -321,7 +326,6 @@ export default function Pedidos() {
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              {/* ✅ "Cliente" cambiado a "Impresión" */}
               {["N° Pedido", "Origen", "Fecha", "Impresión", "Empresa", "Productos", "Total", "Acciones"].map(h => (
                 <th key={h} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{h}</th>
               ))}
@@ -343,7 +347,6 @@ export default function Pedidos() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">{origenBadge(ped)}</td>
                     <td className="px-6 py-4 text-sm text-gray-500 whitespace-nowrap">{formatFecha(ped.fecha)}</td>
-                    {/* ✅ ped.cliente → ped.impresion */}
                     <td className="px-6 py-4 whitespace-nowrap">
                       <p className="text-sm font-medium text-gray-900">{ped.impresion || "—"}</p>
                       {ped.telefono && <p className="text-xs text-gray-400">{ped.telefono}</p>}
@@ -360,12 +363,14 @@ export default function Pedidos() {
                     <td className="px-6 py-4 text-sm font-semibold text-gray-900 whitespace-nowrap">${ped.total.toFixed(2)}</td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-2">
-                        <button onClick={() => handleDescargarPdf(ped)} title="Descargar PDF" className="p-1.5 rounded-md text-green-600 hover:bg-green-50">
+                        <button onClick={() => handleDescargarPdf(ped)} title="Descargar PDF"
+                          className="p-1.5 rounded-md text-green-600 hover:bg-green-50">
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                           </svg>
                         </button>
-                        <button onClick={() => handleEliminar(ped)} title="Cancelar pedido" className="p-1.5 rounded-md text-red-500 hover:bg-red-50">
+                        <button onClick={() => handleEliminar(ped)} title="Cancelar pedido"
+                          className="p-1.5 rounded-md text-red-500 hover:bg-red-50">
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                           </svg>

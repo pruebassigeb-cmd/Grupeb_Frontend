@@ -11,8 +11,8 @@ import type { ClienteBusqueda } from "../types/clientes.types";
 import type { CreateClienteRequest } from "../types/clientes.types";
 import type { ProductoBusqueda, ProductoPlasticoCreate } from "../types/productos-plastico.types";
 import type { Cara, Tinta } from "../types/catalogos-produccion.types";
-import { getSuajes, getColoresAsa } from "../services/suajesService";
-import type { Suaje, ColorAsa } from "../services/suajesService";
+import { getSuajes, getColoresAsa, getMedidasTroquel  } from "../services/suajesService";
+import type { Suaje, ColorAsa, MedidaTroquel  } from "../services/suajesService";
 import { getRegimenesFiscales, getMetodosPago, getFormasPago } from "../services/catalogosService";
 import type { RegimenFiscal, MetodoPago, FormaPago } from "../types/clientes.types";
 
@@ -43,28 +43,33 @@ interface FormularioCotizacionProps {
 }
 
 interface Producto {
-  productoId?:        number;
-  nombre:             string;
-  cantidades:         [number, number, number];
-  kilogramos:         [number, number, number];
-  precios:            [number, number, number];
-  calibre:            string;
-  tintas:             number;
-  tintasId:           number;
-  caras:              number;
-  carasId:            number;
-  material:           string;
-  medidas:            Record<MedidaKey, string>;
-  medidasFormateadas: string;
-  porKilo?:           string;
-  idsuaje?:           number | null;
-  suajeTipo?:         string | null;
-  colorAsaId?:        number | null;
-  colorAsaNombre?:    string | null;
-  observacion?:       string;
-  pantones?:          string | null;
-  pigmentos?:         string | null;
-  modoCantidad:       "unidad" | "kilo";
+  productoId?:             number;
+  nombre:                  string;
+  cantidades:              [number, number, number];
+  kilogramos:              [number, number, number];
+  precios:                 [number, number, number];
+  calibre:                 string;
+  tintas:                  number;
+  tintasId:                number;
+  caras:                   number;
+  carasId:                 number;
+  material:                string;
+  medidas:                 Record<MedidaKey, string>;
+  medidasFormateadas:      string;
+  porKilo?:                string;
+  idsuaje?:                number | null;
+  suajeTipo?:              string | null;
+  colorAsaId?:             number | null;
+  colorAsaNombre?:         string | null;
+  idMedidaTroquel?:        number | null;
+  medidaTroquelTexto?:     string | null;
+  observacion?:            string;
+  pantones?:               string | null;
+  pigmentos?:              string | null;
+  modoCantidad:            "unidad" | "kilo";
+  // ── Herramental ────────────────────────────────────────
+  herramental_descripcion?: string | null;
+  herramental_precio?:      number | null;
 }
 
 interface DatosCotizacion {
@@ -166,6 +171,14 @@ export default function FormularioCotizacion({
   const [modoCantidad,    setModoCantidad]    = useState<"unidad" | "kilo">("unidad");
   const [cantidadesTexto, setCantidadesTexto] = useState<[string, string, string]>(["", "", ""]);
 
+  const [medidasTroquel,         setMedidasTroquel]         = useState<MedidaTroquel[]>([]);
+  const [mostrarDropdownTroquel, setMostrarDropdownTroquel] = useState(false);
+
+  // ── Herramental ────────────────────────────────────────────────────────────
+  const [herramentalExpandido,   setHerramentalExpandido]   = useState(false);
+  const [herramentalDescripcion, setHerramentalDescripcion] = useState("");
+  const [herramentalPrecioTexto, setHerramentalPrecioTexto] = useState("");
+
   const estadoInicialProducto: Producto = {
     nombre:          "",
     cantidades:      [0, 0, 0],
@@ -182,15 +195,19 @@ export default function FormularioCotizacion({
       fuelleLateral1: "", fuelleLateral2: "",
       refuerzo: "", solapa: "",
     },
-    medidasFormateadas: "",
-    idsuaje:         null,
-    suajeTipo:       null,
-    colorAsaId:      null,
-    colorAsaNombre:  null,
-    observacion:     "",
-    pantones:        null,
-    pigmentos:       null,
-    modoCantidad:    "unidad",
+    medidasFormateadas:      "",
+    idsuaje:                 null,
+    suajeTipo:               null,
+    colorAsaId:              null,
+    colorAsaNombre:          null,
+    idMedidaTroquel:         null,
+    medidaTroquelTexto:      null,
+    observacion:             "",
+    pantones:                null,
+    pigmentos:               null,
+    modoCantidad:            "unidad",
+    herramental_descripcion: null,
+    herramental_precio:      null,
   };
 
   const [productoActual,     setProductoActual]     = useState<Producto>(estadoInicialProducto);
@@ -307,13 +324,14 @@ export default function FormularioCotizacion({
 
   const cargarCatalogos = async () => {
     try {
-      const [catalogosData, suajesData, regimenesData, metodosData, formasData, coloresAsaData] = await Promise.all([
+      const [catalogosData, suajesData, regimenesData, metodosData, formasData, coloresAsaData, medidasTroquelData] = await Promise.all([
         getCatalogosProduccion(),
         getSuajes(),
         getRegimenesFiscales(),
         getMetodosPago(),
         getFormasPago(),
         getColoresAsa(),
+        getMedidasTroquel(),
       ]);
       setCaras(catalogosData.caras);
       setTintas(catalogosData.tintas);
@@ -322,6 +340,7 @@ export default function FormularioCotizacion({
       setMetodosPago(metodosData);
       setFormasPago(formasData);
       setColoresAsa(coloresAsaData);
+      setMedidasTroquel(medidasTroquelData);
     } catch (error) {
       console.error("❌ Error al cargar catálogos:", error);
     }
@@ -410,33 +429,38 @@ export default function FormularioCotizacion({
       solapa:         "",
     };
     setProductoActual({
-      productoId:         producto.id,
-      nombre:             `${producto.tipo_producto} ${producto.medida} ${producto.material.toLowerCase()}`,
-      cantidades:         [0, 0, 0],
-      kilogramos:         [0, 0, 0],
-      precios:            [0, 0, 0],
-      calibre:            producto.calibre.toString(),
-      tintas:             tintas[0]?.cantidad || 1,
-      tintasId:           tintas[0]?.id       || 1,
-      caras:              caras[0]?.cantidad  || 1,
-      carasId:            caras[0]?.id        || 1,
-      material:           producto.material,
-      medidas:            medidasMapeadas,
-      medidasFormateadas: producto.medida,
-      porKilo:            producto.por_kilo,
-      idsuaje:            null,
-      suajeTipo:          null,
-      colorAsaId:         null,
-      colorAsaNombre:     null,
-      pantones:           null,
-      pigmentos:          null,
-      modoCantidad:       modoCantidad,
+      productoId:              producto.id,
+      nombre:                  `${producto.tipo_producto} ${producto.medida} ${producto.material.toLowerCase()}`,
+      cantidades:              [0, 0, 0],
+      kilogramos:              [0, 0, 0],
+      precios:                 [0, 0, 0],
+      calibre:                 producto.calibre.toString(),
+      tintas:                  tintas[0]?.cantidad || 1,
+      tintasId:                tintas[0]?.id       || 1,
+      caras:                   caras[0]?.cantidad  || 1,
+      carasId:                 caras[0]?.id        || 1,
+      material:                producto.material,
+      medidas:                 medidasMapeadas,
+      medidasFormateadas:      producto.medida,
+      porKilo:                 producto.por_kilo,
+      idsuaje:                 null,
+      suajeTipo:               null,
+      colorAsaId:              null,
+      colorAsaNombre:          null,
+      pantones:                null,
+      pigmentos:               null,
+      modoCantidad:            modoCantidad,
+      herramental_descripcion: null,
+      herramental_precio:      null,
     });
     setCantidadesTexto(["", "", ""]);
     setPreciosEditadosManualmente([false, false, false]);
     setPreciosTexto(["", "", ""]);
     setModoColor(null);
     setInputsPantones([]);
+    setHerramentalExpandido(false);
+    setHerramentalDescripcion("");
+    setHerramentalPrecioTexto("");
     setMostrarModalProductos(false);
     setBusquedaProducto("");
   };
@@ -619,6 +643,38 @@ export default function FormularioCotizacion({
     setProductoActual(prev => ({ ...prev, pigmentos: sanitizarTexto(value) || null }));
   };
 
+  // ── Herramental handlers ────────────────────────────────────────────────────
+  const handleHerramentalToggle = () => {
+    const nuevo = !herramentalExpandido;
+    setHerramentalExpandido(nuevo);
+    // Si cierra y estaba vacío, limpia
+    if (!nuevo && !herramentalDescripcion && !herramentalPrecioTexto) {
+      setProductoActual(prev => ({ ...prev, herramental_descripcion: null, herramental_precio: null }));
+    }
+  };
+
+  const handleHerramentalDescripcionChange = (value: string) => {
+    setHerramentalDescripcion(value);
+    setProductoActual(prev => ({ ...prev, herramental_descripcion: value.trim() || null }));
+  };
+
+  const handleHerramentalPrecioChange = (value: string) => {
+    if (!/^\d*\.?\d{0,2}$/.test(value)) return;
+    setHerramentalPrecioTexto(value);
+    const parsed = parseFloat(value);
+    setProductoActual(prev => ({ ...prev, herramental_precio: isNaN(parsed) ? null : parsed }));
+  };
+
+  const handleHerramentalLimpiar = () => {
+    setHerramentalDescripcion("");
+    setHerramentalPrecioTexto("");
+    setProductoActual(prev => ({ ...prev, herramental_descripcion: null, herramental_precio: null }));
+    setHerramentalExpandido(false);
+  };
+
+  const herramentalTieneData =
+    !!herramentalDescripcion.trim() || (herramentalPrecioTexto !== "" && parseFloat(herramentalPrecioTexto) > 0);
+
   const handleAgregarProducto = async () => {
     const { bolsas: cantsBolsas, kgs: catsKgs } = calcularDesdeInput(
       cantidadesTexto, modoCantidad, productoActual.porKilo
@@ -634,16 +690,32 @@ export default function FormularioCotizacion({
       alert("Una o más cantidades no cumplen el mínimo de 30 kg.");
       return;
     }
+
+    // Parsear herramental
+    const herramentalPrecioFinal = herramentalPrecioTexto !== ""
+      ? parseFloat(herramentalPrecioTexto) || null
+      : null;
+    const herramentalDescFinal = herramentalDescripcion.trim() || null;
+
     let productoParaAgregar: Producto = {
       ...productoActual,
-      cantidades:   cantsBolsas,
-      kilogramos:   catsKgs,
-      modoCantidad: modoCantidad,
+      cantidades:              cantsBolsas,
+      kilogramos:              catsKgs,
+      modoCantidad:            modoCantidad,
+      herramental_descripcion: herramentalDescFinal,
+      herramental_precio:      herramentalPrecioFinal,
     };
     if (modoProducto === "nuevo" && !productoActual.productoId) {
       const productoCreado = await crearYAgregarProductoNuevo();
       if (!productoCreado) return;
-      productoParaAgregar = { ...productoCreado, cantidades: cantsBolsas, kilogramos: catsKgs, modoCantidad };
+      productoParaAgregar = {
+        ...productoCreado,
+        cantidades:              cantsBolsas,
+        kilogramos:              catsKgs,
+        modoCantidad,
+        herramental_descripcion: herramentalDescFinal,
+        herramental_precio:      herramentalPrecioFinal,
+      };
     }
     setDatos(prev => ({ ...prev, productos: [...prev.productos, productoParaAgregar] }));
     resetearFormularioProducto();
@@ -668,15 +740,19 @@ export default function FormularioCotizacion({
         fuelleLateral1: "", fuelleLateral2: "",
         refuerzo: "", solapa: "",
       },
-      medidasFormateadas: "",
-      idsuaje:        null,
-      suajeTipo:      null,
-      colorAsaId:     null,
-      colorAsaNombre: null,
-      observacion:    "",
-      pantones:       null,
-      pigmentos:      null,
-      modoCantidad:   "unidad",
+      medidasFormateadas:      "",
+      idsuaje:                 null,
+      suajeTipo:               null,
+      colorAsaId:              null,
+      colorAsaNombre:          null,
+      idMedidaTroquel:         null,
+      medidaTroquelTexto:      null,
+      observacion:             "",
+      pantones:                null,
+      pigmentos:               null,
+      modoCantidad:            "unidad",
+      herramental_descripcion: null,
+      herramental_precio:      null,
     });
     setDatosProductoNuevo({
       tipoProducto: "", tipoProductoId: 0,
@@ -696,9 +772,14 @@ export default function FormularioCotizacion({
     setModoCantidad("unidad");
     setMostrarDropdownSuaje(false);
     setMostrarDropdownColorAsa(false);
+    setMostrarDropdownTroquel(false);
     setModoColor(null);
     setInputsPantones([]);
     setAdvertenciaDuplicado(null);
+    // Herramental
+    setHerramentalExpandido(false);
+    setHerramentalDescripcion("");
+    setHerramentalPrecioTexto("");
   };
 
   const handleEliminarProducto = (index: number) => {
@@ -724,9 +805,13 @@ export default function FormularioCotizacion({
   };
 
   const calcularTotal = () =>
-    datos.productos.reduce((total, prod) =>
-      total + prod.cantidades.reduce((sum, cant, i) => sum + cant * prod.precios[i], 0)
-    , 0);
+    datos.productos.reduce((total, prod) => {
+      const subtotalProducto = prod.cantidades.reduce(
+        (sum, cant, i) => sum + cant * prod.precios[i], 0
+      );
+      const herramental = prod.herramental_precio ?? 0;
+      return total + subtotalProducto + herramental;
+    }, 0);
 
   const hayProductoSeleccionado =
     (modoProducto === "registrado" && productoActual.nombre) ||
@@ -821,6 +906,13 @@ export default function FormularioCotizacion({
       ? datosProductoNuevo.tipoProducto
       : productoActual.nombre;
     return (tipo || "").toLowerCase().includes("asa flexible");
+  };
+
+  const getEsTroquel = (): boolean => {
+    const tipo = modoProducto === "nuevo"
+      ? datosProductoNuevo.tipoProducto
+     : productoActual.nombre;
+    return (tipo || "").toLowerCase().includes("troquelada");
   };
 
   const inputCliente = (
@@ -1238,6 +1330,90 @@ export default function FormularioCotizacion({
           {hayProductoSeleccionado && (
             <div className="mt-6 space-y-4 border-t pt-4">
 
+              {/* ── HERRAMENTAL (accordion) ─────────────────────────────── */}
+              <div className="border border-gray-200 rounded-lg overflow-hidden">
+                <button
+                  type="button"
+                  onClick={handleHerramentalToggle}
+                  className={`w-full flex items-center justify-between px-4 py-3 transition-colors text-left ${
+                    herramentalTieneData
+                      ? "bg-orange-50 hover:bg-orange-100"
+                      : "bg-gray-100 hover:bg-gray-200"
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">🔧</span>
+                    <span className={`text-sm font-semibold ${herramentalTieneData ? "text-orange-800" : "text-gray-600"}`}>
+                      Herramental
+                    </span>
+                    <span className="text-xs font-normal text-gray-400">(opcional)</span>
+                    {herramentalTieneData && (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-200 text-orange-800">
+                        ${parseFloat(herramentalPrecioTexto || "0").toFixed(2)}
+                      </span>
+                    )}
+                  </div>
+                  <svg
+                    className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${herramentalExpandido ? "rotate-180" : ""}`}
+                    fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+
+                {herramentalExpandido && (
+                  <div className="p-4 bg-white space-y-3 border-t border-gray-200">
+                    <p className="text-xs text-gray-400">
+                      Indica el herramental requerido para este producto (ej. suaje nuevo, molde especial). Se sumará al total.
+                    </p>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">
+                        Descripción / Características
+                      </label>
+                      <textarea
+                        value={herramentalDescripcion}
+                        onChange={(e) => handleHerramentalDescripcionChange(e.target.value)}
+                        rows={2}
+                        placeholder="Ej: Suaje nuevo para troquel 40x30 con fuelle especial..."
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-orange-400 focus:border-orange-400 resize-none"
+                      />
+                    </div>
+                    <div className="flex items-end gap-3">
+                      <div className="flex-1">
+                        <label className="block text-xs font-medium text-gray-600 mb-1">
+                          Precio <span className="text-red-500">*</span>
+                        </label>
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm font-medium">$</span>
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            value={herramentalPrecioTexto}
+                            onChange={(e) => handleHerramentalPrecioChange(e.target.value)}
+                            placeholder="0.00"
+                            className="w-full pl-7 pr-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-orange-400 focus:border-orange-400"
+                          />
+                        </div>
+                      </div>
+                      {herramentalTieneData && (
+                        <button
+                          type="button"
+                          onClick={handleHerramentalLimpiar}
+                          className="px-3 py-2 text-xs text-red-500 hover:text-red-700 hover:bg-red-50 border border-red-200 rounded-lg transition-colors"
+                        >
+                          Limpiar
+                        </button>
+                      )}
+                    </div>
+                    {herramentalTieneData && (
+                      <p className="text-xs text-orange-600 font-medium">
+                        ✓ Herramental de ${parseFloat(herramentalPrecioTexto || "0").toFixed(2)} incluido en el total
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+
               {/* Tintas y Caras */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="relative">
@@ -1409,69 +1585,73 @@ export default function FormularioCotizacion({
                 );
               })()}
 
-              {/* Color del Asa — solo cuando es asa flexible y hay suaje seleccionado */}
+              {/* Color del Asa */}
               {getEsAsaFlexible() && productoActual.idsuaje && (
                 <div className="relative">
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Color del Asa <span className="ml-2 text-xs text-gray-400 font-normal">(opcional)</span>
                   </label>
                   <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={productoActual.colorAsaNombre || "Seleccionar color..."}
-                      readOnly
-                      className={`flex-1 px-4 py-2 border rounded-lg cursor-pointer text-gray-900 bg-white capitalize ${
-                        productoActual.colorAsaId
-                          ? "border-teal-400 bg-teal-50"
-                          : "border-gray-300"
-                      }`}
-                      onClick={() => setMostrarDropdownColorAsa(!mostrarDropdownColorAsa)}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setMostrarDropdownColorAsa(!mostrarDropdownColorAsa)}
-                      className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700"
-                    >
-                      <svg className={`w-5 h-5 transition-transform ${mostrarDropdownColorAsa ? "rotate-180" : ""}`}
-                        fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <input type="text" value={productoActual.colorAsaNombre || "Seleccionar color..."} readOnly
+                      className={`flex-1 px-4 py-2 border rounded-lg cursor-pointer text-gray-900 bg-white capitalize ${productoActual.colorAsaId ? "border-teal-400 bg-teal-50" : "border-gray-300"}`}
+                      onClick={() => setMostrarDropdownColorAsa(!mostrarDropdownColorAsa)} />
+                    <button type="button" onClick={() => setMostrarDropdownColorAsa(!mostrarDropdownColorAsa)} className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700">
+                      <svg className={`w-5 h-5 transition-transform ${mostrarDropdownColorAsa ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                       </svg>
                     </button>
                     {productoActual.colorAsaId && (
-                      <button
-                        type="button"
-                        onClick={() => setProductoActual(p => ({ ...p, colorAsaId: null, colorAsaNombre: null }))}
-                        className="px-3 py-2 bg-gray-200 text-gray-600 rounded-lg hover:bg-red-100 hover:text-red-600 text-sm font-bold"
-                      >✕</button>
+                      <button type="button" onClick={() => setProductoActual(p => ({ ...p, colorAsaId: null, colorAsaNombre: null }))}
+                        className="px-3 py-2 bg-gray-200 text-gray-600 rounded-lg hover:bg-red-100 hover:text-red-600 text-sm font-bold">✕</button>
                     )}
                   </div>
                   {mostrarDropdownColorAsa && (
                     <ul className="absolute w-full bg-white border border-gray-300 mt-1 rounded-lg shadow-lg z-20 max-h-48 overflow-y-auto">
                       {coloresAsa.map((c) => (
-                        <li
-                          key={c.id_color}
-                          onClick={() => {
-                            setProductoActual(p => ({
-                              ...p,
-                              colorAsaId:    c.id_color,
-                              colorAsaNombre: c.color,
-                            }));
-                            setMostrarDropdownColorAsa(false);
-                          }}
-                          className={`px-4 py-2 hover:bg-teal-100 cursor-pointer text-gray-900 capitalize ${
-                            productoActual.colorAsaId === c.id_color
-                              ? "bg-teal-50 font-semibold text-teal-700"
-                              : ""
-                          }`}
-                        >
+                        <li key={c.id_color} onClick={() => {
+                          setProductoActual(p => ({ ...p, colorAsaId: c.id_color, colorAsaNombre: c.color }));
+                          setMostrarDropdownColorAsa(false);
+                        }} className={`px-4 py-2 hover:bg-teal-100 cursor-pointer text-gray-900 capitalize ${productoActual.colorAsaId === c.id_color ? "bg-teal-50 font-semibold text-teal-700" : ""}`}>
                           {c.color}
                         </li>
                       ))}
                     </ul>
                   )}
-                  {productoActual.colorAsaId && (
-                    <p className="mt-1 text-xs text-teal-600 font-medium capitalize">✓ {productoActual.colorAsaNombre}</p>
+                  {productoActual.colorAsaId && <p className="mt-1 text-xs text-teal-600 font-medium capitalize">✓ {productoActual.colorAsaNombre}</p>}
+                </div>
+              )}
+
+              {/* Medida del Troquel */}
+              {getEsTroquel() && (
+                <div className="relative">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Medida del Troquel <span className="ml-2 text-xs text-gray-400 font-normal">(opcional)</span>
+                  </label>
+                  <div className="flex gap-2">
+                    <input type="text" value={productoActual.medidaTroquelTexto || "Seleccionar medida..."} readOnly
+                      className={`flex-1 px-4 py-2 border rounded-lg cursor-pointer text-gray-900 bg-white ${productoActual.idMedidaTroquel ? "border-violet-400 bg-violet-50" : "border-gray-300"}`}
+                      onClick={() => setMostrarDropdownTroquel(!mostrarDropdownTroquel)} />
+                    <button type="button" onClick={() => setMostrarDropdownTroquel(!mostrarDropdownTroquel)} className="px-4 py-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700">
+                      <svg className={`w-5 h-5 transition-transform ${mostrarDropdownTroquel ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                    {productoActual.idMedidaTroquel && (
+                      <button type="button" onClick={() => setProductoActual(p => ({ ...p, idMedidaTroquel: null, medidaTroquelTexto: null }))}
+                        className="px-3 py-2 bg-gray-200 text-gray-600 rounded-lg hover:bg-red-100 hover:text-red-600 text-sm font-bold">✕</button>
+                    )}
+                  </div>
+                  {mostrarDropdownTroquel && (
+                    <ul className="absolute w-full bg-white border border-gray-300 mt-1 rounded-lg shadow-lg z-20 max-h-48 overflow-y-auto">
+                      {medidasTroquel.map((m) => (
+                        <li key={m.id_medidatro} onClick={() => { setProductoActual(p => ({ ...p, idMedidaTroquel: m.id_medidatro, medidaTroquelTexto: m.medida })); setMostrarDropdownTroquel(false); }}
+                          className={`px-4 py-2 hover:bg-violet-100 cursor-pointer text-gray-900 ${productoActual.idMedidaTroquel === m.id_medidatro ? "bg-violet-50 font-semibold text-violet-700" : ""}`}>
+                          {m.medida}
+                        </li>
+                      ))}
+                    </ul>
                   )}
+                  {productoActual.idMedidaTroquel && <p className="mt-1 text-xs text-violet-600 font-medium">✓ {productoActual.medidaTroquelTexto}</p>}
                 </div>
               )}
 
@@ -1624,10 +1804,11 @@ export default function FormularioCotizacion({
                       <span>Calibre: {prod.calibre}</span>
                       <span>Tintas: {prod.tintas}</span>
                       <span>Caras: {prod.caras}</span>
-                      {prod.suajeTipo    && <span className="text-blue-600 font-medium">Suaje: {prod.suajeTipo}</span>}
-                      {prod.colorAsaNombre && <span className="text-teal-600 font-medium capitalize">🎨 Asa: {prod.colorAsaNombre}</span>}
-                      {prod.pantones     && <span className="text-purple-600 font-medium">🎨 {prod.pantones}</span>}
-                      {prod.pigmentos    && <span className="text-orange-600 font-medium">🧪 {prod.pigmentos}</span>}
+                      {prod.suajeTipo       && <span className="text-blue-600 font-medium">Suaje: {prod.suajeTipo}</span>}
+                      {prod.colorAsaNombre  && <span className="text-teal-600 font-medium capitalize">🎨 Asa: {prod.colorAsaNombre}</span>}
+                      {prod.medidaTroquelTexto && <span className="text-violet-600 font-medium">📐 Troquel: {prod.medidaTroquelTexto}</span>}
+                      {prod.pantones        && <span className="text-purple-600 font-medium">🎨 {prod.pantones}</span>}
+                      {prod.pigmentos       && <span className="text-orange-600 font-medium">🧪 {prod.pigmentos}</span>}
                     </div>
                     <div className="mt-2 space-y-1">
                       {(modo === "pedido" ? [0] : [0, 1, 2]).map((i) => {
@@ -1644,6 +1825,23 @@ export default function FormularioCotizacion({
                         );
                       })}
                     </div>
+                    {/* Herramental en lista de productos agregados */}
+                    {(prod.herramental_descripcion || prod.herramental_precio != null) && (
+                      <div className="mt-2 flex items-center gap-2 px-3 py-1.5 bg-orange-50 border border-orange-200 rounded-lg">
+                        <span className="text-sm">🔧</span>
+                        <div className="flex-1 min-w-0">
+                          <span className="text-xs font-semibold text-orange-800">Herramental</span>
+                          {prod.herramental_descripcion && (
+                            <span className="text-xs text-orange-700 ml-1">— {prod.herramental_descripcion}</span>
+                          )}
+                        </div>
+                        {prod.herramental_precio != null && (
+                          <span className="text-xs font-bold text-orange-800 flex-shrink-0">
+                            +${prod.herramental_precio.toFixed(2)}
+                          </span>
+                        )}
+                      </div>
+                    )}
                     {prod.observacion && (
                       <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded text-sm">
                         <span className="font-semibold text-blue-900">Obs:</span>
@@ -1657,6 +1855,11 @@ export default function FormularioCotizacion({
             </div>
             <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
               <p className="text-xl font-bold text-gray-900">Total: ${calcularTotal().toFixed(2)}</p>
+              {datos.productos.some(p => p.herramental_precio != null && p.herramental_precio > 0) && (
+                <p className="text-xs text-orange-600 mt-1">
+                  Incluye herramental: +${datos.productos.reduce((s, p) => s + (p.herramental_precio ?? 0), 0).toFixed(2)}
+                </p>
+              )}
             </div>
           </div>
         )}

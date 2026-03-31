@@ -45,7 +45,6 @@ function celda(
     alignLeft?: boolean;
   }
 ) {
-  // valueSize por defecto: 13pt (antes 11pt)
   const { bold = false, valueSize = 13, color = BLACK, fill, alignLeft = false } = opts ?? {};
   doc.setDrawColor(...BLACK);
   doc.setLineWidth(0.2);
@@ -56,7 +55,6 @@ function celda(
     doc.rect(x, y, w, h);
   }
   doc.setFont("helvetica", "normal");
-  // Label: 9.5pt (antes 7.5pt)
   doc.setFontSize(9.5);
   doc.setTextColor(...GRAY_MED);
   doc.text(label, x + 1.5, y + 4.5);
@@ -74,12 +72,11 @@ function celda(
 function seccionHeader(
   doc: jsPDF,
   label: string,
-  x: number, y: number, w: number, h = 9  // antes 7
+  x: number, y: number, w: number, h = 9
 ) {
   doc.setFillColor(...GRAY_XDARK);
   doc.rect(x, y, w, h, "FD");
   doc.setFont("helvetica", "bold");
-  // Header sección: 11pt (antes 9pt)
   doc.setFontSize(11);
   doc.setTextColor(...WHITE);
   doc.text(label, x + w / 2, y + h / 2 + 2, { align: "center" });
@@ -98,13 +95,15 @@ const logoBase64 = await cargarLogoBase64(logoUrl);
   const CW = PW - M * 2;
   let y = M;
 
+  const herramentalTotal = datos.herramental_total ?? 0;
+  const tieneHerramental = herramentalTotal > 0;
+
   // ════════════════════════════════════════════════════════════
   // ENCABEZADO
   // ════════════════════════════════════════════════════════════
   const logoW   = 32;
   const folioW  = 52;
   const tituW   = CW - logoW - folioW;
-  // headerH: 28 (antes 22)
   const headerH = 28;
 
   doc.setDrawColor(...BLACK);
@@ -123,12 +122,10 @@ const logoBase64 = await cargarLogoBase64(logoUrl);
   const tituX = M + logoW;
   doc.rect(tituX, y, tituW, headerH);
   doc.setFont("helvetica", "bold");
-  // Título principal: 17pt (antes 14pt)
   doc.setFontSize(17);
   doc.setTextColor(...BLACK);
   doc.text("Estado de Cuenta", tituX + tituW / 2, y + 11, { align: "center" });
   doc.setFont("helvetica", "normal");
-  // Subtítulo: 10.5pt (antes 8.5pt)
   doc.setFontSize(10.5);
   doc.setTextColor(...GRAY_DARK);
   doc.text("Resumen financiero de producción real", tituX + tituW / 2, y + 19, { align: "center" });
@@ -137,26 +134,21 @@ const logoBase64 = await cargarLogoBase64(logoUrl);
   const folioX = M + logoW + tituW;
   doc.rect(folioX, y, folioW, headerH);
   doc.setFillColor(...GRAY_XDARK);
-  // Banda "PEDIDO": altura 8 (antes 6)
   doc.rect(folioX, y, folioW, 8, "FD");
   doc.setFont("helvetica", "bold");
-  // "PEDIDO" label: 10.5pt (antes 8.5pt)
   doc.setFontSize(10.5);
   doc.setTextColor(...WHITE);
   doc.text("PEDIDO", folioX + folioW / 2, y + 5.5, { align: "center" });
   doc.setTextColor(...BLACK);
-  // Número pedido: 18pt (antes 15pt)
   doc.setFontSize(18);
   doc.text(`#${datos.no_pedido}`, folioX + folioW / 2, y + 15, { align: "center" });
   doc.setDrawColor(...GRAY_MED);
   doc.line(folioX, y + 17, folioX + folioW, y + 17);
   doc.setDrawColor(...BLACK);
   doc.setFont("helvetica", "normal");
-  // "FECHA" label: 9.5pt (antes 7.5pt)
   doc.setFontSize(9.5);
   doc.setTextColor(...GRAY_DARK);
   doc.text("FECHA", folioX + 2, y + 21.5);
-  // Fecha valor: 11pt (antes 9pt)
   doc.setFontSize(11);
   doc.setTextColor(...BLACK);
   doc.text(formatFecha(datos.fecha), folioX + folioW / 2, y + 26, { align: "center" });
@@ -169,7 +161,6 @@ const logoBase64 = await cargarLogoBase64(logoUrl);
   seccionHeader(doc, "DATOS DEL CLIENTE", M, y, CW);
   y += 9;
 
-  // clienteH: 13 (antes 10)
   const clienteH = 13;
   const c1 = CW * 0.28;
   const c2 = CW * 0.20;
@@ -209,7 +200,6 @@ const logoBase64 = await cargarLogoBase64(logoUrl);
     { label: "Dif. Precio",    w: colDifPre },
   ];
 
-  // tabHeaderH: 10 (antes 8)
   const tabHeaderH = 10;
   let hx = M;
   tabHeaders.forEach(h => {
@@ -219,7 +209,6 @@ const logoBase64 = await cargarLogoBase64(logoUrl);
     doc.setLineWidth(0.2);
     doc.rect(hx, y, h.w, tabHeaderH);
     doc.setFont("helvetica", "bold");
-    // Header tabla: 9pt (antes 7pt)
     doc.setFontSize(9);
     doc.setTextColor(...GRAY_DARK);
     doc.text(h.label, hx + h.w / 2, y + tabHeaderH / 2 + 2, { align: "center" });
@@ -228,7 +217,6 @@ const logoBase64 = await cargarLogoBase64(logoUrl);
   y += tabHeaderH;
   doc.setTextColor(...BLACK);
 
-  // rowH: 11 (antes 9)
   const rowH = 11;
   datos.productos.forEach((prod, idx) => {
     const diffPzas   = prod.diferencia_piezas;
@@ -256,19 +244,56 @@ const logoBase64 = await cargarLogoBase64(logoUrl);
       doc.setLineWidth(0.15);
       doc.rect(rx, y, col.w, rowH);
       doc.setFont("helvetica", col.bold ? "bold" : "normal");
-      // Texto filas: nombre 9pt, resto 10pt  (antes 7/8pt)
       doc.setFontSize(col.left ? 9 : 10);
       doc.setTextColor(...col.color);
       if (col.left) {
-        doc.text(col.value, rx + 1.5, y + rowH / 2 + 2, { maxWidth: col.w - 3 });
+      doc.text(col.value, rx + 1.5, y + 4, { maxWidth: col.w - 3 });
       } else {
-        doc.text(col.value, rx + col.w / 2, y + rowH / 2 + 2, { align: "center" });
+      doc.text(col.value, rx + col.w / 2, y + rowH / 2 + 2, { align: "center" });
       }
       rx += col.w;
     });
 
     doc.setTextColor(...BLACK);
     y += rowH;
+
+    // ── Fila herramental del producto — con descripción del concepto ────────
+    if (prod.herramental_aprobado === true && prod.herramental_precio != null && prod.herramental_precio > 0) {
+      const herrH = 14; // más alto para que quepa el texto explicativo
+      doc.setFillColor(250, 246, 235);
+      doc.rect(M, y, CW, herrH, "FD");
+      doc.setDrawColor(200, 170, 120);
+      doc.setLineWidth(0.12);
+      doc.rect(M, y, CW, herrH);
+
+      // Ícono + nombre del herramental
+      const nombreHerr = prod.herramental_descripcion?.trim()
+        ? `Herramental: ${prod.herramental_descripcion}`
+        : "Herramental / molde";
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(8.5);
+      doc.setTextColor(120, 60, 0);
+      doc.text(nombreHerr, M + 2, y + 5);
+
+      // Explicación del concepto
+      doc.setFont("helvetica", "italic");
+      doc.setFontSize(7.5);
+      doc.setTextColor(150, 100, 40);
+      doc.text(
+        "Cargo único por fabricación del molde o troquel. No es parte del precio unitario del producto.",
+        M + 2, y + 10.5,
+        { maxWidth: CW * 0.72 }
+      );
+
+      // Precio alineado a la derecha
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.setTextColor(120, 60, 0);
+      doc.text(fmtMoney(prod.herramental_precio), M + CW - 2, y + herrH / 2 + 2, { align: "right" });
+
+      doc.setTextColor(...BLACK);
+      y += herrH;
+    }
   });
 
   y += 5;
@@ -294,7 +319,6 @@ const logoBase64 = await cargarLogoBase64(logoUrl);
       { label: "Observación", w: pColObs    },
     ];
 
-    // pagoHeaderH: 9 (antes 7)
     const pagoHeaderH = 9;
     let phx = M;
     pagoHeaders.forEach(h => {
@@ -304,7 +328,6 @@ const logoBase64 = await cargarLogoBase64(logoUrl);
       doc.setLineWidth(0.2);
       doc.rect(phx, y, h.w, pagoHeaderH);
       doc.setFont("helvetica", "bold");
-      // Header pagos: 9.5pt (antes 7.5pt)
       doc.setFontSize(9.5);
       doc.setTextColor(...GRAY_DARK);
       doc.text(h.label, phx + h.w / 2, y + pagoHeaderH / 2 + 2, { align: "center" });
@@ -313,7 +336,6 @@ const logoBase64 = await cargarLogoBase64(logoUrl);
     y += pagoHeaderH;
     doc.setTextColor(...BLACK);
 
-    // pagoRowH: 10 (antes 8)
     const pagoRowH = 10;
     let totalAcumulado = 0;
 
@@ -335,7 +357,6 @@ const logoBase64 = await cargarLogoBase64(logoUrl);
         doc.setLineWidth(0.15);
         doc.rect(prx, y, pv.w, pagoRowH);
         doc.setFont("helvetica", pv.bold ? "bold" : "normal");
-        // Texto filas pagos: 10pt (antes 8pt)
         doc.setFontSize(10);
         doc.setTextColor(...pv.color);
         if (pv.center) {
@@ -351,7 +372,6 @@ const logoBase64 = await cargarLogoBase64(logoUrl);
       y += pagoRowH;
     });
 
-    // totRowH: 11 (antes 9)
     const totRowH = 11;
     doc.setFillColor(...GRAY_LIGHT);
     doc.rect(M, y, CW, totRowH, "FD");
@@ -359,7 +379,6 @@ const logoBase64 = await cargarLogoBase64(logoUrl);
     doc.setLineWidth(0.2);
     doc.rect(M, y, CW, totRowH);
     doc.setFont("helvetica", "bold");
-    // Total pagado: 11pt (antes 9pt)
     doc.setFontSize(11);
     doc.setTextColor(...GRAY_DARK);
     doc.text(`Total pagado (${pagos.length} pago${pagos.length !== 1 ? "s" : ""})`, M + 3, y + totRowH / 2 + 2);
@@ -375,7 +394,6 @@ const logoBase64 = await cargarLogoBase64(logoUrl);
   seccionHeader(doc, "RESUMEN FINANCIERO", M, y, CW);
   y += 9;
 
-  // finH: 13 (antes 10)
   const finH   = 13;
   const colFin = CW / 6;
 
@@ -396,6 +414,40 @@ const logoBase64 = await cargarLogoBase64(logoUrl);
       { bold: col.bold, color: col.color ?? BLACK, fill: col.fill });
   });
   y += finH;
+
+  // ── Fila herramental en resumen financiero — con nota explicativa ────────
+  if (tieneHerramental) {
+    const herrFinH = 14;
+    doc.setFillColor(250, 246, 235);
+    doc.rect(M, y, CW, herrFinH, "FD");
+    doc.setDrawColor(200, 170, 120);
+    doc.setLineWidth(0.2);
+    doc.rect(M, y, CW, herrFinH);
+
+    // Título
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8.5);
+    doc.setTextColor(120, 60, 0);
+    doc.text(" Herramental aprobado (incluido en Subtotal Real)", M + 3, y + 5);
+
+    // Explicación
+    doc.setFont("helvetica", "italic");
+    doc.setFontSize(7.5);
+    doc.setTextColor(150, 100, 40);
+    doc.text(
+      "Costo único de fabricación del molde o troquel. Se suma al subtotal real y no se repite en pedidos futuros del mismo artículo.",
+      M + 3, y + 10.5,
+      { maxWidth: CW * 0.72 }
+    );
+
+    // Monto
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10);
+    doc.setTextColor(120, 60, 0);
+    doc.text(fmtMoney(herramentalTotal), M + CW - 3, y + herrFinH / 2 + 2, { align: "right" });
+    doc.setTextColor(...BLACK);
+    y += herrFinH;
+  }
 
   const difVal  = datos.diferencia_total;
   const difStr  = (difVal > 0 ? "+" : "") + fmtMoney(difVal);
@@ -424,7 +476,6 @@ const logoBase64 = await cargarLogoBase64(logoUrl);
   // ════════════════════════════════════════════════════════════
   y += 12;
 
-  // Texto depósito: 10.5pt (antes 8.5pt)
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10.5);
   doc.setTextColor(...GRAY_DARK);
@@ -434,14 +485,12 @@ const logoBase64 = await cargarLogoBase64(logoUrl);
   );
   y += 10;
 
-  // Nombre banco: 12pt (antes 9.5pt)
   doc.setFont("helvetica", "bold");
   doc.setFontSize(12);
   doc.setTextColor(...BLACK);
   doc.text("Banamex", PW / 2, y, { align: "center" });
   y += 6;
 
-  // Número cuenta: 11pt (antes 9pt)
   doc.setFont("helvetica", "normal");
   doc.setFontSize(11);
   doc.setTextColor(...BLACK);
@@ -452,35 +501,24 @@ const logoBase64 = await cargarLogoBase64(logoUrl);
   doc.text("Grupeb S.A. de C.V.", PW / 2, y, { align: "center" });
   y += 11;
 
-  // Frase aclaración: 10.5pt (antes 8.5pt)
   doc.setFont("helvetica", "italic");
   doc.setFontSize(10.5);
   doc.setTextColor(...GRAY_DARK);
   doc.text("Estamos a sus órdenes para cualquier duda o aclaración.", PW / 2, y, { align: "center" });
   y += 7;
 
-  // Nombre vendedora: 12.5pt (antes 10pt)
-  // doc.setFont("helvetica", "bold");
-  // doc.setFontSize(12.5);
-  // doc.setTextColor(...BLACK);
-  // doc.text("Yesenia Zúñiga", PW / 2, y, { align: "center" });
-  // y += 6;
-
-  // Dept. ventas: 10pt (antes 8pt)
   doc.setFont("helvetica", "bold");
   doc.setFontSize(12.5);
   doc.setTextColor(...BLACK);
   doc.text("Departamento de Ventas", PW / 2, y, { align: "center" });
   y += 6;
 
-  // Web: 11pt (antes 9pt)
   doc.setFont("helvetica", "bold");
   doc.setFontSize(11);
   doc.setTextColor(...BLACK);
   doc.text("www.grupoeb.com.mx", PW / 2, y, { align: "center" });
   y += 6;
 
-  // Dirección/teléfono/correo: 10pt (antes 8pt)
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10);
   doc.setTextColor(...GRAY_DARK);

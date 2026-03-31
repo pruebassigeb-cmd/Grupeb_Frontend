@@ -7,7 +7,7 @@ import {
   registrarPago,
   eliminarPago,
   getMetodosPago,
-  autorizarAnticipoCredito,  // 👈 nueva importación
+  autorizarAnticipoCredito,
 } from "../services/ventasservice";
 import { getOrdenProduccion } from "../services/seguimientoService";
 import { generarPdfOrdenProduccion } from "../services/generarPdfOrdenProduccion";
@@ -54,7 +54,7 @@ async function descargarPdfOrden(noPedido: string, noProduccion: string): Promis
     telefono:                data.telefono,
     correo:                  data.correo,
     impresion:               data.impresion,
-    prioridad: data.prioridad ?? false,
+    prioridad:               data.prioridad ?? false,
     nombre_producto:         producto.nombre_producto,
     categoria:               producto.categoria,
     material:                producto.material,
@@ -78,7 +78,8 @@ async function descargarPdfOrden(noPedido: string, noProduccion: string): Promis
     pigmentos:               producto.pigmentos,
     pantones:                producto.pantones,
     asa_suaje:               producto.asa_suaje,
-    color_asa_nombre: producto.color_asa_nombre ?? null,
+    color_asa_nombre:        producto.color_asa_nombre ?? null,
+    medida_troquel:          producto.medida_troquel ?? null,
     observacion:             producto.observacion,
     cantidad:                producto.cantidad,
     kilogramos:              producto.kilogramos,
@@ -120,11 +121,8 @@ function Paginador({
         <span className="font-medium">{total}</span>
       </p>
       <div className="flex items-center gap-1">
-        <button
-          onClick={() => onChange(pagina - 1)}
-          disabled={pagina === 1}
-          className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-        >
+        <button onClick={() => onChange(pagina - 1)} disabled={pagina === 1}
+          className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
           ‹ Anterior
         </button>
         {Array.from({ length: totalPaginas }, (_, i) => i + 1)
@@ -138,24 +136,18 @@ function Paginador({
             p === "..." ? (
               <span key={`e${idx}`} className="px-2 text-gray-400 text-sm">…</span>
             ) : (
-              <button
-                key={p}
-                onClick={() => onChange(p as number)}
+              <button key={p} onClick={() => onChange(p as number)}
                 className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
                   p === pagina
                     ? "bg-blue-600 text-white border-blue-600 font-semibold"
                     : "border-gray-300 text-gray-600 hover:bg-gray-50"
-                }`}
-              >
+                }`}>
                 {p}
               </button>
             )
           )}
-        <button
-          onClick={() => onChange(pagina + 1)}
-          disabled={pagina === totalPaginas}
-          className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-        >
+        <button onClick={() => onChange(pagina + 1)} disabled={pagina === totalPaginas}
+          className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
           Siguiente ›
         </button>
       </div>
@@ -175,12 +167,12 @@ function SeccionEstadoCuenta({
   pagos:        VentaPago[];
   onActualizar: (ventaActualizada: Partial<Venta>) => void;
 }) {
-  const [expandido,       setExpandido]       = useState(false);
-  const [datos,           setDatos]           = useState<EstadoCuenta | null>(null);
-  const [cargando,        setCargando]        = useState(false);
-  const [error,           setError]           = useState<string | null>(null);
-  const [cargado,         setCargado]         = useState(false);
-  const [generandoSimple, setGenerandoSimple] = useState(false);
+  const [expandido,        setExpandido]        = useState(false);
+  const [datos,            setDatos]            = useState<EstadoCuenta | null>(null);
+  const [cargando,         setCargando]         = useState(false);
+  const [error,            setError]            = useState<string | null>(null);
+  const [cargado,          setCargado]          = useState(false);
+  const [generandoSimple,  setGenerandoSimple]  = useState(false);
   const [generandoDetalle, setGenerandoDetalle] = useState(false);
 
   const cargar = async () => {
@@ -209,6 +201,11 @@ function SeccionEstadoCuenta({
     }
   };
 
+  // ── Carga automática al montar — actualiza barra sin que el usuario abra el desplegable ──
+  useEffect(() => {
+    cargar();
+  }, []);
+
   const handleToggle = () => {
     const nuevo = !expandido;
     setExpandido(nuevo);
@@ -218,37 +215,31 @@ function SeccionEstadoCuenta({
   const handleDescargarSimple = async () => {
     if (!datos) return;
     setGenerandoSimple(true);
-    try {
-      await generarPdfEstadoCuentaSimple(datos);
-    } catch (e) {
-      console.error("Error al generar PDF estado de cuenta simple:", e);
-    } finally {
-      setGenerandoSimple(false);
-    }
+    try { await generarPdfEstadoCuentaSimple(datos); }
+    catch (e) { console.error("Error al generar PDF estado de cuenta simple:", e); }
+    finally { setGenerandoSimple(false); }
   };
 
   const handleDescargarDetalle = async () => {
     if (!datos) return;
     setGenerandoDetalle(true);
-    try {
-      await generarPdfEstadoCuenta(datos, pagos);
-    } catch (e) {
-      console.error("Error al generar PDF estado de cuenta detallado:", e);
-    } finally {
-      setGenerandoDetalle(false);
-    }
+    try { await generarPdfEstadoCuenta(datos, pagos); }
+    catch (e) { console.error("Error al generar PDF estado de cuenta detallado:", e); }
+    finally { setGenerandoDetalle(false); }
   };
 
   return (
     <div className="border border-indigo-200 rounded-xl overflow-hidden">
-      <button
-        onClick={handleToggle}
-        className="w-full flex items-center justify-between px-4 py-3 bg-indigo-50 hover:bg-indigo-100 transition-colors"
-      >
+      <button onClick={handleToggle}
+        className="w-full flex items-center justify-between px-4 py-3 bg-indigo-50 hover:bg-indigo-100 transition-colors">
         <div className="flex items-center gap-2">
           <span className="text-indigo-600 text-sm">📊</span>
           <span className="text-sm font-semibold text-indigo-800">Estado de Cuenta</span>
           <span className="text-xs text-indigo-500 font-normal">(precio final basado en producción real)</span>
+          {/* Indicador sutil de carga en background */}
+          {cargando && (
+            <div className="w-3 h-3 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
+          )}
         </div>
         <svg className={`w-4 h-4 text-indigo-500 transition-transform duration-200 ${expandido ? "rotate-180" : ""}`}
           fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -299,7 +290,9 @@ function SeccionEstadoCuenta({
                           <div>
                             <p className="text-[9px] text-gray-400 uppercase tracking-wide">Kilogramos reales</p>
                             <p className="text-xs font-bold text-gray-700">
-                              {prod.peso_kg_real > 0 ? `${Number(prod.peso_kg_real).toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kg` : "—"}
+                              {prod.peso_kg_real > 0
+                                ? `${Number(prod.peso_kg_real).toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kg`
+                                : "—"}
                             </p>
                           </div>
                         </div>
@@ -333,6 +326,7 @@ function SeccionEstadoCuenta({
                           }`}>{diffPzas > 0 ? "+" : ""}{Number(diffPzas).toLocaleString("es-MX")}</p>
                         </div>
                       </div>
+
                       <div className="grid grid-cols-3 gap-1.5">
                         <div className="bg-white rounded p-2 text-center border border-gray-100">
                           <p className="text-[9px] text-gray-400 uppercase tracking-wide">Precio orig.</p>
@@ -352,6 +346,34 @@ function SeccionEstadoCuenta({
                           }`}>{diffPrecio > 0 ? "+" : ""}${fmt(diffPrecio)}</p>
                         </div>
                       </div>
+
+                      {prod.herramental_aprobado === true && prod.herramental_precio != null && prod.herramental_precio > 0 && (
+                        <div className="bg-orange-50 border border-orange-200 rounded-lg overflow-hidden">
+                          <div className="flex items-center gap-2 px-3 py-2">
+                            <span className="text-sm flex-shrink-0">🔧</span>
+                            <div className="flex-1 min-w-0">
+                              <span className="text-xs font-semibold text-orange-800">Herramental</span>
+                              {prod.herramental_descripcion && (
+                                <span className="text-xs text-orange-700 ml-1 font-medium">
+                                  — {prod.herramental_descripcion}
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-xs font-bold text-orange-800 flex-shrink-0">
+                              +${fmt(prod.herramental_precio)}
+                            </span>
+                          </div>
+                          <div className="px-3 pb-2.5 border-t border-orange-100 pt-1.5">
+                            <p className="text-[10px] text-orange-700 leading-relaxed">
+                              <span className="font-semibold">¿Por qué se cobra?</span>{" "}
+                              El herramental es el costo único de fabricación del molde o troquel necesario
+                              para producir este artículo. Se cotiza por separado y{" "}
+                              <span className="font-semibold">no forma parte del precio por pieza</span>.
+                              En pedidos futuros del mismo artículo, este cargo no se repite.
+                            </p>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -376,6 +398,7 @@ function SeccionEstadoCuenta({
                       <div className="space-y-1 text-xs">
                         <div className="flex justify-between"><span className="text-gray-500">Subtotal</span><span className="text-blue-700">${fmt(datos.subtotal_real)}</span></div>
                         <div className="flex justify-between"><span className="text-gray-500">IVA 16%</span><span className="text-blue-700">${fmt(datos.iva_real)}</span></div>
+            
                         <div className="flex justify-between font-semibold border-t border-blue-100 pt-1"><span className="text-gray-600">Total</span><span className="text-blue-800">${fmt(datos.total_real)}</span></div>
                       </div>
                     </div>
@@ -426,34 +449,20 @@ function SeccionEstadoCuenta({
                 </div>
               </div>
 
-              {/* ── Dos botones de descarga ── */}
               <div className="grid grid-cols-2 gap-2">
-                <button
-                  onClick={handleDescargarSimple}
-                  disabled={generandoSimple}
-                  className="flex items-center justify-center gap-2 py-2.5 bg-gray-700 hover:bg-gray-800 disabled:bg-gray-400 text-white text-sm font-semibold rounded-lg transition-colors"
-                >
+                <button onClick={handleDescargarSimple} disabled={generandoSimple}
+                  className="flex items-center justify-center gap-2 py-2.5 bg-gray-700 hover:bg-gray-800 disabled:bg-gray-400 text-white text-sm font-semibold rounded-lg transition-colors">
                   {generandoSimple
                     ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    : <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                          d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                      </svg>
+                    : <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
                   }
                   {generandoSimple ? "Generando..." : "PDF Cliente"}
                 </button>
-
-                <button
-                  onClick={handleDescargarDetalle}
-                  disabled={generandoDetalle}
-                  className="flex items-center justify-center gap-2 py-2.5 bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white text-sm font-semibold rounded-lg transition-colors"
-                >
+                <button onClick={handleDescargarDetalle} disabled={generandoDetalle}
+                  className="flex items-center justify-center gap-2 py-2.5 bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white text-sm font-semibold rounded-lg transition-colors">
                   {generandoDetalle
                     ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    : <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                          d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                      </svg>
+                    : <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
                   }
                   {generandoDetalle ? "Generando..." : "PDF Detallado"}
                 </button>
@@ -490,19 +499,28 @@ export function EditarAntLiqReal({
   const [eliminando,      setEliminando]      = useState<number | null>(null);
   const [error,           setError]           = useState<string | null>(null);
   const [descargandoHist, setDescargandoHist] = useState(false);
-  const [autorizando,     setAutorizando]     = useState(false); // 👈 nuevo estado
-  const [alertaPdf, setAlertaPdf] = useState<{ visible: boolean; folios: string[] }>({
+  const [autorizando,     setAutorizando]     = useState(false);
+  const [alertaPdf,       setAlertaPdf]       = useState<{ visible: boolean; folios: string[] }>({
     visible: false, folios: [],
   });
 
-  const anticipo         = Number(venta.anticipo);
-  const saldo            = Number(venta.saldo);
-  const totalPagado      = Number(venta.abono);
-  const totalRef         = Number(venta.total_real ?? venta.total);
+  const anticipo    = Number(venta.anticipo);
+  const saldo       = Number(venta.saldo);
+  const totalPagado = Number(venta.abono);
+  const totalRef    = Number(venta.total_real ?? venta.total);
+
+  const anticreditoActivo =
+    Number(venta.estado_id) >= ESTADO.EN_PROCESO &&
+    totalPagado < anticipo - 0.01;
+
+  const anticipoCubierto =
+    totalPagado >= anticipo - 0.01 ||
+    anticreditoActivo;
+
   const anticipoRestante = Math.max(anticipo - totalPagado, 0);
-  const anticipoCubierto = anticipoRestante <= 0.01;
   const pagado           = saldo <= 0.01;
   const pctPagado        = totalRef > 0 ? Math.min((totalPagado / totalRef) * 100, 100) : 0;
+  const herramentalTotal = Number(venta.herramental_total ?? 0);
 
   const recargar = async () => {
     const actualizada = await getVentaByPedido(venta.no_pedido);
@@ -548,11 +566,10 @@ export function EditarAntLiqReal({
     } finally { setGuardando(false); }
   };
 
-  // 👈 nuevo handler para autorizar anticipo por crédito
   const handleAutorizarCredito = async () => {
     if (!confirm(
-      `¿Autorizar el anticipo de $${fmt(anticipoRestante)} por crédito?\n\n` +
-      `Esto activará la producción sin registrar movimiento de dinero.\n` +
+      `¿Autorizar el anticipo por crédito?\n\n` +
+      `Esto activará la producción sin registrar ningún pago.\n` +
       `El saldo pendiente seguirá siendo $${fmt(saldo)}.`
     )) return;
 
@@ -573,9 +590,7 @@ export function EditarAntLiqReal({
       }
     } catch (e: any) {
       setError(e.response?.data?.error || "Error al autorizar anticipo por crédito");
-    } finally {
-      setAutorizando(false);
-    }
+    } finally { setAutorizando(false); }
   };
 
   const handleEliminarPago = async (pago: VentaPago) => {
@@ -640,18 +655,44 @@ export function EditarAntLiqReal({
       </div>
 
       {/* Resumen financiero */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {[
-          { label: "Subtotal orig.",  value: fmt(venta.subtotal), color: "text-gray-700"               },
-          { label: "IVA 16%",         value: fmt(venta.iva),      color: "text-gray-500"               },
-          { label: "Total orig.",     value: fmt(venta.total),    color: "text-gray-900 font-bold"     },
-          { label: "Anticipo (50%)",  value: fmt(anticipo),       color: "text-blue-700 font-semibold" },
-        ].map(item => (
-          <div key={item.label} className="bg-gray-50 rounded-xl p-3 text-center border border-gray-100">
-            <p className="text-xs text-gray-400 mb-1">{item.label}</p>
-            <p className={`text-sm ${item.color}`}>${item.value}</p>
+      <div className="space-y-2">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {[
+            { label: "Subtotal orig.",  value: fmt(venta.subtotal), color: "text-gray-700"               },
+            { label: "IVA 16%",         value: fmt(venta.iva),      color: "text-gray-500"               },
+            { label: "Total orig.",     value: fmt(venta.total),    color: "text-gray-900 font-bold"     },
+            { label: "Anticipo (50%)",  value: fmt(anticipo),       color: "text-blue-700 font-semibold" },
+          ].map(item => (
+            <div key={item.label} className="bg-gray-50 rounded-xl p-3 text-center border border-gray-100">
+              <p className="text-xs text-gray-400 mb-1">{item.label}</p>
+              <p className={`text-sm ${item.color}`}>${item.value}</p>
+            </div>
+          ))}
+        </div>
+
+        {herramentalTotal > 0 && (
+          <div className="bg-orange-50 border border-orange-200 rounded-lg overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-2.5">
+              <div className="flex items-center gap-2">
+                <span className="text-base flex-shrink-0">🔧</span>
+                <div>
+                  <span className="text-xs font-semibold text-orange-800">Herramental aprobado</span>
+                  <span className="text-xs text-orange-500 ml-1.5 font-normal">(incluido en el total del pedido)</span>
+                </div>
+              </div>
+              <span className="text-sm font-bold text-orange-700">+${fmt(herramentalTotal)}</span>
+            </div>
+            <div className="px-4 pb-3 border-t border-orange-100 pt-2">
+              <p className="text-[10px] text-orange-700 leading-relaxed">
+                <span className="font-semibold">¿Qué es este cargo?</span>{" "}
+                El herramental es el costo único de fabricación del molde o troquel requerido
+                para producir los artículos de este pedido. Se cobra una sola vez y{" "}
+                <span className="font-semibold">no se incluye en el precio unitario por pieza</span>.
+                Si en el futuro se reordena el mismo artículo, este cargo no aplica nuevamente.
+              </p>
+            </div>
           </div>
-        ))}
+        )}
       </div>
 
       {/* Barra de progreso */}
@@ -675,10 +716,22 @@ export function EditarAntLiqReal({
         <p className="text-center text-xs mt-1 text-blue-500">
           {pagado
             ? "✓ Pedido pagado"
-            : anticipoCubierto
-              ? "✓ Anticipo cubierto — falta liquidar saldo"
-              : `↑ Línea azul = anticipo requerido (50%) · Faltan $${fmt(anticipoRestante)}`}
+            : anticreditoActivo
+              ? "🤝 Anticipo a crédito — pago pendiente"
+              : anticipoCubierto
+                ? "✓ Anticipo cubierto — falta liquidar saldo"
+                : `↑ Línea azul = anticipo requerido (50%) · Faltan $${fmt(anticipoRestante)}`}
         </p>
+
+        {!pagado && anticreditoActivo && (
+          <div className="mt-3 flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+            <span className="text-amber-500 text-sm">🤝</span>
+            <p className="text-xs text-amber-800 font-medium">
+              Anticipo a crédito — pago pendiente · Faltan{" "}
+              <span className="font-bold">${fmt(anticipoRestante)}</span> por cobrar
+            </p>
+          </div>
+        )}
 
         {pagado && venta.total_real != null && Number(venta.total_real) > Number(venta.total) && (
           <div className="mt-3 flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
@@ -691,8 +744,9 @@ export function EditarAntLiqReal({
         )}
       </div>
 
-      {/* Estado de cuenta desplegable */}
+      {/* Estado de cuenta desplegable — key fuerza remount cuando cambia el abono */}
       <SeccionEstadoCuenta
+        key={`${venta.no_pedido}-${venta.abono}`}
         noPedido={venta.no_pedido}
         pagos={venta.pagos ?? []}
         onActualizar={handleEstadoCuentaActualiza}
@@ -705,17 +759,11 @@ export function EditarAntLiqReal({
             Historial de pagos ({venta.pagos?.length ?? 0})
           </h4>
           {(venta.pagos?.length ?? 0) > 0 && (
-            <button
-              onClick={handleDescargarHistorial}
-              disabled={descargandoHist}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 disabled:opacity-50 rounded-lg transition-colors border border-gray-200"
-            >
+            <button onClick={handleDescargarHistorial} disabled={descargandoHist}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 disabled:opacity-50 rounded-lg transition-colors border border-gray-200">
               {descargandoHist
                 ? <div className="w-3 h-3 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
-                : <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                      d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
+                : <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
               }
               {descargandoHist ? "Generando..." : "PDF"}
             </button>
@@ -741,20 +789,14 @@ export function EditarAntLiqReal({
                       )}
                     </div>
                     <p className="text-xs text-gray-400">{pago.metodo_pago} · {fmtFecha(pago.fecha)}</p>
-                    {pago.observacion && (
-                      <p className="text-xs text-gray-500 italic">{pago.observacion}</p>
-                    )}
+                    {pago.observacion && <p className="text-xs text-gray-500 italic">{pago.observacion}</p>}
                   </div>
                 </div>
-                <button onClick={() => handleEliminarPago(pago)}
-                  disabled={eliminando === pago.idventa_pago}
+                <button onClick={() => handleEliminarPago(pago)} disabled={eliminando === pago.idventa_pago}
                   className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50">
                   {eliminando === pago.idventa_pago
                     ? <div className="w-4 h-4 rounded-full border-2 border-red-400 border-t-transparent animate-spin" />
-                    : <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                          d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                      </svg>
+                    : <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                   }
                 </button>
               </div>
@@ -770,7 +812,9 @@ export function EditarAntLiqReal({
       {/* Registrar nuevo pago */}
       {!pagado ? (
         <div className="bg-gray-50 rounded-xl border border-gray-200 p-4">
-          <h4 className="text-sm font-semibold text-gray-700 mb-4">Registrar pago</h4>
+          <h4 className="text-sm font-semibold text-gray-700 mb-4">
+            {anticreditoActivo ? "Registrar pago — Anticipo a crédito pendiente" : "Registrar pago"}
+          </h4>
 
           {error && (
             <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
@@ -783,17 +827,11 @@ export function EditarAntLiqReal({
               <label className="block text-xs font-medium text-gray-600 mb-1">Monto *</label>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  value={monto}
-                  readOnly={montoEsAnticipo}
+                <input type="text" inputMode="decimal" value={monto} readOnly={montoEsAnticipo}
                   onChange={e => {
                     const val = e.target.value;
                     if (/^\d*\.?\d{0,2}$/.test(val)) {
-                      setMonto(val);
-                      setEsAnticipo(false);
-                      setMontoEsAnticipo(false);
+                      setMonto(val); setEsAnticipo(false); setMontoEsAnticipo(false);
                     }
                   }}
                   placeholder="0.00"
@@ -803,11 +841,13 @@ export function EditarAntLiqReal({
                 />
               </div>
               <div className="flex gap-2 mt-1 flex-wrap">
-                {!anticipoCubierto && (
+                {totalPagado < anticipo - 0.01 && (
                   <button type="button"
                     onClick={() => { setMonto(anticipoRestante.toFixed(2)); setEsAnticipo(true); setMontoEsAnticipo(true); }}
                     className="text-xs text-blue-600 hover:text-blue-800 underline">
-                    Anticipo restante (${fmt(anticipoRestante)})
+                    {anticreditoActivo
+                      ? `Pagar anticipo a crédito ($${fmt(anticipoRestante)})`
+                      : `Anticipo restante ($${fmt(anticipoRestante)})`}
                   </button>
                 )}
                 <button type="button"
@@ -838,13 +878,14 @@ export function EditarAntLiqReal({
           </div>
 
           <div className="flex items-center justify-between">
-            {/* Lado izquierdo: checkbox o mensaje de anticipo */}
-            {!anticipoCubierto ? (
+            {!anticipoCubierto || anticreditoActivo ? (
               <label className={`flex items-center gap-2 ${montoEsAnticipo ? "cursor-default" : "cursor-not-allowed opacity-40"}`}>
                 <input type="checkbox" checked={esAnticipo} readOnly disabled={!montoEsAnticipo}
                   className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
                 <span className={`text-sm ${montoEsAnticipo ? "text-blue-700 font-medium" : "text-gray-400"}`}>
-                  {montoEsAnticipo ? "✓ Anticipo" : "Anticipo"}
+                  {montoEsAnticipo
+                    ? anticreditoActivo ? "✓ Anticipo a crédito — pago pendiente" : "✓ Anticipo"
+                    : anticreditoActivo ? "Anticipo a crédito — pago pendiente"   : "Anticipo"}
                 </span>
               </label>
             ) : (
@@ -853,32 +894,21 @@ export function EditarAntLiqReal({
               </span>
             )}
 
-            {/* Lado derecho: botones de acción */}
             <div className="flex items-center gap-2">
-              {!anticipoCubierto && (
-                <button
-                  type="button"
-                  onClick={handleAutorizarCredito}
-                  disabled={autorizando}
-                  className="flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 disabled:bg-amber-300 text-white rounded-lg font-medium text-sm transition-colors"
-                >
+              {!anticipoCubierto && !anticreditoActivo && (
+                <button type="button" onClick={handleAutorizarCredito} disabled={autorizando}
+                  className="flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 disabled:bg-amber-300 text-white rounded-lg font-medium text-sm transition-colors">
                   {autorizando
                     ? <><div className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" />Autorizando...</>
                     : <>🤝 Autorizar anticipo por crédito</>
                   }
                 </button>
               )}
-
               <button onClick={handleRegistrarPago} disabled={guardando || !monto}
                 className="flex items-center gap-2 px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                 {guardando
                   ? <><div className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" />Guardando...</>
-                  : <>
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                      </svg>
-                      Registrar pago
-                    </>
+                  : <><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>Registrar pago</>
                 }
               </button>
             </div>

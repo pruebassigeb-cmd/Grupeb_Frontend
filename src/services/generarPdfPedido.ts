@@ -11,10 +11,9 @@ import {
 import type { ProductoPdf, TotalesPdf } from "./Pdfutils";
 import logoUrl from "../assets/logogrupeb.png";
 
-
 interface PedidoPdf {
-  no_pedido:      string;        // ← string: "P26001"
-  no_cotizacion?: string | null; // ← string: "COT26001"
+  no_pedido:      string;
+  no_cotizacion?: string | null;
   fecha:          string;
   cliente:        string;
   empresa:        string;
@@ -31,8 +30,7 @@ interface PedidoPdf {
 }
 
 export async function generarPdfPedido(pedido: PedidoPdf): Promise<void> {
-  const logoBase64 = pedido.logoBase64
-  ?? await cargarLogoBase64(logoUrl);
+  const logoBase64 = pedido.logoBase64 ?? await cargarLogoBase64(logoUrl);
 
   const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
   const PW  = 297;
@@ -44,9 +42,7 @@ export async function generarPdfPedido(pedido: PedidoPdf): Promise<void> {
     labelDocumento: "PEDIDO",
     labelFolio:     "No P",
     folio:          pedido.no_pedido,
-    refTexto:       pedido.no_cotizacion
-      ? `Ref. Cot. ${pedido.no_cotizacion}`
-      : undefined,
+    refTexto:       pedido.no_cotizacion ? `Ref. Cot. ${pedido.no_cotizacion}` : undefined,
     fecha:          pedido.fecha,
     empresa:        pedido.empresa,
     impresion:      pedido.impresion,
@@ -93,11 +89,25 @@ export async function generarPdfPedido(pedido: PedidoPdf): Promise<void> {
     const obsRow = new Array(headAll.length).fill("");
     obsRow[0] = obsTexto;
     bodyRows.push(obsRow);
+
+    // Fila herramental — solo si fue aprobado y tiene precio
+    if (
+      prod.herramental_precio != null &&
+      prod.herramental_precio > 0 &&
+      prod.herramental_aprobado === true
+    ) {
+      const herrRow = new Array(headAll.length).fill("");
+
+      // Texto descriptivo: nombre + explicación de concepto
+      const nombreHerr = prod.herramental_descripcion?.trim() || "Herramental / molde";
+      herrRow[0] = `HERR: ${nombreHerr}  —  Costo de fabricación del molde o troquel aprobado para este artículo. Cargo único, no incluido en el precio por pieza.`;
+      herrRow[headAll.length - 1] = `$${Number(prod.herramental_precio).toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      bodyRows.push(herrRow);
+    }
   });
 
   const availW = PW - M * 2;
 
-  // Anchos base de columnas fijas
   const colW: Record<number, number> = {
     0: 36, 1: 18, 2:  9, 3: 11, 4: 11,
     5: 18, 6: 13, 7: 11, 8: 16, 9: 13,
@@ -106,31 +116,28 @@ export async function generarPdfPedido(pedido: PedidoPdf): Promise<void> {
   const fixedTotal = Object.values(colW).reduce((a, b) => a + b, 0);
   colW[14] = Math.max(availW - fixedTotal, 20);
 
-  // FIX: escalar proporcionalmente si la suma supera availW
   const totalColW = Object.values(colW).reduce((a, b) => a + b, 0);
   if (totalColW > availW) {
     const scale = availW / totalColW;
-    Object.keys(colW).forEach(k => {
-      colW[+k] = colW[+k] * scale;
-    });
+    Object.keys(colW).forEach(k => { colW[+k] = colW[+k] * scale; });
   }
 
   const columnStyles: Parameters<typeof autoTable>[1]["columnStyles"] = {
-    0:  { cellWidth: colW[0],  halign: "left",   fontSize: 11   },
-    1:  { cellWidth: colW[1],  halign: "center", fontSize: 12   },
-    2:  { cellWidth: colW[2],  halign: "center", fontSize: 11   },
-    3:  { cellWidth: colW[3],  halign: "center", fontSize: 11   },
-    4:  { cellWidth: colW[4],  halign: "center", fontSize: 11   },
-    5:  { cellWidth: colW[5],  halign: "center", fontSize: 11   },
-    6:  { cellWidth: colW[6],  halign: "center", fontSize: 11   },
-    7:  { cellWidth: colW[7],  halign: "center", fontSize: 11   },
-    8:  { cellWidth: colW[8],  halign: "center", fontSize: 11   },
-    9:  { cellWidth: colW[9],  halign: "center", fontSize: 11   },
-    10: { cellWidth: colW[10], halign: "center", fontSize: 11   },
-    11: { cellWidth: colW[11], halign: "center", fontSize: 11   },
-    12: { cellWidth: colW[12], halign: "left",   fontSize: 11   },
-    13: { cellWidth: colW[13], halign: "center", fontSize: 11   },
-    14: { cellWidth: colW[14], halign: "center", fontSize: 15   },
+    0:  { cellWidth: colW[0],  halign: "left",   fontSize: 11 },
+    1:  { cellWidth: colW[1],  halign: "center", fontSize: 12 },
+    2:  { cellWidth: colW[2],  halign: "center", fontSize: 11 },
+    3:  { cellWidth: colW[3],  halign: "center", fontSize: 11 },
+    4:  { cellWidth: colW[4],  halign: "center", fontSize: 11 },
+    5:  { cellWidth: colW[5],  halign: "center", fontSize: 11 },
+    6:  { cellWidth: colW[6],  halign: "center", fontSize: 11 },
+    7:  { cellWidth: colW[7],  halign: "center", fontSize: 11 },
+    8:  { cellWidth: colW[8],  halign: "center", fontSize: 11 },
+    9:  { cellWidth: colW[9],  halign: "center", fontSize: 11 },
+    10: { cellWidth: colW[10], halign: "center", fontSize: 11 },
+    11: { cellWidth: colW[11], halign: "center", fontSize: 11 },
+    12: { cellWidth: colW[12], halign: "left",   fontSize: 11 },
+    13: { cellWidth: colW[13], halign: "center", fontSize: 11 },
+    14: { cellWidth: colW[14], halign: "center", fontSize: 15 },
   };
 
   autoTable(doc, {
@@ -149,6 +156,8 @@ export async function generarPdfPedido(pedido: PedidoPdf): Promise<void> {
       }
       if (data.section === "body") {
         const raw0 = String((data.row.raw as any[])?.[0] ?? "");
+
+        // Fila Obs:
         if (raw0.startsWith("Obs:")) {
           if (data.column.index === 0) {
             data.cell.colSpan          = headAll.length;
@@ -159,6 +168,28 @@ export async function generarPdfPedido(pedido: PedidoPdf): Promise<void> {
             data.cell.styles.halign    = "left";
           } else {
             data.cell.styles.fillColor = GRAY_LIGHT;
+            data.cell.text = [];
+          }
+        }
+
+        // Fila herramental
+        if (raw0.startsWith("HERR:")) {
+          if (data.column.index === 0) {
+            data.cell.colSpan          = headAll.length - 1;
+            data.cell.styles.fillColor = [250, 244, 230];
+            data.cell.styles.fontStyle = "italic";
+            data.cell.styles.fontSize  = 9;
+            data.cell.styles.textColor = [130, 70, 0];
+            data.cell.styles.halign    = "left";
+            data.cell.styles.overflow  = "linebreak";
+          } else if (data.column.index === headAll.length - 1) {
+            data.cell.styles.fillColor = [250, 244, 230];
+            data.cell.styles.fontStyle = "bold";
+            data.cell.styles.fontSize  = 11;
+            data.cell.styles.textColor = [130, 70, 0];
+            data.cell.styles.halign    = "center";
+          } else {
+            data.cell.styles.fillColor = [250, 244, 230];
             data.cell.text = [];
           }
         }

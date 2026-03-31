@@ -52,11 +52,17 @@ export interface ProductoCotizacion {
   idsuaje?:   number | null;
   asa_suaje?: string | null;
 
-  color_asa_id?:    number | null;
+  color_asa_id?:     number | null;
   color_asa_nombre?: string | null;
 
   observacion?: string | null;
   por_kilo?:    string | null;
+
+  // ── Herramental ──────────────────────────────────────────
+  herramental_descripcion?: string | null;
+  herramental_precio?:      number | null;
+  herramental_aprobado?:    boolean | null;
+  herramental_id?:          number | null;
 
   detalles: DetalleCotizacion[];
   subtotal: number;
@@ -107,9 +113,9 @@ export interface Pedido {
 // TIPOS PARA CREAR COTIZACIÓN / PEDIDO
 // ============================================================
 export interface DetalleCrearCotizacion {
-  cantidad:              number;
-  precio_total:          number;
-  modo_cantidad:         "unidad" | "kilo";
+  cantidad:               number;
+  precio_total:           number;
+  modo_cantidad:          "unidad" | "kilo";
   kilogramos_ingresados?: number | null;
 }
 
@@ -123,9 +129,15 @@ export interface ProductoEnviarCotizacion {
   pigmentos?:    string | null;
   pantones?:     string | null;
   porKilo?:      string | null;
+  // ── Herramental ──────────────────────────────────────────
+  herramental_descripcion?: string | null;
+  herramental_precio?:      number | null;
   detalles:      DetalleCrearCotizacion[];
 }
 
+// ============================================================
+// RESPUESTA AL CREAR COTIZACIÓN
+// ============================================================
 export interface RespuestaCrearCotizacion {
   message:        string;
   no_cotizacion?: string;

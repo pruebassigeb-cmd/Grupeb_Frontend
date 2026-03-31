@@ -13,7 +13,7 @@ import logoUrl from "../assets/logogrupeb.png";
 
 
 interface CotizacionPdf {
-  no_cotizacion: string;       // ← string: "COT26001"
+  no_cotizacion: string;
   fecha:         string;
   cliente:       string;
   empresa:       string;
@@ -27,8 +27,7 @@ interface CotizacionPdf {
 }
 
 export async function generarPdfCotizacion(cotizacion: CotizacionPdf): Promise<void> {
-  const logoBase64 = cotizacion.logoBase64
-  ?? await cargarLogoBase64(logoUrl);
+  const logoBase64 = cotizacion.logoBase64 ?? await cargarLogoBase64(logoUrl);
 
   const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
   const PW  = 297;
@@ -64,6 +63,7 @@ export async function generarPdfCotizacion(cotizacion: CotizacionPdf): Promise<v
   const bodyRows: any[][] = [];
 
   cotizacion.productos.forEach(prod => {
+    // ── Fila principal del producto ────────────────────────────────────────
     const row: any[] = [
       val(prod.nombre),
       getMedida(prod),
@@ -88,6 +88,7 @@ export async function generarPdfCotizacion(cotizacion: CotizacionPdf): Promise<v
 
     bodyRows.push(row);
 
+    // ── Fila Obs: ──────────────────────────────────────────────────────────
     const tieneKilo   = prod.detalles.some(d => d.modo_cantidad === "kilo");
     const tieneUnidad = prod.detalles.some(d => d.modo_cantidad !== "kilo");
     const modoLabel   = tieneKilo && tieneUnidad ? "Por kilo y por unidad"
@@ -99,11 +100,23 @@ export async function generarPdfCotizacion(cotizacion: CotizacionPdf): Promise<v
     const obsRow = new Array(headAll.length).fill("");
     obsRow[0] = obsTexto;
     bodyRows.push(obsRow);
+
+    // ── Fila herramental — solo si tiene precio ────────────────────────────
+    if (prod.herramental_precio != null && prod.herramental_precio > 0) {
+      const herrRow = new Array(headAll.length).fill("");
+
+      // Texto descriptivo: qué es el herramental y por qué se cobra
+      const nombreHerr = prod.herramental_descripcion?.trim() || "Herramental / molde";
+      herrRow[0] = `HERR: ${nombreHerr}  —  Costo único de fabricación del molde o troquel necesario para producir este artículo. Se cotiza por separado y no forma parte del precio por pieza.`;
+      herrRow[headAll.length - 1] = `$${Number(prod.herramental_precio).toLocaleString("es-MX", {
+        minimumFractionDigits: 2, maximumFractionDigits: 2,
+      })}`;
+      bodyRows.push(herrRow);
+    }
   });
 
   const availW = PW - M * 2;
 
-  // Anchos base de columnas fijas
   const colW: Record<number, number> = {
     0: 36, 1: 18, 2:  9, 3: 11, 4: 11,
     5: 18, 6: 13, 7: 11, 8: 16, 9: 13,
@@ -113,32 +126,29 @@ export async function generarPdfCotizacion(cotizacion: CotizacionPdf): Promise<v
   const cantW      = Math.max((availW - fixedTotal) / numCantCols, 16);
   for (let i = 0; i < numCantCols; i++) colW[14 + i] = cantW;
 
-  // FIX: escalar proporcionalmente si la suma supera availW
   const totalColW = Object.values(colW).reduce((a, b) => a + b, 0);
   if (totalColW > availW) {
     const scale = availW / totalColW;
-    Object.keys(colW).forEach(k => {
-      colW[+k] = colW[+k] * scale;
-    });
+    Object.keys(colW).forEach(k => { colW[+k] = colW[+k] * scale; });
   }
 
   const cantFontSize = 15;
 
   const columnStyles: Parameters<typeof autoTable>[1]["columnStyles"] = {
-    0:  { cellWidth: colW[0],  halign: "left",   fontSize: 11   },
-    1:  { cellWidth: colW[1],  halign: "center", fontSize: 12   },
-    2:  { cellWidth: colW[2],  halign: "center", fontSize: 11   },
-    3:  { cellWidth: colW[3],  halign: "center", fontSize: 11   },
-    4:  { cellWidth: colW[4],  halign: "center", fontSize: 11   },
-    5:  { cellWidth: colW[5],  halign: "center", fontSize: 11   },
-    6:  { cellWidth: colW[6],  halign: "center", fontSize: 11   },
-    7:  { cellWidth: colW[7],  halign: "center", fontSize: 11   },
-    8:  { cellWidth: colW[8],  halign: "center", fontSize: 11   },
-    9:  { cellWidth: colW[9],  halign: "center", fontSize: 11   },
-    10: { cellWidth: colW[10], halign: "center", fontSize: 11   },
-    11: { cellWidth: colW[11], halign: "center", fontSize: 11   },
-    12: { cellWidth: colW[12], halign: "left",   fontSize: 11   },
-    13: { cellWidth: colW[13], halign: "center", fontSize: 11   },
+    0:  { cellWidth: colW[0],  halign: "left",   fontSize: 11          },
+    1:  { cellWidth: colW[1],  halign: "center", fontSize: 12          },
+    2:  { cellWidth: colW[2],  halign: "center", fontSize: 11          },
+    3:  { cellWidth: colW[3],  halign: "center", fontSize: 11          },
+    4:  { cellWidth: colW[4],  halign: "center", fontSize: 11          },
+    5:  { cellWidth: colW[5],  halign: "center", fontSize: 11          },
+    6:  { cellWidth: colW[6],  halign: "center", fontSize: 11          },
+    7:  { cellWidth: colW[7],  halign: "center", fontSize: 11          },
+    8:  { cellWidth: colW[8],  halign: "center", fontSize: 11          },
+    9:  { cellWidth: colW[9],  halign: "center", fontSize: 11          },
+    10: { cellWidth: colW[10], halign: "center", fontSize: 11          },
+    11: { cellWidth: colW[11], halign: "center", fontSize: 11          },
+    12: { cellWidth: colW[12], halign: "left",   fontSize: 11          },
+    13: { cellWidth: colW[13], halign: "center", fontSize: 11          },
     ...(numCantCols >= 1 ? { 14: { cellWidth: colW[14], halign: "center" as const, fontSize: cantFontSize } } : {}),
     ...(numCantCols >= 2 ? { 15: { cellWidth: colW[15], halign: "center" as const, fontSize: cantFontSize } } : {}),
     ...(numCantCols >= 3 ? { 16: { cellWidth: colW[16], halign: "center" as const, fontSize: cantFontSize } } : {}),
@@ -160,6 +170,8 @@ export async function generarPdfCotizacion(cotizacion: CotizacionPdf): Promise<v
       }
       if (data.section === "body") {
         const raw0 = String((data.row.raw as any[])?.[0] ?? "");
+
+        // Fila Obs:
         if (raw0.startsWith("Obs:")) {
           if (data.column.index === 0) {
             data.cell.colSpan          = headAll.length;
@@ -170,6 +182,30 @@ export async function generarPdfCotizacion(cotizacion: CotizacionPdf): Promise<v
             data.cell.styles.halign    = "left";
           } else {
             data.cell.styles.fillColor = GRAY_LIGHT;
+            data.cell.text = [];
+          }
+        }
+
+        // Fila herramental
+        if (raw0.startsWith("HERR:")) {
+          if (data.column.index === 0) {
+            // Descripción + explicación ocupa todas menos la última columna
+            data.cell.colSpan          = headAll.length - 1;
+            data.cell.styles.fillColor = [250, 244, 230];
+            data.cell.styles.fontStyle = "italic";
+            data.cell.styles.fontSize  = 9;
+            data.cell.styles.textColor = [130, 70, 0];
+            data.cell.styles.halign    = "left";
+            data.cell.styles.overflow  = "linebreak";
+          } else if (data.column.index === headAll.length - 1) {
+            // Precio en la última columna
+            data.cell.styles.fillColor = [250, 244, 230];
+            data.cell.styles.fontStyle = "bold";
+            data.cell.styles.fontSize  = 12;
+            data.cell.styles.textColor = [130, 70, 0];
+            data.cell.styles.halign    = "center";
+          } else {
+            data.cell.styles.fillColor = [250, 244, 230];
             data.cell.text = [];
           }
         }

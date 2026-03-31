@@ -2,7 +2,7 @@ export interface PedidoSeguimiento {
   no_pedido:          string;
   no_cotizacion:      string | null;
   fecha:              string;
-  prioridad: boolean;
+  prioridad:          boolean;
   cliente:            string;
   tipo_producto:      string;
   impresion:          string;
@@ -38,8 +38,10 @@ export interface PedidoSeguimiento {
   bk:               boolean | null;
   foil:             boolean | null;
   asa_suaje:        string | null;
-  id_color?:    number | null;    // ← nuevo
-  color_asa_nombre?: string | null;   // ← nuevo
+  id_color?:        number | null;
+  color_asa_nombre?: string | null;
+  id_medidatro?:    number | null;
+  medida_troquel?:  string | null;
   cantidad_orden:   number | null;
   kilogramos_orden: number | null;
   modo_cantidad:    string;

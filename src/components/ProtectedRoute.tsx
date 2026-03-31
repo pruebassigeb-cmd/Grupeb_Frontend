@@ -1,20 +1,16 @@
-
-
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
 interface ProtectedRouteProps {
-  children: React.ReactNode;
+  children:  React.ReactNode;
+  permiso?:  string; // Si se indica, valida que el usuario tenga ese privilegio
 }
 
-export default function ProtectedRoute({ children }: ProtectedRouteProps) {
+export default function ProtectedRoute({ children, permiso }: ProtectedRouteProps) {
   const { user, loading } = useAuth();
-
-  console.log("🛡️ ProtectedRoute - loading:", loading, "user:", user);
 
   // Mientras carga, mostrar spinner
   if (loading) {
-    console.log("⏳ Mostrando spinner de carga...");
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 flex items-center justify-center">
         <div className="text-white text-xl">Cargando...</div>
@@ -22,13 +18,20 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
     );
   }
 
-  // Si no está autenticado (user es null), redirigir al login
+  // Si no está autenticado → login
   if (!user) {
-    console.log("❌ Usuario no autenticado, redirigiendo a /");
     return <Navigate to="/" replace />;
   }
 
-  // Si está autenticado, mostrar el contenido
-  console.log("✅ Usuario autenticado, mostrando contenido protegido");
+  // Si se requiere un permiso específico, verificarlo
+  if (permiso) {
+    const tieneAcceso =
+      user.acceso_total || user.privilegios.includes(permiso);
+
+    if (!tieneAcceso) {
+      return <Navigate to="/sin-acceso" replace />;
+    }
+  }
+
   return <>{children}</>;
 }

@@ -26,6 +26,8 @@ export interface Venta {
   iva_real:              number | null;
   total_real:            number | null;
   diferencia_total:      number | null;
+  // ── Herramental aprobado ──────────────────────────────────
+  herramental_total?:    number | null;
   // ── Pagos ─────────────────────────────────────────────────
   anticipo:              number;
   saldo:                 number;

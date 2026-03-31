@@ -52,8 +52,10 @@ export interface OrdenProduccionProducto {
   pigmentos:               string | null;
   pantones:                string[] | null;
   asa_suaje:               string | null;
-  id_color?:           number | null;   // ← nuevo
-  color_asa_nombre?:       string | null;   // ← nuevo
+  id_color?:               number | null;
+  color_asa_nombre?:       string | null;
+  id_medidatro?:           number | null;
+  medida_troquel?:         string | null;
   observacion:             string | null;
   cantidad:                number | null;
   kilogramos:              number | null;
@@ -120,7 +122,7 @@ export const finalizarProceso = async (idproduccion: number, datos: Record<strin
 };
 
 // ─────────────────────────────────────────────
-// BULTOS — tipos actualizados con dimensiones
+// BULTOS
 // ─────────────────────────────────────────────
 export interface Bulto {
   idbulto:           number;
@@ -227,4 +229,16 @@ export const editarProceso = async (
   datos: Record<string, any>
 ): Promise<void> => {
   await api.put(`/procesos/${idproduccion}/editar/${tabla}`, datos);
+};
+
+export const editarBulto = async (
+  idproduccion: number,
+  idbulto: number,
+  payload: NuevoBultoPayload
+): Promise<Bulto> => {
+  const { data } = await api.put(
+    `/seguimiento/${idproduccion}/bultos/${idbulto}`,
+    payload
+  );
+  return data;
 };

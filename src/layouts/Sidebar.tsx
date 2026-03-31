@@ -8,19 +8,20 @@ interface DashboardProps {
 }
 
 interface MenuItem {
-  name: string;
-  path?: string;
-  subItems: { name: string; path: string }[];
+  name:     string;
+  path?:    string;
+  permiso?: string; // Si se indica, solo se muestra si el usuario tiene ese permiso
+  subItems: { name: string; path: string; permiso?: string }[];
 }
 
 export default function Dashboard({ children }: DashboardProps) {
-  const [open, setOpen] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
+  const [open,          setOpen]          = useState(false);
+  const [isMobile,      setIsMobile]      = useState(false);
   const [expandedMenus, setExpandedMenus] = useState<string[]>([]);
 
-  const navigate = useNavigate();
-  const location = useLocation();
-  const { user, logout } = useAuth(); // ← NUEVO
+  const navigate        = useNavigate();
+  const location        = useLocation();
+  const { user, logout, tienePermiso } = useAuth();
 
   const handleLogout = async () => {
     await logout();
@@ -39,30 +40,75 @@ export default function Dashboard({ children }: DashboardProps) {
   }, []);
 
   const menuItems: MenuItem[] = [
-    { name: "Usuarios", path: "/usuarios", subItems: [] },
-    { name: "Clientes", path: "/clientes", subItems: [] },
     {
-      name: "Dar alta productos",
+      name:    "Usuarios",
+      path:    "/usuarios",
+      permiso: "Crear/Editar/Eliminar Usuarios",
+      subItems: [],
+    },
+    {
+      name:    "Clientes",
+      path:    "/clientes",
+      permiso: "Crear/Editar/Eliminar Clientes",
+      subItems: [],
+    },
+    {
+      name:    "Dar alta productos",
+      permiso: "Dar de alta productos",
       subItems: [
-        { name: "Plástico", path: "/plastico" },
-        // { name: "Papel", path: "/papel" },
-        // { name: "Cartón", path: "/carton" },
+        { name: "Plástico", path: "/plastico", permiso: "Dar de alta productos" },
       ],
     },
-    { name: "Cotización", path: "/cotizar", subItems: [] },
-    { name: "Pedido", path: "/pedido", subItems: [] },
-    { name: "Diseño", path: "/diseno", subItems: [] },
-    { name: "Seguimiento", path: "/seguimiento", subItems: [] },
-    { name: "Anticipo / Liquidación", path: "/anticipolicacion", subItems: [] },
     {
-      name: "Precios productos",
+      name:    "Cotización",
+      path:    "/cotizar",
+      permiso: "Crear/Editar/Aprobar/Rechazar Cotizaciones",
+      subItems: [],
+    },
+    {
+      name:    "Pedido",
+      path:    "/pedido",
+      permiso: "Crear/Editar/Eliminar Pedidos",
+      subItems: [],
+    },
+    {
+      name:    "Diseño",
+      path:    "/diseno",
+      permiso: "Editar Diseño",
+      subItems: [],
+    },
+    {
+      // Seguimiento — visible para todos los autenticados
+      name:    "Seguimiento",
+      path:    "/seguimiento",
+      subItems: [],
+    },
+    {
+      name:    "Anticipo / Liquidación",
+      path:    "/anticipolicacion",
+      permiso: "Editar Anticipo y Liquidacion",
+      subItems: [],
+    },
+    {
+      name:    "Estado de Cuenta",
+      path:    "/estadocuenta",
+      permiso: "Editar Anticipo y Liquidacion",
+      subItems: [],
+    },
+    {
+      name:    "Precios productos",
+      permiso: "Modificar Catalogo de precios",
       subItems: [
-        { name: "Plástico", path: "/precioplastico" },
-        // { name: "Papel", path: "/papelP" },
-        // { name: "Cartón", path: "/cartonP" },
+        { name: "Plástico", path: "/precioplastico", permiso: "Modificar Catalogo de precios" },
       ],
     },
   ];
+
+  // Filtrar items según permisos del usuario
+  const menuFiltrado = menuItems.filter((item) => {
+    if (!item.permiso) return true; // sin permiso requerido → siempre visible
+    return tienePermiso(item.permiso);
+  });
 
   useEffect(() => {
     menuItems.forEach((item) => {
@@ -89,9 +135,14 @@ export default function Dashboard({ children }: DashboardProps) {
     const hasSub = item.subItems.length > 0;
     const expanded = expandedMenus.includes(item.name);
     const activeParent =
-      item.path && isActive(item.path)
-        ? true
-        : item.subItems.some((s) => isActive(s.path));
+      (item.path && isActive(item.path)) ||
+      item.subItems.some((s) => isActive(s.path));
+
+    // Filtrar subitems también
+    const subItemsFiltrados = item.subItems.filter((sub) => {
+      if (!sub.permiso) return true;
+      return tienePermiso(sub.permiso);
+    });
 
     return (
       <div key={item.name}>
@@ -120,7 +171,7 @@ export default function Dashboard({ children }: DashboardProps) {
 
         {hasSub && expanded && (
           <div className="ml-4 mt-1 space-y-1">
-            {item.subItems.map((sub) => (
+            {subItemsFiltrados.map((sub) => (
               <button
                 key={sub.name}
                 onClick={() => {
@@ -143,11 +194,14 @@ export default function Dashboard({ children }: DashboardProps) {
     );
   };
 
-  // Bloque reutilizable de usuario + logout
   const UserFooter = () => (
     <div className="border-t border-slate-700 p-4 mt-auto space-y-2">
       <div className="flex items-center gap-2 bg-slate-700 px-3 py-2 rounded text-white text-sm">
-        👤 <span>{user?.nombre} {user?.apellido}</span>
+        👤{" "}
+        <div>
+          <p className="font-medium">{user?.nombre} {user?.apellido}</p>
+          <p className="text-slate-400 text-xs">{user?.rol}</p>
+        </div>
       </div>
       <button
         onClick={handleLogout}
@@ -191,7 +245,7 @@ export default function Dashboard({ children }: DashboardProps) {
           </div>
 
           <nav className="flex-1 px-2 py-4 space-y-1 overflow-y-auto">
-            {menuItems.map(renderMenuItem)}
+            {menuFiltrado.map(renderMenuItem)}
           </nav>
 
           <UserFooter />
@@ -209,7 +263,7 @@ export default function Dashboard({ children }: DashboardProps) {
           </div>
 
           <nav className="flex-1 px-2 py-4 space-y-1 overflow-y-auto">
-            {menuItems.map(renderMenuItem)}
+            {menuFiltrado.map(renderMenuItem)}
           </nav>
 
           <UserFooter />
@@ -222,7 +276,10 @@ export default function Dashboard({ children }: DashboardProps) {
           <header className="sticky top-0 z-20 bg-white shadow">
             <div className="flex justify-between px-4 py-3">
               <button onClick={() => setOpen(true)} className="text-xl">☰</button>
-              <h1 onClick={() => navigate("/home")} className="font-bold cursor-pointer">
+              <h1
+                onClick={() => navigate("/home")}
+                className="font-bold cursor-pointer"
+              >
                 GRUPEB
               </h1>
               <div className="flex gap-2 bg-slate-200 px-3 py-2 rounded text-sm">
