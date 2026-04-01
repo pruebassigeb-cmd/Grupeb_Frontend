@@ -27,6 +27,16 @@ interface PedidoPdf {
   total:          number;
   anticipo:       number;
   saldo:          number;
+  // ── Campos nuevos de cliente ──────────────────────────────────────────────
+  celular?:        string | null;
+  razon_social?:   string | null;
+  rfc?:            string | null;
+  domicilio?:      string | null;
+  numero?:         string | null;
+  colonia?:        string | null;
+  codigo_postal?:  string | null;
+  poblacion?:      string | null;
+  estado_cliente?: string | null;
 }
 
 export async function generarPdfPedido(pedido: PedidoPdf): Promise<void> {
@@ -49,6 +59,15 @@ export async function generarPdfPedido(pedido: PedidoPdf): Promise<void> {
     cliente:        pedido.cliente,
     telefono:       pedido.telefono,
     correo:         pedido.correo,
+    celular:        pedido.celular        ?? null,
+    razon_social:   pedido.razon_social   ?? null,
+    rfc:            pedido.rfc            ?? null,
+    domicilio:      pedido.domicilio      ?? null,
+    numero:         pedido.numero         ?? null,
+    colonia:        pedido.colonia        ?? null,
+    codigo_postal:  pedido.codigo_postal  ?? null,
+    poblacion:      pedido.poblacion      ?? null,
+    estado_cliente: pedido.estado_cliente ?? null,
   });
 
   const headAll = [
@@ -90,15 +109,12 @@ export async function generarPdfPedido(pedido: PedidoPdf): Promise<void> {
     obsRow[0] = obsTexto;
     bodyRows.push(obsRow);
 
-    // Fila herramental — solo si fue aprobado y tiene precio
     if (
       prod.herramental_precio != null &&
       prod.herramental_precio > 0 &&
       prod.herramental_aprobado === true
     ) {
-      const herrRow = new Array(headAll.length).fill("");
-
-      // Texto descriptivo: nombre + explicación de concepto
+      const herrRow    = new Array(headAll.length).fill("");
       const nombreHerr = prod.herramental_descripcion?.trim() || "Herramental / molde";
       herrRow[0] = `HERR: ${nombreHerr}  —  Costo de fabricación del molde o troquel aprobado para este artículo. Cargo único, no incluido en el precio por pieza.`;
       herrRow[headAll.length - 1] = `$${Number(prod.herramental_precio).toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -157,7 +173,6 @@ export async function generarPdfPedido(pedido: PedidoPdf): Promise<void> {
       if (data.section === "body") {
         const raw0 = String((data.row.raw as any[])?.[0] ?? "");
 
-        // Fila Obs:
         if (raw0.startsWith("Obs:")) {
           if (data.column.index === 0) {
             data.cell.colSpan          = headAll.length;
@@ -172,7 +187,6 @@ export async function generarPdfPedido(pedido: PedidoPdf): Promise<void> {
           }
         }
 
-        // Fila herramental
         if (raw0.startsWith("HERR:")) {
           if (data.column.index === 0) {
             data.cell.colSpan          = headAll.length - 1;

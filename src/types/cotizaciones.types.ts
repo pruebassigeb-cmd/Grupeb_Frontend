@@ -69,9 +69,24 @@ export interface ProductoCotizacion {
 }
 
 // ============================================================
+// DATOS EXTENDIDOS DEL CLIENTE
+// ============================================================
+export interface DatosClientePdf {
+  celular?:        string | null;
+  razon_social?:   string | null;
+  rfc?:            string | null;
+  domicilio?:      string | null;
+  numero?:         string | null;
+  colonia?:        string | null;
+  codigo_postal?:  string | null;
+  poblacion?:      string | null;
+  estado_cliente?: string | null;
+}
+
+// ============================================================
 // COTIZACIÓN COMPLETA
 // ============================================================
-export interface Cotizacion {
+export interface Cotizacion extends DatosClientePdf {
   no_cotizacion:  string;
   no_pedido?:     string | null;
   tipo_documento: "cotizacion" | "pedido";
@@ -91,7 +106,7 @@ export interface Cotizacion {
 // ============================================================
 // PEDIDO
 // ============================================================
-export interface Pedido {
+export interface Pedido extends DatosClientePdf {
   no_pedido:      string;
   no_cotizacion?: string | null;
   es_directo:     boolean;
@@ -129,7 +144,6 @@ export interface ProductoEnviarCotizacion {
   pigmentos?:    string | null;
   pantones?:     string | null;
   porKilo?:      string | null;
-  // ── Herramental ──────────────────────────────────────────
   herramental_descripcion?: string | null;
   herramental_precio?:      number | null;
   detalles:      DetalleCrearCotizacion[];

@@ -2,14 +2,18 @@ import { Navigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
 interface ProtectedRouteProps {
-  children:  React.ReactNode;
-  permiso?:  string; // Si se indica, valida que el usuario tenga ese privilegio
+  children:   React.ReactNode;
+  permiso?:   string;           // Requiere ESTE permiso exacto
+  permisoOr?: string[];         // Requiere CUALQUIERA de estos permisos
 }
 
-export default function ProtectedRoute({ children, permiso }: ProtectedRouteProps) {
+export default function ProtectedRoute({
+  children,
+  permiso,
+  permisoOr,
+}: ProtectedRouteProps) {
   const { user, loading } = useAuth();
 
-  // Mientras carga, mostrar spinner
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 flex items-center justify-center">
@@ -18,17 +22,27 @@ export default function ProtectedRoute({ children, permiso }: ProtectedRouteProp
     );
   }
 
-  // Si no está autenticado → login
+  // No autenticado → login
   if (!user) {
     return <Navigate to="/" replace />;
   }
 
-  // Si se requiere un permiso específico, verificarlo
-  if (permiso) {
-    const tieneAcceso =
-      user.acceso_total || user.privilegios.includes(permiso);
+  // acceso_total → pasa siempre
+  if (user.acceso_total) {
+    return <>{children}</>;
+  }
 
-    if (!tieneAcceso) {
+  // Verificar permiso único
+  if (permiso) {
+    if (!user.privilegios.includes(permiso)) {
+      return <Navigate to="/sin-acceso" replace />;
+    }
+  }
+
+  // Verificar permisoOr (cualquiera)
+  if (permisoOr && permisoOr.length > 0) {
+    const tieneAlguno = permisoOr.some((p) => user.privilegios.includes(p));
+    if (!tieneAlguno) {
       return <Navigate to="/sin-acceso" replace />;
     }
   }

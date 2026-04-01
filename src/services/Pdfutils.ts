@@ -44,7 +44,6 @@ export interface ProductoPdf {
   observacion?: string | null;
   por_kilo?:    string | number | null;
   detalles:     DetallePdf[];
-  // ── Herramental ──────────────────────────────────────────
   herramental_descripcion?: string | null;
   herramental_precio?:      number | null;
   herramental_aprobado?:    boolean | null;
@@ -128,18 +127,33 @@ export interface OpcionesEncabezado {
   cliente:        string;
   telefono:       string;
   correo:         string;
+  celular?:        string | null;
+  razon_social?:   string | null;
+  rfc?:            string | null;
+  domicilio?:      string | null;
+  numero?:         string | null;
+  colonia?:        string | null;
+  codigo_postal?:  string | null;
+  poblacion?:      string | null;
+  estado_cliente?: string | null;
 }
 
 export function dibujarEncabezado(opts: OpcionesEncabezado): number {
-  const { doc, logoBase64, labelDocumento, labelFolio, folio, refTexto,
-          fecha, empresa, impresion, cliente, telefono, correo } = opts;
+  const {
+    doc, logoBase64, labelDocumento, labelFolio, folio, refTexto,
+    fecha, empresa, impresion, cliente, telefono, correo,
+    celular, razon_social, rfc,
+    domicilio, numero, colonia, codigo_postal, poblacion, estado_cliente,
+  } = opts;
 
   const PW = 297; const M = 8;
 
   const row1H = 30;
-  const row2H = 11;
-  const row3H = 11;
-  const totalHeaderH = row1H + row2H + row3H;
+  const row2H = 8;
+  const row3H = 8;
+  const row4H = 8;
+  const row5H = 8;
+  const totalHeaderH = row1H + row2H + row3H + row4H + row5H;
   const logoW  = 38;
   let y = M;
 
@@ -149,7 +163,8 @@ export function dibujarEncabezado(opts: OpcionesEncabezado): number {
 
   doc.setDrawColor(...BLACK); doc.setLineWidth(0.3);
 
-  doc.rect(M, y, logoW + centerW, row1H);
+  // ── Fila 1: logo + datos empresa ─────────────────────────────────────────
+  //doc.rect(M, y, logoW + centerW, row1H);
 
   if (logoBase64) {
     try { doc.addImage(logoBase64, "PNG", M + 2, y + 2, logoW - 4, row1H - 4); }
@@ -169,70 +184,119 @@ export function dibujarEncabezado(opts: OpcionesEncabezado): number {
     "E-mail: ventas@grupoeb.com.mx",
   ].forEach(line => { doc.text(line, centerX + 2, ty); ty += 6; });
 
+  // ── Caja folio ────────────────────────────────────────────────────────────
   const cotBoxX = PW - M - cotBoxW;
   const hH      = totalHeaderH / 3;
 
-  doc.rect(cotBoxX, y, cotBoxW, totalHeaderH);
+  doc.setDrawColor(...BLACK); doc.setLineWidth(0.3);
+  doc.rect(cotBoxX, y, cotBoxW, row1H);
 
+  // Encabezado gris: label documento (ocupa mitad superior)
+  const labelH = row1H * 0.40;
   doc.setFillColor(...GRAY_MED);
-  doc.rect(cotBoxX, y, cotBoxW, hH, "F");
-  doc.setFont("helvetica", "bold"); doc.setFontSize(15); doc.setTextColor(...BLACK);
-  doc.text(labelDocumento, cotBoxX + cotBoxW / 2, y + hH / 2 + 3, { align: "center" });
+  doc.rect(cotBoxX, y, cotBoxW, labelH, "F");
+  doc.setFont("helvetica", "bold"); doc.setFontSize(13); doc.setTextColor(...BLACK);
+  doc.text(labelDocumento, cotBoxX + cotBoxW / 2, y + labelH / 2 + 2.5, { align: "center" });
 
-  doc.line(cotBoxX, y + hH,      cotBoxX + cotBoxW, y + hH);
-  doc.line(cotBoxX + cotBoxW / 2, y + hH, cotBoxX + cotBoxW / 2, y + totalHeaderH);
-  doc.line(cotBoxX, y + hH * 2,  cotBoxX + cotBoxW, y + hH * 2);
+  // Línea divisora horizontal
+  doc.line(cotBoxX, y + labelH, cotBoxX + cotBoxW, y + labelH);
 
-  doc.setFont("helvetica", "normal"); doc.setFontSize(9.5); doc.setTextColor(...GRAY_DARK);
-  doc.text(labelFolio, cotBoxX + cotBoxW / 4, y + hH + 5.5, { align: "center" });
-  doc.setFont("helvetica", "bold"); doc.setFontSize(15); doc.setTextColor(...BLACK);
-  doc.text(String(folio), cotBoxX + cotBoxW * 0.75, y + hH + hH / 2 + 3, { align: "center" });
+  // Línea divisora vertical (separa Folio | Fecha)
+  const halfBox = cotBoxW / 2;
+  doc.line(cotBoxX + halfBox, y + labelH, cotBoxX + halfBox, y + row1H);
 
-  const fecY = y + hH * 2;
-  doc.setFont("helvetica", "normal"); doc.setFontSize(5); doc.setTextColor(...GRAY_DARK);
-  doc.text("FECHA", cotBoxX + cotBoxW / 4, fecY + 5.5, { align: "center" });
-  doc.setFont("helvetica", "normal"); doc.setFontSize(12); doc.setTextColor(...BLACK);
-  doc.text(val(formatFecha(fecha)), cotBoxX + cotBoxW * 0.75, fecY + hH / 2 + 3, { align: "center" });
+  // Celda izquierda: Folio
+  const dataY   = y + labelH;
+  const dataH   = row1H - labelH;
+  doc.setFont("helvetica", "normal"); doc.setFontSize(7); doc.setTextColor(...GRAY_DARK);
+  doc.text(labelFolio, cotBoxX + halfBox / 2, dataY + 4.5, { align: "center" });
+  doc.setFont("helvetica", "bold"); doc.setFontSize(13); doc.setTextColor(...BLACK);
+  doc.text(String(folio), cotBoxX + halfBox / 2, dataY + dataH / 2 + 4, { align: "center" });
+
+  // Celda derecha: Fecha
+  doc.setFont("helvetica", "normal"); doc.setFontSize(7); doc.setTextColor(...GRAY_DARK);
+  doc.text("FECHA", cotBoxX + halfBox + halfBox / 2, dataY + 4.5, { align: "center" });
+  doc.setFont("helvetica", "normal"); doc.setFontSize(10); doc.setTextColor(...BLACK);
+  doc.text(val(formatFecha(fecha)), cotBoxX + halfBox + halfBox / 2, dataY + dataH / 2 + 4, { align: "center" });
 
   y += row1H;
 
   const infoW = PW - 2 * M - cotBoxW - 1;
-  const midY2 = row2H / 2 + 1;
 
-  doc.rect(M, y, infoW, row2H);
-  doc.setFont("helvetica", "bold"); doc.setFontSize(10); doc.setTextColor(...BLACK);
-  doc.text("Empresa:", M + 2, y + midY2 + 2);
-  doc.setFont("helvetica", "normal"); doc.setFontSize(10.5);
-  doc.text(val(empresa), M + 24, y + midY2 + 2);
+  // helper: centra texto verticalmente en fila de altura h
+  const mid = (h: number) => h / 2 + 2.5;
 
-  const impX = M + 130;
-  doc.setFont("helvetica", "bold"); doc.setFontSize(10);
-  doc.text("Impresión:", impX, y + midY2 + 2);
-  doc.setFont("helvetica", "normal"); doc.setFontSize(10.5);
-  doc.text(val(impresion), impX + 25, y + midY2 + 2);
+  // ── Fila 2: Empresa | Impresión ───────────────────────────────────────────
+  // doc.rect(M, y, infoW, row2H);  ← ELIMINADO
+ const col2X = M + 65;   // columna derecha
+ const col3X = M + 140;  // ← tercera columna
+
+  const mid2  = (h: number) => h / 2 + 2.5;
+
+   // Fila 2: Empresa | Impresión | Atención
+  doc.setFont("helvetica", "bold");   doc.setFontSize(9);   doc.setTextColor(...BLACK);
+  doc.text("Empresa:",     M + 2,         y + mid2(row2H));
+  doc.setFont("helvetica", "normal"); doc.setFontSize(9.5);
+  doc.text(val(empresa),   M + 20,        y + mid2(row2H));
+
+  doc.setFont("helvetica", "bold");   doc.setFontSize(9);
+  doc.text("Impresión:",   col2X,         y + mid2(row2H));
+  doc.setFont("helvetica", "normal"); doc.setFontSize(9.5);
+  doc.text(val(impresion), col2X + 20,    y + mid2(row2H));
+
+  doc.setFont("helvetica", "bold");   doc.setFontSize(9);
+  doc.text("Atención:",    col3X,         y + mid2(row2H));  // ← col3X separado
+  doc.setFont("helvetica", "normal"); doc.setFontSize(9.5);
+  doc.text(val(cliente),   col3X + 18,    y + mid2(row2H));
   y += row2H;
 
-  const midY3 = row3H / 2 + 1;
+  // Fila 3: Teléfono | E-mail | Celular
+  doc.setFont("helvetica", "bold");   doc.setFontSize(9);   doc.setTextColor(...BLACK);
+  doc.text("Teléfono:",    M + 2,         y + mid2(row3H));
+  doc.setFont("helvetica", "normal"); doc.setFontSize(9.5);
+  doc.text(val(telefono),  M + 19,        y + mid2(row3H));
 
-  doc.rect(M, y, infoW, row3H);
-  doc.setFont("helvetica", "bold"); doc.setFontSize(10);
-  doc.text("Atención:", M + 2, y + midY3 + 2);
-  doc.setFont("helvetica", "normal"); doc.setFontSize(10.5);
-  doc.text(val(cliente), M + 25, y + midY3 + 2);
+  doc.setFont("helvetica", "bold");   doc.setFontSize(9);
+  doc.text("E-mail:",      col2X,         y + mid2(row3H));
+  doc.setFont("helvetica", "normal"); doc.setFontSize(9.5);
+  doc.text(val(correo),    col2X + 12,    y + mid2(row3H));
 
-  const telX = M + 90;
-  doc.setFont("helvetica", "bold"); doc.setFontSize(10);
-  doc.text("Teléfono:", telX, y + midY3 + 2);
-  doc.setFont("helvetica", "normal"); doc.setFontSize(10.5);
-  doc.text(val(telefono), telX + 24, y + midY3 + 2);
-
-  const emlX = M + 152;
-  doc.setFont("helvetica", "bold"); doc.setFontSize(10);
-  doc.text("E-mail:", emlX, y + midY3 + 2);
-  doc.setFont("helvetica", "normal"); doc.setFontSize(10.5);
-  doc.text(val(correo), emlX + 17, y + midY3 + 2);
+  doc.setFont("helvetica", "bold");   doc.setFontSize(9);
+  doc.text("Celular:",     col3X,         y + mid2(row3H));  // ← col3X
+  doc.setFont("helvetica", "normal"); doc.setFontSize(9.5);
+  doc.text(val(celular),   col3X + 14,    y + mid2(row3H));
   y += row3H;
 
+  // Fila 4: Razón Social | RFC  (sin celular duplicado)
+  doc.setFont("helvetica", "bold");   doc.setFontSize(9);   doc.setTextColor(...BLACK);
+  doc.text("Razón Social:", M + 2,        y + mid2(row4H));
+  doc.setFont("helvetica", "normal"); doc.setFontSize(9.5);
+  doc.text(val(razon_social), M + 26,     y + mid2(row4H));
+
+  doc.setFont("helvetica", "bold");   doc.setFontSize(9);
+  doc.text("RFC:",          col2X,        y + mid2(row4H));
+  doc.setFont("helvetica", "normal"); doc.setFontSize(9.5);
+  doc.text(val(rfc),        col2X + 10,   y + mid2(row4H));
+  y += row4H;
+
+  // Fila 5: Domicilio (fila completa)
+  doc.setFont("helvetica", "bold");   doc.setFontSize(9);   doc.setTextColor(...BLACK);
+  doc.text("Domicilio:",   M + 2,         y + mid2(row5H));
+  doc.setFont("helvetica", "normal"); doc.setFontSize(9);
+
+  const domParts = [
+    domicilio && numero ? `${domicilio} #${numero}` : domicilio || null,
+    colonia,
+    codigo_postal ? `C.P. ${codigo_postal}` : null,
+    poblacion,
+    estado_cliente,
+  ].filter(Boolean);
+  const domStr = domParts.length ? domParts.join(", ") : null;
+
+  doc.text(val(domStr),    M + 20,        y + mid2(row5H));
+  y += row5H;
+
+  // ── Ref texto opcional ────────────────────────────────────────────────────
   if (refTexto) {
     doc.setFont("helvetica", "normal"); doc.setFontSize(10); doc.setTextColor(...GRAY_DARK);
     doc.text(refTexto, cotBoxX + cotBoxW / 2, y + 5, { align: "center" });
@@ -314,7 +378,6 @@ export function dibujarCajasPie(
       doc.setTextColor(...BLACK);
     }
 
-    // ── Herramental en observaciones (cotizacion) ──────────────────────────
     const prodConHerr = productos.filter(
       p => p.herramental_precio != null && p.herramental_precio > 0
     );
@@ -325,7 +388,7 @@ export function dibujarCajasPie(
       herrY += 5;
       doc.setFont("helvetica", "normal"); doc.setFontSize(9.5);
       prodConHerr.forEach(p => {
-        const desc  = p.herramental_descripcion?.trim() || p.nombre;
+        const desc   = p.herramental_descripcion?.trim() || p.nombre;
         const precio = fmtN(p.herramental_precio!);
         doc.text(`• ${desc}: ${precio}`, M + 4, herrY);
         herrY += 5;
@@ -349,7 +412,7 @@ export function dibujarCajasPie(
   const PED_FOOTER_H = 80;
   const pfY          = PH - M - PED_FOOTER_H;
 
-  const RESUMEN_W = 95;
+  const RESUMEN_W = 70;
   const LEFT_W    = PW - M * 2 - RESUMEN_W - 1;
 
   const tvX = M + LEFT_W + 1;
@@ -378,14 +441,12 @@ export function dibujarCajasPie(
       doc.setFillColor(...GRAY_LIGHT);
       doc.rect(tvX, ry, tvW, lineH, "F");
     }
-    // Etiqueta
     doc.setFillColor(...GRAY_DARK);
     doc.rect(tvX, ry, etW, lineH, "F");
     doc.line(tvX + etW, ry, tvX + etW, ry + lineH);
     doc.setFont("helvetica", row.bold ? "bold" : "normal");
     doc.setFontSize(13); doc.setTextColor(...WHITE);
     doc.text(row.label, tvX + etW / 2, ry + lineH / 2 + 2.5, { align: "center" });
-    // Valor
     doc.setFont("helvetica", row.bold ? "bold" : "normal");
     doc.setFontSize(17);
     doc.setTextColor(...BLACK);
@@ -401,14 +462,14 @@ export function dibujarCajasPie(
   doc.setFont("helvetica", "normal"); doc.setFontSize(10.5); doc.setTextColor(...BLACK);
   doc.text("Favor de depositar en Banamex  —  A nombre de Grupeb S.A. de C.V.", lX + lW / 2, pfY + 7, { align: "center" });
   doc.setFont("helvetica", "bold"); doc.setFontSize(15);
-  doc.text("CTA: 7001070896964     CLABE: 002320 7001070896943", lX + lW / 2, pfY + 15, { align: "center" });
+  doc.text("CTA: 70010708964     CLABE: 002320 700107089643", lX + lW / 2, pfY + 15, { align: "center" });
   doc.setFont("helvetica", "normal"); doc.setFontSize(9.5);
-  doc.text("Enviar comprobante de depósito al recibir.", lX + lW / 2, pfY + 22, { align: "center" });
+  doc.text("Enviar comprobante de depósito.", lX + lW / 2, pfY + 22, { align: "center" });
 
   const F2_Y   = pfY + BANCO_H;
   const F2_H   = PED_FOOTER_H - BANCO_H;
-  const COL1_W = lW * 0.26;
-  const COL2_W = lW * 0.47;
+  const COL1_W = lW * 0.20;
+  const COL2_W = lW * 0.60;
   const COL3_W = lW - COL1_W - COL2_W;
 
   doc.rect(lX, F2_Y, COL1_W, F2_H);
@@ -433,7 +494,7 @@ export function dibujarCajasPie(
     "* Su pedido puede tener una variación de un 20% más o un 20% menos en la cantidad final.",
     "* Tiempo de entrega: 30-35 días después de autorizado el diseño.",
   ];
-  doc.setFont("helvetica", "normal"); doc.setFontSize(9.5); doc.setTextColor(...BLACK);
+  doc.setFont("helvetica", "normal"); doc.setFontSize(8); doc.setTextColor(...BLACK);
   const maxLy = F2_Y + F2_H - 2;
   let ly = F2_Y + 6;
   for (const line of legal) {

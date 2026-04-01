@@ -15,10 +15,6 @@ import Pedido from "./pages/Pedido";
 import EstadoCuenta from "./components/EstadoCuenta.tsx";
 import SinAcceso from "./pages/SinAcceso";
 
-// ==========================
-// PERMISOS POR PÁGINA
-// Deben coincidir exactamente con los nombres en la tabla privilegios
-// ==========================
 const PERMISOS = {
   usuarios:     "Crear/Editar/Eliminar Usuarios",
   clientes:     "Crear/Editar/Eliminar Clientes",
@@ -31,6 +27,16 @@ const PERMISOS = {
   estadoCuenta: "Editar Anticipo y Liquidacion",
 } as const;
 
+// Permisos que dan acceso a seguimiento (cualquiera de estos)
+const PERMISOS_SEGUIMIENTO = [
+  "Ver Seguimiento",
+  "Acceso Planta",
+  "Operar Extrusión",
+  "Operar Impresión",
+  "Operar Bolseo",
+  "Operar Asa Flexible",
+];
+
 function App() {
   return (
     <BrowserRouter>
@@ -39,118 +45,65 @@ function App() {
           {/* Ruta pública */}
           <Route path="/" element={<Login />} />
 
-          {/* Sin acceso — página amigable cuando no tiene permiso */}
+          {/* Sin acceso */}
           <Route path="/sin-acceso" element={<SinAcceso />} />
 
-          {/* Home — cualquier usuario autenticado */}
-          <Route
-            path="/home"
-            element={
-              <ProtectedRoute>
-                <Home />
-              </ProtectedRoute>
-            }
-          />
+          {/* Home — cualquier autenticado */}
+          <Route path="/home" element={
+            <ProtectedRoute><Home /></ProtectedRoute>
+          } />
 
-          {/* Seguimiento — cualquier usuario autenticado */}
-          <Route
-            path="/seguimiento"
-            element={
-              <ProtectedRoute>
-                <Seguimiento />
-              </ProtectedRoute>
-            }
-          />
+          {/* Seguimiento — acceso_total o cualquier permiso de la lista */}
+          <Route path="/seguimiento" element={
+            <ProtectedRoute permisoOr={PERMISOS_SEGUIMIENTO}>
+              <Seguimiento />
+            </ProtectedRoute>
+          } />
 
           {/* Usuarios */}
-          <Route
-            path="/usuarios"
-            element={
-              <ProtectedRoute permiso={PERMISOS.usuarios}>
-                <Usuarios />
-              </ProtectedRoute>
-            }
-          />
+          <Route path="/usuarios" element={
+            <ProtectedRoute permiso={PERMISOS.usuarios}><Usuarios /></ProtectedRoute>
+          } />
 
           {/* Clientes */}
-          <Route
-            path="/clientes"
-            element={
-              <ProtectedRoute permiso={PERMISOS.clientes}>
-                <Clientes />
-              </ProtectedRoute>
-            }
-          />
+          <Route path="/clientes" element={
+            <ProtectedRoute permiso={PERMISOS.clientes}><Clientes /></ProtectedRoute>
+          } />
 
           {/* Productos plástico */}
-          <Route
-            path="/plastico"
-            element={
-              <ProtectedRoute permiso={PERMISOS.plastico}>
-                <Plastico />
-              </ProtectedRoute>
-            }
-          />
+          <Route path="/plastico" element={
+            <ProtectedRoute permiso={PERMISOS.plastico}><Plastico /></ProtectedRoute>
+          } />
 
           {/* Cotizaciones */}
-          <Route
-            path="/cotizar"
-            element={
-              <ProtectedRoute permiso={PERMISOS.cotizar}>
-                <Cotizar />
-              </ProtectedRoute>
-            }
-          />
+          <Route path="/cotizar" element={
+            <ProtectedRoute permiso={PERMISOS.cotizar}><Cotizar /></ProtectedRoute>
+          } />
 
           {/* Pedidos */}
-          <Route
-            path="/pedido"
-            element={
-              <ProtectedRoute permiso={PERMISOS.pedido}>
-                <Pedido />
-              </ProtectedRoute>
-            }
-          />
+          <Route path="/pedido" element={
+            <ProtectedRoute permiso={PERMISOS.pedido}><Pedido /></ProtectedRoute>
+          } />
 
           {/* Diseño */}
-          <Route
-            path="/diseno"
-            element={
-              <ProtectedRoute permiso={PERMISOS.diseno}>
-                <Diseno />
-              </ProtectedRoute>
-            }
-          />
+          <Route path="/diseno" element={
+            <ProtectedRoute permiso={PERMISOS.diseno}><Diseno /></ProtectedRoute>
+          } />
 
           {/* Anticipo y Liquidación */}
-          <Route
-            path="/anticipolicacion"
-            element={
-              <ProtectedRoute permiso={PERMISOS.anticipo}>
-                <AnticipoLiquidacion />
-              </ProtectedRoute>
-            }
-          />
+          <Route path="/anticipolicacion" element={
+            <ProtectedRoute permiso={PERMISOS.anticipo}><AnticipoLiquidacion /></ProtectedRoute>
+          } />
 
           {/* Catálogo de precios */}
-          <Route
-            path="/precioplastico"
-            element={
-              <ProtectedRoute permiso={PERMISOS.precios}>
-                <PrecioPlastico />
-              </ProtectedRoute>
-            }
-          />
+          <Route path="/precioplastico" element={
+            <ProtectedRoute permiso={PERMISOS.precios}><PrecioPlastico /></ProtectedRoute>
+          } />
 
           {/* Estado de cuenta */}
-          <Route
-            path="/estadocuenta"
-            element={
-              <ProtectedRoute permiso={PERMISOS.estadoCuenta}>
-                <EstadoCuenta />
-              </ProtectedRoute>
-            }
-          />
+          <Route path="/estadocuenta" element={
+            <ProtectedRoute permiso={PERMISOS.estadoCuenta}><EstadoCuenta /></ProtectedRoute>
+          } />
 
           {/* Ruta no encontrada */}
           <Route path="*" element={<Navigate to="/" replace />} />

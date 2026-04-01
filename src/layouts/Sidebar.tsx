@@ -8,10 +8,11 @@ interface DashboardProps {
 }
 
 interface MenuItem {
-  name:     string;
-  path?:    string;
-  permiso?: string; // Si se indica, solo se muestra si el usuario tiene ese permiso
-  subItems: { name: string; path: string; permiso?: string }[];
+  name:      string;
+  path?:     string;
+  permiso?:  string;
+  permisoOr?: string[]; // visible si tiene CUALQUIERA de estos permisos
+  subItems:  { name: string; path: string; permiso?: string }[];
 }
 
 export default function Dashboard({ children }: DashboardProps) {
@@ -78,20 +79,23 @@ export default function Dashboard({ children }: DashboardProps) {
       subItems: [],
     },
     {
-      // Seguimiento — visible para todos los autenticados
-      name:    "Seguimiento",
-      path:    "/seguimiento",
+      // Seguimiento — visible para acceso_total, operadores de planta,
+      // o quien tenga el privilegio "Ver Seguimiento"
+      name:      "Seguimiento",
+      path:      "/seguimiento",
+      permisoOr: [
+        "Ver Seguimiento",
+        "Acceso Planta",
+        "Operar Extrusión",
+        "Operar Impresión",
+        "Operar Bolseo",
+        "Operar Asa Flexible",
+      ],
       subItems: [],
     },
     {
       name:    "Anticipo / Liquidación",
       path:    "/anticipolicacion",
-      permiso: "Editar Anticipo y Liquidacion",
-      subItems: [],
-    },
-    {
-      name:    "Estado de Cuenta",
-      path:    "/estadocuenta",
       permiso: "Editar Anticipo y Liquidacion",
       subItems: [],
     },
@@ -106,8 +110,11 @@ export default function Dashboard({ children }: DashboardProps) {
 
   // Filtrar items según permisos del usuario
   const menuFiltrado = menuItems.filter((item) => {
-    if (!item.permiso) return true; // sin permiso requerido → siempre visible
-    return tienePermiso(item.permiso);
+    if (!item.permiso && !item.permisoOr) return true;
+    if (user?.acceso_total) return true;
+    if (item.permiso && tienePermiso(item.permiso)) return true;
+    if (item.permisoOr) return item.permisoOr.some((p) => tienePermiso(p));
+    return false;
   });
 
   useEffect(() => {
@@ -132,13 +139,12 @@ export default function Dashboard({ children }: DashboardProps) {
     path && location.pathname.startsWith(path);
 
   const renderMenuItem = (item: MenuItem) => {
-    const hasSub = item.subItems.length > 0;
-    const expanded = expandedMenus.includes(item.name);
+    const hasSub      = item.subItems.length > 0;
+    const expanded    = expandedMenus.includes(item.name);
     const activeParent =
       (item.path && isActive(item.path)) ||
       item.subItems.some((s) => isActive(s.path));
 
-    // Filtrar subitems también
     const subItemsFiltrados = item.subItems.filter((sub) => {
       if (!sub.permiso) return true;
       return tienePermiso(sub.permiso);
@@ -155,17 +161,14 @@ export default function Dashboard({ children }: DashboardProps) {
             }
           }}
           className={`w-full text-left px-3 py-2 rounded transition flex justify-between
-            ${
-              activeParent
-                ? "bg-slate-700 text-white font-semibold"
-                : "text-slate-300 hover:bg-slate-700"
+            ${activeParent
+              ? "bg-slate-700 text-white font-semibold"
+              : "text-slate-300 hover:bg-slate-700"
             }`}
         >
           <span>{item.name}</span>
           {hasSub && (
-            <span className={`transition-transform ${expanded ? "rotate-180" : ""}`}>
-              ▼
-            </span>
+            <span className={`transition-transform ${expanded ? "rotate-180" : ""}`}>▼</span>
           )}
         </button>
 
@@ -179,10 +182,9 @@ export default function Dashboard({ children }: DashboardProps) {
                   if (isMobile) setOpen(false);
                 }}
                 className={`w-full text-left px-3 py-2 rounded text-sm transition
-                  ${
-                    isActive(sub.path)
-                      ? "bg-slate-600 text-white"
-                      : "text-slate-300 hover:bg-slate-600"
+                  ${isActive(sub.path)
+                    ? "bg-slate-600 text-white"
+                    : "text-slate-300 hover:bg-slate-600"
                   }`}
               >
                 • {sub.name}
@@ -214,7 +216,6 @@ export default function Dashboard({ children }: DashboardProps) {
 
   return (
     <div className="min-h-screen flex">
-      {/* OVERLAY móvil */}
       {isMobile && (
         <div
           onClick={() => setOpen(false)}
@@ -223,7 +224,6 @@ export default function Dashboard({ children }: DashboardProps) {
         />
       )}
 
-      {/* SIDEBAR MÓVIL */}
       {isMobile && (
         <aside
           className={`fixed inset-y-0 left-0 w-64 bg-slate-800 z-50
@@ -233,62 +233,41 @@ export default function Dashboard({ children }: DashboardProps) {
           onClick={(e) => e.stopPropagation()}
         >
           <div className="p-4 border-b border-slate-700 flex justify-between">
-            <img
-              src={logo}
-              alt="Grupeb"
-              className="h-10 cursor-pointer"
-              onClick={() => { navigate("/home"); setOpen(false); }}
-            />
-            <button onClick={() => setOpen(false)} className="text-white text-2xl">
-              ✕
-            </button>
+            <img src={logo} alt="Grupeb" className="h-10 cursor-pointer"
+              onClick={() => { navigate("/home"); setOpen(false); }} />
+            <button onClick={() => setOpen(false)} className="text-white text-2xl">✕</button>
           </div>
-
           <nav className="flex-1 px-2 py-4 space-y-1 overflow-y-auto">
             {menuFiltrado.map(renderMenuItem)}
           </nav>
-
           <UserFooter />
         </aside>
       )}
 
-      {/* SIDEBAR DESKTOP */}
       {!isMobile && (
         <aside className="fixed inset-y-0 left-0 w-64 bg-slate-800 z-30 flex flex-col h-screen">
-          <div
-            className="p-4 border-b border-slate-700 cursor-pointer"
-            onClick={() => navigate("/home")}
-          >
+          <div className="p-4 border-b border-slate-700 cursor-pointer" onClick={() => navigate("/home")}>
             <img src={logo} className="h-10 mx-auto" />
           </div>
-
           <nav className="flex-1 px-2 py-4 space-y-1 overflow-y-auto">
             {menuFiltrado.map(renderMenuItem)}
           </nav>
-
           <UserFooter />
         </aside>
       )}
 
-      {/* CONTENIDO */}
       <main className="flex-1 overflow-auto ml-0 md:ml-64">
         {isMobile && (
           <header className="sticky top-0 z-20 bg-white shadow">
             <div className="flex justify-between px-4 py-3">
               <button onClick={() => setOpen(true)} className="text-xl">☰</button>
-              <h1
-                onClick={() => navigate("/home")}
-                className="font-bold cursor-pointer"
-              >
-                GRUPEB
-              </h1>
+              <h1 onClick={() => navigate("/home")} className="font-bold cursor-pointer">GRUPEB</h1>
               <div className="flex gap-2 bg-slate-200 px-3 py-2 rounded text-sm">
                 👤 {user?.nombre}
               </div>
             </div>
           </header>
         )}
-
         <div className="p-4 md:p-6">{children}</div>
       </main>
     </div>

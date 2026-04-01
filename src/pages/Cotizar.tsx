@@ -24,7 +24,7 @@ export default function Cotizaciones() {
   const [errorGuardar,  setErrorGuardar]  = useState<string | null>(null);
   const [modalEditarOpen,    setModalEditarOpen]    = useState(false);
   const [cotizacionEditando, setCotizacionEditando] = useState<Cotizacion | null>(null);
-  const [catalogos,         setCatalogos]         = useState<CatalogosPlastico>({
+  const [catalogos,          setCatalogos]          = useState<CatalogosPlastico>({
     tiposProducto: [], materiales: [], calibres: [],
   });
   const [cargandoCatalogos, setCargandoCatalogos] = useState(false);
@@ -114,8 +114,8 @@ export default function Cotizaciones() {
       observacion:        p.observacion          || null,
       por_kilo:           p.por_kilo             || null,
       herramental_descripcion: p.herramental_descripcion ?? null,
-      herramental_precio:      p.herramental_precio      != null ? Number(p.herramental_precio) : null,
-      herramental_aprobado:    p.herramental_aprobado     ?? null,
+      herramental_precio:      p.herramental_precio != null ? Number(p.herramental_precio) : null,
+      herramental_aprobado:    p.herramental_aprobado    ?? null,
       detalles: (p.detalles || []).map((d: any) => ({
         cantidad:      d.cantidad,
         precio_total:  d.precio_total,
@@ -131,6 +131,7 @@ export default function Cotizaciones() {
       const respuesta = await crearCotizacion(datos);
       await cargarCotizaciones();
       setModalOpen(false);
+
       const productosPdf = datos.productos.map((prod: any) => {
         const modo = prod.modoCantidad || "unidad";
         return {
@@ -151,8 +152,8 @@ export default function Cotizaciones() {
           observacion:        prod.observacion || null,
           por_kilo:           prod.porKilo    || null,
           herramental_descripcion: prod.herramental_descripcion ?? null,
-          herramental_precio:      prod.herramental_precio      != null ? Number(prod.herramental_precio) : null,
-          herramental_aprobado:    prod.herramental_aprobado     ?? null,
+          herramental_precio:      prod.herramental_precio != null ? Number(prod.herramental_precio) : null,
+          herramental_aprobado:    prod.herramental_aprobado    ?? null,
           detalles: prod.cantidades
             .map((cant: number, i: number) => {
               if (cant <= 0 || prod.precios[i] <= 0) return null;
@@ -166,22 +167,34 @@ export default function Cotizaciones() {
             .filter(Boolean),
         };
       });
+
       try {
         await generarPdfCotizacion({
-          no_cotizacion: respuesta.no_cotizacion ?? respuesta.no_pedido ?? "",
-          fecha:         new Date().toISOString(),
-          cliente:       datos.cliente  || "",
-          empresa:       datos.empresa  || "",
-          telefono:      datos.telefono || "",
-          correo:        datos.correo   || "",
-          estado:        "Pendiente",
-          impresion:     datos.impresion ?? null,
+          no_cotizacion:  respuesta.no_cotizacion ?? respuesta.no_pedido ?? "",
+          fecha:          new Date().toISOString(),
+          cliente:        datos.cliente   || "",
+          empresa:        datos.empresa   || "",
+          telefono:       datos.telefono  || "",
+          correo:         datos.correo    || "",
+          estado:         "Pendiente",
+          impresion:      datos.impresion ?? null,
+          // Al crear desde formulario ligero no tenemos estos datos todavía
+          celular:        null,
+          razon_social:   null,
+          rfc:            null,
+          domicilio:      null,
+          numero:         null,
+          colonia:        null,
+          codigo_postal:  null,
+          poblacion:      null,
+          estado_cliente: null,
           total: datos.productos.reduce((sum: number, prod: any) =>
             sum + prod.cantidades.reduce((s: number, cant: number, i: number) =>
               cant > 0 && prod.precios[i] > 0 ? s + cant * prod.precios[i] : s, 0), 0),
           productos: productosPdf,
         });
       } catch (pdfErr) { console.warn("⚠️ PDF:", pdfErr); }
+
     } catch (e: any) {
       console.error("❌ Error al guardar:", e);
       setErrorGuardar(e.message || e.response?.data?.error || "Error al guardar");
@@ -197,14 +210,25 @@ export default function Cotizaciones() {
       }))
     );
     await generarPdfCotizacion({
-      no_cotizacion: cot.no_cotizacion,
-      fecha:         cot.fecha,
-      cliente:       cot.cliente,
-      empresa:       cot.empresa,
-      telefono:      cot.telefono,
-      correo:        cot.correo,
-      estado:        cot.estado,
-      impresion:     cot.impresion ?? null,
+      no_cotizacion:  cot.no_cotizacion,
+      fecha:          cot.fecha,
+      cliente:        cot.cliente,
+      empresa:        cot.empresa,
+      telefono:       cot.telefono,
+      correo:         cot.correo,
+      estado:         cot.estado,
+      impresion:      cot.impresion      ?? null,
+      // ── Campos completos del cliente desde el servidor ──────────────────
+      celular:        cot.celular        ?? null,
+      razon_social:   cot.razon_social   ?? null,
+      rfc:            cot.rfc            ?? null,
+      domicilio:      cot.domicilio      ?? null,
+      numero:         cot.numero         ?? null,
+      colonia:        cot.colonia        ?? null,
+      codigo_postal:  cot.codigo_postal  ?? null,
+      poblacion:      cot.poblacion      ?? null,
+      estado_cliente: cot.estado_cliente ?? null,
+      // ───────────────────────────────────────────────────────────────────
       total: esPedido
         ? cot.productos.reduce((sum, p) =>
             sum + p.detalles.filter(d => d.aprobado === true).reduce((s, d) => s + d.precio_total, 0), 0)
@@ -240,12 +264,19 @@ export default function Cotizaciones() {
       Aprobada:  "bg-green-100 text-green-800",
       Rechazada: "bg-red-100 text-red-800",
     };
-    return <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${m[estado] ?? "bg-gray-100 text-gray-700"}`}>{estado}</span>;
+    return (
+      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${m[estado] ?? "bg-gray-100 text-gray-700"}`}>
+        {estado}
+      </span>
+    );
   };
 
   const formatFecha = (iso: string) => {
-    try { return new Date(iso).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" }); }
-    catch { return iso; }
+    try {
+      return new Date(iso).toLocaleDateString("es-MX", {
+        day: "2-digit", month: "short", year: "numeric",
+      });
+    } catch { return iso; }
   };
 
   const formatCantidadTabla = (d: any): string => {
@@ -261,8 +292,9 @@ export default function Cotizaciones() {
 
   const Paginador = () => {
     const pags: (number | "...")[] = [];
-    if (totalPaginas <= 7) { for (let i = 1; i <= totalPaginas; i++) pags.push(i); }
-    else {
+    if (totalPaginas <= 7) {
+      for (let i = 1; i <= totalPaginas; i++) pags.push(i);
+    } else {
       pags.push(1);
       if (paginaSegura > 3) pags.push("...");
       for (let i = Math.max(2, paginaSegura - 1); i <= Math.min(totalPaginas - 1, paginaSegura + 1); i++) pags.push(i);
@@ -281,16 +313,25 @@ export default function Cotizaciones() {
         <div className="flex items-center gap-1">
           <button onClick={() => irAPagina(paginaSegura - 1)} disabled={paginaSegura === 1}
             className="p-1.5 rounded-md text-gray-500 hover:bg-gray-100 disabled:opacity-30">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
           </button>
           {pags.map((p, i) =>
-            p === "..." ? <span key={`e${i}`} className="px-2 text-gray-400 text-sm">…</span>
-            : <button key={p} onClick={() => irAPagina(p as number)}
-                className={`w-8 h-8 rounded-md text-sm font-medium transition ${p === paginaSegura ? "bg-blue-600 text-white shadow" : "text-gray-600 hover:bg-gray-100"}`}>{p}</button>
+            p === "..." ? (
+              <span key={`e${i}`} className="px-2 text-gray-400 text-sm">…</span>
+            ) : (
+              <button key={p} onClick={() => irAPagina(p as number)}
+                className={`w-8 h-8 rounded-md text-sm font-medium transition ${p === paginaSegura ? "bg-blue-600 text-white shadow" : "text-gray-600 hover:bg-gray-100"}`}>
+                {p}
+              </button>
+            )
           )}
           <button onClick={() => irAPagina(paginaSegura + 1)} disabled={paginaSegura === totalPaginas}
             className="p-1.5 rounded-md text-gray-500 hover:bg-gray-100 disabled:opacity-30">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
           </button>
         </div>
       </div>
@@ -316,7 +357,7 @@ export default function Cotizaciones() {
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              {["Folio","Fecha","Impresión","Empresa","Productos","Total","Estado","Acciones"].map(h => (
+              {["Folio", "Fecha", "Impresión", "Empresa", "Productos", "Total", "Estado", "Acciones"].map(h => (
                 <th key={h} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{h}</th>
               ))}
             </tr>
@@ -361,17 +402,23 @@ export default function Cotizaciones() {
                           title={puedeEliminar ? "Gestionar" : "No se puede modificar una cotización aprobada"}
                           disabled={!puedeEliminar}
                           className={`p-1.5 rounded-md transition-colors ${puedeEliminar ? "text-blue-600 hover:bg-blue-50 cursor-pointer" : "text-gray-300 cursor-not-allowed"}`}>
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                          </svg>
                         </button>
                         <button onClick={() => handleDescargarPdf(cot)} title="Descargar PDF"
                           className="p-1.5 rounded-md text-green-600 hover:bg-green-50">
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
                         </button>
                         <button onClick={() => puedeEliminar && handleEliminar(cot)}
                           title={puedeEliminar ? "Eliminar" : "No se puede eliminar una cotización aprobada"}
                           disabled={!puedeEliminar}
                           className={`p-1.5 rounded-md transition-colors ${puedeEliminar ? "text-red-500 hover:bg-red-50 cursor-pointer" : "text-gray-300 cursor-not-allowed"}`}>
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
                         </button>
                       </div>
                     </td>
@@ -450,7 +497,11 @@ export default function Cotizaciones() {
           </div>
         ) : (
           <div>
-            {errorGuardar && <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg"><p className="text-red-700 text-sm">❌ {errorGuardar}</p></div>}
+            {errorGuardar && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <p className="text-red-700 text-sm">❌ {errorGuardar}</p>
+              </div>
+            )}
             {guardando && (
               <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-center gap-3">
                 <div className="animate-spin rounded-full h-5 w-5 border-2 border-blue-600 border-t-transparent" />

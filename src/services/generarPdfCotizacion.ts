@@ -4,26 +4,35 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import {
   cargarLogoBase64,
-  val, boolLabel, parsePantones, getMedida, formatFecha, formatCantidadCelda,
+  val, boolLabel, parsePantones, getMedida, formatCantidadCelda,
   dibujarEncabezado, dibujarCajasPie, dibujarPiePagina,
   GRAY_DARK, GRAY_MED, GRAY_LIGHT, GRAY_ROW, BLACK, WHITE,
 } from "./Pdfutils";
 import type { ProductoPdf } from "./Pdfutils";
 import logoUrl from "../assets/logogrupeb.png";
 
-
 interface CotizacionPdf {
-  no_cotizacion: string;
-  fecha:         string;
-  cliente:       string;
-  empresa:       string;
-  telefono:      string;
-  correo:        string;
-  estado:        string;
-  impresion?:    string | null;
-  logoBase64?:   string;
-  productos:     ProductoPdf[];
-  total:         number;
+  no_cotizacion:  string;
+  fecha:          string;
+  cliente:        string;
+  empresa:        string;
+  telefono:       string;
+  correo:         string;
+  estado:         string;
+  impresion?:     string | null;
+  logoBase64?:    string;
+  productos:      ProductoPdf[];
+  total:          number;
+  // ── Campos nuevos de cliente ──────────────────────────────────────────────
+  celular?:        string | null;
+  razon_social?:   string | null;
+  rfc?:            string | null;
+  domicilio?:      string | null;
+  numero?:         string | null;
+  colonia?:        string | null;
+  codigo_postal?:  string | null;
+  poblacion?:      string | null;
+  estado_cliente?: string | null;
 }
 
 export async function generarPdfCotizacion(cotizacion: CotizacionPdf): Promise<void> {
@@ -45,6 +54,15 @@ export async function generarPdfCotizacion(cotizacion: CotizacionPdf): Promise<v
     cliente:        cotizacion.cliente,
     telefono:       cotizacion.telefono,
     correo:         cotizacion.correo,
+    celular:        cotizacion.celular        ?? null,
+    razon_social:   cotizacion.razon_social   ?? null,
+    rfc:            cotizacion.rfc            ?? null,
+    domicilio:      cotizacion.domicilio      ?? null,
+    numero:         cotizacion.numero         ?? null,
+    colonia:        cotizacion.colonia        ?? null,
+    codigo_postal:  cotizacion.codigo_postal  ?? null,
+    poblacion:      cotizacion.poblacion      ?? null,
+    estado_cliente: cotizacion.estado_cliente ?? null,
   });
 
   const maxDet      = Math.max(...cotizacion.productos.map(p => p.detalles.length), 1);
@@ -63,7 +81,6 @@ export async function generarPdfCotizacion(cotizacion: CotizacionPdf): Promise<v
   const bodyRows: any[][] = [];
 
   cotizacion.productos.forEach(prod => {
-    // ── Fila principal del producto ────────────────────────────────────────
     const row: any[] = [
       val(prod.nombre),
       getMedida(prod),
@@ -85,10 +102,8 @@ export async function generarPdfCotizacion(cotizacion: CotizacionPdf): Promise<v
       const det = prod.detalles[i];
       row.push(det && det.cantidad > 0 ? formatCantidadCelda(det, prod.por_kilo) : "—");
     }
-
     bodyRows.push(row);
 
-    // ── Fila Obs: ──────────────────────────────────────────────────────────
     const tieneKilo   = prod.detalles.some(d => d.modo_cantidad === "kilo");
     const tieneUnidad = prod.detalles.some(d => d.modo_cantidad !== "kilo");
     const modoLabel   = tieneKilo && tieneUnidad ? "Por kilo y por unidad"
@@ -101,11 +116,8 @@ export async function generarPdfCotizacion(cotizacion: CotizacionPdf): Promise<v
     obsRow[0] = obsTexto;
     bodyRows.push(obsRow);
 
-    // ── Fila herramental — solo si tiene precio ────────────────────────────
     if (prod.herramental_precio != null && prod.herramental_precio > 0) {
-      const herrRow = new Array(headAll.length).fill("");
-
-      // Texto descriptivo: qué es el herramental y por qué se cobra
+      const herrRow    = new Array(headAll.length).fill("");
       const nombreHerr = prod.herramental_descripcion?.trim() || "Herramental / molde";
       herrRow[0] = `HERR: ${nombreHerr}  —  Costo único de fabricación del molde o troquel necesario para producir este artículo. Se cotiza por separado y no forma parte del precio por pieza.`;
       herrRow[headAll.length - 1] = `$${Number(prod.herramental_precio).toLocaleString("es-MX", {
@@ -135,20 +147,20 @@ export async function generarPdfCotizacion(cotizacion: CotizacionPdf): Promise<v
   const cantFontSize = 15;
 
   const columnStyles: Parameters<typeof autoTable>[1]["columnStyles"] = {
-    0:  { cellWidth: colW[0],  halign: "left",   fontSize: 11          },
-    1:  { cellWidth: colW[1],  halign: "center", fontSize: 12          },
-    2:  { cellWidth: colW[2],  halign: "center", fontSize: 11          },
-    3:  { cellWidth: colW[3],  halign: "center", fontSize: 11          },
-    4:  { cellWidth: colW[4],  halign: "center", fontSize: 11          },
-    5:  { cellWidth: colW[5],  halign: "center", fontSize: 11          },
-    6:  { cellWidth: colW[6],  halign: "center", fontSize: 11          },
-    7:  { cellWidth: colW[7],  halign: "center", fontSize: 11          },
-    8:  { cellWidth: colW[8],  halign: "center", fontSize: 11          },
-    9:  { cellWidth: colW[9],  halign: "center", fontSize: 11          },
-    10: { cellWidth: colW[10], halign: "center", fontSize: 11          },
-    11: { cellWidth: colW[11], halign: "center", fontSize: 11          },
-    12: { cellWidth: colW[12], halign: "left",   fontSize: 11          },
-    13: { cellWidth: colW[13], halign: "center", fontSize: 11          },
+    0:  { cellWidth: colW[0],  halign: "left",   fontSize: 11           },
+    1:  { cellWidth: colW[1],  halign: "center", fontSize: 12           },
+    2:  { cellWidth: colW[2],  halign: "center", fontSize: 11           },
+    3:  { cellWidth: colW[3],  halign: "center", fontSize: 11           },
+    4:  { cellWidth: colW[4],  halign: "center", fontSize: 11           },
+    5:  { cellWidth: colW[5],  halign: "center", fontSize: 11           },
+    6:  { cellWidth: colW[6],  halign: "center", fontSize: 11           },
+    7:  { cellWidth: colW[7],  halign: "center", fontSize: 11           },
+    8:  { cellWidth: colW[8],  halign: "center", fontSize: 11           },
+    9:  { cellWidth: colW[9],  halign: "center", fontSize: 11           },
+    10: { cellWidth: colW[10], halign: "center", fontSize: 11           },
+    11: { cellWidth: colW[11], halign: "center", fontSize: 11           },
+    12: { cellWidth: colW[12], halign: "left",   fontSize: 11           },
+    13: { cellWidth: colW[13], halign: "center", fontSize: 11           },
     ...(numCantCols >= 1 ? { 14: { cellWidth: colW[14], halign: "center" as const, fontSize: cantFontSize } } : {}),
     ...(numCantCols >= 2 ? { 15: { cellWidth: colW[15], halign: "center" as const, fontSize: cantFontSize } } : {}),
     ...(numCantCols >= 3 ? { 16: { cellWidth: colW[16], halign: "center" as const, fontSize: cantFontSize } } : {}),
@@ -171,7 +183,6 @@ export async function generarPdfCotizacion(cotizacion: CotizacionPdf): Promise<v
       if (data.section === "body") {
         const raw0 = String((data.row.raw as any[])?.[0] ?? "");
 
-        // Fila Obs:
         if (raw0.startsWith("Obs:")) {
           if (data.column.index === 0) {
             data.cell.colSpan          = headAll.length;
@@ -186,10 +197,8 @@ export async function generarPdfCotizacion(cotizacion: CotizacionPdf): Promise<v
           }
         }
 
-        // Fila herramental
         if (raw0.startsWith("HERR:")) {
           if (data.column.index === 0) {
-            // Descripción + explicación ocupa todas menos la última columna
             data.cell.colSpan          = headAll.length - 1;
             data.cell.styles.fillColor = [250, 244, 230];
             data.cell.styles.fontStyle = "italic";
@@ -198,7 +207,6 @@ export async function generarPdfCotizacion(cotizacion: CotizacionPdf): Promise<v
             data.cell.styles.halign    = "left";
             data.cell.styles.overflow  = "linebreak";
           } else if (data.column.index === headAll.length - 1) {
-            // Precio en la última columna
             data.cell.styles.fillColor = [250, 244, 230];
             data.cell.styles.fontStyle = "bold";
             data.cell.styles.fontSize  = 12;

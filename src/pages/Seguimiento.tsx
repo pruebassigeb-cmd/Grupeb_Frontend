@@ -30,10 +30,15 @@ import type { Pedido } from "../types/cotizaciones.types";
 import Modal from "../components/Modal";
 import { editarBulto as editarBultoService } from "../services/seguimientoService";
 
-
 // Importamos los componentes reales — sin duplicar logica
 import { EditarAntLiqReal } from "./AnticipoLiquidacion";
 import { EditarDisenoReal } from "./Diseno";
+
+// --- Imports para permisos ---
+import { useAuth } from "../context/AuthContext";
+import { usePermiso } from "../hooks/usePermiso";
+// CAMBIO 1: Import del modal de verificación de operador
+import ModalVerificarOperador from "../components/ModalVerificarOperador";
 
 // ─────────────────────────────────────────────
 // HELPERS DE COLOR / TEXTO
@@ -418,7 +423,6 @@ function ModalProcesoIndividual({
       campos.forEach((c: any) => {
         if (proc.registro[c.key] != null) preFill[c.key] = proc.registro[c.key];
       });
-      // Impresion: descomponer "kidder | repeticion"
       if (nombreProceso === "impresion" && proc.registro.maquina) {
         const partes = proc.registro.maquina.split(" | ");
         preFill.maquina    = partes[0] ?? "";
@@ -629,7 +633,6 @@ function ModalProcesoIndividual({
           {/* ── PROCESO TERMINADO ── */}
           {proc.estado === "terminado" && (
             <>
-              {/* Banner completado + botón editar */}
               {!editando && (
                 <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-lg p-3">
                   <svg className="w-5 h-5 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -645,7 +648,6 @@ function ModalProcesoIndividual({
                 </div>
               )}
 
-              {/* Formulario de edición */}
               {editando && (
                 <div className="space-y-3 bg-blue-50 border border-blue-200 rounded-lg p-4">
                   <div className="flex items-center justify-between mb-1">
@@ -655,7 +657,6 @@ function ModalProcesoIndividual({
                     </span>
                   </div>
 
-                  {/* Campos numéricos */}
                   {campos.map((campo: any) => (
                     <div key={campo.key}>
                       <label className="block text-xs font-medium text-gray-600 mb-1">
@@ -687,7 +688,6 @@ function ModalProcesoIndividual({
                     </div>
                   ))}
 
-                  {/* Maquina (solo impresion) */}
                   {nombreProceso === "impresion" && (
                     <div>
                       <label className="block text-xs font-medium text-gray-600 mb-1">Maquina</label>
@@ -702,7 +702,6 @@ function ModalProcesoIndividual({
                     </div>
                   )}
 
-                  {/* Fechas */}
                   <div className="grid grid-cols-2 gap-2">
                     <div>
                       <label className="block text-xs font-medium text-gray-600 mb-1">Fecha inicio</label>
@@ -724,7 +723,6 @@ function ModalProcesoIndividual({
                     </div>
                   </div>
 
-                  {/* Observaciones */}
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">📝 Observaciones</label>
                     <textarea
@@ -759,7 +757,6 @@ function ModalProcesoIndividual({
                 </div>
               )}
 
-              {/* Bultos — solo en el último proceso */}
               {(() => {
                 const tieneAsa = pedido.asa_flexible_estado !== "no-aplica" && pedido.asa_flexible_estado !== undefined;
                 const esUltimoProceso =
@@ -954,46 +951,46 @@ function TarjetaBulto({ bulto, numero, bultosFinalizados, eliminando, onEliminar
             {new Date(bulto.fecha_creacion).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}
           </span>
           {bultosFinalizados ? (
-  <>
-    <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-green-100 text-green-600">
-      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-      </svg>
-    </span>
-    <button onClick={() => onEditar(bulto)}
-      className="p-1 text-blue-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
-      title="Editar bulto">
-      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-          d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-      </svg>
-    </button>
-  </>
-) : (
-  <>
-    <button onClick={() => onEliminar(bulto.idbulto, bulto.cantidad_unidades)}
-      disabled={eliminando === bulto.idbulto}
-      className="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors disabled:opacity-40">
-      {eliminando === bulto.idbulto
-        ? <div className="w-3.5 h-3.5 border-2 border-red-400 border-t-transparent rounded-full animate-spin" />
-        : <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-          </svg>
-      }
-    </button>
-    <button onClick={() => onEditar(bulto)}
-      className="p-1 text-blue-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
-      title="Editar bulto">
-      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-          d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-      </svg>
-    </button>
-  </>
-)}
-</div>
-</div>
+            <>
+              <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-green-100 text-green-600">
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                </svg>
+              </span>
+              <button onClick={() => onEditar(bulto)}
+                className="p-1 text-blue-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                title="Editar bulto">
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                    d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                </svg>
+              </button>
+            </>
+          ) : (
+            <>
+              <button onClick={() => onEliminar(bulto.idbulto, bulto.cantidad_unidades)}
+                disabled={eliminando === bulto.idbulto}
+                className="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors disabled:opacity-40">
+                {eliminando === bulto.idbulto
+                  ? <div className="w-3.5 h-3.5 border-2 border-red-400 border-t-transparent rounded-full animate-spin" />
+                  : <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                }
+              </button>
+              <button onClick={() => onEditar(bulto)}
+                className="p-1 text-blue-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                title="Editar bulto">
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                    d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                </svg>
+              </button>
+            </>
+          )}
+        </div>
+      </div>
       {tieneDimensiones && (
         <div className="px-3 py-2">
           <div className="grid grid-cols-4 gap-1.5">
@@ -1047,46 +1044,46 @@ function SeccionBultos({ pedido, cantidadReal }: { pedido: PedidoSeguimiento; ca
   const [form,               setForm]               = useState<NuevoBultoForm>(FORM_VACIO);
   const [error,              setError]              = useState<string | null>(null);
   const [generandoEtiquetas, setGenerandoEtiquetas] = useState(false);
-  const [editandoBulto, setEditandoBulto] = useState<Bulto | null>(null);
-  const [formEditar, setFormEditar] = useState<NuevoBultoForm>(FORM_VACIO);
-  const [guardandoEdicion, setGuardandoEdicion] = useState(false);
+  const [editandoBulto,      setEditandoBulto]      = useState<Bulto | null>(null);
+  const [formEditar,         setFormEditar]         = useState<NuevoBultoForm>(FORM_VACIO);
+  const [guardandoEdicion,   setGuardandoEdicion]   = useState(false);
 
   useEffect(() => { cargarBultos(); }, []);
 
   const abrirEditar = (bulto: Bulto) => {
-  setFormEditar({
-    cantidad_unidades: String(bulto.cantidad_unidades),
-    peso:  bulto.peso  != null ? String(bulto.peso)  : "",
-    alto:  bulto.alto  != null ? String(bulto.alto)  : "",
-    largo: bulto.largo != null ? String(bulto.largo) : "",
-    ancho: bulto.ancho != null ? String(bulto.ancho) : "",
-  });
-  setEditandoBulto(bulto);
-  setError(null);
-};
+    setFormEditar({
+      cantidad_unidades: String(bulto.cantidad_unidades),
+      peso:  bulto.peso  != null ? String(bulto.peso)  : "",
+      alto:  bulto.alto  != null ? String(bulto.alto)  : "",
+      largo: bulto.largo != null ? String(bulto.largo) : "",
+      ancho: bulto.ancho != null ? String(bulto.ancho) : "",
+    });
+    setEditandoBulto(bulto);
+    setError(null);
+  };
 
-const handleGuardarEdicion = async () => {
-  if (!editandoBulto || !pedido.idproduccion) return;
-  const cantidad = parseInt(formEditar.cantidad_unidades);
-  if (!cantidad || cantidad <= 0) { setError("Cantidad inválida."); return; }
+  const handleGuardarEdicion = async () => {
+    if (!editandoBulto || !pedido.idproduccion) return;
+    const cantidad = parseInt(formEditar.cantidad_unidades);
+    if (!cantidad || cantidad <= 0) { setError("Cantidad inválida."); return; }
 
-  setGuardandoEdicion(true); setError(null);
-  try {
-    const payload: NuevoBultoPayload = {
-      cantidad_unidades: cantidad,
-      peso:  formEditar.peso  !== "" ? parseFloat(formEditar.peso)  : null,
-      alto:  formEditar.alto  !== "" ? parseFloat(formEditar.alto)  : null,
-      largo: formEditar.largo !== "" ? parseFloat(formEditar.largo) : null,
-      ancho: formEditar.ancho !== "" ? parseFloat(formEditar.ancho) : null,
-    };
-    const actualizado = await editarBultoService(pedido.idproduccion, editandoBulto.idbulto, payload);
-    setBultos(prev => prev.map(b => b.idbulto === actualizado.idbulto ? actualizado : b));
-    setTotalUnidades(prev => prev - editandoBulto.cantidad_unidades + actualizado.cantidad_unidades);
-    setEditandoBulto(null);
-  } catch (e: any) {
-    setError(e.response?.data?.error || "Error al editar bulto");
-  } finally { setGuardandoEdicion(false); }
-};
+    setGuardandoEdicion(true); setError(null);
+    try {
+      const payload: NuevoBultoPayload = {
+        cantidad_unidades: cantidad,
+        peso:  formEditar.peso  !== "" ? parseFloat(formEditar.peso)  : null,
+        alto:  formEditar.alto  !== "" ? parseFloat(formEditar.alto)  : null,
+        largo: formEditar.largo !== "" ? parseFloat(formEditar.largo) : null,
+        ancho: formEditar.ancho !== "" ? parseFloat(formEditar.ancho) : null,
+      };
+      const actualizado = await editarBultoService(pedido.idproduccion, editandoBulto.idbulto, payload);
+      setBultos(prev => prev.map(b => b.idbulto === actualizado.idbulto ? actualizado : b));
+      setTotalUnidades(prev => prev - editandoBulto.cantidad_unidades + actualizado.cantidad_unidades);
+      setEditandoBulto(null);
+    } catch (e: any) {
+      setError(e.response?.data?.error || "Error al editar bulto");
+    } finally { setGuardandoEdicion(false); }
+  };
 
   const cargarBultos = async () => {
     try {
@@ -1102,34 +1099,22 @@ const handleGuardarEdicion = async () => {
   const updateForm = (campo: keyof NuevoBultoForm, valor: string) =>
     setForm(prev => ({ ...prev, [campo]: valor }));
 
-  // ── Validaciones ────────────────────────────────────────────
   const validarFormulario = (): string | null => {
     const cantidad = parseInt(form.cantidad_unidades);
-
-    // 1. Cantidad válida
-    if (!cantidad || cantidad <= 0)
-      return "Ingresa una cantidad válida mayor a 0.";
-
-    // 2. Cantidad no excede el disponible
+    if (!cantidad || cantidad <= 0) return "Ingresa una cantidad válida mayor a 0.";
     const disponible = cantidadReal != null ? cantidadReal - totalUnidades : null;
     if (disponible !== null && cantidad > disponible)
       return `La cantidad excede el disponible. Máximo: ${disponible.toLocaleString("es-MX")} pzas.`;
-
-    // 3. Dimensiones y peso obligatorios
     const tienePeso  = form.peso.trim()  !== "" && parseFloat(form.peso)  > 0;
     const tieneAlto  = form.alto.trim()  !== "" && parseFloat(form.alto)  > 0;
     const tieneLargo = form.largo.trim() !== "" && parseFloat(form.largo) > 0;
     const tieneAncho = form.ancho.trim() !== "" && parseFloat(form.ancho) > 0;
-
-    if (!tienePeso)
-      return "El peso del bulto es obligatorio.";
+    if (!tienePeso) return "El peso del bulto es obligatorio.";
     if (!tieneAlto || !tieneLargo || !tieneAncho)
       return "Las dimensiones del bulto (alto, largo y ancho) son obligatorias.";
-
-    return null; // todo ok
+    return null;
   };
 
-  // ── Indica si el formulario está listo para habilitar el botón ──
   const formularioCompleto =
     form.cantidad_unidades !== "" &&
     form.peso.trim()       !== "" &&
@@ -1137,17 +1122,12 @@ const handleGuardarEdicion = async () => {
     form.largo.trim()      !== "" &&
     form.ancho.trim()      !== "";
 
-  // ── Progreso visual: cuántos campos faltan ──
   const camposRequeridos = ["cantidad_unidades", "peso", "alto", "largo", "ancho"] as const;
   const camposLlenos = camposRequeridos.filter(k => form[k].trim() !== "").length;
-  const todoCompleto = cantidadReal != null
-    ? totalUnidades + parseInt(form.cantidad_unidades || "0") >= cantidadReal
-    : false;
 
   const handleAgregar = async () => {
     const mensajeError = validarFormulario();
     if (mensajeError) { setError(mensajeError); return; }
-
     setGuardando(true); setError(null);
     try {
       const payload: NuevoBultoPayload = {
@@ -1198,11 +1178,10 @@ const handleGuardarEdicion = async () => {
     } finally { setGenerandoEtiquetas(false); }
   };
 
-  // ── Indicador de cantidad completada ──
-  const cantidadIngresada   = parseInt(form.cantidad_unidades || "0") || 0;
-  const proyectadoTotal     = totalUnidades + cantidadIngresada;
-  const cantidadCompleta    = cantidadReal != null && proyectadoTotal >= cantidadReal;
-  const disponibleRestante  = cantidadReal != null ? Math.max(cantidadReal - totalUnidades, 0) : null;
+  const cantidadIngresada  = parseInt(form.cantidad_unidades || "0") || 0;
+  const proyectadoTotal    = totalUnidades + cantidadIngresada;
+  const cantidadCompleta   = cantidadReal != null && proyectadoTotal >= cantidadReal;
+  const disponibleRestante = cantidadReal != null ? Math.max(cantidadReal - totalUnidades, 0) : null;
 
   return (
     <div className="space-y-4">
@@ -1266,22 +1245,17 @@ const handleGuardarEdicion = async () => {
         <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3">
           <div className="flex items-center justify-between">
             <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">➕ Agregar bulto</p>
-            {/* Barra de progreso de campos */}
             <div className="flex items-center gap-1.5">
               {camposRequeridos.map(k => (
-                <div
-                  key={k}
+                <div key={k}
                   title={k === "cantidad_unidades" ? "Cantidad" : k.charAt(0).toUpperCase() + k.slice(1)}
-                  className={`w-2 h-2 rounded-full transition-colors ${
-                    form[k].trim() !== "" ? "bg-green-500" : "bg-gray-300"
-                  }`}
+                  className={`w-2 h-2 rounded-full transition-colors ${form[k].trim() !== "" ? "bg-green-500" : "bg-gray-300"}`}
                 />
               ))}
               <span className="text-[10px] text-gray-400 ml-1">{camposLlenos}/5</span>
             </div>
           </div>
 
-          {/* Cantidad */}
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">
               Cantidad de unidades <span className="text-red-500">*</span>
@@ -1291,26 +1265,16 @@ const handleGuardarEdicion = async () => {
                 </span>
               )}
             </label>
-            <input
-              type="text"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              value={form.cantidad_unidades}
-              onChange={e => {
-                updateForm("cantidad_unidades", e.target.value.replace(/[^0-9]/g, ""));
-                setError(null);
-              }}
+            <input type="text" inputMode="numeric" pattern="[0-9]*" value={form.cantidad_unidades}
+              onChange={e => { updateForm("cantidad_unidades", e.target.value.replace(/[^0-9]/g, "")); setError(null); }}
               onKeyDown={e => e.key === "Enter" && handleAgregar()}
               placeholder="Ej: 3000"
               className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 ${
                 cantidadCompleta ? "border-green-400 bg-green-50" : "border-gray-300"
               }`}
             />
-            {/* Indicador visual si la cantidad completaría la producción */}
             {cantidadIngresada > 0 && cantidadReal != null && (
-              <p className={`text-[10px] mt-1 font-medium ${
-                cantidadCompleta ? "text-green-600" : "text-amber-600"
-              }`}>
+              <p className={`text-[10px] mt-1 font-medium ${cantidadCompleta ? "text-green-600" : "text-amber-600"}`}>
                 {cantidadCompleta
                   ? `✓ Con este bulto se completan las ${cantidadReal.toLocaleString("es-MX")} pzas producidas`
                   : `Quedarán ${Math.max(cantidadReal - proyectadoTotal, 0).toLocaleString("es-MX")} pzas sin empacar`
@@ -1319,7 +1283,6 @@ const handleGuardarEdicion = async () => {
             )}
           </div>
 
-          {/* Peso y Dimensiones — OBLIGATORIOS */}
           <div>
             <p className="text-xs font-medium text-gray-700 mb-2 flex items-center gap-1.5">
               <svg className="w-3.5 h-3.5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1330,76 +1293,46 @@ const handleGuardarEdicion = async () => {
               <span className="text-[10px] text-red-400 font-normal">(todos obligatorios)</span>
             </p>
             <div className="grid grid-cols-4 gap-2">
-              {/* Peso */}
               <div>
-                <label className="block text-[10px] font-medium text-orange-600 mb-1 uppercase tracking-wide">
-                  Peso (kg) <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  value={form.peso}
+                <label className="block text-[10px] font-medium text-orange-600 mb-1 uppercase tracking-wide">Peso (kg) <span className="text-red-500">*</span></label>
+                <input type="text" inputMode="decimal" value={form.peso}
                   onChange={e => { updateForm("peso", e.target.value.replace(/[^0-9.]/g, "")); setError(null); }}
                   placeholder="0.0"
                   className={`w-full px-2 py-1.5 border rounded text-sm focus:outline-none focus:ring-2 focus:ring-orange-300 placeholder-orange-300 text-orange-800 ${
-                    form.peso.trim() !== "" ? "border-orange-400 bg-orange-50" : "border-red-200 bg-red-50"
-                  }`}
+                    form.peso.trim() !== "" ? "border-orange-400 bg-orange-50" : "border-red-200 bg-red-50"}`}
                 />
               </div>
-              {/* Alto */}
               <div>
-                <label className="block text-[10px] font-medium text-teal-600 mb-1 uppercase tracking-wide">
-                  Alto (cm) <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  value={form.alto}
+                <label className="block text-[10px] font-medium text-teal-600 mb-1 uppercase tracking-wide">Alto (cm) <span className="text-red-500">*</span></label>
+                <input type="text" inputMode="decimal" value={form.alto}
                   onChange={e => { updateForm("alto", e.target.value.replace(/[^0-9.]/g, "")); setError(null); }}
                   placeholder="0.0"
                   className={`w-full px-2 py-1.5 border rounded text-sm focus:outline-none focus:ring-2 focus:ring-teal-300 placeholder-teal-300 text-teal-800 ${
-                    form.alto.trim() !== "" ? "border-teal-400 bg-teal-50" : "border-red-200 bg-red-50"
-                  }`}
+                    form.alto.trim() !== "" ? "border-teal-400 bg-teal-50" : "border-red-200 bg-red-50"}`}
                 />
               </div>
-              {/* Largo */}
               <div>
-                <label className="block text-[10px] font-medium text-teal-600 mb-1 uppercase tracking-wide">
-                  Largo (cm) <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  value={form.largo}
+                <label className="block text-[10px] font-medium text-teal-600 mb-1 uppercase tracking-wide">Largo (cm) <span className="text-red-500">*</span></label>
+                <input type="text" inputMode="decimal" value={form.largo}
                   onChange={e => { updateForm("largo", e.target.value.replace(/[^0-9.]/g, "")); setError(null); }}
                   placeholder="0.0"
                   className={`w-full px-2 py-1.5 border rounded text-sm focus:outline-none focus:ring-2 focus:ring-teal-300 placeholder-teal-300 text-teal-800 ${
-                    form.largo.trim() !== "" ? "border-teal-400 bg-teal-50" : "border-red-200 bg-red-50"
-                  }`}
+                    form.largo.trim() !== "" ? "border-teal-400 bg-teal-50" : "border-red-200 bg-red-50"}`}
                 />
               </div>
-              {/* Ancho */}
               <div>
-                <label className="block text-[10px] font-medium text-teal-600 mb-1 uppercase tracking-wide">
-                  Ancho (cm) <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  value={form.ancho}
+                <label className="block text-[10px] font-medium text-teal-600 mb-1 uppercase tracking-wide">Ancho (cm) <span className="text-red-500">*</span></label>
+                <input type="text" inputMode="decimal" value={form.ancho}
                   onChange={e => { updateForm("ancho", e.target.value.replace(/[^0-9.]/g, "")); setError(null); }}
                   placeholder="0.0"
                   className={`w-full px-2 py-1.5 border rounded text-sm focus:outline-none focus:ring-2 focus:ring-teal-300 placeholder-teal-300 text-teal-800 ${
-                    form.ancho.trim() !== "" ? "border-teal-400 bg-teal-50" : "border-red-200 bg-red-50"
-                  }`}
+                    form.ancho.trim() !== "" ? "border-teal-400 bg-teal-50" : "border-red-200 bg-red-50"}`}
                 />
               </div>
             </div>
           </div>
 
-          <button
-            onClick={handleAgregar}
-            disabled={guardando || !formularioCompleto}
+          <button onClick={handleAgregar} disabled={guardando || !formularioCompleto}
             className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-lg transition-colors flex items-center justify-center gap-2">
             {guardando
               ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -1422,15 +1355,14 @@ const handleGuardarEdicion = async () => {
         <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
           {bultos.map((b, idx) => (
             <TarjetaBulto key={b.idbulto} bulto={b} numero={idx + 1}
-            bultosFinalizados={bultosFinalizados} eliminando={eliminando}
-            onEliminar={handleEliminar} onEditar={abrirEditar} />
+              bultosFinalizados={bultosFinalizados} eliminando={eliminando}
+              onEliminar={handleEliminar} onEditar={abrirEditar} />
           ))}
         </div>
       )}
 
       {!bultosFinalizados && bultos.length > 0 && (
         <>
-          {/* Advertencia si aún faltan piezas por empacar */}
           {cantidadReal != null && totalUnidades < cantidadReal && (
             <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg p-3">
               <span className="text-amber-500 mt-0.5 text-base leading-none">⚠️</span>
@@ -1446,13 +1378,11 @@ const handleGuardarEdicion = async () => {
           )}
 
           {!confirmFinalizar ? (
-            <button
-              onClick={() => setConfirmFinalizar(true)}
+            <button onClick={() => setConfirmFinalizar(true)}
               disabled={cantidadReal != null && totalUnidades < cantidadReal}
               title={cantidadReal != null && totalUnidades < cantidadReal
                 ? `Faltan ${(cantidadReal - totalUnidades).toLocaleString("es-MX")} pzas por empacar`
-                : undefined
-              }
+                : undefined}
               className="w-full py-2.5 bg-green-600 hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white disabled:text-gray-500 text-sm font-semibold rounded-lg transition-colors flex items-center justify-center gap-2">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -1481,64 +1411,58 @@ const handleGuardarEdicion = async () => {
           )}
         </>
       )}
+
       {editandoBulto && (
-  <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-    <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-5 space-y-4">
-      <div className="flex items-center justify-between">
-        <p className="font-semibold text-gray-800">✏️ Editar Bulto #{editandoBulto.idbulto}</p>
-        <button onClick={() => setEditandoBulto(null)} className="text-gray-400 hover:text-gray-600">✕</button>
-      </div>
-
-      <div>
-        <label className="block text-xs font-medium text-gray-600 mb-1">
-          Cantidad de unidades <span className="text-red-500">*</span>
-        </label>
-        <input type="text" inputMode="numeric" value={formEditar.cantidad_unidades}
-          onChange={e => setFormEditar(p => ({ ...p, cantidad_unidades: e.target.value.replace(/[^0-9]/g, "") }))}
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
-          placeholder="Ej: 3000" />
-      </div>
-
-      <div>
-        <p className="text-xs font-medium text-gray-700 mb-2">Peso y dimensiones</p>
-        <div className="grid grid-cols-2 gap-2">
-          {([
-            { key: "peso",  label: "Peso (kg)",  color: "orange" },
-            { key: "alto",  label: "Alto (cm)",  color: "teal"   },
-            { key: "largo", label: "Largo (cm)", color: "teal"   },
-            { key: "ancho", label: "Ancho (cm)", color: "teal"   },
-          ] as const).map(({ key, label, color }) => (
-            <div key={key}>
-              <label className={`block text-[10px] font-medium text-${color}-600 mb-1 uppercase tracking-wide`}>
-                {label}
-              </label>
-              <input type="text" inputMode="decimal"
-                value={formEditar[key]}
-                onChange={e => setFormEditar(p => ({ ...p, [key]: e.target.value.replace(/[^0-9.]/g, "") }))}
-                placeholder="0.0"
-                className={`w-full px-2 py-1.5 border border-${color}-200 rounded text-sm bg-${color}-50 text-${color}-800 focus:outline-none focus:ring-2 focus:ring-${color}-300`}
-              />
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <p className="font-semibold text-gray-800">✏️ Editar Bulto #{editandoBulto.idbulto}</p>
+              <button onClick={() => setEditandoBulto(null)} className="text-gray-400 hover:text-gray-600">✕</button>
             </div>
-          ))}
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">
+                Cantidad de unidades <span className="text-red-500">*</span>
+              </label>
+              <input type="text" inputMode="numeric" value={formEditar.cantidad_unidades}
+                onChange={e => setFormEditar(p => ({ ...p, cantidad_unidades: e.target.value.replace(/[^0-9]/g, "") }))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                placeholder="Ej: 3000" />
+            </div>
+            <div>
+              <p className="text-xs font-medium text-gray-700 mb-2">Peso y dimensiones</p>
+              <div className="grid grid-cols-2 gap-2">
+                {([
+                  { key: "peso",  label: "Peso (kg)",  color: "orange" },
+                  { key: "alto",  label: "Alto (cm)",  color: "teal"   },
+                  { key: "largo", label: "Largo (cm)", color: "teal"   },
+                  { key: "ancho", label: "Ancho (cm)", color: "teal"   },
+                ] as const).map(({ key, label, color }) => (
+                  <div key={key}>
+                    <label className={`block text-[10px] font-medium text-${color}-600 mb-1 uppercase tracking-wide`}>{label}</label>
+                    <input type="text" inputMode="decimal" value={formEditar[key]}
+                      onChange={e => setFormEditar(p => ({ ...p, [key]: e.target.value.replace(/[^0-9.]/g, "") }))}
+                      placeholder="0.0"
+                      className={`w-full px-2 py-1.5 border border-${color}-200 rounded text-sm bg-${color}-50 text-${color}-800 focus:outline-none focus:ring-2 focus:ring-${color}-300`}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+            {error && <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded p-2">{error}</p>}
+            <div className="flex gap-2 pt-1">
+              <button onClick={() => { setEditandoBulto(null); setError(null); }}
+                className="flex-1 py-2 border border-gray-300 text-gray-600 text-sm rounded-lg hover:bg-gray-50">
+                Cancelar
+              </button>
+              <button onClick={handleGuardarEdicion} disabled={guardandoEdicion || !formEditar.cantidad_unidades}
+                className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white text-sm font-semibold rounded-lg flex items-center justify-center gap-2">
+                {guardandoEdicion && <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+                Guardar
+              </button>
+            </div>
+          </div>
         </div>
-      </div>
-
-      {error && <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded p-2">{error}</p>}
-
-      <div className="flex gap-2 pt-1">
-        <button onClick={() => { setEditandoBulto(null); setError(null); }}
-          className="flex-1 py-2 border border-gray-300 text-gray-600 text-sm rounded-lg hover:bg-gray-50">
-          Cancelar
-        </button>
-        <button onClick={handleGuardarEdicion} disabled={guardandoEdicion || !formEditar.cantidad_unidades}
-          className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white text-sm font-semibold rounded-lg flex items-center justify-center gap-2">
-          {guardandoEdicion && <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
-          Guardar
-        </button>
-      </div>
-    </div>
-  </div>
-)}
+      )}
     </div>
   );
 }
@@ -1603,9 +1527,11 @@ function BotonPdfDirecto({ pedido }: { pedido: PedidoSeguimiento }) {
         refuerzo: producto.refuerzo, por_kilo: producto.por_kilo, medidas: producto.medidas,
         tintas: producto.tintas, caras: producto.caras, bk: producto.bk, foil: producto.foil,
         alto_rel: producto.alto_rel, laminado: producto.laminado, uv_br: producto.uv_br,
-        pigmentos: producto.pigmentos, pantones: producto.pantones, asa_suaje: producto.asa_suaje,color_asa_nombre: producto.color_asa_nombre ?? null,  // ← agregar aquí
-        medida_troquel: producto.medida_troquel ?? null, observacion: producto.observacion, cantidad: producto.cantidad,
-        kilogramos: producto.kilogramos, modo_cantidad: producto.modo_cantidad,
+        pigmentos: producto.pigmentos, pantones: producto.pantones, asa_suaje: producto.asa_suaje,
+        color_asa_nombre: producto.color_asa_nombre ?? null,
+        medida_troquel: producto.medida_troquel ?? null, observacion: producto.observacion,
+        cantidad: producto.cantidad, kilogramos: producto.kilogramos,
+        modo_cantidad: producto.modo_cantidad,
         repeticion_extrusion: producto.repeticion_extrusion ?? null,
         repeticion_metro: producto.repeticion_metro ?? null,
         metros: producto.metros ?? null, ancho_bobina: producto.ancho_bobina ?? null,
@@ -1651,7 +1577,7 @@ function RenderOrdenProduccion({ pedido }: { pedido: PedidoSeguimiento }) {
 }
 
 // ─────────────────────────────────────────────
-// COLUMNAS DE LA TABLA (+ "E. Cta" entre Asa y Pago)
+// COLUMNAS DE LA TABLA
 // ─────────────────────────────────────────────
 const COLUMNAS = [
   "Fecha", "N° Pedido", "Impresion", "Tipo",
@@ -1691,17 +1617,29 @@ export default function Seguimiento() {
   const [filtroTipo,       setFiltroTipo]       = useState("todos");
   const [pantallaCompleta, setPantallaCompleta] = useState(false);
 
-  // Modal proceso (extrusion, impresion, bolseo, asa_flexible)
   const [modalProceso, setModalProceso] = useState<{
     pedido: PedidoSeguimiento; nombreProceso: string;
   } | null>(null);
 
-  // Modal anticipo/liquidacion
   const [modalAnticipo,    setModalAnticipo]    = useState<{ venta: Venta; metodos: MetodoPago[] } | null>(null);
   const [cargandoAnticipo, setCargandoAnticipo] = useState<string | null>(null);
+  const [modalDiseno,      setModalDiseno]      = useState<Pedido | null>(null);
 
-  // Modal diseno
-  const [modalDiseno, setModalDiseno] = useState<Pedido | null>(null);
+  // CAMBIO 3: Estado para el modal de verificación de operador
+  const [modalVerificacion, setModalVerificacion] = useState<{
+    pedido: PedidoSeguimiento;
+    proceso: "extrusion" | "impresion" | "bolseo" | "asa_flexible";
+  } | null>(null);
+
+  // CAMBIO 2: Hooks de permisos granulares por proceso
+  const { user } = useAuth();
+  const esAccesoTotal    = user?.acceso_total ?? false;
+  const puedeExtrusion   = esAccesoTotal || usePermiso("Operar Extrusión");
+  const puedeImpresion   = esAccesoTotal || usePermiso("Operar Impresión");
+  const puedeBolseo      = esAccesoTotal || usePermiso("Operar Bolseo");
+  const puedeAsaFlexible = esAccesoTotal || usePermiso("Operar Asa Flexible");
+  const esRolPlanta      = usePermiso("Acceso Planta");
+  const puedeVerECta     = esAccesoTotal || usePermiso("Editar Anticipo y Liquidacion");
 
   useEffect(() => {
     cargar();
@@ -1718,7 +1656,6 @@ export default function Seguimiento() {
     finally { setCargando(false); }
   };
 
-  // Abre modal anticipo: carga venta completa + metodos de pago
   const abrirAnticipo = async (pedido: PedidoSeguimiento) => {
     if (cargandoAnticipo) return;
     setCargandoAnticipo(pedido.no_pedido);
@@ -1734,7 +1671,6 @@ export default function Seguimiento() {
     } finally { setCargandoAnticipo(null); }
   };
 
-  // Abre modal diseno: construye objeto Pedido minimo
   const abrirDiseno = (pedido: PedidoSeguimiento) => {
     const pedidoObj = {
       no_pedido:        pedido.no_pedido,
@@ -1753,6 +1689,7 @@ export default function Seguimiento() {
     ? pedidos
     : pedidos.filter(p => (p.tipo_producto || "").toLowerCase().includes(filtroTipo));
 
+  // CAMBIO 4: renderFila con lógica de popup vs directo por proceso
   const renderFila = (pedido: PedidoSeguimiento, grande = false) => {
     const px  = grande ? "px-4 py-3" : "px-3 py-2";
     const txt = grande ? "text-sm"   : "text-xs";
@@ -1776,7 +1713,6 @@ export default function Seguimiento() {
       setModalProceso({ pedido, nombreProceso });
     };
 
-    
     return (
       <tr key={`${pedido.no_pedido}-${pedido.no_produccion}`}
         className="hover:bg-gray-50 transition-colors border-t border-gray-200">
@@ -1793,40 +1729,86 @@ export default function Seguimiento() {
           </span>
         </td>
 
-        {/* Anticipo: clickeable → abre modal anticipo/liquidacion */}
+        {/* Anticipo: solo acceso_total puede abrir el modal */}
         <td className={`${px} text-center`}>
-          <BadgeTextoBtn
-            estado={estadoAnticipo}
-            cargando={cargandoAnticipo === pedido.no_pedido}
-            onClick={() => abrirAnticipo(pedido)}
-          />
+          {esAccesoTotal
+            ? <BadgeTextoBtn estado={estadoAnticipo} cargando={cargandoAnticipo === pedido.no_pedido} onClick={() => abrirAnticipo(pedido)} />
+            : <BadgeTexto estado={estadoAnticipo} />
+          }
         </td>
 
-        {/* Diseno: clickeable → abre modal diseno */}
+        {/* Diseño: solo acceso_total puede abrir el modal */}
         <td className={`${px} text-center`}>
-          <BadgeTextoBtn
-            estado={estadoDiseño}
-            onClick={() => abrirDiseno(pedido)}
-          />
+          {esAccesoTotal
+            ? <BadgeTextoBtn estado={estadoDiseño} onClick={() => abrirDiseno(pedido)} />
+            : <BadgeTexto estado={estadoDiseño} />
+          }
         </td>
 
         <td className={`${px} text-center`}><RenderOrdenProduccion pedido={pedido} /></td>
+
+        {/* Extrusión: directo si tiene permiso, popup si es rol planta */}
         <td className={`${px} text-center`}>
-          <Badge estado={extEstado} clickable={tieneOrden && extEstado !== "no-aplica"} onClick={() => abrirProceso("extrusion")} />
-        </td>
-        <td className={`${px} text-center`}>
-          <Badge estado={impEstado} clickable={tieneOrden && impEstado !== "no-aplica"} onClick={() => abrirProceso("impresion")} />
-        </td>
-        <td className={`${px} text-center`}>
-          <Badge estado={bolEstado} clickable={tieneOrden && bolEstado !== "no-aplica"} onClick={() => abrirProceso("bolseo")} />
-        </td>
-        <td className={`${px} text-center`}>
-          <Badge estado={asaEstado} clickable={tieneOrden && asaEstado !== "no-aplica"} onClick={() => abrirProceso("asa_flexible")} />
+          <Badge
+            estado={extEstado}
+            clickable={tieneOrden && extEstado !== "no-aplica" && (puedeExtrusion || esRolPlanta)}
+            onClick={() => {
+              if (!tieneOrden) return;
+              puedeExtrusion
+                ? abrirProceso("extrusion")
+                : setModalVerificacion({ pedido, proceso: "extrusion" });
+            }}
+          />
         </td>
 
-        {/* E. Cta: PDF directo del estado de cuenta */}
+        {/* Impresión: directo si tiene permiso, popup si es rol planta */}
         <td className={`${px} text-center`}>
-          <BotonEstadoCuentaPdf noPedido={pedido.no_pedido} />
+          <Badge
+            estado={impEstado}
+            clickable={tieneOrden && impEstado !== "no-aplica" && (puedeImpresion || esRolPlanta)}
+            onClick={() => {
+              if (!tieneOrden) return;
+              puedeImpresion
+                ? abrirProceso("impresion")
+                : setModalVerificacion({ pedido, proceso: "impresion" });
+            }}
+          />
+        </td>
+
+        {/* Bolseo: directo si tiene permiso, popup si es rol planta */}
+        <td className={`${px} text-center`}>
+          <Badge
+            estado={bolEstado}
+            clickable={tieneOrden && bolEstado !== "no-aplica" && (puedeBolseo || esRolPlanta)}
+            onClick={() => {
+              if (!tieneOrden) return;
+              puedeBolseo
+                ? abrirProceso("bolseo")
+                : setModalVerificacion({ pedido, proceso: "bolseo" });
+            }}
+          />
+        </td>
+
+        {/* Asa Flexible: directo si tiene permiso, popup si es rol planta */}
+        <td className={`${px} text-center`}>
+          <Badge
+            estado={asaEstado}
+            clickable={tieneOrden && asaEstado !== "no-aplica" && (puedeAsaFlexible || esRolPlanta)}
+            onClick={() => {
+              if (!tieneOrden) return;
+              puedeAsaFlexible
+                ? abrirProceso("asa_flexible")
+                : setModalVerificacion({ pedido, proceso: "asa_flexible" });
+            }}
+          />
+        </td>
+
+        {/* E. Cta: solo para quien tenga permiso de anticipo o acceso_total */}
+        <td className={`${px} text-center`}>
+          {puedeVerECta
+            ? <BotonEstadoCuentaPdf noPedido={pedido.no_pedido} />
+            : <span className="text-gray-300 text-xs">—</span>
+          }
         </td>
 
         <td className={`${px} text-center`}><BadgeTexto estado={estadoPago} /></td>
@@ -1978,17 +1960,17 @@ export default function Seguimiento() {
 
       {/* Modal anticipo/liquidacion */}
       {modalAnticipo && (
-  <Modal isOpen={!!modalAnticipo} onClose={() => { setModalAnticipo(null); cargar(); }} title="Anticipo y Liquidacion">
-    <EditarAntLiqReal
-  venta={modalAnticipo.venta}
-  metodos={modalAnticipo.metodos}
-  onClose={() => { setModalAnticipo(null); cargar(); }}
-  onActualizar={(ventaActualizada) => {
-    setModalAnticipo(prev => prev ? { ...prev, venta: ventaActualizada } : null);
-  }}
-/>
-  </Modal>
-)}
+        <Modal isOpen={!!modalAnticipo} onClose={() => { setModalAnticipo(null); cargar(); }} title="Anticipo y Liquidacion">
+          <EditarAntLiqReal
+            venta={modalAnticipo.venta}
+            metodos={modalAnticipo.metodos}
+            onClose={() => { setModalAnticipo(null); cargar(); }}
+            onActualizar={(ventaActualizada) => {
+              setModalAnticipo(prev => prev ? { ...prev, venta: ventaActualizada } : null);
+            }}
+          />
+        </Modal>
+      )}
 
       {/* Modal diseno */}
       {modalDiseno && (
@@ -1999,6 +1981,19 @@ export default function Seguimiento() {
             onEstadoChange={() => { cargar(); }}
           />
         </Modal>
+      )}
+
+      {/* CAMBIO 5: Modal verificacion operador para rol planta */}
+      {modalVerificacion && (
+        <ModalVerificarOperador
+          proceso={modalVerificacion.proceso}
+          onSuccess={() => {
+            const { pedido, proceso } = modalVerificacion;
+            setModalVerificacion(null);
+            setModalProceso({ pedido, nombreProceso: proceso });
+          }}
+          onCancel={() => setModalVerificacion(null)}
+        />
       )}
 
     </Dashboard>

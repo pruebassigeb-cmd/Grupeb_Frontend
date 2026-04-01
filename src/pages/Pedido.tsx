@@ -124,65 +124,86 @@ export default function Pedidos() {
       const respuesta = await crearCotizacion({ ...datos, tipo: "pedido" });
       await cargarPedidos();
       setModalOpen(false);
-      const productosPdf = datos.productos.map((prod: any) => {
-        const modo = prod.modoCantidad || "unidad";
-        return {
-          nombre:             prod.nombre || `Producto #${prod.productoId}`,
-          material:           prod.material           || "",
-          calibre:            resolverCalibre(prod),
-          tintas:             prod.tintas             ?? "—",
-          caras:              prod.caras              ?? "—",
-          medidasFormateadas: prod.medidasFormateadas || "",
-          medidas:            prod.medidas            || {},
-          bk:                 prod.bk        || null,
-          foil:               prod.foil      || null,
-          laminado:           prod.laminado  || null,
-          uvBr:               prod.uvBr      || null,
-          pigmentos:          prod.pigmentos || null,
-          pantones:           prod.pantones  || null,
-          asa_suaje:          prod.suajeTipo || null,
-          observacion:        prod.observacion || null,
-          por_kilo:           prod.porKilo    || null,
-          herramental_descripcion: prod.herramental_descripcion ?? null,
-          herramental_precio:      prod.herramental_precio      != null ? Number(prod.herramental_precio) : null,
-          herramental_aprobado:    prod.herramental_aprobado     ?? null,
-          detalles: prod.cantidades
-            .map((cant: number, i: number) => {
-              if (cant <= 0 || prod.precios[i] <= 0) return null;
-              return {
-                cantidad:      cant,
-                precio_total:  Number((cant * prod.precios[i]).toFixed(2)),
-                kilogramos:    prod.kilogramos?.[i] > 0 ? prod.kilogramos[i] : null,
-                modo_cantidad: modo,
-              };
-            })
-            .filter(Boolean),
-        };
-      });
+
       try {
         const noPedido = respuesta.no_pedido ?? "";
         if (!noPedido) throw new Error("No se recibió no_pedido del servidor");
-        const venta = await getVentaByPedido(noPedido);
+
+        const [pedidosActualizados, venta] = await Promise.all([
+          getPedidos(),
+          getVentaByPedido(noPedido),
+        ]);
+
+        const pedidoCompleto = (pedidosActualizados as Pedido[]).find(
+          (p) => p.no_pedido === noPedido
+        );
+
+        const productosPdf = datos.productos.map((prod: any) => {
+          const modo = prod.modoCantidad || "unidad";
+          return {
+            nombre:             prod.nombre || `Producto #${prod.productoId}`,
+            material:           prod.material           || "",
+            calibre:            resolverCalibre(prod),
+            tintas:             prod.tintas             ?? "—",
+            caras:              prod.caras              ?? "—",
+            medidasFormateadas: prod.medidasFormateadas || "",
+            medidas:            prod.medidas            || {},
+            bk:                 prod.bk        || null,
+            foil:               prod.foil      || null,
+            laminado:           prod.laminado  || null,
+            uvBr:               prod.uvBr      || null,
+            pigmentos:          prod.pigmentos || null,
+            pantones:           prod.pantones  || null,
+            asa_suaje:          prod.suajeTipo || null,
+            observacion:        prod.observacion || null,
+            por_kilo:           prod.porKilo    || null,
+            herramental_descripcion: prod.herramental_descripcion ?? null,
+            herramental_precio:      prod.herramental_precio != null ? Number(prod.herramental_precio) : null,
+            herramental_aprobado:    prod.herramental_aprobado ?? null,
+            detalles: prod.cantidades
+              .map((cant: number, i: number) => {
+                if (cant <= 0 || prod.precios[i] <= 0) return null;
+                return {
+                  cantidad:      cant,
+                  precio_total:  Number((cant * prod.precios[i]).toFixed(2)),
+                  kilogramos:    prod.kilogramos?.[i] > 0 ? prod.kilogramos[i] : null,
+                  modo_cantidad: modo,
+                };
+              })
+              .filter(Boolean),
+          };
+        });
+
         await generarPdfPedido({
-          no_pedido:     noPedido,
-          no_cotizacion: null,
-          fecha:         new Date().toISOString(),
-          cliente:       datos.cliente  || "",
-          empresa:       datos.empresa  || "",
-          telefono:      datos.telefono || "",
-          correo:        datos.correo   || "",
-          impresion:     datos.impresion ?? null,
-          subtotal:      Number(venta.subtotal),
-          iva:           Number(venta.iva),
-          total:         Number(venta.total),
-          anticipo:      Number(venta.anticipo),
-          saldo:         Number(venta.saldo),
-          productos:     productosPdf,
+          no_pedido:      noPedido,
+          no_cotizacion:  null,
+          fecha:          new Date().toISOString(),
+          cliente:        pedidoCompleto?.cliente  ?? datos.cliente  ?? "",
+          empresa:        pedidoCompleto?.empresa  ?? datos.empresa  ?? "",
+          telefono:       pedidoCompleto?.telefono ?? datos.telefono ?? "",
+          correo:         pedidoCompleto?.correo   ?? datos.correo   ?? "",
+          impresion: pedidoCompleto?.impresion ?? datos.impresion ?? null,
+          celular:        pedidoCompleto?.celular        ?? null,
+          razon_social:   pedidoCompleto?.razon_social   ?? null,
+          rfc:            pedidoCompleto?.rfc            ?? null,
+          domicilio:      pedidoCompleto?.domicilio      ?? null,
+          numero:         pedidoCompleto?.numero         ?? null,
+          colonia:        pedidoCompleto?.colonia        ?? null,
+          codigo_postal:  pedidoCompleto?.codigo_postal  ?? null,
+          poblacion:      pedidoCompleto?.poblacion      ?? null,
+          estado_cliente: pedidoCompleto?.estado_cliente ?? null,
+          subtotal:       Number(venta.subtotal),
+          iva:            Number(venta.iva),
+          total:          Number(venta.total),
+          anticipo:       Number(venta.anticipo),
+          saldo:          Number(venta.saldo),
+          productos:      productosPdf,
         });
       } catch (pdfErr) { console.warn("⚠️ PDF:", pdfErr); }
+
     } catch (e: any) {
       console.error("❌ Error al guardar pedido:", e);
-      setErrorGuardar(e.message || e.response?.data?.error || "Error al guardar");
+      setErrorGuardar(e.response?.data?.error || e.message || "Error al guardar");
     } finally { setGuardando(false); }
   };
 
@@ -190,20 +211,29 @@ export default function Pedidos() {
     try {
       const venta = await getVentaByPedido(ped.no_pedido);
       await generarPdfPedido({
-        no_pedido:     ped.no_pedido,
-        no_cotizacion: ped.no_cotizacion ?? null,
-        fecha:         ped.fecha,
-        cliente:       ped.cliente,
-        empresa:       ped.empresa,
-        telefono:      ped.telefono,
-        correo:        ped.correo,
-        impresion:     ped.impresion ?? null,
-        subtotal:      Number(venta.subtotal),
-        iva:           Number(venta.iva),
-        total:         Number(venta.total),
-        anticipo:      Number(venta.anticipo),
-        saldo:         Number(venta.saldo),
-        productos:     buildProductosPdf(ped.productos),
+        no_pedido:      ped.no_pedido,
+        no_cotizacion:  ped.no_cotizacion ?? null,
+        fecha:          ped.fecha,
+        cliente:        ped.cliente,
+        empresa:        ped.empresa,
+        telefono:       ped.telefono,
+        correo:         ped.correo,
+        impresion:      ped.impresion ?? null,
+        celular:        ped.celular        ?? null,
+        razon_social:   ped.razon_social   ?? null,
+        rfc:            ped.rfc            ?? null,
+        domicilio:      ped.domicilio      ?? null,
+        numero:         ped.numero         ?? null,
+        colonia:        ped.colonia        ?? null,
+        codigo_postal:  ped.codigo_postal  ?? null,
+        poblacion:      ped.poblacion      ?? null,
+        estado_cliente: ped.estado_cliente ?? null,
+        subtotal:       Number(venta.subtotal),
+        iva:            Number(venta.iva),
+        total:          Number(venta.total),
+        anticipo:       Number(venta.anticipo),
+        saldo:          Number(venta.saldo),
+        productos:      buildProductosPdf(ped.productos),
       });
     } catch (e) {
       console.error("❌ Error al obtener venta para PDF:", e);
