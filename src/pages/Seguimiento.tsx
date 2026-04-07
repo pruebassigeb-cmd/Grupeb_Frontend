@@ -1649,12 +1649,15 @@ export default function Seguimiento() {
   }, []);
 
   const cargar = async () => {
-    try {
-      setCargando(true); setError(null);
-      setPedidos(await getSeguimiento());
-    } catch { setError("No se pudo cargar el seguimiento."); }
-    finally { setCargando(false); }
-  };
+  try {
+    setCargando(true); setError(null);
+    const data = await getSeguimiento();
+    console.log("Primer pedido:", data[0]); // ← agrega esto
+    setPedidos(data);
+  } catch { setError("No se pudo cargar el seguimiento."); }
+  finally { setCargando(false); }
+};
+
 
   const abrirAnticipo = async (pedido: PedidoSeguimiento) => {
     if (cargandoAnticipo) return;

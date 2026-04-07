@@ -1,8 +1,7 @@
 import jsPDF from "jspdf";
 import { cargarLogoBase64 } from "./Pdfutils";
 import type { EtiquetaData } from "./seguimientoService";
-import logoUrl from "../assets/logogrupeb.png";
-
+import logoUrl from "../assets/grupeblanco.png";
 
 // ── Paleta B/N ───────────────────────────────────────────────
 const BLACK:      [number, number, number] = [0,   0,   0  ];
@@ -14,228 +13,239 @@ const GRAY_LIGHT: [number, number, number] = [240, 240, 240];
 const f = (v: any) =>
   v === null || v === undefined || String(v).trim() === "" ? "—" : String(v).trim();
 
-function formatFecha(iso: string | null): string {
-  if (!iso) return "—";
-  try {
-    return new Date(iso).toLocaleDateString("es-MX", {
-      day: "2-digit", month: "short", year: "numeric",
-    });
-  } catch { return iso; }
-}
-
-// ── Dibuja una etiqueta completa en la posición Y indicada ───
 function dibujarEtiqueta(
   doc: jsPDF,
   data: EtiquetaData,
   bultoIndex: number,
-  offsetY: number,         // 0 = etiqueta superior, ~148 = etiqueta inferior
   logoBase64: string | null
 ) {
-  const M  = 10;           // margen izquierdo
-  const W  = 190;          // ancho total (A4 = 210, margen 10 c/lado)
-  const Y  = offsetY;
+  const ML = 4;
+  const MT = 4;
+  const W  = 92;
 
-  // ════════════════════════════════════════════
-  // BORDE EXTERIOR
-  // ════════════════════════════════════════════
-  doc.setDrawColor(BLACK[0], BLACK[1], BLACK[2]);
-  doc.setLineWidth(0.4);
-  doc.rect(M, Y, W, 128);
+  let y = MT;
 
-  // ════════════════════════════════════════════
-  // BLOQUE EMPRESA (superior) — fondo negro
-  // ════════════════════════════════════════════
-  doc.setFillColor(BLACK[0], BLACK[1], BLACK[2]);
-  doc.rect(M, Y, W, 24, "F");
+  // ══════════════════════════════════════════
+  // 1. HEADER EMPRESA
+  // ══════════════════════════════════════════
+  const HEADER_H = 28;
+  doc.setFillColor(...BLACK);
+  doc.rect(ML, y, W, HEADER_H, "F");
 
-  // Logo (pequeño, lado izquierdo)
   if (logoBase64) {
-    try { doc.addImage(logoBase64, "PNG", M + 2, Y + 2, 18, 18); }
+    try { doc.addImage(logoBase64, "PNG", ML + 2, y + 3, 22, 22); }
     catch { /* sin logo */ }
   }
 
-  // Nombre empresa
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(11);
-  doc.setTextColor(WHITE[0], WHITE[1], WHITE[2]);
-  doc.text("GRUPEB SA DE CV", M + 23, Y + 9);
+  const txtX = logoBase64 ? ML + 27 : ML + 3;
 
-  // RFC + dirección + teléfono
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(12);
+  doc.setTextColor(...WHITE);
+  doc.text("GRUPEB SA DE CV", txtX, y + 10);
+
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(7);
+  doc.setFontSize(6.5);
   doc.setTextColor(200, 200, 200);
   doc.text(
-    "RFC: GRU110205D55   ·   Rogelio Ledesma #102, Col. Cruz Vieja, Tlajomulco de Zúñiga, Jalisco  CP. 45644",
-    M + 23, Y + 16,
-    { maxWidth: W - 26 }
+    "RFC: GRU110205D55  ·  Rogelio Ledesma #102, Col. Cruz Vieja,",
+    txtX, y + 17, { maxWidth: W - (txtX - ML) - 2 }
   );
-  doc.text("Tel: (33) 31801460", M + 23, Y + 21);
-  doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);
+  doc.text(
+    "Tlajomulco de Zúñiga, Jal.  CP. 45644   Tel: (33) 31801460",
+    txtX, y + 23, { maxWidth: W - (txtX - ML) - 2 }
+  );
 
-  // ════════════════════════════════════════════
-  // BLOQUE DESTINATARIO (medio) — fondo gris claro
-  // ════════════════════════════════════════════
-  doc.setFillColor(GRAY_LIGHT[0], GRAY_LIGHT[1], GRAY_LIGHT[2]);
-  doc.rect(M, Y + 24, W, 6, "F");
+  doc.setTextColor(...BLACK);
+  y += HEADER_H;
+
+  // ══════════════════════════════════════════
+  // 2. DESTINATARIO
+  // ══════════════════════════════════════════
+  doc.setFillColor(...GRAY_LIGHT);
+  doc.rect(ML, y, W, 7, "F");
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(6.5);
-  doc.setTextColor(GRAY_DARK[0], GRAY_DARK[1], GRAY_DARK[2]);
-  doc.text("DESTINATARIO", M + 3, Y + 28.5);
-  doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);
+  doc.setFontSize(7);
+  doc.setTextColor(...GRAY_DARK);
+  doc.text("DESTINATARIO", ML + 3, y + 5);
+  doc.setTextColor(...BLACK);
+  y += 7;
 
-  // Nombre de impresión (con fallback a razón social)
+  // Nombre
   const nombreDestinatario = data.cliente_impresion?.trim()
     ? data.cliente_impresion
     : data.cliente;
 
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(10);
-  doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);
-  doc.text(f(nombreDestinatario), M + 3, Y + 38);
+  doc.setFontSize(12);
+  doc.setTextColor(...BLACK);
+  const nombreLines = doc.splitTextToSize(f(nombreDestinatario), W - 6);
+  doc.text(nombreLines, ML + 3, y + 8);
+  y += nombreLines.length > 1 ? 18 : 12;
 
   // Dirección
-  const direccion = [data.calle, data.numero].filter(Boolean).join(" #");
-  const coloniaCP = [`Col. ${data.colonia}`, `C.P. ${data.codigo_postal}`].filter(v => v !== "Col. " && v !== "C.P. ").join("  ·  ");
-  const pobEdo    = [data.poblacion, data.estado].filter(Boolean).join(", ");
-
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(8);
-  doc.setTextColor(GRAY_DARK[0], GRAY_DARK[1], GRAY_DARK[2]);
-  if (direccion.trim()) doc.text(direccion, M + 3, Y + 46);
-  if (coloniaCP.trim()) doc.text(coloniaCP,  M + 3, Y + 52);
-  if (pobEdo.trim())    doc.text(pobEdo,     M + 3, Y + 58);
+  doc.setFontSize(9);
+  doc.setTextColor(...GRAY_DARK);
 
-  // Teléfono / celular
-  const contacto = [
-    data.telefono ? `Tel: ${data.telefono}` : "",
-    data.celular  ? `Cel: ${data.celular}`  : "",
+  const direccion = [data.calle, data.numero ? `#${data.numero}` : null]
+    .filter(Boolean).join(" ");
+  const coloniaCP = [
+    data.colonia       ? `Col. ${data.colonia}`        : null,
+    data.codigo_postal ? `C.P. ${data.codigo_postal}`  : null,
   ].filter(Boolean).join("  ·  ");
-  if (contacto) doc.text(contacto, M + 3, Y + 64);
-  doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);
+  const pobEdo = [data.poblacion, data.estado].filter(Boolean).join(", ");
+  const contacto = [
+    data.telefono ? `Tel: ${data.telefono}` : null,
+    data.celular  ? `Cel: ${data.celular}`  : null,
+  ].filter(Boolean).join("  ·  ");
 
-  // ════════════════════════════════════════════
-  // BLOQUE PEDIDO / PRODUCTO (inferior) — fondo gris claro
-  // ════════════════════════════════════════════
-  doc.setDrawColor(GRAY_MED[0], GRAY_MED[1], GRAY_MED[2]);
+  [direccion, coloniaCP, pobEdo, contacto].filter(Boolean).forEach(line => {
+    const wrapped = doc.splitTextToSize(line, W - 6);
+    doc.text(wrapped, ML + 3, y);
+    y += wrapped.length * 6.5;
+  });
+
+  y += 3;
+
+  // ══════════════════════════════════════════
+  // 3. PEDIDO / PRODUCTO
+  // ══════════════════════════════════════════
+  doc.setDrawColor(...GRAY_MED);
   doc.setLineWidth(0.3);
-  doc.line(M, Y + 70, M + W, Y + 70);
+  doc.line(ML, y, ML + W, y);
 
-  doc.setFillColor(GRAY_LIGHT[0], GRAY_LIGHT[1], GRAY_LIGHT[2]);
-  doc.rect(M, Y + 70, W, 6, "F");
+  doc.setFillColor(...GRAY_LIGHT);
+  doc.rect(ML, y, W, 7, "F");
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(6.5);
-  doc.setTextColor(GRAY_DARK[0], GRAY_DARK[1], GRAY_DARK[2]);
-  doc.text("PEDIDO / PRODUCTO", M + 3, Y + 74.5);
-  doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);
+  doc.setFontSize(7);
+  doc.setTextColor(...GRAY_DARK);
+  doc.text("PEDIDO / PRODUCTO", ML + 3, y + 5);
+  doc.setTextColor(...BLACK);
+  y += 7;
 
-  // Labels: Pedido | Orden | Producto
+  // Labels
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(6.5);
-  doc.setTextColor(GRAY_MED[0], GRAY_MED[1], GRAY_MED[2]);
-  doc.text("PEDIDO",   M + 3,  Y + 83);
-  doc.text("ORDEN",    M + 55, Y + 83);
-  doc.text("PRODUCTO", M + 110, Y + 83);
+  doc.setFontSize(7);
+  doc.setTextColor(...GRAY_MED);
+  doc.text("PEDIDO",   ML + 3,  y + 5);
+  doc.text("ORDEN",    ML + 34, y + 5);
+  doc.text("PRODUCTO", ML + 62, y + 5);
 
   // Valores
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(9);
-  doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);
-  doc.text(`PED-${f(data.no_pedido)}`,  M + 3,  Y + 90);
-  doc.text(f(data.no_produccion),        M + 55, Y + 90);
+  doc.setFontSize(10);
+  doc.setTextColor(...BLACK);
+  doc.text(`PED-${f(data.no_pedido)}`,  ML + 3,  y + 13);
+  doc.text(f(data.no_produccion),        ML + 34, y + 13);
 
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(8);
-  doc.text(f(data.nombre_producto),      M + 110, Y + 90, { maxWidth: W - 113 });
+  doc.setFontSize(9);
+  const prodLines = doc.splitTextToSize(f(data.nombre_producto), W - 65);
+  doc.text(prodLines, ML + 62, y + 13);
 
-  // Medida / material / cantidad
   const cantDisplay = data.modo_cantidad === "kilo" && data.kilogramos
     ? `${data.kilogramos.toLocaleString("es-MX")} kg`
     : data.cantidad_total
       ? `${data.cantidad_total.toLocaleString("es-MX")} pzs`
       : "—";
   const detalle = [data.medida, data.material, cantDisplay].filter(Boolean).join("  ·  ");
-  doc.setFontSize(7.5);
-  doc.setTextColor(GRAY_DARK[0], GRAY_DARK[1], GRAY_DARK[2]);
-  doc.text(detalle, M + 110, Y + 97, { maxWidth: W - 113 });
-  doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);
 
-  // ── Separador antes del bulto ──
-  doc.setDrawColor(GRAY_MED[0], GRAY_MED[1], GRAY_MED[2]);
+  doc.setFontSize(8);
+  doc.setTextColor(...GRAY_DARK);
+  const detLines = doc.splitTextToSize(detalle, W - 65);
+  doc.text(detLines, ML + 62, y + 21);
+  doc.setTextColor(...BLACK);
+
+  y += 30;
+
+  // ══════════════════════════════════════════
+  // 4. BULTO
+  // ══════════════════════════════════════════
+  doc.setDrawColor(...GRAY_MED);
   doc.setLineWidth(0.3);
-  doc.line(M, Y + 103, M + W, Y + 103);
+  doc.line(ML, y, ML + W, y);
+  y += 5;
 
-  // ── Caja BULTO (izquierda) ──
   const bultoNum    = bultoIndex + 1;
   const totalBultos = data.total_bultos;
   const bulto       = data.bultos[bultoIndex];
 
-  doc.setDrawColor(BLACK[0], BLACK[1], BLACK[2]);
+  // Caja BULTO
+  doc.setDrawColor(...BLACK);
   doc.setLineWidth(0.5);
-  doc.setFillColor(GRAY_LIGHT[0], GRAY_LIGHT[1], GRAY_LIGHT[2]);
-  doc.rect(M + 3, Y + 107, 34, 16, "FD");
+  doc.setFillColor(...GRAY_LIGHT);
+  doc.rect(ML + 3, y, 36, 24, "FD");
 
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(6.5);
-  doc.setTextColor(GRAY_DARK[0], GRAY_DARK[1], GRAY_DARK[2]);
-  doc.text("BULTO", M + 20, Y + 112, { align: "center" });
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(14);
-  doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);
-  doc.text(String(bultoNum), M + 20, Y + 121, { align: "center" });
-
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(6.5);
-  doc.setTextColor(GRAY_DARK[0], GRAY_DARK[1], GRAY_DARK[2]);
-  doc.text(`de ${totalBultos}`, M + 20, Y + 126, { align: "center" });
-
-  // ── Unidades (derecha de la caja) ──
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7);
-  doc.setTextColor(GRAY_MED[0], GRAY_MED[1], GRAY_MED[2]);
-  doc.text("UNIDADES EN ESTE BULTO", M + 42, Y + 113);
+  doc.setTextColor(...GRAY_DARK);
+  doc.text("BULTO", ML + 3 + 18, y + 6, { align: "center" });
 
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(18);
-  doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);
+  doc.setFontSize(22);
+  doc.setTextColor(...BLACK);
+  doc.text(String(bultoNum), ML + 3 + 18, y + 17, { align: "center" });
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(7);
+  doc.setTextColor(...GRAY_DARK);
+  doc.text(`de ${totalBultos}`, ML + 3 + 18, y + 23, { align: "center" });
+
+  // Unidades
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8);
+  doc.setTextColor(...GRAY_MED);
+  doc.text("UNIDADES EN ESTE BULTO", ML + 43, y + 7);
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(24);
+  doc.setTextColor(...BLACK);
   doc.text(
     bulto.cantidad_unidades.toLocaleString("es-MX"),
-    M + 42, Y + 125
+    ML + 43, y + 21
   );
 
-  // ── Pie ──
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(6.5);
-  doc.setTextColor(GRAY_MED[0], GRAY_MED[1], GRAY_MED[2]);
-  doc.text(
-    `${f(data.no_produccion)}  ·  PED-${f(data.no_pedido)}  ·  Etiqueta ${bultoNum} de ${totalBultos}`,
-    M + W / 2, Y + 126, { align: "center" }
-  );
-  doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);
+  // // ══════════════════════════════════════════
+  // // 5. PIE
+  // // ══════════════════════════════════════════
+  // doc.setFont("helvetica", "normal");
+  // doc.setFontSize(6.5);
+  // doc.setTextColor(...GRAY_MED);
+  // doc.text(
+  //   `${f(data.no_produccion)}  ·  PED-${f(data.no_pedido)}  ·  Etiqueta ${bultoNum} de ${totalBultos}`,
+  //   ML + W / 2, 146, { align: "center" }
+  // );
+
+  // Borde exterior
+  doc.setDrawColor(...BLACK);
+  doc.setLineWidth(0.4);
+  doc.rect(ML, MT, W, 142);
+  doc.setTextColor(...BLACK);
 }
 
-// ── Función principal exportada ──────────────────────────────
+// ── Exportado principal ──────────────────────────────────────
 export async function generarPdfEtiquetas(data: EtiquetaData): Promise<void> {
-const logoBase64 = await cargarLogoBase64(logoUrl);
+  const logoBase64 = await cargarLogoBase64(logoUrl);
 
-  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-
-  // 2 etiquetas por hoja — offsetY: 10 (superior) y 152 (inferior)
-  const OFFSET_TOP    = 10;
-  const OFFSET_BOTTOM = 152;
-
-  data.bultos.forEach((_, idx) => {
-    const esSegundo = idx % 2 === 1;
-    const esPrimero = idx % 2 === 0;
-
-    // Nueva página cuando empieza un par (0, 2, 4...)
-    if (esPrimero && idx > 0) doc.addPage();
-
-    const offsetY = esSegundo ? OFFSET_BOTTOM : OFFSET_TOP;
-    dibujarEtiqueta(doc, data, idx, offsetY, logoBase64);
+  const doc = new jsPDF({
+    orientation: "portrait",
+    unit: "mm",
+    format: [100, 150],
+    putOnlyUsedFonts: true,
+    floatPrecision: 16,
   });
 
-  // Si hay número impar de bultos, la segunda posición queda vacía — está bien
+  data.bultos.forEach((_, idx) => {
+    if (idx > 0) doc.addPage();
+    dibujarEtiqueta(doc, data, idx, logoBase64);
+  });
+
+  doc.setProperties({
+    title: `Etiquetas_${data.no_produccion}`,
+  });
+
+  (doc.internal as any).scaleFactor = 1;
 
   doc.save(`Etiquetas_${data.no_produccion ?? `PED-${data.no_pedido}`}.pdf`);
 }

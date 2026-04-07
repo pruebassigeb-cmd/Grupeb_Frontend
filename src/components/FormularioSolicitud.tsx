@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import SelectorProducto, { CONFIG_PRODUCTOS } from "./ConfigurarProducto";
 import type { DatosProducto, MedidaKey } from "../types/productos-plastico.types";
 import { FORMATO_MEDIDAS } from "../types/productos-plastico.types";
-import { searchClientes, createCliente } from "../services/clientesService";
+import { searchClientes, createCliente, getClienteById } from "../services/clientesService";
 import { searchProductosPlastico, crearOObtenerProducto, checkProductoDuplicado } from "../services/productosPlasticoService";
 import { getCatalogosProduccion } from "../services/catalogosProduccionService";
 import { usePreciosBatch } from "../hooks/usePrecioCalculado";
@@ -79,6 +79,15 @@ interface DatosCotizacion {
   correo:        string;
   empresa:       string;
   impresion?:    string | null;
+  celular?:        string | null;
+  razon_social?:   string | null;
+  rfc?:            string | null;
+  domicilio?:      string | null;
+  numero?:         string | null;
+  colonia?:        string | null;
+  codigo_postal?:  string | null;
+  poblacion?:      string | null;
+  estado_cliente?: string | null;
   productos:     Producto[];
   observaciones: string;
   tipo?:         "cotizacion" | "pedido";
@@ -123,6 +132,15 @@ export default function FormularioCotizacion({
     correo:        "",
     empresa:       "",
     impresion:     null,
+    celular:         null,   // NUEVO
+  razon_social:    null,   // NUEVO
+  rfc:             null,   // NUEVO
+  domicilio:       null,   // NUEVO
+  numero:          null,   // NUEVO
+  colonia:         null,   // NUEVO
+  codigo_postal:   null,   // NUEVO
+  poblacion:       null,   // NUEVO
+  estado_cliente:  null,   // NUEVO
     productos:     [],
     observaciones: "",
     prioridad:     false,
@@ -391,19 +409,68 @@ export default function FormularioCotizacion({
     }
   };
 
-  const seleccionarCliente = (cliente: ClienteBusqueda) => {
+  /*const seleccionarCliente = (cliente: ClienteBusqueda) => {
     setDatos({
       ...datos,
+      clienteId:      cliente.idclientes,
+    cliente:        cliente.atencion       || "",
+    telefono:       cliente.telefono       || "",
+    correo:         cliente.correo         || "",
+    empresa:        cliente.empresa        || "",
+    impresion:      cliente.impresion      ?? null,
+    celular:        cliente.celular        ?? null,
+    razon_social:   cliente.razon_social   ?? null,
+    rfc:            cliente.rfc            ?? null,
+    domicilio:      cliente.domicilio      ?? null,
+    numero:         cliente.numero         ?? null,
+    colonia:        cliente.colonia        ?? null,
+    codigo_postal:  cliente.codigo_postal  ?? null,
+    poblacion:      cliente.poblacion      ?? null,
+    estado_cliente: cliente.estado        ?? null,
+    });
+    setMostrarModalClientes(false);
+    setBusquedaCliente("");
+  };*/
+
+  // ── seleccionarCliente — fetch completo con getClienteById ────────────────
+const seleccionarCliente = async (cliente: ClienteBusqueda) => {
+  setMostrarModalClientes(false);
+  setBusquedaCliente("");
+
+  // Traer el cliente completo para tener domicilio, RFC, etc.
+  try {
+    const completo = await getClienteById(cliente.idclientes);
+    setDatos(prev => ({
+      ...prev,
+      clienteId:      completo.idclientes,
+      cliente:        completo.atencion       || "",
+      telefono:       completo.telefono       || "",
+      correo:         completo.correo         || "",
+      empresa:        completo.empresa        || "",
+      impresion:      completo.impresion      ?? null,
+      celular:        completo.celular        ?? null,
+      razon_social:   completo.razon_social   ?? null,
+      rfc:            completo.rfc            ?? null,
+      domicilio:      completo.domicilio      ?? null,
+      numero:         completo.numero         ?? null,
+      colonia:        completo.colonia        ?? null,
+      codigo_postal:  completo.codigo_postal  ?? null,
+      poblacion:      completo.poblacion      ?? null,
+      estado_cliente: completo.estado         ?? null,
+    }));
+  } catch {
+    // Fallback con lo que ya tiene el objeto de búsqueda
+    setDatos(prev => ({
+      ...prev,
       clienteId: cliente.idclientes,
       cliente:   cliente.atencion  || "",
       telefono:  cliente.telefono  || "",
       correo:    cliente.correo    || "",
       empresa:   cliente.empresa   || "",
       impresion: cliente.impresion ?? null,
-    });
-    setMostrarModalClientes(false);
-    setBusquedaCliente("");
-  };
+    }));
+  }
+};
 
   const cargarProductos = async (query?: string) => {
     setLoadingProductos(true);

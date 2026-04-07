@@ -164,8 +164,6 @@ export function dibujarEncabezado(opts: OpcionesEncabezado): number {
   doc.setDrawColor(...BLACK); doc.setLineWidth(0.3);
 
   // ── Fila 1: logo + datos empresa ─────────────────────────────────────────
-  //doc.rect(M, y, logoW + centerW, row1H);
-
   if (logoBase64) {
     try { doc.addImage(logoBase64, "PNG", M + 2, y + 2, logoW - 4, row1H - 4); }
     catch {
@@ -191,21 +189,17 @@ export function dibujarEncabezado(opts: OpcionesEncabezado): number {
   doc.setDrawColor(...BLACK); doc.setLineWidth(0.3);
   doc.rect(cotBoxX, y, cotBoxW, row1H);
 
-  // Encabezado gris: label documento (ocupa mitad superior)
   const labelH = row1H * 0.40;
   doc.setFillColor(...GRAY_MED);
   doc.rect(cotBoxX, y, cotBoxW, labelH, "F");
   doc.setFont("helvetica", "bold"); doc.setFontSize(13); doc.setTextColor(...BLACK);
   doc.text(labelDocumento, cotBoxX + cotBoxW / 2, y + labelH / 2 + 2.5, { align: "center" });
 
-  // Línea divisora horizontal
   doc.line(cotBoxX, y + labelH, cotBoxX + cotBoxW, y + labelH);
 
-  // Línea divisora vertical (separa Folio | Fecha)
   const halfBox = cotBoxW / 2;
   doc.line(cotBoxX + halfBox, y + labelH, cotBoxX + halfBox, y + row1H);
 
-  // Celda izquierda: Folio
   const dataY   = y + labelH;
   const dataH   = row1H - labelH;
   doc.setFont("helvetica", "normal"); doc.setFontSize(7); doc.setTextColor(...GRAY_DARK);
@@ -213,7 +207,6 @@ export function dibujarEncabezado(opts: OpcionesEncabezado): number {
   doc.setFont("helvetica", "bold"); doc.setFontSize(13); doc.setTextColor(...BLACK);
   doc.text(String(folio), cotBoxX + halfBox / 2, dataY + dataH / 2 + 4, { align: "center" });
 
-  // Celda derecha: Fecha
   doc.setFont("helvetica", "normal"); doc.setFontSize(7); doc.setTextColor(...GRAY_DARK);
   doc.text("FECHA", cotBoxX + halfBox + halfBox / 2, dataY + 4.5, { align: "center" });
   doc.setFont("helvetica", "normal"); doc.setFontSize(10); doc.setTextColor(...BLACK);
@@ -223,17 +216,14 @@ export function dibujarEncabezado(opts: OpcionesEncabezado): number {
 
   const infoW = PW - 2 * M - cotBoxW - 1;
 
-  // helper: centra texto verticalmente en fila de altura h
   const mid = (h: number) => h / 2 + 2.5;
 
-  // ── Fila 2: Empresa | Impresión ───────────────────────────────────────────
-  // doc.rect(M, y, infoW, row2H);  ← ELIMINADO
- const col2X = M + 65;   // columna derecha
- const col3X = M + 140;  // ← tercera columna
+  // ── Fila 2: Empresa | Impresión | Atención ────────────────────────────────
+  const col2X = M + 65;
+  const col3X = M + 140;
 
   const mid2  = (h: number) => h / 2 + 2.5;
 
-   // Fila 2: Empresa | Impresión | Atención
   doc.setFont("helvetica", "bold");   doc.setFontSize(9);   doc.setTextColor(...BLACK);
   doc.text("Empresa:",     M + 2,         y + mid2(row2H));
   doc.setFont("helvetica", "normal"); doc.setFontSize(9.5);
@@ -245,12 +235,12 @@ export function dibujarEncabezado(opts: OpcionesEncabezado): number {
   doc.text(val(impresion), col2X + 20,    y + mid2(row2H));
 
   doc.setFont("helvetica", "bold");   doc.setFontSize(9);
-  doc.text("Atención:",    col3X,         y + mid2(row2H));  // ← col3X separado
+  doc.text("Atención:",    col3X,         y + mid2(row2H));
   doc.setFont("helvetica", "normal"); doc.setFontSize(9.5);
   doc.text(val(cliente),   col3X + 18,    y + mid2(row2H));
   y += row2H;
 
-  // Fila 3: Teléfono | E-mail | Celular
+  // ── Fila 3: Teléfono | E-mail | Celular ──────────────────────────────────
   doc.setFont("helvetica", "bold");   doc.setFontSize(9);   doc.setTextColor(...BLACK);
   doc.text("Teléfono:",    M + 2,         y + mid2(row3H));
   doc.setFont("helvetica", "normal"); doc.setFontSize(9.5);
@@ -262,12 +252,12 @@ export function dibujarEncabezado(opts: OpcionesEncabezado): number {
   doc.text(val(correo),    col2X + 12,    y + mid2(row3H));
 
   doc.setFont("helvetica", "bold");   doc.setFontSize(9);
-  doc.text("Celular:",     col3X,         y + mid2(row3H));  // ← col3X
+  doc.text("Celular:",     col3X,         y + mid2(row3H));
   doc.setFont("helvetica", "normal"); doc.setFontSize(9.5);
   doc.text(val(celular),   col3X + 14,    y + mid2(row3H));
   y += row3H;
 
-  // Fila 4: Razón Social | RFC  (sin celular duplicado)
+  // ── Fila 4: Razón Social | RFC ────────────────────────────────────────────
   doc.setFont("helvetica", "bold");   doc.setFontSize(9);   doc.setTextColor(...BLACK);
   doc.text("Razón Social:", M + 2,        y + mid2(row4H));
   doc.setFont("helvetica", "normal"); doc.setFontSize(9.5);
@@ -279,7 +269,7 @@ export function dibujarEncabezado(opts: OpcionesEncabezado): number {
   doc.text(val(rfc),        col2X + 10,   y + mid2(row4H));
   y += row4H;
 
-  // Fila 5: Domicilio (fila completa)
+  // ── Fila 5: Domicilio ─────────────────────────────────────────────────────
   doc.setFont("helvetica", "bold");   doc.setFontSize(9);   doc.setTextColor(...BLACK);
   doc.text("Domicilio:",   M + 2,         y + mid2(row5H));
   doc.setFont("helvetica", "normal"); doc.setFontSize(9);
