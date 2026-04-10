@@ -40,6 +40,7 @@ export interface Venta {
   no_cotizacion:         string | null;
   fecha_pedido:          string;
   cliente:               string;
+  cliente_id?:           number | null;
   empresa:               string;
   telefono:              string;
   correo:                string;

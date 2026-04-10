@@ -6,21 +6,9 @@ export const getSeguimiento = async (): Promise<PedidoSeguimiento[]> => {
   return response.data;
 };
 
-export interface OrdenProduccionRespuesta {
-  no_pedido:       string;
-  no_cotizacion:   string | null;
-  fecha:           string;
-  prioridad:       boolean;
-  cliente:         string;
-  empresa:         string;
-  telefono:        string;
-  correo:          string;
-  impresion:       string | null;
-  total_productos: number;
-  con_orden:       number;
-  productos:       OrdenProduccionProducto[];
-}
-
+// ─────────────────────────────────────────────
+// ORDEN DE PRODUCCIÓN
+// ─────────────────────────────────────────────
 export interface OrdenProduccionProducto {
   idsolicitud_producto:    number;
   no_produccion:           string | null;
@@ -76,11 +64,29 @@ export interface OrdenProduccionProducto {
   metros_extruir:          number | null;
 }
 
+export interface OrdenProduccionRespuesta {
+  no_pedido:       string;
+  no_cotizacion:   string | null;
+  fecha:           string;
+  prioridad:       boolean;
+  cliente:         string;
+  empresa:         string;
+  telefono:        string;
+  correo:          string;
+  impresion:       string | null;
+  total_productos: number;
+  con_orden:       number;
+  productos:       OrdenProduccionProducto[];
+}
+
 export const getOrdenProduccion = async (noPedido: string): Promise<OrdenProduccionRespuesta> => {
   const response = await api.get(`/seguimiento/${noPedido}/orden-produccion`);
   return response.data;
 };
 
+// ─────────────────────────────────────────────
+// PROCESOS
+// ─────────────────────────────────────────────
 export interface ProcesoRegistro {
   idproceso_cat:  number;
   nombre_proceso: string;
@@ -121,6 +127,14 @@ export const finalizarProceso = async (idproduccion: number, datos: Record<strin
   return response.data;
 };
 
+export const editarProceso = async (
+  idproduccion: number,
+  tabla: string,
+  datos: Record<string, any>
+): Promise<void> => {
+  await api.put(`/procesos/${idproduccion}/editar/${tabla}`, datos);
+};
+
 // ─────────────────────────────────────────────
 // BULTOS
 // ─────────────────────────────────────────────
@@ -142,11 +156,6 @@ export interface BultosRespuesta {
   total_unidades:    number;
 }
 
-export const getBultos = async (idproduccion: number): Promise<BultosRespuesta> => {
-  const { data } = await api.get(`/seguimiento/${idproduccion}/bultos`);
-  return data;
-};
-
 export interface NuevoBultoPayload {
   cantidad_unidades: number;
   peso?:  number | null;
@@ -154,6 +163,11 @@ export interface NuevoBultoPayload {
   largo?: number | null;
   ancho?: number | null;
 }
+
+export const getBultos = async (idproduccion: number): Promise<BultosRespuesta> => {
+  const { data } = await api.get(`/seguimiento/${idproduccion}/bultos`);
+  return data;
+};
 
 export const agregarBulto = async (
   idproduccion: number,
@@ -172,6 +186,18 @@ export const eliminarBulto = async (
 
 export const finalizarBultos = async (idproduccion: number): Promise<void> => {
   await api.patch(`/seguimiento/${idproduccion}/bultos/finalizar`);
+};
+
+export const editarBulto = async (
+  idproduccion: number,
+  idbulto: number,
+  payload: NuevoBultoPayload
+): Promise<Bulto> => {
+  const { data } = await api.put(
+    `/seguimiento/${idproduccion}/bultos/${idbulto}`,
+    payload
+  );
+  return data;
 };
 
 // ─────────────────────────────────────────────
@@ -217,28 +243,5 @@ export interface EtiquetaData {
 
 export const getBultosEtiqueta = async (idproduccion: number): Promise<EtiquetaData> => {
   const { data } = await api.get(`/seguimiento/${idproduccion}/bultos/etiqueta`);
-  return data;
-};
-
-// ─────────────────────────────────────────────
-// EDITAR PROCESO TERMINADO
-// ─────────────────────────────────────────────
-export const editarProceso = async (
-  idproduccion: number,
-  tabla: string,
-  datos: Record<string, any>
-): Promise<void> => {
-  await api.put(`/procesos/${idproduccion}/editar/${tabla}`, datos);
-};
-
-export const editarBulto = async (
-  idproduccion: number,
-  idbulto: number,
-  payload: NuevoBultoPayload
-): Promise<Bulto> => {
-  const { data } = await api.put(
-    `/seguimiento/${idproduccion}/bultos/${idbulto}`,
-    payload
-  );
   return data;
 };

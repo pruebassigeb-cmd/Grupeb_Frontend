@@ -30,30 +30,31 @@ export default function Clientes() {
     }
   };
 
-  const normalizarTexto = (texto: string) => {
-    return texto
-      .toLowerCase()
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .replace(/[.,\-]/g, "")
-      .trim();
-  };
+const normalizarTexto = (texto: string | null | undefined) => {
+  if (!texto) return "";
+  return texto
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[.,\-]/g, "")
+    .trim();
+};
 
-  const clientesFiltrados = clientes.filter((cliente) => {
-    if (!busqueda) return true;
+const clientesFiltrados = clientes.filter((cliente) => {
+  if (!busqueda) return true;
 
-    const terminoBusqueda = normalizarTexto(busqueda);
+  const terminoBusqueda = normalizarTexto(busqueda);
 
-    return (
-      normalizarTexto(cliente.empresa).includes(terminoBusqueda) ||
-      normalizarTexto(cliente.correo).includes(terminoBusqueda) ||
-      normalizarTexto(cliente.atencion || "").includes(terminoBusqueda) ||
-      normalizarTexto(cliente.impresion || "").includes(terminoBusqueda) ||
-      normalizarTexto(cliente.telefono || "").includes(terminoBusqueda) ||
-      normalizarTexto(cliente.rfc || "").includes(terminoBusqueda)
-    );
-  });
-
+  return (
+    cliente.idclientes.toString().includes(busqueda.trim()) ||
+    normalizarTexto(cliente.empresa).includes(terminoBusqueda) ||
+    normalizarTexto(cliente.correo).includes(terminoBusqueda) ||
+    normalizarTexto(cliente.atencion).includes(terminoBusqueda) ||
+    normalizarTexto(cliente.impresion).includes(terminoBusqueda) ||
+    normalizarTexto(cliente.telefono).includes(terminoBusqueda) ||
+    normalizarTexto(cliente.rfc).includes(terminoBusqueda)
+  );
+});
   const handleEditar = async (id: number) => {
     try {
       const cliente = await getClienteById(id);
@@ -123,7 +124,7 @@ export default function Clientes() {
             type="text"
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
-            placeholder="Buscar por empresa, correo, atención, impresión, teléfono o RFC..."
+            placeholder="Buscar por N° cliente, empresa, correo, impresión, teléfono o RFC..."
             className="w-full px-4 py-3 pl-12 border border-gray-300 rounded-lg text-gray-900 bg-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
           <svg

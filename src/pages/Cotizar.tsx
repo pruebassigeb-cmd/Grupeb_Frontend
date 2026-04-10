@@ -72,6 +72,8 @@ export default function Cotizaciones() {
       normalizar(c.correo   ?? "").includes(t) ||
       normalizar(c.telefono ?? "").includes(t) ||
       normalizar(c.estado).includes(t)         ||
+      String(c.cliente_id ?? "").includes(busqueda.trim()) ||
+      normalizar(c.impresion ?? "").includes(t) ||
       (c.no_cotizacion ?? "").toLowerCase().includes(t)
     );
   });
@@ -157,9 +159,18 @@ export default function Cotizaciones() {
           detalles: prod.cantidades
             .map((cant: number, i: number) => {
               if (cant <= 0 || prod.precios[i] <= 0) return null;
+
+              let precioTotal: number;
+              if (modo === "kilo" && prod.kilogramos?.[i] > 0 && prod.porKilo) {
+                const precioKg = Math.round(prod.precios[i] * Number(prod.porKilo) * 10000) / 10000;
+                precioTotal = Math.round(prod.kilogramos[i] * precioKg * 100) / 100;
+              } else {
+                precioTotal = Math.round(cant * prod.precios[i] * 100) / 100;
+              }
+
               return {
                 cantidad:      cant,
-                precio_total:  Number((cant * prod.precios[i]).toFixed(2)),
+                precio_total:  precioTotal,
                 kilogramos:    prod.kilogramos?.[i] > 0 ? prod.kilogramos[i] : null,
                 modo_cantidad: modo,
               };
@@ -178,7 +189,6 @@ export default function Cotizaciones() {
           correo:         datos.correo    || "",
           estado:         "Pendiente",
           impresion:      datos.impresion ?? null,
-          // Al crear desde formulario ligero no tenemos estos datos todavía
           celular:        datos.celular        ?? null,
           razon_social:   datos.razon_social   ?? null,
           rfc:            datos.rfc            ?? null,
@@ -188,9 +198,9 @@ export default function Cotizaciones() {
           codigo_postal:  datos.codigo_postal  ?? null,
           poblacion:      datos.poblacion      ?? null,
           estado_cliente: datos.estado_cliente ?? null,
-          total: datos.productos.reduce((sum: number, prod: any) =>
-            sum + prod.cantidades.reduce((s: number, cant: number, i: number) =>
-              cant > 0 && prod.precios[i] > 0 ? s + cant * prod.precios[i] : s, 0), 0),
+          cliente_id:     datos.cliente_id     ?? null,
+          total: productosPdf.reduce((sum: number, prod: any) =>
+            sum + prod.detalles.reduce((s: number, d: any) => s + d.precio_total, 0), 0),
           productos: productosPdf,
         });
       } catch (pdfErr) { console.warn("⚠️ PDF:", pdfErr); }
@@ -218,7 +228,6 @@ export default function Cotizaciones() {
       correo:         cot.correo,
       estado:         cot.estado,
       impresion:      cot.impresion      ?? null,
-      // ── Campos completos del cliente desde el servidor ──────────────────
       celular:        cot.celular        ?? null,
       razon_social:   cot.razon_social   ?? null,
       rfc:            cot.rfc            ?? null,
@@ -228,7 +237,7 @@ export default function Cotizaciones() {
       codigo_postal:  cot.codigo_postal  ?? null,
       poblacion:      cot.poblacion      ?? null,
       estado_cliente: cot.estado_cliente ?? null,
-      // ───────────────────────────────────────────────────────────────────
+      cliente_id:     cot.cliente_id     ?? null,
       total: esPedido
         ? cot.productos.reduce((sum, p) =>
             sum + p.detalles.filter(d => d.aprobado === true).reduce((s, d) => s + d.precio_total, 0), 0)

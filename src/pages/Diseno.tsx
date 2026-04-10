@@ -528,6 +528,8 @@ export default function Diseno() {
     return (
       normalizarTexto(p.cliente ?? "").includes(t) ||
       normalizarTexto(p.empresa ?? "").includes(t) ||
+      String((p as any).cliente_id ?? "").includes(busqueda.trim()) ||
+      normalizarTexto((p as any).impresion ?? "").includes(t) ||
       p.no_pedido.toString().includes(t)
     );
   });

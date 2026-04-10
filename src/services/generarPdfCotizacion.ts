@@ -1,10 +1,10 @@
-// generarPdfCotizacion.ts — LANDSCAPE A4 — B&N
+// generarPdfCotizacion.ts — LANDSCAPE CARTA — B&N
 
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import {
   cargarLogoBase64,
-  val, boolLabel, parsePantones, getMedida, formatCantidadCelda,
+  val, boolLabel, parsePantones, getMedida, tipoProducto, formatCantidadCelda,
   dibujarEncabezado, dibujarCajasPie, dibujarPiePagina,
   GRAY_DARK, GRAY_MED, GRAY_LIGHT, GRAY_ROW, BLACK, WHITE,
 } from "./Pdfutils";
@@ -23,7 +23,6 @@ interface CotizacionPdf {
   logoBase64?:    string;
   productos:      ProductoPdf[];
   total:          number;
-  // ── Campos nuevos de cliente ──────────────────────────────────────────────
   celular?:        string | null;
   razon_social?:   string | null;
   rfc?:            string | null;
@@ -33,16 +32,20 @@ interface CotizacionPdf {
   codigo_postal?:  string | null;
   poblacion?:      string | null;
   estado_cliente?: string | null;
+  cliente_id?:     number | null;
 }
 
 export async function generarPdfCotizacion(cotizacion: CotizacionPdf): Promise<void> {
   const logoBase64 = cotizacion.logoBase64 ?? await cargarLogoBase64(logoUrl);
 
-  const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
-  const PW  = 297;
-  const M   = 8;
+  const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "letter" });
+  const PW  = 274.9;
+  const PH  = 215.9;
+  const M   = 10;
+  const COT_FOOTER_H = 55;
 
-  const y = dibujarEncabezado({
+  // ← await aquí
+  const y = await dibujarEncabezado({
     doc,
     logoBase64,
     labelDocumento: "COTIZACION",
@@ -63,6 +66,7 @@ export async function generarPdfCotizacion(cotizacion: CotizacionPdf): Promise<v
     codigo_postal:  cotizacion.codigo_postal  ?? null,
     poblacion:      cotizacion.poblacion      ?? null,
     estado_cliente: cotizacion.estado_cliente ?? null,
+    cliente_id:     cotizacion.cliente_id     ?? null, 
   });
 
   const maxDet      = Math.max(...cotizacion.productos.map(p => p.detalles.length), 1);
@@ -78,11 +82,13 @@ export async function generarPdfCotizacion(cotizacion: CotizacionPdf): Promise<v
     ...Array.from({ length: numCantCols }, (_, i) => `Cant ${i + 1}`),
   ];
 
+  const MID_COL = Math.floor(headAll.length / 2);
+
   const bodyRows: any[][] = [];
 
   cotizacion.productos.forEach(prod => {
     const row: any[] = [
-      val(prod.nombre),
+      tipoProducto(prod.nombre),
       getMedida(prod),
       boolLabel(prod.bk),
       val(prod.tintas),
@@ -97,7 +103,6 @@ export async function generarPdfCotizacion(cotizacion: CotizacionPdf): Promise<v
       parsePantones(prod.pantones),
       prod.pigmentos ? String(prod.pigmentos).trim() || "—" : "—",
     ];
-
     for (let i = 0; i < numCantCols; i++) {
       const det = prod.detalles[i];
       row.push(det && det.cantidad > 0 ? formatCantidadCelda(det, prod.por_kilo) : "—");
@@ -112,27 +117,31 @@ export async function generarPdfCotizacion(cotizacion: CotizacionPdf): Promise<v
     const obsTexto    = prod.observacion?.trim()
       ? `Obs: ${modoLabel}  —  ${prod.observacion.trim()}`
       : `Obs: ${modoLabel}`;
-    const obsRow = new Array(headAll.length).fill("");
-    obsRow[0] = obsTexto;
-    bodyRows.push(obsRow);
 
-    if (prod.herramental_precio != null && prod.herramental_precio > 0) {
-      const herrRow    = new Array(headAll.length).fill("");
+    const hasHerr =
+      prod.herramental_precio != null &&
+      prod.herramental_precio > 0;
+
+    const comboRow = new Array(headAll.length).fill("");
+    comboRow[0] = obsTexto;
+
+    if (hasHerr) {
       const nombreHerr = prod.herramental_descripcion?.trim() || "Herramental / molde";
-      herrRow[0] = `HERR: ${nombreHerr}  —  Costo único de fabricación del molde o troquel necesario para producir este artículo. Se cotiza por separado y no forma parte del precio por pieza.`;
-      herrRow[headAll.length - 1] = `$${Number(prod.herramental_precio).toLocaleString("es-MX", {
+      comboRow[1] = `HERR: ${nombreHerr}  —  Costo único de fabricación del molde o troquel necesario para producir este artículo. Se cotiza por separado y no forma parte del precio por pieza.`;
+      comboRow[headAll.length - 1] = `$${Number(prod.herramental_precio).toLocaleString("es-MX", {
         minimumFractionDigits: 2, maximumFractionDigits: 2,
       })}`;
-      bodyRows.push(herrRow);
     }
+
+    bodyRows.push(comboRow);
   });
 
   const availW = PW - M * 2;
 
   const colW: Record<number, number> = {
-    0: 36, 1: 18, 2:  9, 3: 11, 4: 11,
-    5: 18, 6: 13, 7: 11, 8: 16, 9: 13,
-    10: 15, 11: 13, 12: 32, 13: 20,
+    0: 20, 1: 17, 2:  8, 3: 10, 4: 10,
+    5: 17, 6: 12, 7: 10, 8: 15, 9: 12,
+    10: 14, 11: 12, 12: 28, 13: 18,
   };
   const fixedTotal = Object.values(colW).reduce((a, b) => a + b, 0);
   const cantW      = Math.max((availW - fixedTotal) / numCantCols, 16);
@@ -144,82 +153,95 @@ export async function generarPdfCotizacion(cotizacion: CotizacionPdf): Promise<v
     Object.keys(colW).forEach(k => { colW[+k] = colW[+k] * scale; });
   }
 
-  const cantFontSize = 15;
-
   const columnStyles: Parameters<typeof autoTable>[1]["columnStyles"] = {
-    0:  { cellWidth: colW[0],  halign: "left",   fontSize: 11           },
-    1:  { cellWidth: colW[1],  halign: "center", fontSize: 12           },
-    2:  { cellWidth: colW[2],  halign: "center", fontSize: 11           },
-    3:  { cellWidth: colW[3],  halign: "center", fontSize: 11           },
-    4:  { cellWidth: colW[4],  halign: "center", fontSize: 11           },
-    5:  { cellWidth: colW[5],  halign: "center", fontSize: 11           },
-    6:  { cellWidth: colW[6],  halign: "center", fontSize: 11           },
-    7:  { cellWidth: colW[7],  halign: "center", fontSize: 11           },
-    8:  { cellWidth: colW[8],  halign: "center", fontSize: 11           },
-    9:  { cellWidth: colW[9],  halign: "center", fontSize: 11           },
-    10: { cellWidth: colW[10], halign: "center", fontSize: 11           },
-    11: { cellWidth: colW[11], halign: "center", fontSize: 11           },
-    12: { cellWidth: colW[12], halign: "left",   fontSize: 11           },
-    13: { cellWidth: colW[13], halign: "center", fontSize: 11           },
-    ...(numCantCols >= 1 ? { 14: { cellWidth: colW[14], halign: "center" as const, fontSize: cantFontSize } } : {}),
-    ...(numCantCols >= 2 ? { 15: { cellWidth: colW[15], halign: "center" as const, fontSize: cantFontSize } } : {}),
-    ...(numCantCols >= 3 ? { 16: { cellWidth: colW[16], halign: "center" as const, fontSize: cantFontSize } } : {}),
+    0:  { cellWidth: colW[0],  halign: "left",   fontSize: 7 },
+    1:  { cellWidth: colW[1],  halign: "center", fontSize: 7 },
+    2:  { cellWidth: colW[2],  halign: "center", fontSize: 7 },
+    3:  { cellWidth: colW[3],  halign: "center", fontSize: 7 },
+    4:  { cellWidth: colW[4],  halign: "center", fontSize: 7 },
+    5:  { cellWidth: colW[5],  halign: "center", fontSize: 7 },
+    6:  { cellWidth: colW[6],  halign: "center", fontSize: 7 },
+    7:  { cellWidth: colW[7],  halign: "center", fontSize: 7 },
+    8:  { cellWidth: colW[8],  halign: "center", fontSize: 7 },
+    9:  { cellWidth: colW[9],  halign: "center", fontSize: 7 },
+    10: { cellWidth: colW[10], halign: "center", fontSize: 7 },
+    11: { cellWidth: colW[11], halign: "center", fontSize: 7 },
+    12: { cellWidth: colW[12], halign: "left",   fontSize: 7 },
+    13: { cellWidth: colW[13], halign: "center", fontSize: 7 },
+    ...(numCantCols >= 1 ? { 14: { cellWidth: colW[14], halign: "center" as const, fontSize: 8, fontStyle: "bold" as const } } : {}),
+    ...(numCantCols >= 2 ? { 15: { cellWidth: colW[15], halign: "center" as const, fontSize: 8, fontStyle: "bold" as const } } : {}),
+    ...(numCantCols >= 3 ? { 16: { cellWidth: colW[16], halign: "center" as const, fontSize: 8, fontStyle: "bold" as const } } : {}),
   };
 
   autoTable(doc, {
     startY: y,
-    margin: { left: M, right: M },
+    margin: { left: M, right: M, bottom: COT_FOOTER_H + M },
     head:   [headAll],
     body:   bodyRows,
     theme:  "grid",
-    headStyles:         { fillColor: GRAY_DARK, textColor: WHITE, fontStyle: "bold", fontSize: 11, cellPadding: 1.5, halign: "center", valign: "middle" },
-    bodyStyles:         { fontSize: 11, textColor: BLACK, cellPadding: 1.5, valign: "middle", minCellHeight: 9 },
+    headStyles:         { fillColor: GRAY_DARK, textColor: WHITE, fontStyle: "bold", fontSize: 7, cellPadding: 1.2, halign: "center", valign: "middle" },
+    bodyStyles:         { fontSize: 7, textColor: BLACK, cellPadding: 1.2, valign: "middle", minCellHeight: 7 },
     alternateRowStyles: { fillColor: GRAY_ROW },
     columnStyles,
     didParseCell(data) {
       if (data.section === "head" && data.column.index >= 14) {
         data.cell.styles.fillColor = GRAY_MED;
       }
+
       if (data.section === "body") {
-        const raw0 = String((data.row.raw as any[])?.[0] ?? "");
+        const raw     = data.row.raw as any[];
+        const raw0    = String(raw?.[0] ?? "");
+        const raw1    = String(raw?.[1] ?? "");
+        const isCombo = raw0.startsWith("Obs:");
 
-        if (raw0.startsWith("Obs:")) {
-          if (data.column.index === 0) {
-            data.cell.colSpan          = headAll.length;
-            data.cell.styles.fillColor = GRAY_LIGHT;
-            data.cell.styles.fontStyle = "italic";
-            data.cell.styles.fontSize  = 11;
-            data.cell.styles.textColor = [80, 80, 80];
-            data.cell.styles.halign    = "left";
-          } else {
-            data.cell.styles.fillColor = GRAY_LIGHT;
-            data.cell.text = [];
-          }
-        }
+        if (!isCombo) return;
 
-        if (raw0.startsWith("HERR:")) {
-          if (data.column.index === 0) {
-            data.cell.colSpan          = headAll.length - 1;
-            data.cell.styles.fillColor = [250, 244, 230];
-            data.cell.styles.fontStyle = "italic";
-            data.cell.styles.fontSize  = 9;
-            data.cell.styles.textColor = [130, 70, 0];
-            data.cell.styles.halign    = "left";
-            data.cell.styles.overflow  = "linebreak";
-          } else if (data.column.index === headAll.length - 1) {
-            data.cell.styles.fillColor = [250, 244, 230];
-            data.cell.styles.fontStyle = "bold";
-            data.cell.styles.fontSize  = 12;
-            data.cell.styles.textColor = [130, 70, 0];
-            data.cell.styles.halign    = "center";
-          } else {
-            data.cell.styles.fillColor = [250, 244, 230];
-            data.cell.text = [];
-          }
+        const hasHerr = raw1.startsWith("HERR:");
+        const ci      = data.column.index;
+        const lastCol = headAll.length - 1;
+
+        if (ci === 0) {
+          data.cell.colSpan            = hasHerr ? MID_COL : headAll.length;
+          data.cell.styles.fillColor   = GRAY_LIGHT;
+          data.cell.styles.fontStyle   = "italic";
+          data.cell.styles.fontSize    = 6.5;
+          data.cell.styles.textColor   = [80, 80, 80] as [number, number, number];
+          data.cell.styles.halign      = "left";
+          data.cell.styles.cellPadding = 0.8;
+
+        } else if (hasHerr && ci === MID_COL) {
+          data.cell.colSpan            = lastCol - MID_COL;
+          data.cell.styles.fillColor   = [250, 244, 230] as [number, number, number];
+          data.cell.styles.fontStyle   = "italic";
+          data.cell.styles.fontSize    = 6.5;
+          data.cell.styles.textColor   = [130, 70, 0] as [number, number, number];
+          data.cell.styles.halign      = "left";
+          data.cell.styles.overflow    = "linebreak";
+          data.cell.styles.cellPadding = 0.8;
+          data.cell.text               = [raw1];
+
+        } else if (hasHerr && ci === lastCol) {
+          data.cell.styles.fillColor   = [250, 244, 230] as [number, number, number];
+          data.cell.styles.fontStyle   = "bold";
+          data.cell.styles.fontSize    = 7;
+          data.cell.styles.textColor   = [130, 70, 0] as [number, number, number];
+          data.cell.styles.halign      = "center";
+
+        } else {
+          data.cell.styles.fillColor =
+            ci < MID_COL
+              ? GRAY_LIGHT
+              : [250, 244, 230] as [number, number, number];
+          data.cell.text = [];
         }
       }
     },
   });
+
+  const finalY = (doc as any).lastAutoTable?.finalY ?? 0;
+  if (finalY + COT_FOOTER_H + M > PH) {
+    doc.addPage();
+  }
 
   dibujarCajasPie(doc, cotizacion.productos, [
     "• Precios más IVA.",

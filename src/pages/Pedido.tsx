@@ -64,8 +64,11 @@ export default function Pedidos() {
       normalizar(p.empresa  ?? "").includes(t) ||
       normalizar(p.correo   ?? "").includes(t) ||
       normalizar(p.telefono ?? "").includes(t) ||
+      String(p.cliente_id ?? "").includes(busqueda.trim()) ||
+      normalizar(p.impresion ?? "").includes(t) ||
       (p.no_pedido ?? "").toLowerCase().includes(t) ||
       (p.no_cotizacion ?? "").toLowerCase().includes(t)
+      
     );
   });
 
@@ -163,9 +166,18 @@ export default function Pedidos() {
             detalles: prod.cantidades
               .map((cant: number, i: number) => {
                 if (cant <= 0 || prod.precios[i] <= 0) return null;
+
+                let precioTotal: number;
+                if (modo === "kilo" && prod.kilogramos?.[i] > 0 && prod.porKilo) {
+                  const precioKg = Math.round(prod.precios[i] * Number(prod.porKilo) * 10000) / 10000;
+                  precioTotal = Math.round(prod.kilogramos[i] * precioKg * 100) / 100;
+                } else {
+                  precioTotal = Math.round(cant * prod.precios[i] * 100) / 100;
+                }
+
                 return {
                   cantidad:      cant,
-                  precio_total:  Number((cant * prod.precios[i]).toFixed(2)),
+                  precio_total:  precioTotal,
                   kilogramos:    prod.kilogramos?.[i] > 0 ? prod.kilogramos[i] : null,
                   modo_cantidad: modo,
                 };
@@ -182,7 +194,7 @@ export default function Pedidos() {
           empresa:        pedidoCompleto?.empresa  ?? datos.empresa  ?? "",
           telefono:       pedidoCompleto?.telefono ?? datos.telefono ?? "",
           correo:         pedidoCompleto?.correo   ?? datos.correo   ?? "",
-          impresion: pedidoCompleto?.impresion ?? datos.impresion ?? null,
+          impresion:      pedidoCompleto?.impresion ?? datos.impresion ?? null,
           celular:        pedidoCompleto?.celular        ?? null,
           razon_social:   pedidoCompleto?.razon_social   ?? null,
           rfc:            pedidoCompleto?.rfc            ?? null,
@@ -192,6 +204,7 @@ export default function Pedidos() {
           codigo_postal:  pedidoCompleto?.codigo_postal  ?? null,
           poblacion:      pedidoCompleto?.poblacion      ?? null,
           estado_cliente: pedidoCompleto?.estado_cliente ?? null,
+          cliente_id:     pedidoCompleto?.cliente_id     ?? null,
           subtotal:       Number(venta.subtotal),
           iva:            Number(venta.iva),
           total:          Number(venta.total),
@@ -228,6 +241,7 @@ export default function Pedidos() {
         codigo_postal:  ped.codigo_postal  ?? null,
         poblacion:      ped.poblacion      ?? null,
         estado_cliente: ped.estado_cliente ?? null,
+        cliente_id:     ped.cliente_id     ?? null,
         subtotal:       Number(venta.subtotal),
         iva:            Number(venta.iva),
         total:          Number(venta.total),
@@ -372,9 +386,7 @@ export default function Pedidos() {
               return (
                 <>
                   <tr key={ped.no_pedido} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 text-sm font-semibold text-gray-900 whitespace-nowrap">
-                      {ped.no_pedido}
-                    </td>
+                    <td className="px-6 py-4 text-sm font-semibold text-gray-900 whitespace-nowrap">{ped.no_pedido}</td>
                     <td className="px-6 py-4 whitespace-nowrap">{origenBadge(ped)}</td>
                     <td className="px-6 py-4 text-sm text-gray-500 whitespace-nowrap">{formatFecha(ped.fecha)}</td>
                     <td className="px-6 py-4 whitespace-nowrap">

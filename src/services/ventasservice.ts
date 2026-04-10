@@ -22,6 +22,7 @@ export const registrarPago = async (
     monto:        number;
     esAnticipo?:  boolean;
     observacion?: string;
+    fecha?:       string | null;
   }
 ) => {
   const response = await api.post(`/ventas/${idventas}/pagos`, datos);
@@ -41,4 +42,4 @@ export const getMetodosPago = async () => {
 export const autorizarAnticipoCredito = async (idVenta: number) => {
   const response = await api.post(`/ventas/${idVenta}/anticipo-credito`);
   return response.data;
-};
+};  

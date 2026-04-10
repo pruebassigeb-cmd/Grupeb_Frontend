@@ -71,7 +71,6 @@ function dibujarEtiqueta(
   doc.setTextColor(...BLACK);
   y += 7;
 
-  // Nombre
   const nombreDestinatario = data.cliente_impresion?.trim()
     ? data.cliente_impresion
     : data.cliente;
@@ -83,7 +82,6 @@ function dibujarEtiqueta(
   doc.text(nombreLines, ML + 3, y + 8);
   y += nombreLines.length > 1 ? 18 : 12;
 
-  // Dirección
   doc.setFont("helvetica", "normal");
   doc.setFontSize(9);
   doc.setTextColor(...GRAY_DARK);
@@ -94,7 +92,7 @@ function dibujarEtiqueta(
     data.colonia       ? `Col. ${data.colonia}`        : null,
     data.codigo_postal ? `C.P. ${data.codigo_postal}`  : null,
   ].filter(Boolean).join("  ·  ");
-  const pobEdo = [data.poblacion, data.estado].filter(Boolean).join(", ");
+  const pobEdo   = [data.poblacion, data.estado].filter(Boolean).join(", ");
   const contacto = [
     data.telefono ? `Tel: ${data.telefono}` : null,
     data.celular  ? `Cel: ${data.celular}`  : null,
@@ -124,7 +122,7 @@ function dibujarEtiqueta(
   doc.setTextColor(...BLACK);
   y += 7;
 
-  // Labels
+  // Labels fila superior
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7);
   doc.setTextColor(...GRAY_MED);
@@ -132,15 +130,42 @@ function dibujarEtiqueta(
   doc.text("ORDEN",    ML + 34, y + 5);
   doc.text("PRODUCTO", ML + 62, y + 5);
 
-  // Valores
+  // Valores pedido y orden
   doc.setFont("helvetica", "bold");
   doc.setFontSize(10);
   doc.setTextColor(...BLACK);
-  doc.text(`PED-${f(data.no_pedido)}`,  ML + 3,  y + 13);
-  doc.text(f(data.no_produccion),        ML + 34, y + 13);
+  doc.text(`PED-${f(data.no_pedido)}`, ML + 3,  y + 13);
+  doc.text(f(data.no_produccion),       ML + 34, y + 13);
 
+  // Peso y dimensiones — debajo de PEDIDO y ORDEN, en chiquito
+  const bulto  = data.bultos[bultoIndex];
+  const campos = [
+    { label: "Peso",  valor: bulto.peso,  unidad: "kg" },
+    { label: "Alto",  valor: bulto.alto,  unidad: "cm" },
+    { label: "Largo", valor: bulto.largo, unidad: "cm" },
+    { label: "Ancho", valor: bulto.ancho, unidad: "cm" },
+  ].filter(c => c.valor != null);
+
+  if (campos.length > 0) {
+    const dimColW = 58 / campos.length;
+    doc.setFont("helvetica", "normal");
+    campos.forEach((c, i) => {
+      const cx = ML + 3 + dimColW * i;
+      doc.setFontSize(6);
+      doc.setTextColor(...GRAY_MED);
+      doc.text(`${c.label}:`, cx, y + 20);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(7);
+      doc.setTextColor(...BLACK);
+      doc.text(`${c.valor} ${c.unidad}`, cx, y + 26);
+      doc.setFont("helvetica", "normal");
+    });
+  }
+
+  // Producto (columna derecha)
   doc.setFont("helvetica", "normal");
   doc.setFontSize(9);
+  doc.setTextColor(...BLACK);
   const prodLines = doc.splitTextToSize(f(data.nombre_producto), W - 65);
   doc.text(prodLines, ML + 62, y + 13);
 
@@ -169,55 +194,56 @@ function dibujarEtiqueta(
 
   const bultoNum    = bultoIndex + 1;
   const totalBultos = data.total_bultos;
-  const bulto       = data.bultos[bultoIndex];
 
-  // Caja BULTO
   doc.setDrawColor(...BLACK);
   doc.setLineWidth(0.5);
   doc.setFillColor(...GRAY_LIGHT);
-  doc.rect(ML + 3, y, 36, 24, "FD");
+  doc.rect(ML + 3, y, 26, 18, "FD");
 
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(7);
+  doc.setFontSize(6);
   doc.setTextColor(...GRAY_DARK);
-  doc.text("BULTO", ML + 3 + 18, y + 6, { align: "center" });
+  doc.text("BULTO", ML + 3 + 13, y + 5, { align: "center" });
 
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(22);
+  doc.setFontSize(14);
   doc.setTextColor(...BLACK);
-  doc.text(String(bultoNum), ML + 3 + 18, y + 17, { align: "center" });
+  doc.text(String(bultoNum), ML + 3 + 13, y + 13, { align: "center" });
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(6);
+  doc.setTextColor(...GRAY_DARK);
+  doc.text(`de ${totalBultos}`, ML + 3 + 13, y + 17, { align: "center" });
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7);
-  doc.setTextColor(...GRAY_DARK);
-  doc.text(`de ${totalBultos}`, ML + 3 + 18, y + 23, { align: "center" });
-
-  // Unidades
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(8);
   doc.setTextColor(...GRAY_MED);
-  doc.text("UNIDADES EN ESTE BULTO", ML + 43, y + 7);
+  doc.text("UNIDADES EN ESTE BULTO", ML + 33, y + 6);
 
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(24);
+  doc.setFontSize(16);
   doc.setTextColor(...BLACK);
   doc.text(
     bulto.cantidad_unidades.toLocaleString("es-MX"),
-    ML + 43, y + 21
+    ML + 33, y + 16
   );
 
-  // // ══════════════════════════════════════════
-  // // 5. PIE
-  // // ══════════════════════════════════════════
-  // doc.setFont("helvetica", "normal");
-  // doc.setFontSize(6.5);
-  // doc.setTextColor(...GRAY_MED);
-  // doc.text(
-  //   `${f(data.no_produccion)}  ·  PED-${f(data.no_pedido)}  ·  Etiqueta ${bultoNum} de ${totalBultos}`,
-  //   ML + W / 2, 146, { align: "center" }
-  // );
+  y += 22;
 
-  // Borde exterior
+  // ══════════════════════════════════════════
+  // 5. PIE
+  // ══════════════════════════════════════════
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(6.5);
+  doc.setTextColor(...GRAY_MED);
+  doc.text(
+    `${f(data.no_produccion)}  ·  PED-${f(data.no_pedido)}  ·  Etiqueta ${bultoNum} de ${totalBultos}`,
+    ML + W / 2, y + 5, { align: "center" }
+  );
+
+  // ══════════════════════════════════════════
+  // BORDE EXTERIOR
+  // ══════════════════════════════════════════
   doc.setDrawColor(...BLACK);
   doc.setLineWidth(0.4);
   doc.rect(ML, MT, W, 142);

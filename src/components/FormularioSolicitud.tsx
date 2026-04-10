@@ -871,14 +871,21 @@ const seleccionarCliente = async (cliente: ClienteBusqueda) => {
     if (datos.productos.length > 0) onSubmit({ ...datos, tipo: modo });
   };
 
-  const calcularTotal = () =>
-    datos.productos.reduce((total, prod) => {
-      const subtotalProducto = prod.cantidades.reduce(
-        (sum, cant, i) => sum + cant * prod.precios[i], 0
-      );
-      const herramental = prod.herramental_precio ?? 0;
-      return total + subtotalProducto + herramental;
+const calcularTotal = () =>
+  datos.productos.reduce((total, prod) => {
+    const pk = Number(prod.porKilo || 1);
+    const subtotalProducto = prod.cantidades.reduce((sum, cant, i) => {
+      if (!cant || cant <= 0) return sum;
+      if (prod.modoCantidad === "kilo") {
+        const precioKg = Math.round(prod.precios[i] * pk * 100) / 100;
+        const importe  = Math.round(prod.kilogramos[i] * precioKg * 100) / 100;
+        return sum + importe;
+      }
+      return sum + Math.round(cant * prod.precios[i] * 100) / 100;
     }, 0);
+    const herramental = prod.herramental_precio ?? 0;
+    return total + subtotalProducto + herramental;
+  }, 0);
 
   const hayProductoSeleccionado =
     (modoProducto === "registrado" && productoActual.nombre) ||
@@ -1025,7 +1032,7 @@ const seleccionarCliente = async (cliente: ClienteBusqueda) => {
               </div>
               <div className="relative">
                 <input type="text" value={busquedaCliente} onChange={(e) => setBusquedaCliente(e.target.value)}
-                  placeholder="Buscar por nombre, empresa, teléfono o correo..."
+                  placeholder="Buscar por N° cliente, nombre, empresa, impresión, teléfono o correo..."
                   className="w-full px-4 py-3 pl-11 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 text-gray-900 bg-white" autoFocus />
                 <svg className="w-5 h-5 text-gray-400 absolute left-3 top-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
               </div>
@@ -1878,20 +1885,31 @@ const seleccionarCliente = async (cliente: ClienteBusqueda) => {
                       {prod.pigmentos       && <span className="text-orange-600 font-medium">🧪 {prod.pigmentos}</span>}
                     </div>
                     <div className="mt-2 space-y-1">
-                      {(modo === "pedido" ? [0] : [0, 1, 2]).map((i) => {
-                        const cant = prod.cantidades[i];
-                        if (!cant || cant <= 0) return null;
-                        return (
-                          <p key={i} className="text-sm text-gray-700">
-                            {prod.modoCantidad === "kilo"
-                              ? `${prod.kilogramos[i]} kg (${cant.toLocaleString()} bolsas) × $${(prod.precios[i] * Number(prod.porKilo || 1)).toFixed(4)}/kg`
-                              : `${cant.toLocaleString()} bolsas × $${prod.precios[i].toFixed(4)}/bolsa`
-                            }
-                            {" = $"}{(cant * prod.precios[i]).toFixed(2)}
-                          </p>
-                        );
-                      })}
-                    </div>
+  {(modo === "pedido" ? [0] : [0, 1, 2]).map((i) => {
+    const cant = prod.cantidades[i];
+    if (!cant || cant <= 0) return null;
+
+    const pk = Number(prod.porKilo || 1);
+
+    if (prod.modoCantidad === "kilo") {
+      const kgs        = prod.kilogramos[i];
+      const precioKg   = Math.round(prod.precios[i] * pk * 100) / 100;
+      const importe    = Math.round(kgs * precioKg * 100) / 100;
+      return (
+        <p key={i} className="text-sm text-gray-700">
+          {kgs} kg ({cant.toLocaleString()} bolsas) × ${precioKg.toFixed(2)}/kg = ${importe.toFixed(2)}
+        </p>
+      );
+    }
+
+    const importe = Math.round(cant * prod.precios[i] * 100) / 100;
+    return (
+      <p key={i} className="text-sm text-gray-700">
+        {cant.toLocaleString()} bolsas × ${prod.precios[i].toFixed(4)}/bolsa = ${importe.toFixed(2)}
+      </p>
+    );
+  })}
+</div>
                     {/* Herramental en lista de productos agregados */}
                     {(prod.herramental_descripcion || prod.herramental_precio != null) && (
                       <div className="mt-2 flex items-center gap-2 px-3 py-1.5 bg-orange-50 border border-orange-200 rounded-lg">

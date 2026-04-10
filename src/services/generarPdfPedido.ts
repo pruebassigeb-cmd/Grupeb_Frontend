@@ -1,14 +1,15 @@
-// generarPdfPedido.ts — LANDSCAPE A4 — mismo diseño que cotización
+// generarPdfPedido.ts — LANDSCAPE CARTA
 
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import {
   cargarLogoBase64,
-  val, boolLabel, parsePantones, getMedida, formatCantidadCelda,
+  val, boolLabel, parsePantones, getMedida, tipoProducto,
+  formatCantidadCelda, formatImporte,
   dibujarEncabezado, dibujarCajasPie, dibujarPiePagina,
   GRAY_DARK, GRAY_MED, GRAY_LIGHT, GRAY_ROW, BLACK, WHITE,
 } from "./Pdfutils";
-import type { ProductoPdf, TotalesPdf } from "./Pdfutils";
+import type { ProductoPdf } from "./Pdfutils";
 import logoUrl from "../assets/logogrupeb.png";
 
 interface PedidoPdf {
@@ -27,7 +28,6 @@ interface PedidoPdf {
   total:          number;
   anticipo:       number;
   saldo:          number;
-  // ── Campos nuevos de cliente ──────────────────────────────────────────────
   celular?:        string | null;
   razon_social?:   string | null;
   rfc?:            string | null;
@@ -37,16 +37,19 @@ interface PedidoPdf {
   codigo_postal?:  string | null;
   poblacion?:      string | null;
   estado_cliente?: string | null;
+  cliente_id?:     number | null;
 }
 
 export async function generarPdfPedido(pedido: PedidoPdf): Promise<void> {
   const logoBase64 = pedido.logoBase64 ?? await cargarLogoBase64(logoUrl);
 
-  const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
-  const PW  = 297;
-  const M   = 8;
+  const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "letter" });
+  const PW  = 279.4;
+  const PH  = 215.9;
+  const M   = 10;
+  const PED_FOOTER_H = 55;
 
-  const y = dibujarEncabezado({
+  const y = await dibujarEncabezado({
     doc,
     logoBase64,
     labelDocumento: "PEDIDO",
@@ -68,14 +71,25 @@ export async function generarPdfPedido(pedido: PedidoPdf): Promise<void> {
     codigo_postal:  pedido.codigo_postal  ?? null,
     poblacion:      pedido.poblacion      ?? null,
     estado_cliente: pedido.estado_cliente ?? null,
+    cliente_id:     pedido.cliente_id     ?? null,
   });
 
   const headAll = [
     "Descripción", "Medida", "B/K", "Tintas", "Caras",
     "Material", "Calibre", "Foil", "Asa/Suaje", "Alto Rel",
     "Laminado", "UV/BR", "Pantones", "Pigmento",
-    "Cantidad",
+    "Cantidad / Precio", "Importe",
   ];
+
+  // fontSize por columna para el header
+  // General: 8  |  Tintas (3): 7.5  |  Asa/Suaje (8): 7.5  |  Laminado (10): 7
+  const HEAD_FONT_SIZE_DEFAULT = 8;
+  const headFontSizeMap: Record<number, number> = {
+    3:  7.5, // Tintas
+    8:  7.5, // Asa/Suaje
+    9: 7,
+    10: 7,   // Laminado
+  };
 
   const bodyRows: any[][] = [];
 
@@ -83,7 +97,7 @@ export async function generarPdfPedido(pedido: PedidoPdf): Promise<void> {
     const det = prod.detalles.find(d => d.cantidad > 0);
 
     bodyRows.push([
-      val(prod.nombre),
+      tipoProducto(prod.nombre),
       getMedida(prod),
       boolLabel(prod.bk),
       val(prod.tintas),
@@ -98,6 +112,7 @@ export async function generarPdfPedido(pedido: PedidoPdf): Promise<void> {
       parsePantones(prod.pantones),
       prod.pigmentos ? String(prod.pigmentos).trim() || "—" : "—",
       det ? formatCantidadCelda(det, prod.por_kilo) : "—",
+      det ? formatImporte(det, prod.por_kilo) : "—",
     ]);
 
     const tieneKilo = prod.detalles.some(d => d.modo_cantidad === "kilo");
@@ -105,32 +120,35 @@ export async function generarPdfPedido(pedido: PedidoPdf): Promise<void> {
     const obsTexto  = prod.observacion?.trim()
       ? `Obs: ${modoLabel}  —  ${prod.observacion.trim()}`
       : `Obs: ${modoLabel}`;
-    const obsRow = new Array(headAll.length).fill("");
-    obsRow[0] = obsTexto;
-    bodyRows.push(obsRow);
 
-    if (
+    const hasHerr =
       prod.herramental_precio != null &&
       prod.herramental_precio > 0 &&
-      prod.herramental_aprobado === true
-    ) {
-      const herrRow    = new Array(headAll.length).fill("");
+      prod.herramental_aprobado === true;
+
+    const comboRow = new Array(headAll.length).fill("");
+    comboRow[0] = obsTexto;
+
+    if (hasHerr) {
       const nombreHerr = prod.herramental_descripcion?.trim() || "Herramental / molde";
-      herrRow[0] = `HERR: ${nombreHerr}  —  Costo de fabricación del molde o troquel aprobado para este artículo. Cargo único, no incluido en el precio por pieza.`;
-      herrRow[headAll.length - 1] = `$${Number(prod.herramental_precio).toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-      bodyRows.push(herrRow);
+      comboRow[1] = `Herramental: ${nombreHerr}  —  Costo de fabricación del molde o troquel aprobado para este artículo. Cargo único, no incluido en el precio por pieza.`;
+      comboRow[headAll.length - 1] = `$${Number(prod.herramental_precio).toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     }
+
+    bodyRows.push(comboRow);
   });
 
   const availW = PW - M * 2;
 
   const colW: Record<number, number> = {
-    0: 36, 1: 18, 2:  9, 3: 11, 4: 11,
-    5: 18, 6: 13, 7: 11, 8: 16, 9: 13,
-    10: 15, 11: 13, 12: 32, 13: 20,
+    0: 32, 1: 17, 2:  8, 3: 10, 4: 10,
+    5: 17, 6: 12, 7: 10, 8: 15, 9: 12,
+    10: 14, 11: 12, 12: 28, 13: 18,
   };
   const fixedTotal = Object.values(colW).reduce((a, b) => a + b, 0);
-  colW[14] = Math.max(availW - fixedTotal, 20);
+  const remaining  = Math.max(availW - fixedTotal, 30);
+  colW[14] = Math.round(remaining * 0.60);
+  colW[15] = Math.round(remaining * 0.40);
 
   const totalColW = Object.values(colW).reduce((a, b) => a + b, 0);
   if (totalColW > availW) {
@@ -139,77 +157,105 @@ export async function generarPdfPedido(pedido: PedidoPdf): Promise<void> {
   }
 
   const columnStyles: Parameters<typeof autoTable>[1]["columnStyles"] = {
-    0:  { cellWidth: colW[0],  halign: "left",   fontSize: 11 },
-    1:  { cellWidth: colW[1],  halign: "center", fontSize: 12 },
-    2:  { cellWidth: colW[2],  halign: "center", fontSize: 11 },
-    3:  { cellWidth: colW[3],  halign: "center", fontSize: 11 },
-    4:  { cellWidth: colW[4],  halign: "center", fontSize: 11 },
-    5:  { cellWidth: colW[5],  halign: "center", fontSize: 11 },
-    6:  { cellWidth: colW[6],  halign: "center", fontSize: 11 },
-    7:  { cellWidth: colW[7],  halign: "center", fontSize: 11 },
-    8:  { cellWidth: colW[8],  halign: "center", fontSize: 11 },
-    9:  { cellWidth: colW[9],  halign: "center", fontSize: 11 },
-    10: { cellWidth: colW[10], halign: "center", fontSize: 11 },
-    11: { cellWidth: colW[11], halign: "center", fontSize: 11 },
-    12: { cellWidth: colW[12], halign: "left",   fontSize: 11 },
-    13: { cellWidth: colW[13], halign: "center", fontSize: 11 },
-    14: { cellWidth: colW[14], halign: "center", fontSize: 15 },
+    0:  { cellWidth: colW[0],  halign: "left",   fontSize: 9 },
+    1:  { cellWidth: colW[1],  halign: "center", fontSize: 9 },
+    2:  { cellWidth: colW[2],  halign: "center", fontSize: 9 },
+    3:  { cellWidth: colW[3],  halign: "center", fontSize: 9 },
+    4:  { cellWidth: colW[4],  halign: "center", fontSize: 9 },
+    5:  { cellWidth: colW[5],  halign: "center", fontSize: 9 },
+    6:  { cellWidth: colW[6],  halign: "center", fontSize: 9 },
+    7:  { cellWidth: colW[7],  halign: "center", fontSize: 9 },
+    8:  { cellWidth: colW[8],  halign: "center", fontSize: 9 },
+    9:  { cellWidth: colW[9],  halign: "center", fontSize: 9 },
+    10: { cellWidth: colW[10], halign: "center", fontSize: 9 },
+    11: { cellWidth: colW[11], halign: "center", fontSize: 9 },
+    12: { cellWidth: colW[12], halign: "left",   fontSize: 9 },
+    13: { cellWidth: colW[13], halign: "center", fontSize: 9 },
+    14: { cellWidth: colW[14], halign: "center", fontSize: 9 },
+    15: { cellWidth: colW[15], halign: "center", fontSize: 9, fontStyle: "bold" },
   };
+
+  const MID_COL = Math.floor(headAll.length / 2);
 
   autoTable(doc, {
     startY: y,
-    margin: { left: M, right: M },
+    margin: { left: M, right: M, bottom: PED_FOOTER_H + M },
     head:   [headAll],
     body:   bodyRows,
     theme:  "grid",
-    headStyles:         { fillColor: GRAY_DARK, textColor: WHITE, fontStyle: "bold", fontSize: 11, cellPadding: 1.5, halign: "center", valign: "middle" },
-    bodyStyles:         { fontSize: 11, textColor: BLACK, cellPadding: 1.5, valign: "middle", minCellHeight: 9 },
+    headStyles:         { fillColor: GRAY_DARK, textColor: WHITE, fontStyle: "bold", fontSize: HEAD_FONT_SIZE_DEFAULT, cellPadding: 1.2, halign: "center", valign: "middle" },
+    bodyStyles:         { fontSize: 10, textColor: BLACK, cellPadding: 1.2, valign: "middle", minCellHeight: 7 },
     alternateRowStyles: { fillColor: GRAY_ROW },
     columnStyles,
     didParseCell(data) {
-      if (data.section === "head" && data.column.index === 14) {
-        data.cell.styles.fillColor = GRAY_MED;
-      }
-      if (data.section === "body") {
-        const raw0 = String((data.row.raw as any[])?.[0] ?? "");
-
-        if (raw0.startsWith("Obs:")) {
-          if (data.column.index === 0) {
-            data.cell.colSpan          = headAll.length;
-            data.cell.styles.fillColor = GRAY_LIGHT;
-            data.cell.styles.fontStyle = "italic";
-            data.cell.styles.fontSize  = 11;
-            data.cell.styles.textColor = [80, 80, 80];
-            data.cell.styles.halign    = "left";
-          } else {
-            data.cell.styles.fillColor = GRAY_LIGHT;
-            data.cell.text = [];
-          }
+      // ── Header ──
+      if (data.section === "head") {
+        // Color especial en columnas Cantidad/Precio e Importe
+        if (data.column.index === 14 || data.column.index === 15) {
+          data.cell.styles.fillColor = GRAY_MED;
         }
+        // fontSize especial por columna: Tintas, Asa/Suaje, Laminado
+        const customSize = headFontSizeMap[data.column.index];
+        if (customSize !== undefined) {
+          data.cell.styles.fontSize = customSize;
+        }
+      }
 
-        if (raw0.startsWith("HERR:")) {
-          if (data.column.index === 0) {
-            data.cell.colSpan          = headAll.length - 1;
-            data.cell.styles.fillColor = [250, 244, 230];
-            data.cell.styles.fontStyle = "italic";
-            data.cell.styles.fontSize  = 9;
-            data.cell.styles.textColor = [130, 70, 0];
-            data.cell.styles.halign    = "left";
-            data.cell.styles.overflow  = "linebreak";
-          } else if (data.column.index === headAll.length - 1) {
-            data.cell.styles.fillColor = [250, 244, 230];
-            data.cell.styles.fontStyle = "bold";
-            data.cell.styles.fontSize  = 11;
-            data.cell.styles.textColor = [130, 70, 0];
-            data.cell.styles.halign    = "center";
-          } else {
-            data.cell.styles.fillColor = [250, 244, 230];
-            data.cell.text = [];
-          }
+      // ── Body: filas combo (Obs / Herramental) ──
+      if (data.section === "body") {
+        const raw     = data.row.raw as any[];
+        const raw0    = String(raw?.[0] ?? "");
+        const raw1    = String(raw?.[1] ?? "");
+        const isCombo = raw0.startsWith("Obs:");
+
+        if (!isCombo) return;
+
+        const hasHerr = raw1.startsWith("Herramental:");
+        const ci      = data.column.index;
+        const lastCol = headAll.length - 1;
+
+        if (ci === 0) {
+          data.cell.colSpan            = hasHerr ? MID_COL : headAll.length;
+          data.cell.styles.fillColor   = GRAY_LIGHT;
+          data.cell.styles.fontStyle   = "italic";
+          data.cell.styles.fontSize    = 6.5;
+          data.cell.styles.textColor   = [80, 80, 80] as [number, number, number];
+          data.cell.styles.halign      = "left";
+          data.cell.styles.cellPadding = 0.8;
+
+        } else if (hasHerr && ci === MID_COL) {
+          data.cell.colSpan            = lastCol - MID_COL;
+          data.cell.styles.fillColor   = [250, 244, 230] as [number, number, number];
+          data.cell.styles.fontStyle   = "italic";
+          data.cell.styles.fontSize    = 8;
+          data.cell.styles.textColor   = [130, 70, 0] as [number, number, number];
+          data.cell.styles.halign      = "left";
+          data.cell.styles.overflow    = "linebreak";
+          data.cell.styles.cellPadding = 0.8;
+          data.cell.text               = [raw1];
+
+        } else if (hasHerr && ci === lastCol) {
+          data.cell.styles.fillColor   = [250, 244, 230] as [number, number, number];
+          data.cell.styles.fontStyle   = "bold";
+          data.cell.styles.fontSize    = 9;
+          data.cell.styles.textColor   = [130, 70, 0] as [number, number, number];
+          data.cell.styles.halign      = "center";
+
+        } else {
+          data.cell.styles.fillColor =
+            ci < MID_COL
+              ? GRAY_LIGHT
+              : [250, 244, 230] as [number, number, number];
+          data.cell.text = [];
         }
       }
     },
   });
+
+  const finalY = (doc as any).lastAutoTable?.finalY ?? 0;
+  if (finalY + PED_FOOTER_H + M > PH) {
+    doc.addPage();
+  }
 
   dibujarCajasPie(doc, pedido.productos, [], {
     subtotal: pedido.subtotal,

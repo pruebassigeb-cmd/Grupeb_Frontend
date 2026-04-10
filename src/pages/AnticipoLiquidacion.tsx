@@ -495,6 +495,7 @@ export function EditarAntLiqReal({
   const [esAnticipo,      setEsAnticipo]      = useState(false);
   const [montoEsAnticipo, setMontoEsAnticipo] = useState(false);
   const [observacion,     setObservacion]     = useState("");
+  const [fechaPago,       setFechaPago]       = useState(""); // "" = hoy (backend usa NOW())
   const [guardando,       setGuardando]       = useState(false);
   const [eliminando,      setEliminando]      = useState<number | null>(null);
   const [error,           setError]           = useState<string | null>(null);
@@ -522,6 +523,9 @@ export function EditarAntLiqReal({
   const pctPagado        = totalRef > 0 ? Math.min((totalPagado / totalRef) * 100, 100) : 0;
   const herramentalTotal = Number(venta.herramental_total ?? 0);
 
+  // Fecha máxima permitida = hoy
+  const hoy = new Date().toISOString().split("T")[0];
+
   const recargar = async () => {
     const actualizada = await getVentaByPedido(venta.no_pedido);
     setVenta(actualizada);
@@ -546,11 +550,15 @@ export function EditarAntLiqReal({
     setError(null);
     try {
       const response = await registrarPago(venta.idventas, {
-        metodoPagoId, monto: montoNum, esAnticipo,
+        metodoPagoId,
+        monto:      montoNum,
+        esAnticipo,
         observacion: observacion.trim() || undefined,
+        fecha:       fechaPago || null, // null = backend usa NOW()
       });
       await recargar();
-      setMonto(""); setObservacion(""); setEsAnticipo(false); setMontoEsAnticipo(false);
+      setMonto(""); setObservacion(""); setFechaPago("");
+      setEsAnticipo(false); setMontoEsAnticipo(false);
 
       const foliosNuevos: string[] = response?.ordenes_generadas ?? [];
       if (foliosNuevos.length > 0) {
@@ -661,7 +669,7 @@ export function EditarAntLiqReal({
             { label: "Subtotal orig.",  value: fmt(venta.subtotal), color: "text-gray-700"               },
             { label: "IVA 16%",         value: fmt(venta.iva),      color: "text-gray-500"               },
             { label: "Total orig.",     value: fmt(venta.total),    color: "text-gray-900 font-bold"     },
-            { label: "Anticipo (50%)",  value: fmt(anticipo),       color: "text-blue-700 font-semibold" },
+            { label: "Anticipo (40%)",  value: fmt(anticipo),       color: "text-blue-700 font-semibold" },
           ].map(item => (
             <div key={item.label} className="bg-gray-50 rounded-xl p-3 text-center border border-gray-100">
               <p className="text-xs text-gray-400 mb-1">{item.label}</p>
@@ -702,9 +710,9 @@ export function EditarAntLiqReal({
           <span className="text-sm font-bold text-gray-900">{pctPagado.toFixed(1)}%</span>
         </div>
         <div className="w-full bg-gray-200 rounded-full h-3 relative">
-          <div className="absolute top-0 bottom-0 w-0.5 bg-blue-400 z-10" style={{ left: "50%" }} />
+          <div className="absolute top-0 bottom-0 w-0.5 bg-blue-400 z-10" style={{ left: "40%" }} />
           <div className={`h-3 rounded-full transition-all duration-500 ${
-            pctPagado >= 100 ? "bg-emerald-500" : pctPagado >= 50 ? "bg-blue-500" : "bg-yellow-500"
+            pctPagado >= 100 ? "bg-emerald-500" : pctPagado >= 40 ? "bg-blue-500" : "bg-yellow-500"
           }`} style={{ width: `${pctPagado}%` }} />
         </div>
         <div className="flex justify-between mt-2 text-xs text-gray-500">
@@ -720,7 +728,7 @@ export function EditarAntLiqReal({
               ? "🤝 Anticipo a crédito — pago pendiente"
               : anticipoCubierto
                 ? "✓ Anticipo cubierto — falta liquidar saldo"
-                : `↑ Línea azul = anticipo requerido (50%) · Faltan $${fmt(anticipoRestante)}`}
+                : `↑ Línea azul = anticipo requerido (40%) · Faltan $${fmt(anticipoRestante)}`}
         </p>
 
         {!pagado && anticreditoActivo && (
@@ -744,7 +752,7 @@ export function EditarAntLiqReal({
         )}
       </div>
 
-      {/* Estado de cuenta desplegable — key fuerza remount cuando cambia el abono */}
+      {/* Estado de cuenta */}
       <SeccionEstadoCuenta
         key={`${venta.no_pedido}-${venta.abono}`}
         noPedido={venta.no_pedido}
@@ -823,6 +831,7 @@ export function EditarAntLiqReal({
           )}
 
           <div className="grid grid-cols-2 gap-3 mb-3">
+            {/* Monto */}
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Monto *</label>
               <div className="relative">
@@ -858,6 +867,7 @@ export function EditarAntLiqReal({
               </div>
             </div>
 
+            {/* Método de pago */}
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Método de pago *</label>
               <select value={metodoPagoId} onChange={e => setMetodoPagoId(Number(e.target.value))}
@@ -869,12 +879,33 @@ export function EditarAntLiqReal({
             </div>
           </div>
 
-          <div className="mb-3">
-            <label className="block text-xs font-medium text-gray-600 mb-1">Observación (opcional)</label>
-            <input type="text" value={observacion} onChange={e => setObservacion(e.target.value)}
-              placeholder="Ej: Transferencia ref. 12345"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white focus:ring-2 focus:ring-blue-400 text-sm"
-            />
+          {/* Fecha del pago + Observación */}
+          <div className="grid grid-cols-2 gap-3 mb-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">
+                Fecha del pago
+                <span className="ml-1 text-gray-400 font-normal">(vacío = hoy)</span>
+              </label>
+              <input
+                type="date"
+                value={fechaPago}
+                max={hoy}
+                onChange={e => setFechaPago(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white focus:ring-2 focus:ring-blue-400 text-sm"
+              />
+              {fechaPago && fechaPago < hoy && (
+                <p className="text-xs text-amber-600 mt-1">
+                  ⚠️ Registrando pago con fecha anterior: {fmtFecha(fechaPago)}
+                </p>
+              )}
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Observación (opcional)</label>
+              <input type="text" value={observacion} onChange={e => setObservacion(e.target.value)}
+                placeholder="Ej: Transferencia ref. 12345"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white focus:ring-2 focus:ring-blue-400 text-sm"
+              />
+            </div>
           </div>
 
           <div className="flex items-center justify-between">
@@ -997,6 +1028,8 @@ export default function AnticipoLiquidacion() {
       normalizarTexto(v.cliente ?? "").includes(t) ||
       normalizarTexto(v.empresa ?? "").includes(t) ||
       normalizarTexto(v.no_pedido ?? "").includes(t) ||
+      String(v.cliente_id ?? "").includes(busqueda.trim()) ||
+      normalizarTexto(v.impresion ?? "").includes(t) ||
       (v.no_cotizacion?.toString() ?? "").includes(t)
     );
   });
