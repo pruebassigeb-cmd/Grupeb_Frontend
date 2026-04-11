@@ -43,9 +43,18 @@ export const crearCotizacion = async (datos: {
     const detalles = prod.cantidades
       .map((cantidad, i) => {
         if (cantidad <= 0 || prod.precios[i] <= 0) return null;
+
+        let precio_total: number;
+        if (modo === "kilo" && prod.kilogramos?.[i] > 0 && prod.porKilo) {
+          const precioKg = Math.round(prod.precios[i] * Number(prod.porKilo) * 10000) / 10000;
+          precio_total   = Math.round(prod.kilogramos[i] * precioKg * 100) / 100;
+        } else {
+          precio_total = Number((cantidad * prod.precios[i]).toFixed(2));
+        }
+
         return {
           cantidad,
-          precio_total:          Number((cantidad * prod.precios[i]).toFixed(2)),
+          precio_total,
           modo_cantidad:         modo,
           kilogramos_ingresados: modo === "kilo" && prod.kilogramos?.[i] > 0
             ? prod.kilogramos[i]

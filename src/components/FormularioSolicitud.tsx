@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import SelectorProducto, { CONFIG_PRODUCTOS } from "./ConfigurarProducto";
 import type { DatosProducto, MedidaKey } from "../types/productos-plastico.types";
 import { FORMATO_MEDIDAS } from "../types/productos-plastico.types";
@@ -147,6 +147,7 @@ export default function FormularioCotizacion({
   });
 
   const [datosClienteCompleto, setDatosClienteCompleto] = useState<CreateClienteRequest>(clienteVacio);
+  const isMounted = useRef(false);
 
   const [regimenesFiscales, setRegimenesFiscales] = useState<RegimenFiscal[]>([]);
   const [metodosPago,       setMetodosPago]       = useState<MetodoPago[]>([]);
@@ -339,6 +340,17 @@ export default function FormularioCotizacion({
     setPreciosEditadosManualmente([false, false, false]);
     setPreciosTexto(["", "", ""]);
   }, [modoCantidad]);
+
+  // Limpiar precios cuando cambian tintas o caras
+useEffect(() => {
+  if (!isMounted.current) {
+    isMounted.current = true;
+    return;
+  }
+  setPreciosEditadosManualmente([false, false, false]);
+  setPreciosTexto(["", "", ""]);
+  setProductoActual(prev => ({ ...prev, precios: [0, 0, 0] }));
+}, [productoActual.tintasId, productoActual.carasId]);
 
   const cargarCatalogos = async () => {
     try {

@@ -123,13 +123,11 @@ export function formatCantidadCelda(det: DetallePdf, porKilo?: string | number |
     `$${n.toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   if (det.modo_cantidad === "kilo" && det.kilogramos && det.kilogramos > 0) {
-    const pk         = Number(porKilo || 1);
-    const precioUnit = det.cantidad > 0 ? det.precio_total / det.cantidad : 0;
-    const precioKgRd = Math.round(precioUnit * pk * 100) / 100;
-    const kgStr      = Number.isInteger(det.kilogramos)
+    const precioKg = Math.round((det.precio_total / det.kilogramos) * 100) / 100;
+    const kgStr    = Number.isInteger(det.kilogramos)
       ? det.kilogramos.toString()
       : Number(det.kilogramos).toFixed(2);
-    return `${kgStr} kg\n${fmtMoneda(precioKgRd)}/kg`;
+    return `${kgStr} kg\n${fmtMoneda(precioKg)}/kg`;
   }
 
   const precioUnit = det.cantidad > 0 ? det.precio_total / det.cantidad : 0;
@@ -141,16 +139,7 @@ export function formatImporte(det: DetallePdf, porKilo?: string | number | null)
   const fmtMoneda = (n: number) =>
     `$${n.toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-  if (det.modo_cantidad === "kilo" && det.kilogramos && det.kilogramos > 0) {
-    const pk         = Number(porKilo || 1);
-    const precioUnit = det.cantidad > 0 ? det.precio_total / det.cantidad : 0;
-    const precioKgRd = Math.round(precioUnit * pk * 100) / 100;
-    const importe    = Math.round(det.kilogramos * precioKgRd * 100) / 100;
-    return fmtMoneda(importe);
-  }
-
-  const importe = Math.round(det.precio_total * 100) / 100;
-  return fmtMoneda(importe);
+  return fmtMoneda(Math.round(det.precio_total * 100) / 100);
 }
 
 // ── Encabezado compartido ─────────────────────────────────────────────────────
@@ -176,7 +165,7 @@ export interface OpcionesEncabezado {
   codigo_postal?:  string | null;
   poblacion?:      string | null;
   estado_cliente?: string | null;
-  cliente_id?:     number | null;   // ← ID del cliente
+  cliente_id?:     number | null;
 }
 
 export async function dibujarEncabezado(opts: OpcionesEncabezado): Promise<number> {
@@ -299,7 +288,6 @@ export async function dibujarEncabezado(opts: OpcionesEncabezado): Promise<numbe
   doc.setFont("helvetica", "normal"); doc.setFontSize(fs);
   doc.text(val(cliente),  col3X + 15,  y + mid(rowH));
 
-  // Cliente # en negritas, al lado del valor de Atención
   if (cliente_id != null) {
     const atencionValWidth = doc.getTextWidth(val(cliente));
     const clienteNumX      = col3X + 15 + atencionValWidth + 5;
