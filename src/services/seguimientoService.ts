@@ -225,6 +225,7 @@ export interface EtiquetaData {
   celular:           string;
   correo:            string;
   cliente_impresion: string;
+  atencion:          string | null;
   calle:         string;
   numero:        string;
   colonia:       string;

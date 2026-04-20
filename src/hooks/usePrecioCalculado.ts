@@ -18,7 +18,6 @@ interface UsePrecioCalculadoParams {
   cantidad: number;
   porKilo: number | string | undefined;
   tintasId: number;
-  carasId: number;
   enabled?: boolean;
 }
 
@@ -26,7 +25,6 @@ export const usePrecioCalculado = ({
   cantidad,
   porKilo,
   tintasId,
-  carasId,
   enabled = true,
 }: UsePrecioCalculadoParams) => {
   const [resultado, setResultado] = useState<ResultadoCalculo | null>(null);
@@ -44,7 +42,7 @@ export const usePrecioCalculado = ({
       return;
     }
 
-    if (!cantidad || cantidad <= 0 || !porKilo || !tintasId || !carasId) {
+    if (!cantidad || cantidad <= 0 || !porKilo || !tintasId) {
       setResultado(null);
       setLoading(false);
       setError(null);
@@ -71,7 +69,6 @@ export const usePrecioCalculado = ({
           cantidad,
           porKilo,
           tintasId,
-          carasId,
         });
 
         const response = await api.post(
@@ -80,11 +77,8 @@ export const usePrecioCalculado = ({
             cantidad,
             porKilo: Number(porKilo),
             tintasId,
-            carasId,
           },
-          {
-            signal: abortController.signal,
-          }
+          { signal: abortController.signal }
         );
 
         if (!abortController.signal.aborted) {
@@ -97,7 +91,6 @@ export const usePrecioCalculado = ({
           console.log("⚠️ Petición cancelada (normal en debounce)");
           return;
         }
-
         console.error("❌ Error al calcular precio:", err);
         setError(
           err.response?.data?.error ||
@@ -110,14 +103,10 @@ export const usePrecioCalculado = ({
     }, 500);
 
     return () => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      if (abortControllerRef.current) abortControllerRef.current.abort();
     };
-  }, [cantidad, porKilo, tintasId, carasId, enabled]);
+  }, [cantidad, porKilo, tintasId, enabled]);
 
   return {
     resultado,
@@ -134,7 +123,6 @@ interface UsePreciosBatchParams {
   cantidades: number[];
   porKilo: number | string | undefined;
   tintasId: number;
-  carasId: number;
   enabled?: boolean;
 }
 
@@ -142,7 +130,6 @@ export const usePreciosBatch = ({
   cantidades,
   porKilo,
   tintasId,
-  carasId,
   enabled = true,
 }: UsePreciosBatchParams) => {
   const [resultados, setResultados] = useState<(ResultadoCalculo | null)[]>([]);
@@ -153,19 +140,17 @@ export const usePreciosBatch = ({
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    if (!enabled || !porKilo || !tintasId || !carasId) {
+    if (!enabled || !porKilo || !tintasId) {
       setResultados([]);
       setLoading(false);
       setError(null);
       return;
     }
 
-    // Filtrar solo las cantidades > 0 y guardar sus índices originales
     const cantidadesConIndice = cantidades
       .map((c, i) => ({ cantidad: c, indice: i }))
       .filter(({ cantidad }) => cantidad > 0);
 
-    // Si no hay ninguna cantidad válida, limpiar y salir
     if (cantidadesConIndice.length === 0) {
       setResultados([]);
       setLoading(false);
@@ -173,12 +158,8 @@ export const usePreciosBatch = ({
       return;
     }
 
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-    }
+    if (abortControllerRef.current) abortControllerRef.current.abort();
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
 
     setLoading(true);
     setError(null);
@@ -188,14 +169,12 @@ export const usePreciosBatch = ({
         const abortController = new AbortController();
         abortControllerRef.current = abortController;
 
-        // Solo mandamos al backend las cantidades > 0
         const cantidadesFiltradas = cantidadesConIndice.map((c) => c.cantidad);
 
         console.log("🔍 Calculando precios batch en backend:", {
           cantidades: cantidadesFiltradas,
           porKilo,
           tintasId,
-          carasId,
         });
 
         const response = await api.post(
@@ -204,22 +183,16 @@ export const usePreciosBatch = ({
             cantidades: cantidadesFiltradas,
             porKilo: Number(porKilo),
             tintasId,
-            carasId,
           },
-          {
-            signal: abortController.signal,
-          }
+          { signal: abortController.signal }
         );
 
         if (!abortController.signal.aborted) {
-          // Reconstruir array del tamaño original (cantidades.length),
-          // colocando cada resultado en su índice original
           const resultadosCompletos: (ResultadoCalculo | null)[] = Array(
             cantidades.length
           ).fill(null);
 
-          const resultadosBackend: ResultadoCalculo[] =
-            response.data.resultados;
+          const resultadosBackend: ResultadoCalculo[] = response.data.resultados;
 
           cantidadesConIndice.forEach(({ indice }, posicionEnBatch) => {
             resultadosCompletos[indice] = resultadosBackend[posicionEnBatch] ?? null;
@@ -234,7 +207,6 @@ export const usePreciosBatch = ({
           console.log("⚠️ Petición cancelada (normal en debounce)");
           return;
         }
-
         console.error("❌ Error al calcular precios batch:", err);
         setError(err.response?.data?.error || "Error al calcular precios");
         setResultados([]);
@@ -247,7 +219,7 @@ export const usePreciosBatch = ({
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
       if (abortControllerRef.current) abortControllerRef.current.abort();
     };
-  }, [JSON.stringify(cantidades), porKilo, tintasId, carasId, enabled]);
+  }, [JSON.stringify(cantidades), porKilo, tintasId, enabled]);
 
   return {
     resultados,

@@ -67,7 +67,6 @@ interface Producto {
   pantones?:               string | null;
   pigmentos?:              string | null;
   modoCantidad:            "unidad" | "kilo";
-  // ── Herramental ────────────────────────────────────────
   herramental_descripcion?: string | null;
   herramental_precio?:      number | null;
 }
@@ -132,15 +131,15 @@ export default function FormularioCotizacion({
     correo:        "",
     empresa:       "",
     impresion:     null,
-    celular:         null,   // NUEVO
-  razon_social:    null,   // NUEVO
-  rfc:             null,   // NUEVO
-  domicilio:       null,   // NUEVO
-  numero:          null,   // NUEVO
-  colonia:         null,   // NUEVO
-  codigo_postal:   null,   // NUEVO
-  poblacion:       null,   // NUEVO
-  estado_cliente:  null,   // NUEVO
+    celular:         null,
+    razon_social:    null,
+    rfc:             null,
+    domicilio:       null,
+    numero:          null,
+    colonia:         null,
+    codigo_postal:   null,
+    poblacion:       null,
+    estado_cliente:  null,
     productos:     [],
     observaciones: "",
     prioridad:     false,
@@ -271,11 +270,11 @@ export default function FormularioCotizacion({
     productoActual.porKilo
   );
 
+  // ── CAMBIO 1: quitado carasId del hook ──────────────────────────────────
   const { resultados, loading: calculandoPrecios, error: errorCalculo } = usePreciosBatch({
     cantidades: cantidadesEnBolsas,
     porKilo:    productoActual.porKilo,
     tintasId:   productoActual.tintasId,
-    carasId:    productoActual.carasId,
     enabled:    cantidadesEnBolsas.some(c => c > 0) && !!productoActual.porKilo,
   });
 
@@ -289,6 +288,7 @@ export default function FormularioCotizacion({
     }
   }, [productoActual.tintas, modoColor]);
 
+  // ── CAMBIO 2: preciosEditadosManualmente en dependencias ─────────────────
   useEffect(() => {
     if (resultados.length === 0) return;
     setProductoActual(prev => {
@@ -312,7 +312,7 @@ export default function FormularioCotizacion({
       });
       return nuevosTextos;
     });
-  }, [resultados]);
+  }, [resultados, preciosEditadosManualmente]);
 
   useEffect(() => {
     if (mostrarModalClientes && clientesCargados.length === 0) cargarClientes();
@@ -341,16 +341,16 @@ export default function FormularioCotizacion({
     setPreciosTexto(["", "", ""]);
   }, [modoCantidad]);
 
-  // Limpiar precios cuando cambian tintas o caras
-useEffect(() => {
-  if (!isMounted.current) {
-    isMounted.current = true;
-    return;
-  }
-  setPreciosEditadosManualmente([false, false, false]);
-  setPreciosTexto(["", "", ""]);
-  setProductoActual(prev => ({ ...prev, precios: [0, 0, 0] }));
-}, [productoActual.tintasId, productoActual.carasId]);
+  // Limpiar precios cuando cambian tintas
+  useEffect(() => {
+    if (!isMounted.current) {
+      isMounted.current = true;
+      return;
+    }
+    setPreciosEditadosManualmente([false, false, false]);
+    setPreciosTexto(["", "", ""]);
+    setProductoActual(prev => ({ ...prev, precios: [0, 0, 0] }));
+  }, [productoActual.tintasId]);
 
   const cargarCatalogos = async () => {
     try {
@@ -421,68 +421,41 @@ useEffect(() => {
     }
   };
 
-  /*const seleccionarCliente = (cliente: ClienteBusqueda) => {
-    setDatos({
-      ...datos,
-      clienteId:      cliente.idclientes,
-    cliente:        cliente.atencion       || "",
-    telefono:       cliente.telefono       || "",
-    correo:         cliente.correo         || "",
-    empresa:        cliente.empresa        || "",
-    impresion:      cliente.impresion      ?? null,
-    celular:        cliente.celular        ?? null,
-    razon_social:   cliente.razon_social   ?? null,
-    rfc:            cliente.rfc            ?? null,
-    domicilio:      cliente.domicilio      ?? null,
-    numero:         cliente.numero         ?? null,
-    colonia:        cliente.colonia        ?? null,
-    codigo_postal:  cliente.codigo_postal  ?? null,
-    poblacion:      cliente.poblacion      ?? null,
-    estado_cliente: cliente.estado        ?? null,
-    });
+  const seleccionarCliente = async (cliente: ClienteBusqueda) => {
     setMostrarModalClientes(false);
     setBusquedaCliente("");
-  };*/
-
-  // ── seleccionarCliente — fetch completo con getClienteById ────────────────
-const seleccionarCliente = async (cliente: ClienteBusqueda) => {
-  setMostrarModalClientes(false);
-  setBusquedaCliente("");
-
-  // Traer el cliente completo para tener domicilio, RFC, etc.
-  try {
-    const completo = await getClienteById(cliente.idclientes);
-    setDatos(prev => ({
-      ...prev,
-      clienteId:      completo.idclientes,
-      cliente:        completo.atencion       || "",
-      telefono:       completo.telefono       || "",
-      correo:         completo.correo         || "",
-      empresa:        completo.empresa        || "",
-      impresion:      completo.impresion      ?? null,
-      celular:        completo.celular        ?? null,
-      razon_social:   completo.razon_social   ?? null,
-      rfc:            completo.rfc            ?? null,
-      domicilio:      completo.domicilio      ?? null,
-      numero:         completo.numero         ?? null,
-      colonia:        completo.colonia        ?? null,
-      codigo_postal:  completo.codigo_postal  ?? null,
-      poblacion:      completo.poblacion      ?? null,
-      estado_cliente: completo.estado         ?? null,
-    }));
-  } catch {
-    // Fallback con lo que ya tiene el objeto de búsqueda
-    setDatos(prev => ({
-      ...prev,
-      clienteId: cliente.idclientes,
-      cliente:   cliente.atencion  || "",
-      telefono:  cliente.telefono  || "",
-      correo:    cliente.correo    || "",
-      empresa:   cliente.empresa   || "",
-      impresion: cliente.impresion ?? null,
-    }));
-  }
-};
+    try {
+      const completo = await getClienteById(cliente.idclientes);
+      setDatos(prev => ({
+        ...prev,
+        clienteId:      completo.idclientes,
+        cliente:        completo.atencion       || "",
+        telefono:       completo.telefono       || "",
+        correo:         completo.correo         || "",
+        empresa:        completo.empresa        || "",
+        impresion:      completo.impresion      ?? null,
+        celular:        completo.celular        ?? null,
+        razon_social:   completo.razon_social   ?? null,
+        rfc:            completo.rfc            ?? null,
+        domicilio:      completo.domicilio      ?? null,
+        numero:         completo.numero         ?? null,
+        colonia:        completo.colonia        ?? null,
+        codigo_postal:  completo.codigo_postal  ?? null,
+        poblacion:      completo.poblacion      ?? null,
+        estado_cliente: completo.estado         ?? null,
+      }));
+    } catch {
+      setDatos(prev => ({
+        ...prev,
+        clienteId: cliente.idclientes,
+        cliente:   cliente.atencion  || "",
+        telefono:  cliente.telefono  || "",
+        correo:    cliente.correo    || "",
+        empresa:   cliente.empresa   || "",
+        impresion: cliente.impresion ?? null,
+      }));
+    }
+  };
 
   const cargarProductos = async (query?: string) => {
     setLoadingProductos(true);
@@ -634,16 +607,14 @@ const seleccionarCliente = async (cliente: ClienteBusqueda) => {
   const esNumeroEnteroValido = (val: string) => /^\d*$/.test(val);
   const esDecimalValido      = (val: string) => /^\d*\.?\d{0,4}$/.test(val);
 
+  // ── CAMBIO 3: NO resetear preciosEditadosManualmente al cambiar cantidad ─
   const handleCantidadChange = (index: number, value: string) => {
     if (!esNumeroEnteroValido(value)) return;
     const nuevasTexto = [...cantidadesTexto] as [string, string, string];
     nuevasTexto[index] = value;
     setCantidadesTexto(nuevasTexto);
     const { bolsas, kgs } = calcularDesdeInput(nuevasTexto, modoCantidad, productoActual.porKilo);
-    const nuevosFlags = [...preciosEditadosManualmente] as [boolean, boolean, boolean];
-    nuevosFlags[index] = false;
     setProductoActual(prev => ({ ...prev, cantidades: bolsas, kilogramos: kgs }));
-    setPreciosEditadosManualmente(nuevosFlags);
   };
 
   const handlePrecioChange = (index: number, value: string) => {
@@ -726,7 +697,6 @@ const seleccionarCliente = async (cliente: ClienteBusqueda) => {
   const handleHerramentalToggle = () => {
     const nuevo = !herramentalExpandido;
     setHerramentalExpandido(nuevo);
-    // Si cierra y estaba vacío, limpia
     if (!nuevo && !herramentalDescripcion && !herramentalPrecioTexto) {
       setProductoActual(prev => ({ ...prev, herramental_descripcion: null, herramental_precio: null }));
     }
@@ -770,7 +740,6 @@ const seleccionarCliente = async (cliente: ClienteBusqueda) => {
       return;
     }
 
-    // Parsear herramental
     const herramentalPrecioFinal = herramentalPrecioTexto !== ""
       ? parseFloat(herramentalPrecioTexto) || null
       : null;
@@ -855,7 +824,6 @@ const seleccionarCliente = async (cliente: ClienteBusqueda) => {
     setModoColor(null);
     setInputsPantones([]);
     setAdvertenciaDuplicado(null);
-    // Herramental
     setHerramentalExpandido(false);
     setHerramentalDescripcion("");
     setHerramentalPrecioTexto("");
@@ -883,21 +851,21 @@ const seleccionarCliente = async (cliente: ClienteBusqueda) => {
     if (datos.productos.length > 0) onSubmit({ ...datos, tipo: modo });
   };
 
-const calcularTotal = () =>
-  datos.productos.reduce((total, prod) => {
-    const pk = Number(prod.porKilo || 1);
-    const subtotalProducto = prod.cantidades.reduce((sum, cant, i) => {
-      if (!cant || cant <= 0) return sum;
-      if (prod.modoCantidad === "kilo") {
-        const precioKg = Math.round(prod.precios[i] * pk * 100) / 100;
-        const importe  = Math.round(prod.kilogramos[i] * precioKg * 100) / 100;
-        return sum + importe;
-      }
-      return sum + Math.round(cant * prod.precios[i] * 100) / 100;
+  const calcularTotal = () =>
+    datos.productos.reduce((total, prod) => {
+      const pk = Number(prod.porKilo || 1);
+      const subtotalProducto = prod.cantidades.reduce((sum, cant, i) => {
+        if (!cant || cant <= 0) return sum;
+        if (prod.modoCantidad === "kilo") {
+          const precioKg = Math.round(prod.precios[i] * pk * 100) / 100;
+          const importe  = Math.round(prod.kilogramos[i] * precioKg * 100) / 100;
+          return sum + importe;
+        }
+        return sum + Math.round(cant * prod.precios[i] * 100) / 100;
+      }, 0);
+      const herramental = prod.herramental_precio ?? 0;
+      return total + subtotalProducto + herramental;
     }, 0);
-    const herramental = prod.herramental_precio ?? 0;
-    return total + subtotalProducto + herramental;
-  }, 0);
 
   const hayProductoSeleccionado =
     (modoProducto === "registrado" && productoActual.nombre) ||
@@ -997,7 +965,7 @@ const calcularTotal = () =>
   const getEsTroquel = (): boolean => {
     const tipo = modoProducto === "nuevo"
       ? datosProductoNuevo.tipoProducto
-     : productoActual.nombre;
+      : productoActual.nombre;
     return (tipo || "").toLowerCase().includes("troquelada");
   };
 
@@ -1416,22 +1384,13 @@ const calcularTotal = () =>
           {hayProductoSeleccionado && (
             <div className="mt-6 space-y-4 border-t pt-4">
 
-              {/* ── HERRAMENTAL (accordion) ─────────────────────────────── */}
+              {/* ── HERRAMENTAL ─────────────────────────────── */}
               <div className="border border-gray-200 rounded-lg overflow-hidden">
-                <button
-                  type="button"
-                  onClick={handleHerramentalToggle}
-                  className={`w-full flex items-center justify-between px-4 py-3 transition-colors text-left ${
-                    herramentalTieneData
-                      ? "bg-orange-50 hover:bg-orange-100"
-                      : "bg-gray-100 hover:bg-gray-200"
-                  }`}
-                >
+                <button type="button" onClick={handleHerramentalToggle}
+                  className={`w-full flex items-center justify-between px-4 py-3 transition-colors text-left ${herramentalTieneData ? "bg-orange-50 hover:bg-orange-100" : "bg-gray-100 hover:bg-gray-200"}`}>
                   <div className="flex items-center gap-2">
                     <span className="text-base">🔧</span>
-                    <span className={`text-sm font-semibold ${herramentalTieneData ? "text-orange-800" : "text-gray-600"}`}>
-                      Herramental
-                    </span>
+                    <span className={`text-sm font-semibold ${herramentalTieneData ? "text-orange-800" : "text-gray-600"}`}>Herramental</span>
                     <span className="text-xs font-normal text-gray-400">(opcional)</span>
                     {herramentalTieneData && (
                       <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-200 text-orange-800">
@@ -1439,62 +1398,34 @@ const calcularTotal = () =>
                       </span>
                     )}
                   </div>
-                  <svg
-                    className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${herramentalExpandido ? "rotate-180" : ""}`}
-                    fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                  >
+                  <svg className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${herramentalExpandido ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                   </svg>
                 </button>
-
                 {herramentalExpandido && (
                   <div className="p-4 bg-white space-y-3 border-t border-gray-200">
-                    <p className="text-xs text-gray-400">
-                      Indica el herramental requerido para este producto (ej. suaje nuevo, molde especial). Se sumará al total.
-                    </p>
+                    <p className="text-xs text-gray-400">Indica el herramental requerido para este producto. Se sumará al total.</p>
                     <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1">
-                        Descripción / Características
-                      </label>
-                      <textarea
-                        value={herramentalDescripcion}
-                        onChange={(e) => handleHerramentalDescripcionChange(e.target.value)}
-                        rows={2}
-                        placeholder="Ej: Suaje nuevo para troquel 40x30 con fuelle especial..."
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-orange-400 focus:border-orange-400 resize-none"
-                      />
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Descripción / Características</label>
+                      <textarea value={herramentalDescripcion} onChange={(e) => handleHerramentalDescripcionChange(e.target.value)} rows={2}
+                        placeholder="Ej: Suaje nuevo para troquel 40x30..."
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-orange-400 focus:border-orange-400 resize-none" />
                     </div>
                     <div className="flex items-end gap-3">
                       <div className="flex-1">
-                        <label className="block text-xs font-medium text-gray-600 mb-1">
-                          Precio <span className="text-red-500">*</span>
-                        </label>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Precio <span className="text-red-500">*</span></label>
                         <div className="relative">
                           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm font-medium">$</span>
-                          <input
-                            type="text"
-                            inputMode="decimal"
-                            value={herramentalPrecioTexto}
-                            onChange={(e) => handleHerramentalPrecioChange(e.target.value)}
-                            placeholder="0.00"
-                            className="w-full pl-7 pr-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-orange-400 focus:border-orange-400"
-                          />
+                          <input type="text" inputMode="decimal" value={herramentalPrecioTexto} onChange={(e) => handleHerramentalPrecioChange(e.target.value)} placeholder="0.00"
+                            className="w-full pl-7 pr-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-orange-400 focus:border-orange-400" />
                         </div>
                       </div>
                       {herramentalTieneData && (
-                        <button
-                          type="button"
-                          onClick={handleHerramentalLimpiar}
-                          className="px-3 py-2 text-xs text-red-500 hover:text-red-700 hover:bg-red-50 border border-red-200 rounded-lg transition-colors"
-                        >
-                          Limpiar
-                        </button>
+                        <button type="button" onClick={handleHerramentalLimpiar} className="px-3 py-2 text-xs text-red-500 hover:text-red-700 hover:bg-red-50 border border-red-200 rounded-lg transition-colors">Limpiar</button>
                       )}
                     </div>
                     {herramentalTieneData && (
-                      <p className="text-xs text-orange-600 font-medium">
-                        ✓ Herramental de ${parseFloat(herramentalPrecioTexto || "0").toFixed(2)} incluido en el total
-                      </p>
+                      <p className="text-xs text-orange-600 font-medium">✓ Herramental de ${parseFloat(herramentalPrecioTexto || "0").toFixed(2)} incluido en el total</p>
                     )}
                   </div>
                 )}
@@ -1565,12 +1496,9 @@ const calcularTotal = () =>
                     <div className="relative group flex-shrink-0">
                       <button type="button" disabled={esBopp}
                         className={`flex items-center gap-2 px-4 py-2 rounded-lg border-2 font-medium text-sm transition-all ${
-                          esBopp
-                            ? "border-gray-200 bg-gray-50 text-gray-300 cursor-not-allowed"
-                            : productoActual.pigmentos
-                              ? "border-orange-500 bg-orange-50 text-orange-700"
-                              : "border-gray-300 bg-white text-gray-600 hover:border-orange-300"
-                        }`}>
+                          esBopp ? "border-gray-200 bg-gray-50 text-gray-300 cursor-not-allowed"
+                          : productoActual.pigmentos ? "border-orange-500 bg-orange-50 text-orange-700"
+                          : "border-gray-300 bg-white text-gray-600 hover:border-orange-300"}`}>
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" /></svg>
                         Pigmentos
                       </button>
@@ -1580,19 +1508,15 @@ const calcularTotal = () =>
                         </div>
                       )}
                     </div>
-                    <input type="text" value={productoActual.pigmentos || ""} onChange={(e) => handlePigmentoChange(e.target.value)}
-                      disabled={esBopp}
+                    <input type="text" value={productoActual.pigmentos || ""} onChange={(e) => handlePigmentoChange(e.target.value)} disabled={esBopp}
                       placeholder={esBopp ? "No aplica (BOPP/Celofán)" : "Ej: Rojo intenso, Azul marino..."}
                       className={`flex-1 min-w-0 px-3 py-2 border-2 rounded-lg text-sm transition-all focus:outline-none ${
-                        esBopp
-                          ? "border-gray-200 bg-gray-50 text-gray-300 cursor-not-allowed placeholder-gray-300"
-                          : productoActual.pigmentos
-                            ? "border-orange-400 bg-orange-50 text-orange-800 focus:ring-2 focus:ring-orange-300 placeholder-orange-300"
-                            : "border-gray-300 bg-white text-gray-900 focus:border-orange-400 focus:ring-2 focus:ring-orange-200 placeholder-gray-400"
-                      }`} />
+                        esBopp ? "border-gray-200 bg-gray-50 text-gray-300 cursor-not-allowed placeholder-gray-300"
+                        : productoActual.pigmentos ? "border-orange-400 bg-orange-50 text-orange-800 focus:ring-2 focus:ring-orange-300 placeholder-orange-300"
+                        : "border-gray-300 bg-white text-gray-900 focus:border-orange-400 focus:ring-2 focus:ring-orange-200 placeholder-gray-400"}`} />
                     {productoActual.pigmentos && !esBopp && (
                       <button type="button" onClick={() => setProductoActual(p => ({ ...p, pigmentos: null }))}
-                        className="flex-shrink-0 p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors" title="Limpiar pigmento">
+                        className="flex-shrink-0 p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors">
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                       </button>
                     )}
@@ -1635,32 +1559,17 @@ const calcularTotal = () =>
                         <svg className={`w-5 h-5 transition-transform ${mostrarDropdownSuaje ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
                       </button>
                       {productoActual.idsuaje && esAsaFlexible && (
-                        <button type="button" onClick={() => setProductoActual(p => ({
-                          ...p,
-                          idsuaje: null, suajeTipo: null,
-                          colorAsaId: null, colorAsaNombre: null,
-                        }))} className="px-3 py-2 bg-gray-200 text-gray-600 rounded-lg hover:bg-red-100 hover:text-red-600 text-sm font-bold">✕</button>
+                        <button type="button" onClick={() => setProductoActual(p => ({ ...p, idsuaje: null, suajeTipo: null, colorAsaId: null, colorAsaNombre: null }))}
+                          className="px-3 py-2 bg-gray-200 text-gray-600 rounded-lg hover:bg-red-100 hover:text-red-600 text-sm font-bold">✕</button>
                       )}
                     </div>
                     {mostrarDropdownSuaje && esAsaFlexible && (
                       <ul className="absolute w-full bg-white border border-gray-300 mt-1 rounded-lg shadow-lg z-20 max-h-48 overflow-y-auto">
-                        <li onClick={() => {
-                          setProductoActual(p => ({
-                            ...p,
-                            idsuaje: null, suajeTipo: null,
-                            colorAsaId: null, colorAsaNombre: null,
-                          }));
-                          setMostrarDropdownSuaje(false);
-                        }} className="px-4 py-2 hover:bg-gray-100 cursor-pointer text-gray-400 italic border-b border-gray-200 text-sm">Sin suaje</li>
+                        <li onClick={() => { setProductoActual(p => ({ ...p, idsuaje: null, suajeTipo: null, colorAsaId: null, colorAsaNombre: null })); setMostrarDropdownSuaje(false); }}
+                          className="px-4 py-2 hover:bg-gray-100 cursor-pointer text-gray-400 italic border-b border-gray-200 text-sm">Sin suaje</li>
                         {suajes.map((s) => (
-                          <li key={s.idsuaje} onClick={() => {
-                            setProductoActual(p => ({
-                              ...p,
-                              idsuaje: s.idsuaje, suajeTipo: s.tipo,
-                              colorAsaId: null, colorAsaNombre: null,
-                            }));
-                            setMostrarDropdownSuaje(false);
-                          }} className={`px-4 py-2 hover:bg-blue-100 cursor-pointer text-gray-900 ${productoActual.idsuaje === s.idsuaje ? "bg-blue-50 font-semibold text-blue-700" : ""}`}>
+                          <li key={s.idsuaje} onClick={() => { setProductoActual(p => ({ ...p, idsuaje: s.idsuaje, suajeTipo: s.tipo, colorAsaId: null, colorAsaNombre: null })); setMostrarDropdownSuaje(false); }}
+                            className={`px-4 py-2 hover:bg-blue-100 cursor-pointer text-gray-900 ${productoActual.idsuaje === s.idsuaje ? "bg-blue-50 font-semibold text-blue-700" : ""}`}>
                             {s.tipo}
                           </li>
                         ))}
@@ -1674,17 +1583,13 @@ const calcularTotal = () =>
               {/* Color del Asa */}
               {getEsAsaFlexible() && productoActual.idsuaje && (
                 <div className="relative">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Color del Asa <span className="ml-2 text-xs text-gray-400 font-normal">(opcional)</span>
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Color del Asa <span className="ml-2 text-xs text-gray-400 font-normal">(opcional)</span></label>
                   <div className="flex gap-2">
                     <input type="text" value={productoActual.colorAsaNombre || "Seleccionar color..."} readOnly
                       className={`flex-1 px-4 py-2 border rounded-lg cursor-pointer text-gray-900 bg-white capitalize ${productoActual.colorAsaId ? "border-teal-400 bg-teal-50" : "border-gray-300"}`}
                       onClick={() => setMostrarDropdownColorAsa(!mostrarDropdownColorAsa)} />
                     <button type="button" onClick={() => setMostrarDropdownColorAsa(!mostrarDropdownColorAsa)} className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700">
-                      <svg className={`w-5 h-5 transition-transform ${mostrarDropdownColorAsa ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
+                      <svg className={`w-5 h-5 transition-transform ${mostrarDropdownColorAsa ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
                     </button>
                     {productoActual.colorAsaId && (
                       <button type="button" onClick={() => setProductoActual(p => ({ ...p, colorAsaId: null, colorAsaNombre: null }))}
@@ -1694,10 +1599,8 @@ const calcularTotal = () =>
                   {mostrarDropdownColorAsa && (
                     <ul className="absolute w-full bg-white border border-gray-300 mt-1 rounded-lg shadow-lg z-20 max-h-48 overflow-y-auto">
                       {coloresAsa.map((c) => (
-                        <li key={c.id_color} onClick={() => {
-                          setProductoActual(p => ({ ...p, colorAsaId: c.id_color, colorAsaNombre: c.color }));
-                          setMostrarDropdownColorAsa(false);
-                        }} className={`px-4 py-2 hover:bg-teal-100 cursor-pointer text-gray-900 capitalize ${productoActual.colorAsaId === c.id_color ? "bg-teal-50 font-semibold text-teal-700" : ""}`}>
+                        <li key={c.id_color} onClick={() => { setProductoActual(p => ({ ...p, colorAsaId: c.id_color, colorAsaNombre: c.color })); setMostrarDropdownColorAsa(false); }}
+                          className={`px-4 py-2 hover:bg-teal-100 cursor-pointer text-gray-900 capitalize ${productoActual.colorAsaId === c.id_color ? "bg-teal-50 font-semibold text-teal-700" : ""}`}>
                           {c.color}
                         </li>
                       ))}
@@ -1710,17 +1613,13 @@ const calcularTotal = () =>
               {/* Medida del Troquel */}
               {getEsTroquel() && (
                 <div className="relative">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Medida del Troquel <span className="ml-2 text-xs text-gray-400 font-normal">(opcional)</span>
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Medida del Troquel <span className="ml-2 text-xs text-gray-400 font-normal">(opcional)</span></label>
                   <div className="flex gap-2">
                     <input type="text" value={productoActual.medidaTroquelTexto || "Seleccionar medida..."} readOnly
                       className={`flex-1 px-4 py-2 border rounded-lg cursor-pointer text-gray-900 bg-white ${productoActual.idMedidaTroquel ? "border-violet-400 bg-violet-50" : "border-gray-300"}`}
                       onClick={() => setMostrarDropdownTroquel(!mostrarDropdownTroquel)} />
                     <button type="button" onClick={() => setMostrarDropdownTroquel(!mostrarDropdownTroquel)} className="px-4 py-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700">
-                      <svg className={`w-5 h-5 transition-transform ${mostrarDropdownTroquel ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
+                      <svg className={`w-5 h-5 transition-transform ${mostrarDropdownTroquel ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
                     </button>
                     {productoActual.idMedidaTroquel && (
                       <button type="button" onClick={() => setProductoActual(p => ({ ...p, idMedidaTroquel: null, medidaTroquelTexto: null }))}
@@ -1801,7 +1700,7 @@ const calcularTotal = () =>
                   </label>
                   {preciosEditadosManualmente.some(Boolean) && (
                     <button type="button" onClick={() => { setPreciosEditadosManualmente([false, false, false]); setPreciosTexto(["", "", ""]); }}
-                      className="text-xs text-blue-600 hover:text-blue-800 underline">↺ Restaurar</button>
+                      className="text-xs text-blue-600 hover:text-blue-800 underline">↺ Restaurar todos</button>
                   )}
                 </div>
                 {errorCalculo && <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-lg"><p className="text-red-700 text-sm">⚠️ {errorCalculo}</p></div>}
@@ -1890,53 +1789,35 @@ const calcularTotal = () =>
                       <span>Calibre: {prod.calibre}</span>
                       <span>Tintas: {prod.tintas}</span>
                       <span>Caras: {prod.caras}</span>
-                      {prod.suajeTipo       && <span className="text-blue-600 font-medium">Suaje: {prod.suajeTipo}</span>}
-                      {prod.colorAsaNombre  && <span className="text-teal-600 font-medium capitalize">🎨 Asa: {prod.colorAsaNombre}</span>}
+                      {prod.suajeTipo      && <span className="text-blue-600 font-medium">Suaje: {prod.suajeTipo}</span>}
+                      {prod.colorAsaNombre && <span className="text-teal-600 font-medium capitalize">🎨 Asa: {prod.colorAsaNombre}</span>}
                       {prod.medidaTroquelTexto && <span className="text-violet-600 font-medium">📐 Troquel: {prod.medidaTroquelTexto}</span>}
-                      {prod.pantones        && <span className="text-purple-600 font-medium">🎨 {prod.pantones}</span>}
-                      {prod.pigmentos       && <span className="text-orange-600 font-medium">🧪 {prod.pigmentos}</span>}
+                      {prod.pantones       && <span className="text-purple-600 font-medium">🎨 {prod.pantones}</span>}
+                      {prod.pigmentos      && <span className="text-orange-600 font-medium">🧪 {prod.pigmentos}</span>}
                     </div>
                     <div className="mt-2 space-y-1">
-  {(modo === "pedido" ? [0] : [0, 1, 2]).map((i) => {
-    const cant = prod.cantidades[i];
-    if (!cant || cant <= 0) return null;
-
-    const pk = Number(prod.porKilo || 1);
-
-    if (prod.modoCantidad === "kilo") {
-      const kgs        = prod.kilogramos[i];
-      const precioKg   = Math.round(prod.precios[i] * pk * 100) / 100;
-      const importe    = Math.round(kgs * precioKg * 100) / 100;
-      return (
-        <p key={i} className="text-sm text-gray-700">
-          {kgs} kg ({cant.toLocaleString()} bolsas) × ${precioKg.toFixed(2)}/kg = ${importe.toFixed(2)}
-        </p>
-      );
-    }
-
-    const importe = Math.round(cant * prod.precios[i] * 100) / 100;
-    return (
-      <p key={i} className="text-sm text-gray-700">
-        {cant.toLocaleString()} bolsas × ${prod.precios[i].toFixed(4)}/bolsa = ${importe.toFixed(2)}
-      </p>
-    );
-  })}
-</div>
-                    {/* Herramental en lista de productos agregados */}
+                      {(modo === "pedido" ? [0] : [0, 1, 2]).map((i) => {
+                        const cant = prod.cantidades[i];
+                        if (!cant || cant <= 0) return null;
+                        const pk = Number(prod.porKilo || 1);
+                        if (prod.modoCantidad === "kilo") {
+                          const kgs      = prod.kilogramos[i];
+                          const precioKg = Math.round(prod.precios[i] * pk * 100) / 100;
+                          const importe  = Math.round(kgs * precioKg * 100) / 100;
+                          return <p key={i} className="text-sm text-gray-700">{kgs} kg ({cant.toLocaleString()} bolsas) × ${precioKg.toFixed(2)}/kg = ${importe.toFixed(2)}</p>;
+                        }
+                        const importe = Math.round(cant * prod.precios[i] * 100) / 100;
+                        return <p key={i} className="text-sm text-gray-700">{cant.toLocaleString()} bolsas × ${prod.precios[i].toFixed(4)}/bolsa = ${importe.toFixed(2)}</p>;
+                      })}
+                    </div>
                     {(prod.herramental_descripcion || prod.herramental_precio != null) && (
                       <div className="mt-2 flex items-center gap-2 px-3 py-1.5 bg-orange-50 border border-orange-200 rounded-lg">
                         <span className="text-sm">🔧</span>
                         <div className="flex-1 min-w-0">
                           <span className="text-xs font-semibold text-orange-800">Herramental</span>
-                          {prod.herramental_descripcion && (
-                            <span className="text-xs text-orange-700 ml-1">— {prod.herramental_descripcion}</span>
-                          )}
+                          {prod.herramental_descripcion && <span className="text-xs text-orange-700 ml-1">— {prod.herramental_descripcion}</span>}
                         </div>
-                        {prod.herramental_precio != null && (
-                          <span className="text-xs font-bold text-orange-800 flex-shrink-0">
-                            +${prod.herramental_precio.toFixed(2)}
-                          </span>
-                        )}
+                        {prod.herramental_precio != null && <span className="text-xs font-bold text-orange-800 flex-shrink-0">+${prod.herramental_precio.toFixed(2)}</span>}
                       </div>
                     )}
                     {prod.observacion && (
@@ -1953,9 +1834,7 @@ const calcularTotal = () =>
             <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
               <p className="text-xl font-bold text-gray-900">Total: ${calcularTotal().toFixed(2)}</p>
               {datos.productos.some(p => p.herramental_precio != null && p.herramental_precio > 0) && (
-                <p className="text-xs text-orange-600 mt-1">
-                  Incluye herramental: +${datos.productos.reduce((s, p) => s + (p.herramental_precio ?? 0), 0).toFixed(2)}
-                </p>
+                <p className="text-xs text-orange-600 mt-1">Incluye herramental: +${datos.productos.reduce((s, p) => s + (p.herramental_precio ?? 0), 0).toFixed(2)}</p>
               )}
             </div>
           </div>
@@ -1964,13 +1843,9 @@ const calcularTotal = () =>
         {/* Prioridad (solo pedido directo) */}
         {modo === "pedido" && (
           <div className="flex items-center gap-3 py-3 px-4 bg-amber-50 border border-amber-200 rounded-lg mb-4">
-            <input
-              type="checkbox"
-              id="chk-prioridad"
-              checked={datos.prioridad ?? false}
+            <input type="checkbox" id="chk-prioridad" checked={datos.prioridad ?? false}
               onChange={(e) => setDatos(prev => ({ ...prev, prioridad: e.target.checked }))}
-              className="w-5 h-5 rounded border-amber-400 text-amber-600 focus:ring-amber-400 cursor-pointer"
-            />
+              className="w-5 h-5 rounded border-amber-400 text-amber-600 focus:ring-amber-400 cursor-pointer" />
             <label htmlFor="chk-prioridad" className="flex items-center gap-2 cursor-pointer select-none">
               <span className="text-amber-700 font-semibold text-sm">Pedido urgente</span>
               <span className="text-amber-500 text-xs">(prioridad alta)</span>
@@ -1991,8 +1866,7 @@ const calcularTotal = () =>
           )}
 
           {datos.productos.length > 0 && (
-            <button type="button" onClick={handleSubmit}
-              className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-semibold">
+            <button type="button" onClick={handleSubmit} className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-semibold">
               {modo === "pedido" ? "Crear Pedido" : "Crear Cotización"}
             </button>
           )}

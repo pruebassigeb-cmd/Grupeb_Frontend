@@ -12,4 +12,4 @@ export interface TarifaUpdate {
   id: number;
   precio: number;
   merma_porcentaje: number;
-}
+} 

@@ -67,10 +67,10 @@ export interface OrdenProduccionData {
   metros_imprimir?:      number | null;
   metros_impresos?:      number | null;
   imp_maquina?:          string | null;
-  kilos_bolsear?:        number | null;
+  kilos_bolseados?:      number | null;
   bol_merma?:            number | null;
   piezas_bolseadas?:     number | null;
-  kilos_bolseados?:      number | null;
+  kilos_bolseados2?:     number | null;
   bol_piezas_merma?:     number | null;
   asa_piezas_recibidas?: number | null;
   asa_merma?:            number | null;
@@ -93,6 +93,34 @@ const LABEL_SIZE = 7;
 
 const f = (v: any) =>
   v === null || v === undefined || String(v).trim() === "" ? "" : String(v).trim();
+
+// ── Calcula ancho de película y bolseo según tipo de fuelle ──
+function calcularAnchoPeliculaYBolseo(data: OrdenProduccionData): {
+  anchoPelicula: string;
+  bolseo: string;
+} {
+  const n = (v: string | null | undefined) => {
+    const parsed = parseFloat(String(v ?? "").trim());
+    return isNaN(parsed) ? 0 : parsed;
+  };
+  const has = (v: string | null | undefined) => n(v) > 0;
+
+  const tieneLateral = has(data.fuelle_lat_iz) || has(data.fuelle_lat_de);
+
+  if (tieneLateral) {
+    const total = n(data.ancho) + n(data.fuelle_lat_iz) + n(data.fuelle_lat_de);
+    return {
+      anchoPelicula: total > 0 ? String(total) : "",
+      bolseo:        has(data.altura) ? String(n(data.altura)) : "",
+    };
+  } else {
+    const total = n(data.altura) + n(data.fuelle_fondo) + n(data.refuerzo);
+    return {
+      anchoPelicula: total > 0 ? String(total) : "",
+      bolseo:        has(data.ancho) ? String(n(data.ancho)) : "",
+    };
+  }
+}
 
 function celdaLabel(
   doc: jsPDF,
@@ -131,7 +159,6 @@ function celdaHeader(
   doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);
 }
 
-// ── CAMBIO: texto en esquina superior izquierda, igual que celdaLabel ──
 function celdaFirma(
   doc: jsPDF,
   label: string,
@@ -143,7 +170,7 @@ function celdaFirma(
   doc.setFont("helvetica", "normal");
   doc.setFontSize(LABEL_SIZE);
   doc.setTextColor(GRAY_DARK[0], GRAY_DARK[1], GRAY_DARK[2]);
-  doc.text(label, x + 1.5, y + 4.5);   // ← esquina superior izquierda
+  doc.text(label, x + 1.5, y + 4.5);
   doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);
 }
 
@@ -173,7 +200,6 @@ function bloqueOperativo(
   const firmaY = dataY + filaH;
   celdaLabel(doc, f2c1Label, f2c1Val, x, firmaY, colW, filaH, LABEL_SIZE, 11, !!f2c1Val);
 
-  // Observacion — ya estaba en esquina superior izquierda, sin cambio
   doc.setDrawColor(BLACK[0], BLACK[1], BLACK[2]);
   doc.setLineWidth(0.2);
   doc.rect(x + colW, firmaY, colW, filaH);
@@ -214,7 +240,6 @@ function bloqueBolseo(
   const firmaY = dataY + filaH;
   const obsW   = colW * 2;
 
-  // Observacion — esquina superior izquierda
   doc.setDrawColor(BLACK[0], BLACK[1], BLACK[2]);
   doc.setLineWidth(0.2);
   doc.rect(x, firmaY, obsW, filaH);
@@ -278,14 +303,13 @@ function bloqueBultosAlmacen(
   celdaLabel(doc, "Piezas Recibidas", "", almX,            almDataY,        almCol1W, almRowH, LABEL_SIZE, 11, false);
   celdaLabel(doc, "Ubicacion",        "", almX + almCol1W, almDataY,        almCol2W, almRowH, LABEL_SIZE, 11, false);
 
-  // ── CAMBIO: "Observaciones" en esquina superior izquierda ──
   doc.setDrawColor(BLACK[0], BLACK[1], BLACK[2]);
   doc.setLineWidth(0.2);
   doc.rect(almX, almDataY + almRowH, almW, almRowH);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(LABEL_SIZE);
   doc.setTextColor(GRAY_DARK[0], GRAY_DARK[1], GRAY_DARK[2]);
-  doc.text("Observaciones", almX + 1.5, almDataY + almRowH + 4.5);  // ← esquina superior izquierda
+  doc.text("Observaciones", almX + 1.5, almDataY + almRowH + 4.5);
   doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);
 
   celdaFirma(doc, "Firma Calidad", almX,            almDataY + almRowH * 2, almCol1W, almRowH);
@@ -312,6 +336,9 @@ export async function generarPdfOrdenProduccion(data: OrdenProduccionData): Prom
   const logoBase64    = await cargarLogoBase64(logoUrl);
   const repeticionStr = construirRepeticionStr(data);
   const pantStr       = parsePantones(data.pantones);
+
+  // ── Calcular ancho película y bolseo ──
+  const { anchoPelicula, bolseo: bolseoCalculado } = calcularAnchoPeliculaYBolseo(data);
 
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   const PW = 210;
@@ -473,7 +500,7 @@ export async function generarPdfOrdenProduccion(data: OrdenProduccionData): Prom
   doc.text("mts", kilos4X + 1.5, y + secH + 3);
   if (mtsVal) {
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(18);
+    doc.setFontSize(15);
     doc.setTextColor(0, 0, 0);
     doc.text(mtsVal, kilos4X + kilos4W / 2, y + secH * 2 - 1.5, { align: "center" });
   }
@@ -487,7 +514,7 @@ export async function generarPdfOrdenProduccion(data: OrdenProduccionData): Prom
   doc.text("Bolsas", kilos4X + 1.5, y + secH * 2 + 3);
   if (bolsasVal) {
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(18);
+    doc.setFontSize(15);
     doc.setTextColor(0, 0, 0);
     doc.text(bolsasVal, kilos4X + kilos4W / 2, y + secH * 3 - 1.5, { align: "center" });
   }
@@ -499,16 +526,16 @@ export async function generarPdfOrdenProduccion(data: OrdenProduccionData): Prom
   const medidasW = CW - kilos4W;
 
   const cols5 = [
-    { label: "Ancho Pel.", value: f(data.ancho_pelicula),                w: medidasW * 0.09 },
-    { label: "Altura",     value: f(data.altura),                        w: medidasW * 0.08 },
-    { label: "Fuelle R",   value: f(data.fuelle_r ?? data.fuelle_fondo), w: medidasW * 0.09 },
-    { label: "Fuelle F",   value: f(data.fuelle_f ?? data.fuelle_fondo), w: medidasW * 0.08 },
-    { label: "Ancho",      value: f(data.ancho),                         w: medidasW * 0.09 },
-    { label: "Fuelle Lat", value: f(data.fuelle_lat_iz),                 w: medidasW * 0.09 },
-    { label: "Fuelle Lat", value: f(data.fuelle_lat_de),                 w: medidasW * 0.09 },
-    { label: "Material",   value: f(data.material),                      w: medidasW * 0.17 },
-    { label: "Calibre",    value: f(data.calibre),                       w: medidasW * 0.08 },
-    { label: "Pigmento",   value: f(data.pigmentos),                     w: medidasW * 0.08 },
+    { label: "Ancho Pel.", value: anchoPelicula,        w: medidasW * 0.09 },
+    { label: "Altura",     value: f(data.altura),       w: medidasW * 0.08 },
+    { label: "Fuelle R",   value: f(data.fuelle_r),     w: medidasW * 0.09 },
+    { label: "Fuelle F",   value: f(data.fuelle_f),     w: medidasW * 0.08 },
+    { label: "Ancho",      value: f(data.ancho),        w: medidasW * 0.09 },
+    { label: "Fuelle Lat", value: f(data.fuelle_lat_iz), w: medidasW * 0.09 },
+    { label: "Fuelle Lat", value: f(data.fuelle_lat_de), w: medidasW * 0.09 },
+    { label: "Material",   value: f(data.material),     w: medidasW * 0.17 },
+    { label: "Calibre",    value: f(data.calibre),      w: medidasW * 0.08 },
+    { label: "Pigmento",   value: f(data.pigmentos),    w: medidasW * 0.08 },
     { label: "Caras",      value: f(data.caras),
       w: medidasW - medidasW * (0.09+0.08+0.09+0.08+0.09+0.09+0.09+0.17+0.08+0.08) },
   ];
@@ -559,8 +586,8 @@ export async function generarPdfOrdenProduccion(data: OrdenProduccionData): Prom
     asaTexto = `${asaTexto} ${data.medida_troquel}`;
   }
 
-  celdaLabel(doc, "Asa / Troquel", asaTexto,           M,         y, asa7W, fila7H, LABEL_SIZE, 13);
-  celdaLabel(doc, "Bolseo",        f(data.bolseo_asa), M + asa7W, y, bol7W, fila7H, LABEL_SIZE, 13);
+  celdaLabel(doc, "Asa / Troquel", asaTexto, M, y, asa7W, fila7H, LABEL_SIZE, 13);
+  celdaLabel(doc, "Bolseo", bolseoCalculado || f(data.bolseo_asa), M + asa7W, y, bol7W, fila7H, LABEL_SIZE, 13);
 
   doc.setDrawColor(BLACK[0], BLACK[1], BLACK[2]);
   doc.setLineWidth(0.2);
@@ -585,7 +612,8 @@ export async function generarPdfOrdenProduccion(data: OrdenProduccionData): Prom
   const colDerX = M + colIzqW;
   const bloqueY = y;
 
-  const espacioTotal = PH - M - y;
+  // ── 10% menos alto en los bloques operativos ──
+  const espacioTotal = (PH - M - y) * 0.90;
   const bultosRatio  = 0.22;
   const bultosH      = espacioTotal * bultosRatio;
   const bloqueH      = (espacioTotal - bultosH) / 4;
