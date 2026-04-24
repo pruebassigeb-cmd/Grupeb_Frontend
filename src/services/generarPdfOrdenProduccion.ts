@@ -81,6 +81,7 @@ export interface OrdenProduccionData {
   metros_calculados?:    number | null;
   bolsas_calculadas?:    number | null;
   codigo_kliche?:        string | null;
+  ubicacion_kliche?:     string | null;
 }
 
 const BLACK:     [number, number, number] = [0,   0,   0];
@@ -93,6 +94,10 @@ const LABEL_SIZE = 7;
 
 const f = (v: any) =>
   v === null || v === undefined || String(v).trim() === "" ? "" : String(v).trim();
+
+// ── Formato de kilos con separador de miles y 2 decimales ──
+const formatKilos = (n: number) =>
+  n.toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 // ── Calcula ancho de película y bolseo según tipo de fuelle ──
 function calcularAnchoPeliculaYBolseo(data: OrdenProduccionData): {
@@ -452,12 +457,13 @@ export async function generarPdfOrdenProduccion(data: OrdenProduccionData): Prom
   const kilosTotH = fila4H * 2;
   const secH      = kilosTotH / 3;
 
+  // ── FIX: kilosVal con separador de miles ──
   const kilosVal = data.kilos_merma != null
-    ? Number(data.kilos_merma).toFixed(2)
+    ? formatKilos(Number(data.kilos_merma))
     : data.kilogramos != null
-      ? Number(data.kilogramos).toFixed(2)
+      ? formatKilos(Number(data.kilogramos))
       : data.kilos != null
-        ? Number(data.kilos).toFixed(2)
+        ? formatKilos(Number(data.kilos))
         : "";
 
   const mtsVal = data.metros_extruir != null
@@ -499,7 +505,7 @@ export async function generarPdfOrdenProduccion(data: OrdenProduccionData): Prom
   doc.setTextColor(GRAY_DARK[0], GRAY_DARK[1], GRAY_DARK[2]);
   doc.text("mts", kilos4X + 1.5, y + secH + 3);
   if (mtsVal) {
-    doc.setFont("helvetica", "bold");
+    doc.setFont("helvetica");
     doc.setFontSize(15);
     doc.setTextColor(0, 0, 0);
     doc.text(mtsVal, kilos4X + kilos4W / 2, y + secH * 2 - 1.5, { align: "center" });
@@ -513,7 +519,7 @@ export async function generarPdfOrdenProduccion(data: OrdenProduccionData): Prom
   doc.setTextColor(GRAY_DARK[0], GRAY_DARK[1], GRAY_DARK[2]);
   doc.text("Bolsas", kilos4X + 1.5, y + secH * 2 + 3);
   if (bolsasVal) {
-    doc.setFont("helvetica", "bold");
+    doc.setFont("helvetica");
     doc.setFontSize(15);
     doc.setTextColor(0, 0, 0);
     doc.text(bolsasVal, kilos4X + kilos4W / 2, y + secH * 3 - 1.5, { align: "center" });
@@ -526,16 +532,16 @@ export async function generarPdfOrdenProduccion(data: OrdenProduccionData): Prom
   const medidasW = CW - kilos4W;
 
   const cols5 = [
-    { label: "Ancho Pel.", value: anchoPelicula,        w: medidasW * 0.09 },
-    { label: "Altura",     value: f(data.altura),       w: medidasW * 0.08 },
-    { label: "Fuelle R",   value: f(data.fuelle_r),     w: medidasW * 0.09 },
-    { label: "Fuelle F",   value: f(data.fuelle_f),     w: medidasW * 0.08 },
-    { label: "Ancho",      value: f(data.ancho),        w: medidasW * 0.09 },
-    { label: "Fuelle Lat", value: f(data.fuelle_lat_iz), w: medidasW * 0.09 },
-    { label: "Fuelle Lat", value: f(data.fuelle_lat_de), w: medidasW * 0.09 },
-    { label: "Material",   value: f(data.material),     w: medidasW * 0.17 },
-    { label: "Calibre",    value: f(data.calibre),      w: medidasW * 0.08 },
-    { label: "Pigmento",   value: f(data.pigmentos),    w: medidasW * 0.08 },
+    { label: "Ancho Pel.", value: anchoPelicula,          w: medidasW * 0.09 },
+    { label: "Altura",     value: f(data.altura),         w: medidasW * 0.08 },
+    { label: "Fuelle R",   value: f(data.refuerzo),       w: medidasW * 0.09 },
+    { label: "Fuelle F",   value: f(data.fuelle_fondo),   w: medidasW * 0.08 },
+    { label: "Ancho",      value: f(data.ancho),          w: medidasW * 0.09 },
+    { label: "Fuelle Lat", value: f(data.fuelle_lat_iz),  w: medidasW * 0.09 },
+    { label: "Fuelle Lat", value: f(data.fuelle_lat_de),  w: medidasW * 0.09 },
+    { label: "Material",   value: f(data.material),       w: medidasW * 0.17 },
+    { label: "Calibre",    value: f(data.calibre),        w: medidasW * 0.08 },
+    { label: "Pigmento",   value: f(data.pigmentos),      w: medidasW * 0.08 },
     { label: "Caras",      value: f(data.caras),
       w: medidasW - medidasW * (0.09+0.08+0.09+0.08+0.09+0.09+0.09+0.17+0.08+0.08) },
   ];
@@ -547,11 +553,12 @@ export async function generarPdfOrdenProduccion(data: OrdenProduccionData): Prom
   });
   y += fila5H;
 
-  // ── FILA 5 — Repetición | Código Kliche | Pantones ──
-  const fila6H = 16;
-  const repW6  = CW * 0.35;
-  const codK6W = CW * 0.15;
-  const pan6W  = CW - repW6 - codK6W;
+  // ── FILA 5 — Repetición | Código Kliche | Ubicación | Pantones ──
+  const fila6H  = 16;
+  const repW6   = CW * 0.35;
+  const codK6W  = CW * 0.075;
+  const ubic6W  = CW * 0.075;
+  const pan6W   = CW - repW6 - codK6W - ubic6W;
 
   doc.setDrawColor(BLACK[0], BLACK[1], BLACK[2]);
   doc.setLineWidth(0.2);
@@ -566,8 +573,9 @@ export async function generarPdfOrdenProduccion(data: OrdenProduccionData): Prom
     doc.text(repeticionStr, M + 2, y + 8.5, { maxWidth: repW6 - 3 });
   }
 
-  celdaLabel(doc, "Código Kliche", f(data.codigo_kliche),         M + repW6,          y, codK6W, fila6H, LABEL_SIZE, 12);
-  celdaLabel(doc, "Pantones",      pantStr !== "—" ? pantStr : "", M + repW6 + codK6W, y, pan6W,  fila6H, LABEL_SIZE, 12);
+  celdaLabel(doc, "Cod. Kliche", f(data.codigo_kliche),          M + repW6,                    y, codK6W, fila6H, LABEL_SIZE, 12);
+  celdaLabel(doc, "Ubicación",     f(data.ubicacion_kliche ?? ""), M + repW6 + codK6W,            y, ubic6W, fila6H, LABEL_SIZE, 12);
+  celdaLabel(doc, "Pantones",      pantStr !== "—" ? pantStr : "", M + repW6 + codK6W + ubic6W,   y, pan6W,  fila6H, LABEL_SIZE, 12);
   y += fila6H;
 
   // ── FILA 6 — Asa/Suaje | Bolseo | Observaciones ──
@@ -612,7 +620,6 @@ export async function generarPdfOrdenProduccion(data: OrdenProduccionData): Prom
   const colDerX = M + colIzqW;
   const bloqueY = y;
 
-  // ── 10% menos alto en los bloques operativos ──
   const espacioTotal = (PH - M - y) * 0.90;
   const bultosRatio  = 0.22;
   const bultosH      = espacioTotal * bultosRatio;

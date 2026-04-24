@@ -1,7 +1,7 @@
 import jsPDF from "jspdf";
 import { cargarLogoBase64 } from "./Pdfutils";
 import type { EstadoCuenta } from "./estadoCuentaService";
-import logoUrl from "../assets/grupeblanco.png"; // ✅ logo blanco
+import logoUrl from "../assets/grupeblanco.png";
 
 // ─── Paleta estrictamente blanco y negro ────────────────────
 const BLACK:   [number, number, number] = [0,   0,   0  ];
@@ -11,6 +11,7 @@ const GRAY_60: [number, number, number] = [80,  80,  80 ];
 const GRAY_30: [number, number, number] = [180, 180, 180];
 const GRAY_10: [number, number, number] = [235, 235, 235];
 const GRAY_05: [number, number, number] = [248, 248, 248];
+
 
 // ─── Helpers ────────────────────────────────────────────────
 const f = (v: any): string =>
@@ -149,7 +150,6 @@ export async function generarPdfEstadoCuentaSimple(
   doc.setFontSize(9);
   doc.setTextColor(...GRAY_60);
   doc.text("Guadalajara, Jalisco", M, y);
-  doc.text(formatFecha(datos.fecha), M + CW, y, { align: "right" });
 
   y += 7;
 
@@ -277,18 +277,16 @@ export async function generarPdfEstadoCuentaSimple(
 
     y += rowH;
 
-    // ── Fila herramental del producto — con descripción del concepto ────────
+    // ── Fila herramental del producto ────────────────────────
     if (prod.herramental_aprobado === true && prod.herramental_precio != null && prod.herramental_precio > 0) {
       const herrH = 16;
 
-      // Fondo cálido
       doc.setFillColor(250, 246, 235);
       doc.rect(M, y, CW, herrH, "F");
       doc.setDrawColor(200, 170, 120);
       doc.setLineWidth(0.15);
       doc.line(M, y + herrH, M + CW, y + herrH);
 
-      // Nombre del herramental
       const nombreHerr = prod.herramental_descripcion?.trim()
         ? `Herramental: ${prod.herramental_descripcion}`
         : "Herramental / molde";
@@ -297,7 +295,6 @@ export async function generarPdfEstadoCuentaSimple(
       doc.setTextColor(110, 55, 0);
       doc.text(nombreHerr, M + 2, y + 5.5);
 
-      // Explicación del concepto en pequeño
       doc.setFont("helvetica", "italic");
       doc.setFontSize(7.5);
       doc.setTextColor(140, 90, 30);
@@ -307,7 +304,6 @@ export async function generarPdfEstadoCuentaSimple(
         { maxWidth: CW - colTot - 4 }
       );
 
-      // Precio
       doc.setFont("helvetica", "bold");
       doc.setFontSize(9);
       doc.setTextColor(110, 55, 0);
@@ -332,7 +328,6 @@ export async function generarPdfEstadoCuentaSimple(
   const totVX        = totX + totW - 4;
   const totalesLineH = 7.5;
 
-  // Altura dinámica: base 5 líneas + 2 si hay herramental (línea + nota)
   const lineasBase  = 5;
   const lineasExtra = tieneHerramental ? 2 : 0;
   const totBlockH   = 8 + 4 + totalesLineH * (lineasBase + lineasExtra) + 8;
@@ -351,36 +346,23 @@ export async function generarPdfEstadoCuentaSimple(
 
   let ty = y + 8 + 4 + totalesLineH;
 
-  filaTotales(doc, "Sub-Total",     fmtMoney(datos.subtotal_real), ty, totLX, totVX, totX, totW);
+  filaTotales(doc, "Sub-Total",    fmtMoney(datos.subtotal_real), ty, totLX, totVX, totX, totW);
   ty += totalesLineH;
 
-  filaTotales(doc, "I.V.A. (16%)",  fmtMoney(datos.iva_real),      ty, totLX, totVX, totX, totW, { gris: true });
+  filaTotales(doc, "I.V.A. (16%)", fmtMoney(datos.iva_real),      ty, totLX, totVX, totX, totW, { gris: true });
   ty += totalesLineH;
 
-  filaTotales(doc, "Total",         fmtMoney(datos.total_real),    ty, totLX, totVX, totX, totW, { bold: true, separador: true });
+  filaTotales(doc, "Total",        fmtMoney(datos.total_real),    ty, totLX, totVX, totX, totW, { bold: true, separador: true });
   ty += totalesLineH;
 
-  // ── Herramental en bloque totales — con nota ────────────────
-  /*if (tieneHerramental) {
-    // Línea principal con monto
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(9);
-    doc.setTextColor(110, 55, 0);
-    doc.text("Herramental", totLX, ty);
-    doc.text(fmtMoney(herramentalTotal), totVX, ty, { align: "right" });
-    doc.setTextColor(...BLACK);
-    ty += totalesLineH - 1;
-
-    // Nota explicativa dentro del bloque
-    doc.setFont("helvetica", "italic");
-    doc.setFontSize(7);
-    doc.setTextColor(...GRAY_60);
-    doc.text("Cargo único. No se repite en reordenes.", totLX, ty, { maxWidth: totW - 8 });
-    doc.setTextColor(...BLACK);
-    ty += totalesLineH + 1;
-  }*/
-
-  filaTotales(doc, "Anticipo req.", fmtMoney(datos.anticipo),      ty, totLX, totVX, totX, totW, { gris: true });
+  // ── Anticipo req.: $0.00 si fue autorizado por crédito ────
+  filaTotales(
+    doc,
+    "Anticipo req.",
+    datos.es_credito_anticipo ? fmtMoney(0) : fmtMoney(datos.anticipo),
+    ty, totLX, totVX, totX, totW,
+    { gris: true }
+  );
   ty += totalesLineH + 2;
 
   filaTotales(
@@ -448,7 +430,6 @@ export async function generarPdfEstadoCuentaSimple(
 
   y += 13;
 
-  // Badge banco
   doc.setFillColor(...GRAY_90);
   doc.rect(M, y - 1.5, 24, 7, "F");
   doc.setFont("helvetica", "bold");
@@ -471,9 +452,9 @@ export async function generarPdfEstadoCuentaSimple(
     doc.setTextColor(...BLACK);
   };
 
-  datoBancario("Cuenta",       "70010708964",          y); y += 6;
-  datoBancario("CLABE",        "002320700107089643",   y); y += 6;
-  datoBancario("A nombre de",  "Grupeb S.A. de C.V.", y);
+  datoBancario("Cuenta",      "70010708964",          y); y += 6;
+  datoBancario("CLABE",       "002320700107089643",   y); y += 6;
+  datoBancario("A nombre de", "Grupeb S.A. de C.V.", y);
 
   // ── Columna derecha ──
   let yc = yPieStart;

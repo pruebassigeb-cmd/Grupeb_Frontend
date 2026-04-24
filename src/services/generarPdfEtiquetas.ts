@@ -60,7 +60,7 @@ function dibujarEtiqueta(
   y += HEADER_H;
 
   // ══════════════════════════════════════════
-  // 2. DESTINATARIO
+  // 2. DESTINATARIO — 2 columnas
   // ══════════════════════════════════════════
   doc.setFillColor(...GRAY_LIGHT);
   doc.rect(ML, y, W, 7, "F");
@@ -71,26 +71,51 @@ function dibujarEtiqueta(
   doc.setTextColor(...BLACK);
   y += 7;
 
+  // ── Layout: izquierda 50% | derecha 50% ──
+  const COL_GAP = 2;
+  const COL_W   = (W - COL_GAP) / 2;   // ~45 mm cada columna
+  const colIzqX = ML;
+  const colDerX = ML + COL_W + COL_GAP;
+  const colIzqW = COL_W - 2;
+  const colDerW = COL_W - 2;
+
   const nombreDestinatario = data.cliente_impresion?.trim()
     ? data.cliente_impresion
     : data.cliente;
 
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(12);
-  doc.setTextColor(...BLACK);
-  const nombreLines = doc.splitTextToSize(f(nombreDestinatario), W - 6);
-  doc.text(nombreLines, ML + 3, y + 8);
-  y += nombreLines.length > 1 ? 18 : 12;
+  // ── Columna IZQUIERDA: Nombre + Atención ──
+  let yIzq = y + 5;
 
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(9);
-  doc.setTextColor(...GRAY_DARK);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(10);
+  doc.setTextColor(...BLACK);
+  const nombreLines = doc.splitTextToSize(f(nombreDestinatario), colIzqW);
+  doc.text(nombreLines, colIzqX + 2, yIzq);
+  yIzq += nombreLines.length * 5.5;
+
+  if (data.atencion?.trim()) {
+    yIzq += 2;
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(6.5);
+    doc.setTextColor(...GRAY_DARK);
+    doc.text("ATENCIÓN", colIzqX + 2, yIzq);
+    yIzq += 4;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(...BLACK);
+    const atencionLines = doc.splitTextToSize(data.atencion.trim(), colIzqW);
+    doc.text(atencionLines, colIzqX + 2, yIzq);
+    yIzq += atencionLines.length * 5;
+  }
+
+  // ── Columna DERECHA: Dirección + Contacto ──
+  let yDer = y + 5;
 
   const direccion = [data.calle, data.numero ? `#${data.numero}` : null]
     .filter(Boolean).join(" ");
   const coloniaCP = [
-    data.colonia       ? `Col. ${data.colonia}`        : null,
-    data.codigo_postal ? `C.P. ${data.codigo_postal}`  : null,
+    data.colonia       ? `Col. ${data.colonia}`       : null,
+    data.codigo_postal ? `C.P. ${data.codigo_postal}` : null,
   ].filter(Boolean).join("  ·  ");
   const pobEdo   = [data.poblacion, data.estado].filter(Boolean).join(", ");
   const contacto = [
@@ -98,13 +123,24 @@ function dibujarEtiqueta(
     data.celular  ? `Cel: ${data.celular}`  : null,
   ].filter(Boolean).join("  ·  ");
 
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(7.5);
+  doc.setTextColor(...GRAY_DARK);
+
   [direccion, coloniaCP, pobEdo, contacto].filter(Boolean).forEach(line => {
-    const wrapped = doc.splitTextToSize(line, W - 6);
-    doc.text(wrapped, ML + 3, y);
-    y += wrapped.length * 6.5;
+    const wrapped = doc.splitTextToSize(line, colDerW);
+    doc.text(wrapped, colDerX, yDer);
+    yDer += wrapped.length * 5;
   });
 
-  y += 3;
+  // ── Línea divisoria vertical entre columnas ──
+  const yColBottom = Math.max(yIzq, yDer) + 2;
+  doc.setDrawColor(...GRAY_MED);
+  doc.setLineWidth(0.2);
+  doc.line(colDerX - 1, y, colDerX - 1, yColBottom);
+
+  // Avanzar y al máximo de las dos columnas
+  y = yColBottom + 2;
 
   // ══════════════════════════════════════════
   // 3. PEDIDO / PRODUCTO
@@ -134,8 +170,8 @@ function dibujarEtiqueta(
   doc.setFont("helvetica", "bold");
   doc.setFontSize(10);
   doc.setTextColor(...BLACK);
-  doc.text(`PED-${f(data.no_pedido)}`, ML + 3,  y + 13);
-  doc.text(f(data.no_produccion),       ML + 34, y + 13);
+  doc.text(`${f(data.no_pedido)}`, ML + 3,  y + 13);
+  doc.text(f(data.no_produccion),  ML + 34, y + 13);
 
   // Peso y dimensiones — debajo de PEDIDO y ORDEN, en chiquito
   const bulto  = data.bultos[bultoIndex];
@@ -237,7 +273,7 @@ function dibujarEtiqueta(
   doc.setFontSize(6.5);
   doc.setTextColor(...GRAY_MED);
   doc.text(
-    `${f(data.no_produccion)}  ·  PED-${f(data.no_pedido)}  ·  Etiqueta ${bultoNum} de ${totalBultos}`,
+    `${f(data.no_produccion)}  ·  ${f(data.no_pedido)}  ·  Etiqueta ${bultoNum} de ${totalBultos}`,
     ML + W / 2, y + 5, { align: "center" }
   );
 

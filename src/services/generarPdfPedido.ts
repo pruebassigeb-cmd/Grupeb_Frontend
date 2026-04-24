@@ -85,10 +85,10 @@ export async function generarPdfPedido(pedido: PedidoPdf): Promise<void> {
   // General: 8  |  Tintas (3): 7.5  |  Asa/Suaje (8): 7.5  |  Laminado (10): 7
   const HEAD_FONT_SIZE_DEFAULT = 8;
   const headFontSizeMap: Record<number, number> = {
-    3:  7.5, // Tintas
-    8:  7.5, // Asa/Suaje
-    9: 7,
-    10: 7,   // Laminado
+    3:  7, // Tintas
+    8:  7, // Asa/Suaje
+    9: 6.5,
+    10: 6.5,   // Laminado
   };
 
   const bodyRows: any[][] = [];
@@ -148,7 +148,7 @@ export async function generarPdfPedido(pedido: PedidoPdf): Promise<void> {
   const fixedTotal = Object.values(colW).reduce((a, b) => a + b, 0);
   const remaining  = Math.max(availW - fixedTotal, 30);
   colW[14] = Math.round(remaining * 0.60);
-  colW[15] = Math.round(remaining * 0.40);
+  colW[15] = Math.round(remaining * 0.65);
 
   const totalColW = Object.values(colW).reduce((a, b) => a + b, 0);
   if (totalColW > availW) {

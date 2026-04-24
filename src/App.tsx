@@ -14,6 +14,7 @@ import Seguimiento from "./pages/Seguimiento";
 import Pedido from "./pages/Pedido";
 import EstadoCuenta from "./components/EstadoCuenta.tsx";
 import SinAcceso from "./pages/SinAcceso";
+import EditarPedido from "./components/EditarPedido.tsx";  // ← ajusta si lo mueves a pages/
 
 const PERMISOS = {
   usuarios:     "Crear/Editar/Eliminar Usuarios",
@@ -27,7 +28,6 @@ const PERMISOS = {
   estadoCuenta: "Editar Anticipo y Liquidacion",
 } as const;
 
-// Permisos que dan acceso a seguimiento (cualquiera de estos)
 const PERMISOS_SEGUIMIENTO = [
   "Ver Seguimiento",
   "Acceso Planta",
@@ -42,18 +42,18 @@ function App() {
     <BrowserRouter>
       <AuthProvider>
         <Routes>
-          {/* Ruta pública */}
+          {/* Pública */}
           <Route path="/" element={<Login />} />
 
           {/* Sin acceso */}
           <Route path="/sin-acceso" element={<SinAcceso />} />
 
-          {/* Home — cualquier autenticado */}
+          {/* Home */}
           <Route path="/home" element={
             <ProtectedRoute><Home /></ProtectedRoute>
           } />
 
-          {/* Seguimiento — acceso_total o cualquier permiso de la lista */}
+          {/* Seguimiento */}
           <Route path="/seguimiento" element={
             <ProtectedRoute permisoOr={PERMISOS_SEGUIMIENTO}>
               <Seguimiento />
@@ -80,9 +80,16 @@ function App() {
             <ProtectedRoute permiso={PERMISOS.cotizar}><Cotizar /></ProtectedRoute>
           } />
 
-          {/* Pedidos */}
+          {/* Pedidos — lista */}
           <Route path="/pedido" element={
             <ProtectedRoute permiso={PERMISOS.pedido}><Pedido /></ProtectedRoute>
+          } />
+
+          {/* Pedidos — editar  ← NUEVA */}
+          <Route path="/pedido/:noPedido/editar" element={
+            <ProtectedRoute permiso={PERMISOS.pedido}>
+              <EditarPedido />
+            </ProtectedRoute>
           } />
 
           {/* Diseño */}
@@ -105,7 +112,7 @@ function App() {
             <ProtectedRoute permiso={PERMISOS.estadoCuenta}><EstadoCuenta /></ProtectedRoute>
           } />
 
-          {/* Ruta no encontrada */}
+          {/* Catch-all */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </AuthProvider>

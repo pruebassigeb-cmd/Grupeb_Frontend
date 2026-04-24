@@ -26,32 +26,34 @@ export interface ProductoEstadoCuenta {
 }
 
 export interface EstadoCuenta {
-  no_pedido:         string;
-  no_cotizacion:     string | null;
-  fecha:             string;
-  cliente:           string;
-  empresa:           string;
-  telefono:          string;
-  correo:            string;
-  productos:         ProductoEstadoCuenta[];
+  no_pedido:          string;
+  no_cotizacion:      string | null;
+  fecha:              string;
+  cliente:            string;
+  empresa:            string;
+  telefono:           string;
+  correo:             string;
+  productos:          ProductoEstadoCuenta[];
   // ── Original — nunca cambia ───────────────────────────────
-  subtotal_original: number;
-  iva_original:      number;
-  total_original:    number;
+  subtotal_original:  number;
+  iva_original:       number;
+  total_original:     number;
   // ── Real — calculado con producción final ─────────────────
-  subtotal_real:     number;
-  iva_real:          number;
-  total_real:        number;
+  subtotal_real:      number;
+  iva_real:           number;
+  total_real:         number;
   // ── Herramental total aprobado ────────────────────────────
-  herramental_total: number;
+  herramental_total:  number;
   // ── Pagos ─────────────────────────────────────────────────
-  anticipo:          number;
-  abono:             number;
-  saldo:             number;
+  anticipo:           number;
+  abono:              number;
+  saldo:              number;
+  // ── Crédito anticipo ──────────────────────────────────────
+  es_credito_anticipo: boolean;
   // ── Diferencia guardada en BD ─────────────────────────────
-  diferencia_total:  number;
+  diferencia_total:   number;
   // ── Estado actualizado ────────────────────────────────────
-  estado_id:         number;
+  estado_id:          number;
 }
 
 export interface ResumenEstadoCuenta {

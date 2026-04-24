@@ -4,8 +4,10 @@ import { getSeguimiento, getOrdenProduccion } from "../services/seguimientoServi
 import type { OrdenProduccionProducto } from "../services/seguimientoService";
 import { generarPdfOrdenProduccion } from "../services/generarPdfOrdenProduccion";
 import { generarPdfEstadoCuentaSimple } from "../services/generarPdfEstadoCuentaSimple";
+import { generarPdfPedido } from "../services/generarPdfPedido";
 import { getEstadoCuenta } from "../services/estadoCuentaService";
 import { getVentaByPedido, getMetodosPago } from "../services/ventasservice";
+import { getPedidos } from "../services/pedidosService";
 import type { PedidoSeguimiento } from "../types/seguimiento.types";
 import type { Venta, MetodoPago } from "../types/ventas.types";
 import type { Pedido } from "../types/cotizaciones.types";
@@ -14,13 +16,11 @@ import ModalProcesoIndividual from "../components/ModalProcesoIndividual";
 import { EditarAntLiqReal } from "./AnticipoLiquidacion";
 import { EditarDisenoReal } from "./Diseno";
 import { useAuth } from "../context/AuthContext";
-
 import { usePermiso } from "../hooks/usePermiso";
 import ModalVerificarOperador from "../components/ModalVerificarOperador";
 
-// ─────────────────────────────────────────────
-// HELPERS DE COLOR / TEXTO
-// ─────────────────────────────────────────────
+const ITEMS_POR_PAGINA = 20;
+
 const obtenerColorEstado = (estado: string) => {
   switch (estado) {
     case "finalizado": case "aprobado": case "pagado": case "enviado":
@@ -48,18 +48,9 @@ const obtenerTextoEstado = (estado: string) => {
   return mapa[estado] ?? "–";
 };
 
-// ─────────────────────────────────────────────
-// BADGES
-// ─────────────────────────────────────────────
-const Badge = ({
-  estado, clickable = false, onClick,
-}: {
-  estado: string; clickable?: boolean; onClick?: () => void;
-}) => {
+const Badge = ({ estado, clickable = false, onClick }: { estado: string; clickable?: boolean; onClick?: () => void }) => {
   const base   = `inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold border ${obtenerColorEstado(estado)}`;
-  const cursor = clickable && estado !== "no-aplica"
-    ? "cursor-pointer hover:scale-110 hover:shadow-md transition-transform"
-    : "";
+  const cursor = clickable && estado !== "no-aplica" ? "cursor-pointer hover:scale-110 hover:shadow-md transition-transform" : "";
   return (
     <span title={estado} className={`${base} ${cursor}`}
       onClick={clickable && estado !== "no-aplica" ? onClick : undefined}>
@@ -80,11 +71,7 @@ const BadgeTexto = ({ estado }: { estado: string }) => {
   );
 };
 
-const BadgeTextoBtn = ({
-  estado, onClick, cargando = false,
-}: {
-  estado: string; onClick: () => void; cargando?: boolean;
-}) => {
+const BadgeTextoBtn = ({ estado, onClick, cargando = false }: { estado: string; onClick: () => void; cargando?: boolean }) => {
   const textos: Record<string, string> = {
     finalizado: "Finalizado", proceso: "En Proceso", pendiente: "Pendiente",
     resagado: "Resagado", "no-aplica": "N/A", aprobado: "Aprobado", pagado: "Pagado ✓",
@@ -106,6 +93,116 @@ const IconoPdf = () => (
       d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
   </svg>
 );
+
+// ─────────────────────────────────────────────
+// BOTON PDF PEDIDO (columna N° Pedido)
+// ─────────────────────────────────────────────
+function BotonPdfPedido({ pedido }: { pedido: PedidoSeguimiento }) {
+  const [descargando, setDescargando] = useState(false);
+
+  const resolverCalibre = (p: any): string => {
+    const mat = (p.material || "").toUpperCase();
+    const esBopp = mat.includes("BOPP") || mat.includes("CELOFAN") || mat.includes("CELOFÁN");
+    if (esBopp) {
+      const cb = p.calibre_bopp ? String(p.calibre_bopp).trim() : "";
+      if (cb && cb !== "0") return cb;
+    }
+    const c = p.calibre ? String(p.calibre).trim() : "";
+    if (c && c !== "0") return c;
+    const cb2 = p.calibre_bopp ? String(p.calibre_bopp).trim() : "";
+    return cb2 && cb2 !== "0" ? cb2 : "";
+  };
+
+  const buildProductosPdf = (productos: any[]) =>
+    productos.map((p: any) => ({
+      nombre:             p.nombre,
+      material:           p.material            || "",
+      calibre:            resolverCalibre(p),
+      tintas:             p.tintas,
+      caras:              p.caras,
+      medidasFormateadas: p.medidasFormateadas   || "",
+      medidas:            p.medidas             || {},
+      bk:                 p.bk                  || null,
+      foil:               p.foil                || null,
+      laminado:           p.laminado            || null,
+      uvBr:               (p.uv_br ?? p.uvBr)    || null,
+      pigmentos:          p.pigmentos            || null,
+      pantones:           p.pantones             || null,
+      asa_suaje:          p.asa_suaje            || null,
+      observacion:        p.observacion          || null,
+      por_kilo:           p.por_kilo             || null,
+      herramental_descripcion: p.herramental_descripcion ?? null,
+      herramental_precio:      p.herramental_precio != null ? Number(p.herramental_precio) : null,
+      herramental_aprobado:    p.herramental_aprobado    ?? null,
+      detalles: (p.detalles || []).map((d: any) => ({
+        cantidad:      d.cantidad,
+        precio_total:  d.precio_total,
+        kilogramos:    d.kilogramos   ?? null,
+        modo_cantidad: d.modo_cantidad || "unidad",
+      })),
+    }));
+
+  const handleDescargar = async () => {
+    setDescargando(true);
+    try {
+      const [todos, venta] = await Promise.all([
+        getPedidos(),
+        getVentaByPedido(pedido.no_pedido),
+      ]);
+      const ped: Pedido | undefined = (todos as Pedido[]).find(p => p.no_pedido === pedido.no_pedido);
+      if (!ped) { alert("No se encontró el pedido."); return; }
+
+      await generarPdfPedido({
+        no_pedido:      ped.no_pedido,
+        no_cotizacion:  ped.no_cotizacion  ?? null,
+        fecha:          ped.fecha,
+        cliente:        ped.cliente,
+        empresa:        ped.empresa,
+        telefono:       ped.telefono,
+        correo:         ped.correo,
+        impresion:      ped.impresion      ?? null,
+        celular:        ped.celular        ?? null,
+        razon_social:   ped.razon_social   ?? null,
+        rfc:            ped.rfc            ?? null,
+        domicilio:      ped.domicilio      ?? null,
+        numero:         ped.numero         ?? null,
+        colonia:        ped.colonia        ?? null,
+        codigo_postal:  ped.codigo_postal  ?? null,
+        poblacion:      ped.poblacion      ?? null,
+        estado_cliente: ped.estado_cliente ?? null,
+        cliente_id:     ped.cliente_id     ?? null,
+        subtotal:       Number(venta.subtotal),
+        iva:            Number(venta.iva),
+        total:          Number(venta.total),
+        anticipo:       Number(venta.anticipo),
+        saldo:          Number(venta.saldo),
+        productos:      buildProductosPdf(ped.productos),
+      });
+    } catch {
+      alert("No se pudo generar el PDF del pedido.");
+    } finally {
+      setDescargando(false);
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <span className="text-xs font-medium text-blue-600 whitespace-nowrap">{pedido.no_pedido}</span>
+      <button
+        onClick={handleDescargar}
+        disabled={descargando}
+        title="Descargar PDF del pedido"
+        className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white text-xs font-medium rounded transition-colors"
+      >
+        {descargando
+          ? <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+          : <IconoPdf />
+        }
+        PDF
+      </button>
+    </div>
+  );
+}
 
 // ─────────────────────────────────────────────
 // BOTON ESTADO DE CUENTA PDF
@@ -214,6 +311,63 @@ function RenderOrdenProduccion({ pedido }: { pedido: PedidoSeguimiento }) {
 }
 
 // ─────────────────────────────────────────────
+// PAGINADOR
+// ─────────────────────────────────────────────
+function Paginador({
+  total, paginaActual, totalPaginas, inicio, irAPagina,
+}: {
+  total: number; paginaActual: number; totalPaginas: number; inicio: number; irAPagina: (p: number) => void;
+}) {
+  const pags: (number | "...")[] = [];
+  if (totalPaginas <= 7) {
+    for (let i = 1; i <= totalPaginas; i++) pags.push(i);
+  } else {
+    pags.push(1);
+    if (paginaActual > 3) pags.push("...");
+    for (let i = Math.max(2, paginaActual - 1); i <= Math.min(totalPaginas - 1, paginaActual + 1); i++) pags.push(i);
+    if (paginaActual < totalPaginas - 2) pags.push("...");
+    pags.push(totalPaginas);
+  }
+
+  return (
+    <div className="flex items-center justify-between px-4 py-3 bg-white border-t border-gray-200">
+      <p className="text-sm text-gray-500">
+        Mostrando{" "}
+        <span className="font-medium text-gray-700">{inicio + 1}</span>
+        {" – "}
+        <span className="font-medium text-gray-700">{Math.min(inicio + ITEMS_POR_PAGINA, total)}</span>
+        {" de "}
+        <span className="font-medium text-gray-700">{total}</span> órdenes
+      </p>
+      <div className="flex items-center gap-1">
+        <button onClick={() => irAPagina(paginaActual - 1)} disabled={paginaActual === 1}
+          className="p-1.5 rounded-md text-gray-500 hover:bg-gray-100 disabled:opacity-30 transition-colors">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          </svg>
+        </button>
+        {pags.map((p, i) =>
+          p === "..."
+            ? <span key={`e${i}`} className="px-2 text-gray-400 text-sm">…</span>
+            : <button key={p} onClick={() => irAPagina(p as number)}
+                className={`w-8 h-8 rounded-md text-sm font-medium transition-colors ${
+                  p === paginaActual
+                    ? "bg-blue-600 text-white shadow"
+                    : "text-gray-600 hover:bg-gray-100"
+                }`}>{p}</button>
+        )}
+        <button onClick={() => irAPagina(paginaActual + 1)} disabled={paginaActual === totalPaginas}
+          className="p-1.5 rounded-md text-gray-500 hover:bg-gray-100 disabled:opacity-30 transition-colors">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────
 // TABLA — columnas y header
 // ─────────────────────────────────────────────
 const COLUMNAS = [
@@ -252,6 +406,7 @@ export default function Seguimiento() {
   const [error,            setError]            = useState<string | null>(null);
   const [filtroTipo,       setFiltroTipo]       = useState("todos");
   const [pantallaCompleta, setPantallaCompleta] = useState(false);
+  const [paginaActual,     setPaginaActual]     = useState(1);
 
   const [modalProceso, setModalProceso] = useState<{
     pedido: PedidoSeguimiento; nombreProceso: string;
@@ -281,6 +436,9 @@ export default function Seguimiento() {
     document.addEventListener("visibilitychange", onVisible);
     return () => document.removeEventListener("visibilitychange", onVisible);
   }, []);
+
+  // Reset pagina al cambiar filtro
+  useEffect(() => { setPaginaActual(1); }, [filtroTipo]);
 
   const cargar = async () => {
     try {
@@ -318,11 +476,18 @@ export default function Seguimiento() {
     } as any);
   };
 
+  // ── Filtrado y paginación ──
   const pedidosFiltrados = filtroTipo === "todos"
     ? pedidos
     : pedidos.filter(p => (p.tipo_producto || "").toLowerCase().includes(filtroTipo));
 
-  const renderFila = (pedido: PedidoSeguimiento, grande = false) => {
+  const totalPaginas  = Math.max(1, Math.ceil(pedidosFiltrados.length / ITEMS_POR_PAGINA));
+  const paginaSegura  = Math.min(paginaActual, totalPaginas);
+  const inicio        = (paginaSegura - 1) * ITEMS_POR_PAGINA;
+  const pedidosPagina = pedidosFiltrados.slice(inicio, inicio + ITEMS_POR_PAGINA);
+  const irAPagina     = (p: number) => setPaginaActual(Math.max(1, Math.min(p, totalPaginas)));
+
+  const renderFila = (pedido: PedidoSeguimiento, grande = false, idx = 0) => {
     const px  = grande ? "px-4 py-3" : "px-3 py-2";
     const txt = grande ? "text-sm"   : "text-xs";
 
@@ -343,12 +508,17 @@ export default function Seguimiento() {
     };
 
     return (
-      <tr key={`${pedido.no_pedido}-${pedido.no_produccion}`}
+      <tr key={`${pedido.no_pedido}-${pedido.no_produccion ?? idx}`}
         className="hover:bg-gray-50 transition-colors border-t border-gray-200">
+
         <td className={`${px} ${txt} text-gray-900 whitespace-nowrap`}>
           {new Date(pedido.fecha).toLocaleDateString("es-MX")}
         </td>
-        <td className={`${px} ${txt} font-medium text-blue-600 whitespace-nowrap`}>{pedido.no_pedido}</td>
+
+        <td className={`${px} whitespace-nowrap`}>
+          <BotonPdfPedido pedido={pedido} />
+        </td>
+
         <td className={`${px} ${txt} text-gray-900`}>{pedido.impresion}</td>
         <td className={`${px}`}>
           <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800 capitalize">
@@ -427,12 +597,79 @@ export default function Seguimiento() {
           }
         </td>
 
-        <td className={`${px} text-center`}><BadgeTexto estado={estadoPago} /></td>
+        <td className={`${px} text-center`}>
+          {esAccesoTotal
+            ? <BadgeTextoBtn
+                estado={estadoPago}
+                cargando={cargandoAnticipo === pedido.no_pedido}
+                onClick={() => abrirAnticipo(pedido)}
+              />
+            : <BadgeTexto estado={estadoPago} />
+          }
+        </td>
+
         <td className={`${px} text-center`}><BadgeTexto estado="pendiente" /></td>
       </tr>
     );
   };
 
+  // ─────────────────────────────────────────────
+  // MODALES
+  // ─────────────────────────────────────────────
+  const modales = (
+    <>
+      {modalProceso && (
+        <Modal isOpen={!!modalProceso} onClose={() => setModalProceso(null)}
+          title={`${modalProceso.nombreProceso.replace("_", " ").toUpperCase()} — ${modalProceso.pedido.no_produccion}`}>
+          <ModalProcesoIndividual
+            pedido={modalProceso.pedido}
+            nombreProceso={modalProceso.nombreProceso}
+            onClose={() => setModalProceso(null)}
+            onActualizar={cargar}
+          />
+        </Modal>
+      )}
+
+      {modalAnticipo && (
+        <Modal isOpen={!!modalAnticipo} onClose={() => { setModalAnticipo(null); cargar(); }} title="Anticipo y Liquidacion">
+          <EditarAntLiqReal
+            venta={modalAnticipo.venta}
+            metodos={modalAnticipo.metodos}
+            onClose={() => { setModalAnticipo(null); cargar(); }}
+            onActualizar={(ventaActualizada) => {
+              setModalAnticipo(prev => prev ? { ...prev, venta: ventaActualizada } : null);
+            }}
+          />
+        </Modal>
+      )}
+
+      {modalDiseno && (
+        <Modal isOpen={!!modalDiseno} onClose={() => setModalDiseno(null)} title="Gestionar Disenos">
+          <EditarDisenoReal
+            pedido={modalDiseno}
+            onClose={() => setModalDiseno(null)}
+            onEstadoChange={() => { cargar(); }}
+          />
+        </Modal>
+      )}
+
+      {modalVerificacion && (
+        <ModalVerificarOperador
+          proceso={modalVerificacion.proceso}
+          onSuccess={() => {
+            const { pedido, proceso } = modalVerificacion;
+            setModalVerificacion(null);
+            setModalProceso({ pedido, nombreProceso: proceso });
+          }}
+          onCancel={() => setModalVerificacion(null)}
+        />
+      )}
+    </>
+  );
+
+  // ─────────────────────────────────────────────
+  // ESTADOS DE CARGA / ERROR
+  // ─────────────────────────────────────────────
   if (cargando) return (
     <Dashboard>
       <div className="flex items-center justify-center h-64">
@@ -455,26 +692,35 @@ export default function Seguimiento() {
     </Dashboard>
   );
 
+  // ─────────────────────────────────────────────
+  // VISTA PANTALLA COMPLETA (sin paginador, muestra todo)
+  // ─────────────────────────────────────────────
   if (pantallaCompleta) return (
-    <div className="p-6 min-h-screen bg-gray-50">
-      <button onClick={() => setPantallaCompleta(false)}
-        className="mb-4 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium flex items-center gap-2">
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-        </svg>
-        Cerrar
-      </button>
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            {renderThead(true)}
-            <tbody>{pedidosFiltrados.map(p => renderFila(p, true))}</tbody>
-          </table>
+    <>
+      <div className="p-6 min-h-screen bg-gray-50">
+        <button onClick={() => setPantallaCompleta(false)}
+          className="mb-4 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium flex items-center gap-2">
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+          Cerrar
+        </button>
+        <div className="bg-white rounded-lg shadow overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              {renderThead(true)}
+              <tbody>{pedidosFiltrados.map((p, i) => renderFila(p, true, i))}</tbody>
+            </table>
+          </div>
         </div>
       </div>
-    </div>
+      {modales}
+    </>
   );
 
+  // ─────────────────────────────────────────────
+  // VISTA NORMAL
+  // ─────────────────────────────────────────────
   return (
     <Dashboard>
       <div className="mb-6">
@@ -547,70 +793,31 @@ export default function Seguimiento() {
             </button>
           </div>
         </div>
+
         <div className="overflow-x-auto">
           <table className="w-full">
             {renderThead()}
-            <tbody>{pedidosFiltrados.map(p => renderFila(p))}</tbody>
+            <tbody>{pedidosPagina.map((p, i) => renderFila(p, false, inicio + i))}</tbody>
           </table>
         </div>
-        {pedidosFiltrados.length === 0 && (
+
+        {pedidosFiltrados.length === 0 ? (
           <div className="p-8 text-center">
             <p className="text-lg font-medium text-gray-900">No hay ordenes</p>
             <p className="text-sm text-gray-500 mt-1">No se encontraron ordenes con los filtros seleccionados</p>
           </div>
+        ) : (
+          <Paginador
+            total={pedidosFiltrados.length}
+            paginaActual={paginaSegura}
+            totalPaginas={totalPaginas}
+            inicio={inicio}
+            irAPagina={irAPagina}
+          />
         )}
       </div>
 
-      {/* Modal proceso */}
-      {modalProceso && (
-        <Modal isOpen={!!modalProceso} onClose={() => setModalProceso(null)}
-          title={`${modalProceso.nombreProceso.replace("_", " ").toUpperCase()} — ${modalProceso.pedido.no_produccion}`}>
-          <ModalProcesoIndividual
-            pedido={modalProceso.pedido}
-            nombreProceso={modalProceso.nombreProceso}
-            onClose={() => setModalProceso(null)}
-            onActualizar={cargar}
-          />
-        </Modal>
-      )}
-
-      {/* Modal anticipo */}
-      {modalAnticipo && (
-        <Modal isOpen={!!modalAnticipo} onClose={() => { setModalAnticipo(null); cargar(); }} title="Anticipo y Liquidacion">
-          <EditarAntLiqReal
-            venta={modalAnticipo.venta}
-            metodos={modalAnticipo.metodos}
-            onClose={() => { setModalAnticipo(null); cargar(); }}
-            onActualizar={(ventaActualizada) => {
-              setModalAnticipo(prev => prev ? { ...prev, venta: ventaActualizada } : null);
-            }}
-          />
-        </Modal>
-      )}
-
-      {/* Modal diseno */}
-      {modalDiseno && (
-        <Modal isOpen={!!modalDiseno} onClose={() => setModalDiseno(null)} title="Gestionar Disenos">
-          <EditarDisenoReal
-            pedido={modalDiseno}
-            onClose={() => setModalDiseno(null)}
-            onEstadoChange={() => { cargar(); }}
-          />
-        </Modal>
-      )}
-
-      {/* Modal verificacion operador */}
-      {modalVerificacion && (
-        <ModalVerificarOperador
-          proceso={modalVerificacion.proceso}
-          onSuccess={() => {
-            const { pedido, proceso } = modalVerificacion;
-            setModalVerificacion(null);
-            setModalProceso({ pedido, nombreProceso: proceso });
-          }}
-          onCancel={() => setModalVerificacion(null)}
-        />
-      )}
+      {modales}
     </Dashboard>
   );
 }

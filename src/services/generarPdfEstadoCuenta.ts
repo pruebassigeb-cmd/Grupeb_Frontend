@@ -4,7 +4,6 @@ import type { EstadoCuenta } from "./estadoCuentaService";
 import type { VentaPago } from "../types/ventas.types";
 import logoUrl from "../assets/logogrupeb.png";
 
-
 // ── Paleta monocromática ─────────────────────────────────────
 const BLACK:      [number, number, number] = [0,   0,   0  ];
 const WHITE:      [number, number, number] = [255, 255, 255];
@@ -87,7 +86,7 @@ export async function generarPdfEstadoCuenta(
   datos: EstadoCuenta,
   pagos: VentaPago[]
 ): Promise<void> {
-const logoBase64 = await cargarLogoBase64(logoUrl);
+  const logoBase64 = await cargarLogoBase64(logoUrl);
 
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   const PW = 210;
@@ -163,13 +162,13 @@ const logoBase64 = await cargarLogoBase64(logoUrl);
 
   const clienteH = 13;
   const c1 = CW * 0.28;
-  const c2 = CW * 0.20;
-  const c3 = CW * 0.22;
+  const c2 = CW * 0.25;
+  const c3 = CW * 0.15;
   const c4 = CW - c1 - c2 - c3;
 
-  celda(doc, "Cliente",  f(datos.cliente),  M,                y, c1, clienteH);
-  celda(doc, "Empresa",  f(datos.empresa),  M + c1,           y, c2, clienteH);
-  celda(doc, "Teléfono", f(datos.telefono), M + c1 + c2,      y, c3, clienteH);
+  celda(doc, "Cliente",  f(datos.cliente),  M,                y, c1, clienteH, { valueSize: 10 });
+  celda(doc, "Empresa",  f(datos.empresa),  M + c1,           y, c2, clienteH, { valueSize: 10 });
+  celda(doc, "Teléfono", f(datos.telefono), M + c1 + c2,      y, c3, clienteH, { valueSize: 10 });
   celda(doc, "Correo",   f(datos.correo),   M + c1 + c2 + c3, y, c4, clienteH, { valueSize: 10 });
 
   y += clienteH + 5;
@@ -182,7 +181,7 @@ const logoBase64 = await cargarLogoBase64(logoUrl);
 
   const colNom    = CW * 0.24;
   const colOrden  = CW * 0.12;
-  const colCantO  = CW * 0.10;
+  const colCantO  = CW * 0.12;
   const colCantR  = CW * 0.10;
   const colDifPzs = CW * 0.09;
   const colPreO   = CW * 0.11;
@@ -226,14 +225,14 @@ const logoBase64 = await cargarLogoBase64(logoUrl);
     const difPrecioColor: [number, number, number] = diffPrecio !== 0 ? GRAY_XDARK : GRAY_MED;
 
     const cols = [
-      { value: prod.nombre,                                          w: colNom,    bold: false, color: BLACK      as [number,number,number], left: true  },
-      { value: prod.no_produccion ?? "—",                            w: colOrden,  bold: false, color: GRAY_DARK  as [number,number,number], left: false },
-      { value: fmtNum(prod.cantidad_original),                       w: colCantO,  bold: false, color: BLACK      as [number,number,number], left: false },
-      { value: fmtNum(prod.cantidad_real),                           w: colCantR,  bold: true,  color: GRAY_XDARK as [number,number,number], left: false },
-      { value: (diffPzas > 0 ? "+" : "") + fmtNum(diffPzas),        w: colDifPzs, bold: true,  color: difPzasColor,                         left: false },
-      { value: fmtMoney(prod.precio_total_original),                 w: colPreO,   bold: false, color: BLACK      as [number,number,number], left: false },
-      { value: fmtMoney(prod.precio_total_real),                     w: colPreR,   bold: true,  color: GRAY_XDARK as [number,number,number], left: false },
-      { value: (diffPrecio > 0 ? "+" : "") + fmtMoney(diffPrecio),  w: colDifPre, bold: true,  color: difPrecioColor,                       left: false },
+      { value: prod.nombre,                                         w: colNom,    bold: false, color: BLACK      as [number,number,number], left: true  },
+      { value: prod.no_produccion ?? "—",                           w: colOrden,  bold: false, color: GRAY_DARK  as [number,number,number], left: false },
+      { value: fmtNum(prod.cantidad_original),                      w: colCantO,  bold: false, color: BLACK      as [number,number,number], left: false },
+      { value: fmtNum(prod.cantidad_real),                          w: colCantR,  bold: true,  color: GRAY_XDARK as [number,number,number], left: false },
+      { value: (diffPzas > 0 ? "+" : "") + fmtNum(diffPzas),       w: colDifPzs, bold: true,  color: difPzasColor,                        left: false },
+      { value: fmtMoney(prod.precio_total_original),                w: colPreO,   bold: false, color: BLACK      as [number,number,number], left: false },
+      { value: fmtMoney(prod.precio_total_real),                    w: colPreR,   bold: true,  color: GRAY_XDARK as [number,number,number], left: false },
+      { value: (diffPrecio > 0 ? "+" : "") + fmtMoney(diffPrecio), w: colDifPre, bold: true,  color: difPrecioColor,                      left: false },
     ];
 
     let rx = M;
@@ -247,9 +246,9 @@ const logoBase64 = await cargarLogoBase64(logoUrl);
       doc.setFontSize(col.left ? 9 : 10);
       doc.setTextColor(...col.color);
       if (col.left) {
-      doc.text(col.value, rx + 1.5, y + 4, { maxWidth: col.w - 3 });
+        doc.text(col.value, rx + 1.5, y + 4, { maxWidth: col.w - 3 });
       } else {
-      doc.text(col.value, rx + col.w / 2, y + rowH / 2 + 2, { align: "center" });
+        doc.text(col.value, rx + col.w / 2, y + rowH / 2 + 2, { align: "center" });
       }
       rx += col.w;
     });
@@ -257,16 +256,15 @@ const logoBase64 = await cargarLogoBase64(logoUrl);
     doc.setTextColor(...BLACK);
     y += rowH;
 
-    // ── Fila herramental del producto — con descripción del concepto ────────
+    // ── Fila herramental del producto ────────────────────────
     if (prod.herramental_aprobado === true && prod.herramental_precio != null && prod.herramental_precio > 0) {
-      const herrH = 14; // más alto para que quepa el texto explicativo
+      const herrH = 14;
       doc.setFillColor(250, 246, 235);
       doc.rect(M, y, CW, herrH, "FD");
       doc.setDrawColor(200, 170, 120);
       doc.setLineWidth(0.12);
       doc.rect(M, y, CW, herrH);
 
-      // Ícono + nombre del herramental
       const nombreHerr = prod.herramental_descripcion?.trim()
         ? `Herramental: ${prod.herramental_descripcion}`
         : "Herramental / molde";
@@ -275,7 +273,6 @@ const logoBase64 = await cargarLogoBase64(logoUrl);
       doc.setTextColor(120, 60, 0);
       doc.text(nombreHerr, M + 2, y + 5);
 
-      // Explicación del concepto
       doc.setFont("helvetica", "italic");
       doc.setFontSize(7.5);
       doc.setTextColor(150, 100, 40);
@@ -285,7 +282,6 @@ const logoBase64 = await cargarLogoBase64(logoUrl);
         { maxWidth: CW * 0.72 }
       );
 
-      // Precio alineado a la derecha
       doc.setFont("helvetica", "bold");
       doc.setFontSize(10);
       doc.setTextColor(120, 60, 0);
@@ -342,11 +338,11 @@ const logoBase64 = await cargarLogoBase64(logoUrl);
     pagos.forEach((pago, idx) => {
       const bg: [number,number,number] = idx % 2 === 0 ? WHITE : [248, 248, 248];
       const pagoVals = [
-        { value: formatFecha(pago.fecha),                  w: pColFecha,  bold: false, color: BLACK      as [number,number,number], center: true  },
-        { value: fmtMoney(pago.monto),                     w: pColMonto,  bold: true,  color: GRAY_XDARK as [number,number,number], center: true  },
-        { value: pago.metodo_pago ?? "—",                  w: pColMetodo, bold: false, color: BLACK      as [number,number,number], center: true  },
-        { value: pago.es_anticipo ? "Anticipo" : "Abono",  w: pColTipo,   bold: false, color: GRAY_DARK  as [number,number,number], center: true  },
-        { value: pago.observacion ?? "—",                  w: pColObs,    bold: false, color: GRAY_DARK  as [number,number,number], center: false },
+        { value: formatFecha(pago.fecha),                 w: pColFecha,  bold: false, color: BLACK      as [number,number,number], center: true  },
+        { value: fmtMoney(pago.monto),                    w: pColMonto,  bold: true,  color: GRAY_XDARK as [number,number,number], center: true  },
+        { value: pago.metodo_pago ?? "—",                 w: pColMetodo, bold: false, color: BLACK      as [number,number,number], center: true  },
+        { value: pago.es_anticipo ? "Anticipo" : "Abono", w: pColTipo,   bold: false, color: GRAY_DARK  as [number,number,number], center: true  },
+        { value: pago.observacion ?? "—",                 w: pColObs,    bold: false, color: GRAY_DARK  as [number,number,number], center: false },
       ];
 
       let prx = M;
@@ -415,7 +411,7 @@ const logoBase64 = await cargarLogoBase64(logoUrl);
   });
   y += finH;
 
-  // ── Fila herramental en resumen financiero — con nota explicativa ────────
+  // ── Herramental en resumen financiero ────────────────────
   if (tieneHerramental) {
     const herrFinH = 14;
     doc.setFillColor(250, 246, 235);
@@ -424,13 +420,11 @@ const logoBase64 = await cargarLogoBase64(logoUrl);
     doc.setLineWidth(0.2);
     doc.rect(M, y, CW, herrFinH);
 
-    // Título
     doc.setFont("helvetica", "bold");
     doc.setFontSize(8.5);
     doc.setTextColor(120, 60, 0);
     doc.text(" Herramental aprobado (incluido en Subtotal Real)", M + 3, y + 5);
 
-    // Explicación
     doc.setFont("helvetica", "italic");
     doc.setFontSize(7.5);
     doc.setTextColor(150, 100, 40);
@@ -440,7 +434,6 @@ const logoBase64 = await cargarLogoBase64(logoUrl);
       { maxWidth: CW * 0.72 }
     );
 
-    // Monto
     doc.setFont("helvetica", "bold");
     doc.setFontSize(10);
     doc.setTextColor(120, 60, 0);
@@ -459,9 +452,12 @@ const logoBase64 = await cargarLogoBase64(logoUrl);
   const abonoW = colFin;
   const saldoW = CW - difW - anticW - abonoW;
 
-  celda(doc, "Diferencia Total",   difStr,                   M,                       y, difW,   finH, { bold: true, color: difColor, fill: difFill });
-  celda(doc, "Anticipo Requerido", fmtMoney(datos.anticipo), M + difW,                y, anticW, finH, { fill: GRAY_LIGHT });
-  celda(doc, "Total Abonado",      fmtMoney(datos.abono),    M + difW + anticW,       y, abonoW, finH, { bold: true, color: GRAY_XDARK, fill: GRAY_SOFT });
+  // ── Anticipo: $0.00 si fue autorizado por crédito ─────────
+  const anticipoValor = datos.es_credito_anticipo ? fmtMoney(0) : fmtMoney(datos.anticipo);
+
+  celda(doc, "Diferencia Total",   difStr,        M,                       y, difW,   finH, { bold: true, color: difColor, fill: difFill });
+  celda(doc, "Anticipo Requerido", anticipoValor, M + difW,                y, anticW, finH, { fill: GRAY_LIGHT });
+  celda(doc, "Total Abonado",      fmtMoney(datos.abono), M + difW + anticW, y, abonoW, finH, { bold: true, color: GRAY_XDARK, fill: GRAY_SOFT });
   celda(
     doc, "Saldo Pendiente",
     datos.saldo <= 0 ? "LIQUIDADO" : fmtMoney(datos.saldo),

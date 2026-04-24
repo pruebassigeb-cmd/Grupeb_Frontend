@@ -125,31 +125,49 @@ export default function EditarCotizacion({
   };
 
   const handleToggleDetalle = async (
-    indexProd:   number,
-    indexDet:    number,
-    detalleId:   number,
-    valorActual: boolean | null
-  ) => {
-    const nuevoValor = valorActual !== true;
-    setLoadingDetalle(detalleId);
-    setError(null);
-    setMensajeExito(null);
-    try {
-      await aprobarDetalle(detalleId, nuevoValor);
-      setProductos((prev) => {
-        const copia = prev.map((p) => ({ ...p, detalles: [...p.detalles] }));
+  indexProd:   number,
+  indexDet:    number,
+  detalleId:   number,
+  valorActual: boolean | null
+) => {
+  const nuevoValor = valorActual !== true;
+  setLoadingDetalle(detalleId);
+  setError(null);
+  setMensajeExito(null);
+  try {
+    // Si se está aprobando, desaprobar los demás UNO POR UNO con delay
+    if (nuevoValor === true) {
+      const otrosDetalles = productos[indexProd].detalles.filter(
+        (d, i) => i !== indexDet && d.aprobado === true
+      );
+      for (const d of otrosDetalles) {
+        await aprobarDetalle(d.iddetalle, false);
+        await new Promise((res) => setTimeout(res, 120)); // pequeño respiro
+      }
+    }
+
+    await aprobarDetalle(detalleId, nuevoValor);
+
+    setProductos((prev) => {
+      const copia = prev.map((p) => ({ ...p, detalles: [...p.detalles] }));
+      if (nuevoValor === true) {
+        copia[indexProd].detalles = copia[indexProd].detalles.map((d, i) =>
+          i === indexDet ? { ...d, aprobado: true } : { ...d, aprobado: false }
+        );
+      } else {
         copia[indexProd].detalles[indexDet] = {
           ...copia[indexProd].detalles[indexDet],
-          aprobado: nuevoValor,
+          aprobado: false,
         };
-        return copia;
-      });
-    } catch {
-      setError("No se pudo actualizar la selección. Intenta de nuevo.");
-    } finally {
-      setLoadingDetalle(null);
-    }
-  };
+      }
+      return copia;
+    });
+  } catch {
+    setError("No se pudo actualizar la selección. Intenta de nuevo.");
+  } finally {
+    setLoadingDetalle(null);
+  }
+};
 
   const handleObservacion = async (
     indexProd:  number,

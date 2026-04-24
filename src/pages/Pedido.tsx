@@ -2,6 +2,7 @@ import Dashboard from "../layouts/Sidebar";
 import Modal from "../components/Modal";
 import FormularioCotizacion from "../components/FormularioSolicitud";
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { getCatalogosPlastico } from "../services/productosPlasticoService";
 import { getPedidos, eliminarPedido } from "../services/pedidosService";
 import { crearCotizacion } from "../services/cotizacionesService";
@@ -13,6 +14,8 @@ import type { Pedido } from "../types/cotizaciones.types";
 const ITEMS_POR_PAGINA = 7;
 
 export default function Pedidos() {
+  const navigate = useNavigate();
+
   const [pedidos,      setPedidos]      = useState<Pedido[]>([]);
   const [loadingPeds,  setLoadingPeds]  = useState(false);
   const [busqueda,     setBusqueda]     = useState("");
@@ -68,7 +71,6 @@ export default function Pedidos() {
       normalizar(p.impresion ?? "").includes(t) ||
       (p.no_pedido ?? "").toLowerCase().includes(t) ||
       (p.no_cotizacion ?? "").toLowerCase().includes(t)
-      
     );
   });
 
@@ -386,7 +388,15 @@ export default function Pedidos() {
               return (
                 <>
                   <tr key={ped.no_pedido} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 text-sm font-semibold text-gray-900 whitespace-nowrap">{ped.no_pedido}</td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-semibold text-gray-900">{ped.no_pedido}</span>
+                        {ped.prioridad && (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-700"
+                            title="Pedido urgente">⚡</span>
+                        )}
+                      </div>
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap">{origenBadge(ped)}</td>
                     <td className="px-6 py-4 text-sm text-gray-500 whitespace-nowrap">{formatFecha(ped.fecha)}</td>
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -404,15 +414,27 @@ export default function Pedidos() {
                     </td>
                     <td className="px-6 py-4 text-sm font-semibold text-gray-900 whitespace-nowrap">${ped.total.toFixed(2)}</td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1">
+                        {/* ── Editar ── */}
+                        <button
+                          onClick={() => navigate(`/pedido/${ped.no_pedido}/editar`)}
+                          title="Editar pedido"
+                          className="p-1.5 rounded-md text-blue-500 hover:bg-blue-50 transition-colors">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                              d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                          </svg>
+                        </button>
+                        {/* ── PDF ── */}
                         <button onClick={() => handleDescargarPdf(ped)} title="Descargar PDF"
-                          className="p-1.5 rounded-md text-green-600 hover:bg-green-50">
+                          className="p-1.5 rounded-md text-green-600 hover:bg-green-50 transition-colors">
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                           </svg>
                         </button>
+                        {/* ── Eliminar ── */}
                         <button onClick={() => handleEliminar(ped)} title="Cancelar pedido"
-                          className="p-1.5 rounded-md text-red-500 hover:bg-red-50">
+                          className="p-1.5 rounded-md text-red-500 hover:bg-red-50 transition-colors">
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                           </svg>
@@ -420,6 +442,7 @@ export default function Pedidos() {
                       </div>
                     </td>
                   </tr>
+
                   {expandida && (
                     <tr key={`det-${ped.no_pedido}`} className="bg-blue-50 border-t border-blue-100">
                       <td colSpan={8} className="px-8 py-4">
