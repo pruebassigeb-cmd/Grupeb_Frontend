@@ -759,19 +759,19 @@ function SeccionBultos({
             <div className="text-center bg-white rounded border border-amber-100 px-2 py-2">
               <p className="text-[10px] text-amber-400 uppercase tracking-wide mb-0.5">Total producido</p>
               <p className="text-lg font-bold text-amber-800">{cantidadReal.toLocaleString("es-MX")}</p>
-              <p className="text-[10px] text-amber-400">pzas</p>
+              <p className="text-[10px] text-amber-400">{unidadLimite}</p>
             </div>
             <div className="text-center bg-white rounded border border-amber-100 px-2 py-2">
               <p className="text-[10px] text-amber-400 uppercase tracking-wide mb-0.5">Ya en bultos</p>
-              <p className="text-lg font-bold text-blue-700">{totalUnidades.toLocaleString("es-MX")}</p>
-              <p className="text-[10px] text-amber-400">pzas</p>
+              <p className="text-lg font-bold text-blue-700">{totalActual.toLocaleString("es-MX")}</p>
+              <p className="text-[10px] text-amber-400">{unidadLimite}</p>
             </div>
-            <div className={`text-center rounded border px-2 py-2 ${cantidadReal - totalUnidades <= 0 ? "bg-green-50 border-green-200" : "bg-white border-amber-100"}`}>
+            <div className={`text-center rounded border px-2 py-2 ${cantidadReal - totalActual <= 0 ? "bg-green-50 border-green-200" : "bg-white border-amber-100"}`}>
               <p className="text-[10px] text-amber-400 uppercase tracking-wide mb-0.5">Disponible</p>
-              <p className={`text-lg font-bold ${cantidadReal - totalUnidades <= 0 ? "text-green-600" : "text-amber-800"}`}>
-                {Math.max(cantidadReal - totalUnidades, 0).toLocaleString("es-MX")}
+              <p className={`text-lg font-bold ${cantidadReal - totalActual <= 0 ? "text-green-600" : "text-amber-800"}`}>
+                {Math.max(cantidadReal - totalActual, 0).toLocaleString("es-MX")}
               </p>
-              <p className="text-[10px] text-amber-400">pzas</p>
+              <p className="text-[10px] text-amber-400">{unidadLimite}</p>
             </div>
           </div>
         </div>

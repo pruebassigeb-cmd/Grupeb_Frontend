@@ -1,4 +1,6 @@
-// Interfaces para Cliente
+// ==========================
+// CLIENTE (respuesta del GET)
+// ==========================
 export interface Cliente {
   idclientes: number;
   empresa: string;
@@ -12,32 +14,39 @@ export interface Cliente {
   regimen_fiscal_idregimen_fiscal: number;
   metodo_pago_idmetodo_pago: number;
   forma_pago_idforma_pago: number;
-  // Datos de catálogos (del JOIN)
+  // Catálogos (del JOIN)
   tipo_regimen?: string;
   regimen_codigo?: string;
   tipo_pago?: string;
   metodo_codigo?: string;
   tipo_forma?: string;
   forma_codigo?: string;
-  // Datos de facturación
+  // Facturación
   rfc?: string;
   correo_facturacion?: string;
   uso_cfdi?: string;
   moneda?: string;
-  // Datos de domicilio
+  // Domicilio principal
   domicilio?: string;
   numero?: string;
   colonia?: string;
   codigo_postal?: string;
   poblacion?: string;
   estado?: string;
+  // Dirección de envío
+  envio_id?: number;
+  envio_domicilio?: string;
+  envio_numero?: string;
+  envio_colonia?: string;
+  envio_codigo_postal?: string;
+  envio_poblacion?: string;
+  envio_estado?: string;
+  envio_referencia?: string;
 }
 
-// ====================================
-// NUEVAS INTERFACES PARA BÚSQUEDA
-// ====================================
-
-// Cliente simplificado para búsqueda (solo campos que devuelve /search)
+// ==========================
+// BÚSQUEDA (GET /search)
+// ==========================
 export interface ClienteBusqueda {
   idclientes: number;
   empresa: string | null;
@@ -49,12 +58,11 @@ export interface ClienteBusqueda {
   impresion: string | null;
 }
 
-// ====================================
-// NUEVAS INTERFACES PARA CLIENTE LIGERO
-// ====================================
-
+// ==========================
+// CLIENTE LIGERO (cotizaciones)
+// ==========================
 export interface CreateClienteLigeroRequest {
-  nombre?: string;      // Va al campo "atencion"
+  nombre?: string;
   telefono?: string;
   correo?: string;
   empresa?: string;
@@ -71,10 +79,9 @@ export interface CreateClienteLigeroResponse {
   };
 }
 
-// ====================================
-// INTERFACES EXISTENTES
-// ====================================
-
+// ==========================
+// CREATE / UPDATE
+// ==========================
 export interface CreateClienteRequest {
   empresa: string;
   correo: string;
@@ -86,23 +93,34 @@ export interface CreateClienteRequest {
   regimen_fiscal_idregimen_fiscal: number;
   metodo_pago_idmetodo_pago: number;
   forma_pago_idforma_pago: number;
-  // Datos de facturación
+  // Facturación
   rfc?: string;
   correo_facturacion?: string;
   uso_cfdi?: string;
   moneda?: string;
-  // Datos de domicilio
+  // Domicilio principal
   domicilio?: string;
   numero?: string;
   colonia?: string;
   codigo_postal?: string;
   poblacion?: string;
   estado?: string;
+  // Dirección de envío
+  envio_id?: number;
+  envio_domicilio?: string;
+  envio_numero?: string;
+  envio_colonia?: string;
+  envio_codigo_postal?: string;
+  envio_poblacion?: string;
+  envio_estado?: string;
+  envio_referencia?: string;
 }
 
 export interface UpdateClienteRequest extends CreateClienteRequest {}
 
-// Interfaces para Catálogos
+// ==========================
+// CATÁLOGOS
+// ==========================
 export interface RegimenFiscal {
   idregimen_fiscal: number;
   tipo_regimen: string;

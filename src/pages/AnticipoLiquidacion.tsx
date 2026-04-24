@@ -275,33 +275,41 @@ function SeccionEstadoCuenta({
                 {datos.productos.map(prod => {
                   const diffPzas   = prod.diferencia_piezas;
                   const diffPrecio = prod.diferencia_precio;
+                  // Unidad según modo del pedido
+                  const esKiloProd = (prod as any).modo_cantidad === "kilo";
+                  const unidadProd = esKiloProd ? "kg" : "pzas";
                   return (
                     <div key={prod.idsolicitud_producto} className="border border-gray-100 rounded-lg p-3 space-y-2 bg-gray-50">
                       <div>
                         <p className="text-xs font-semibold text-gray-800">{prod.nombre}</p>
                         <p className="text-[10px] text-gray-400">
                           {prod.no_produccion} · {prod.tintas} tinta(s) · {prod.caras} cara(s)
+                          {esKiloProd && <span className="ml-1.5 inline-flex items-center px-1 py-0.5 rounded text-[9px] font-semibold bg-orange-100 text-orange-700">Por kg</span>}
                         </p>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-1.5">
-                        <div className="bg-white rounded p-2 border border-gray-100 flex items-center gap-2">
-                          <span className="text-sm">⚖️</span>
-                          <div>
-                            <p className="text-[9px] text-gray-400 uppercase tracking-wide">Kilogramos reales</p>
-                            <p className="text-xs font-bold text-gray-700">
-                              {prod.peso_kg_real > 0
-                                ? `${Number(prod.peso_kg_real).toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kg`
-                                : "—"}
-                            </p>
+                      <div className={`grid gap-1.5 ${esKiloProd ? "grid-cols-1" : "grid-cols-2"}`}>
+                        {!esKiloProd && (
+                          <div className="bg-white rounded p-2 border border-gray-100 flex items-center gap-2">
+                            <span className="text-sm">⚖️</span>
+                            <div>
+                              <p className="text-[9px] text-gray-400 uppercase tracking-wide">Kilogramos reales</p>
+                              <p className="text-xs font-bold text-gray-700">
+                                {prod.peso_kg_real > 0
+                                  ? `${Number(prod.peso_kg_real).toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kg`
+                                  : "—"}
+                              </p>
+                            </div>
                           </div>
-                        </div>
+                        )}
                         <div className="bg-white rounded p-2 border border-gray-100 flex items-center gap-2">
-                          <span className="text-sm">📦</span>
+                          <span className="text-sm">{esKiloProd ? "⚖️" : "📦"}</span>
                           <div>
-                            <p className="text-[9px] text-gray-400 uppercase tracking-wide">Piezas reales</p>
+                            <p className="text-[9px] text-gray-400 uppercase tracking-wide">
+                              {esKiloProd ? "Kilogramos reales" : "Piezas reales"}
+                            </p>
                             <p className="text-xs font-bold text-gray-700">
-                              {Number(prod.cantidad_real).toLocaleString("es-MX")} pzas
+                              {Number(prod.cantidad_real).toLocaleString("es-MX")} {unidadProd}
                             </p>
                           </div>
                         </div>
@@ -309,18 +317,18 @@ function SeccionEstadoCuenta({
 
                       <div className="grid grid-cols-3 gap-1.5">
                         <div className="bg-white rounded p-2 text-center border border-gray-100">
-                          <p className="text-[9px] text-gray-400 uppercase tracking-wide">Ordenado</p>
+                          <p className="text-[9px] text-gray-400 uppercase tracking-wide">Ordenado ({unidadProd})</p>
                           <p className="text-xs font-bold text-gray-700">{Number(prod.cantidad_original).toLocaleString("es-MX")}</p>
                         </div>
                         <div className="bg-blue-50 rounded p-2 text-center border border-blue-100">
-                          <p className="text-[9px] text-blue-400 uppercase tracking-wide">Real</p>
+                          <p className="text-[9px] text-blue-400 uppercase tracking-wide">Real ({unidadProd})</p>
                           <p className="text-xs font-bold text-blue-700">{Number(prod.cantidad_real).toLocaleString("es-MX")}</p>
                         </div>
                         <div className={`rounded p-2 text-center border ${
                           diffPzas === 0 ? "bg-gray-50 border-gray-100" :
                           diffPzas > 0   ? "bg-green-50 border-green-100" : "bg-red-50 border-red-100"
                         }`}>
-                          <p className="text-[9px] text-gray-400 uppercase tracking-wide">Dif. pzas</p>
+                          <p className="text-[9px] text-gray-400 uppercase tracking-wide">Dif. ({unidadProd})</p>
                           <p className={`text-xs font-bold ${
                             diffPzas === 0 ? "text-gray-500" : diffPzas > 0 ? "text-green-700" : "text-red-700"
                           }`}>{diffPzas > 0 ? "+" : ""}{Number(diffPzas).toLocaleString("es-MX")}</p>

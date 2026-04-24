@@ -84,32 +84,56 @@ function DetalleEstadoCuenta({
         {datos.productos.map(prod => {
           const diffPzas   = prod.diferencia_piezas;
           const diffPrecio = prod.diferencia_precio;
+
+          // ── Unidad según modo del pedido ──────────────────────
+          const esKilo = prod.modo_cantidad === "kilo";
+          const unidad = esKilo ? "kg" : "pzas";
+
           return (
             <div key={prod.idsolicitud_producto} className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
               <div>
                 <p className="text-sm font-semibold text-gray-900">{prod.nombre}</p>
                 <p className="text-xs text-gray-400 mt-0.5">
                   {prod.no_produccion} · {prod.tintas} tinta(s) · {prod.caras} cara(s)
+                  {esKilo && (
+                    <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-orange-100 text-orange-700">
+                      Por kg
+                    </span>
+                  )}
                 </p>
               </div>
+
+              {/* Cards de cantidad */}
               <div className="grid grid-cols-3 gap-2">
                 <div className="bg-gray-50 rounded-lg p-2.5 text-center border border-gray-100">
-                  <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-0.5">Cant. ordenada</p>
-                  <p className="text-sm font-bold text-gray-700">{Number(prod.cantidad_original).toLocaleString("es-MX")}</p>
+                  <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-0.5">
+                    Cant. ordenada ({unidad})
+                  </p>
+                  <p className="text-sm font-bold text-gray-700">
+                    {Number(prod.cantidad_original).toLocaleString("es-MX")}
+                  </p>
                 </div>
                 <div className="bg-blue-50 rounded-lg p-2.5 text-center border border-blue-100">
-                  <p className="text-[10px] text-blue-500 uppercase tracking-wide mb-0.5">Cant. real</p>
-                  <p className="text-sm font-bold text-blue-700">{Number(prod.cantidad_real).toLocaleString("es-MX")}</p>
+                  <p className="text-[10px] text-blue-500 uppercase tracking-wide mb-0.5">
+                    Cant. real ({unidad})
+                  </p>
+                  <p className="text-sm font-bold text-blue-700">
+                    {Number(prod.cantidad_real).toLocaleString("es-MX")}
+                  </p>
                 </div>
                 <div className={`rounded-lg p-2.5 text-center border ${
                   diffPzas === 0 ? "bg-gray-50 border-gray-100" : diffPzas > 0 ? "bg-green-50 border-green-100" : "bg-red-50 border-red-100"
                 }`}>
-                  <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-0.5">Diferencia</p>
+                  <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-0.5">
+                    Dif. ({unidad})
+                  </p>
                   <p className={`text-sm font-bold ${diffPzas === 0 ? "text-gray-500" : diffPzas > 0 ? "text-green-700" : "text-red-700"}`}>
                     {diffPzas > 0 ? "+" : ""}{Number(diffPzas).toLocaleString("es-MX")}
                   </p>
                 </div>
               </div>
+
+              {/* Cards de precio */}
               <div className="grid grid-cols-3 gap-2">
                 <div className="bg-gray-50 rounded-lg p-2.5 text-center border border-gray-100">
                   <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-0.5">Precio original</p>
@@ -122,15 +146,17 @@ function DetalleEstadoCuenta({
                 <div className={`rounded-lg p-2.5 text-center border ${
                   diffPrecio === 0 ? "bg-gray-50 border-gray-100" : diffPrecio > 0 ? "bg-green-50 border-green-100" : "bg-red-50 border-red-100"
                 }`}>
-                  <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-0.5">Diferencia</p>
+                  <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-0.5">Dif. precio</p>
                   <p className={`text-sm font-bold ${diffPrecio === 0 ? "text-gray-500" : diffPrecio > 0 ? "text-green-700" : "text-red-700"}`}>
                     {diffPrecio > 0 ? "+" : ""}${fmt(diffPrecio)}
                   </p>
                 </div>
               </div>
+
               <div className="flex justify-end">
                 <span className="text-xs text-gray-400">
-                  Precio unitario real: <span className="font-semibold text-gray-600">${prod.precio_unitario_real.toFixed(6)}</span>
+                  Precio unitario real ({unidad}):{" "}
+                  <span className="font-semibold text-gray-600">${prod.precio_unitario_real.toFixed(6)}</span>
                 </span>
               </div>
             </div>
