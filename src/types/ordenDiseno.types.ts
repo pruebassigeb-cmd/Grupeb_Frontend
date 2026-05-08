@@ -73,3 +73,10 @@ export interface Notificacion {
   leido:          boolean;
   created_at:     string;
 }
+
+export interface UsuarioParticipante {
+  idusuario: number;
+  nombre:    string;
+  apellido:  string;
+  rol:       string;
+}
