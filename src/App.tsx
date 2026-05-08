@@ -14,7 +14,9 @@ import Seguimiento from "./pages/Seguimiento";
 import Pedido from "./pages/Pedido";
 import EstadoCuenta from "./components/EstadoCuenta.tsx";
 import SinAcceso from "./pages/SinAcceso";
-import EditarPedido from "./components/EditarPedido.tsx";  // ← ajusta si lo mueves a pages/
+import EditarPedido from "./components/EditarPedido.tsx";
+import Envios from "./pages/Envios";
+import GestorArchivos from "./components/GestorArchivos"; // 👈 nuevo
 
 const PERMISOS = {
   usuarios:     "Crear/Editar/Eliminar Usuarios",
@@ -85,7 +87,7 @@ function App() {
             <ProtectedRoute permiso={PERMISOS.pedido}><Pedido /></ProtectedRoute>
           } />
 
-          {/* Pedidos — editar  ← NUEVA */}
+          {/* Pedidos — editar */}
           <Route path="/pedido/:noPedido/editar" element={
             <ProtectedRoute permiso={PERMISOS.pedido}>
               <EditarPedido />
@@ -94,7 +96,9 @@ function App() {
 
           {/* Diseño */}
           <Route path="/diseno" element={
-            <ProtectedRoute permiso={PERMISOS.diseno}><Diseno /></ProtectedRoute>
+            <ProtectedRoute permisoOr={["Editar Diseño", "Orden de Diseño"]}>
+              <Diseno />
+            </ProtectedRoute>
           } />
 
           {/* Anticipo y Liquidación */}
@@ -110,6 +114,18 @@ function App() {
           {/* Estado de cuenta */}
           <Route path="/estadocuenta" element={
             <ProtectedRoute permiso={PERMISOS.estadoCuenta}><EstadoCuenta /></ProtectedRoute>
+          } />
+
+          {/* Envíos */}
+          <Route path="/envios" element={
+            <ProtectedRoute permiso="Gestionar Envios">
+              <Envios />
+            </ProtectedRoute>
+          } />
+
+          {/* Archivos */}
+          <Route path="/archivos" element={
+            <ProtectedRoute><GestorArchivos /></ProtectedRoute>
           } />
 
           {/* Catch-all */}

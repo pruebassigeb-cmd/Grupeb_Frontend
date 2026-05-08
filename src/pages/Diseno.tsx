@@ -7,6 +7,9 @@ import { getOrdenProduccion } from "../services/seguimientoService";
 import { generarPdfOrdenProduccion } from "../services/generarPdfOrdenProduccion";
 import type { Diseno, DisenoProducto } from "../types/ventas.types";
 import type { Pedido } from "../types/cotizaciones.types";
+import ChatRevision from "../components/ChatRevision";
+import { useAuth } from "../context/AuthContext";
+import { usePermisos } from "../hooks/usePermiso";
 
 const ESTADO = { PENDIENTE: 1, EN_PROCESO: 2, APROBADO: 3 } as const;
 const POR_PAGINA = 10;
@@ -29,7 +32,6 @@ async function descargarPdfOrden(noPedido: string, noProduccion: string): Promis
   const data = await getOrdenProduccion(noPedido);
   const producto = data.productos.find((p: any) => p.no_produccion === noProduccion);
   if (!producto) throw new Error(`Producto con folio ${noProduccion} no encontrado`);
-
   await generarPdfOrdenProduccion({
     no_pedido:               data.no_pedido,
     no_produccion:           producto.no_produccion,
@@ -42,7 +44,7 @@ async function descargarPdfOrden(noPedido: string, noProduccion: string): Promis
     telefono:                data.telefono,
     correo:                  data.correo,
     impresion:               data.impresion,
-    prioridad: data.prioridad ?? false,
+    prioridad:               data.prioridad ?? false,
     nombre_producto:         producto.nombre_producto,
     categoria:               producto.categoria,
     material:                producto.material,
@@ -67,7 +69,7 @@ async function descargarPdfOrden(noPedido: string, noProduccion: string): Promis
     pantones:                producto.pantones,
     asa_suaje:               producto.asa_suaje,
     color_asa_nombre:        producto.color_asa_nombre ?? null,
-    medida_troquel:          producto.medida_troquel ?? null,
+    medida_troquel:          producto.medida_troquel   ?? null,
     observacion:             producto.observacion,
     cantidad:                producto.cantidad,
     kilogramos:              producto.kilogramos,
@@ -88,9 +90,6 @@ async function descargarPdfOrden(noPedido: string, noProduccion: string): Promis
   });
 }
 
-// ─────────────────────────────────────────────
-// PAGINADOR
-// ─────────────────────────────────────────────
 function Paginador({
   total, pagina, porPagina, onChange,
 }: {
@@ -98,10 +97,8 @@ function Paginador({
 }) {
   const totalPaginas = Math.ceil(total / porPagina);
   if (totalPaginas <= 1) return null;
-
   const desde = (pagina - 1) * porPagina + 1;
   const hasta = Math.min(pagina * porPagina, total);
-
   return (
     <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 bg-white">
       <p className="text-sm text-gray-500">
@@ -161,16 +158,24 @@ export function EditarDisenoReal({
   onClose:        () => void;
   onEstadoChange: (noPedido: string, estadoId: number) => void;
 }) {
+  const { user } = useAuth();
+  const { puedeEditarDiseno, puedeOrdenDiseno } = usePermisos({
+    puedeEditarDiseno: "Editar Diseño",
+    puedeOrdenDiseno:  "Orden de Diseño",
+  });
+
+  // Usuario con solo "Orden de Diseño" — acceso restringido a chat únicamente
+  const soloChat = puedeOrdenDiseno && !puedeEditarDiseno;
+
   const [diseno,    setDiseno]    = useState<Diseno | null>(null);
   const [loading,   setLoading]   = useState(true);
   const [guardando, setGuardando] = useState<number | null>(null);
   const [error,     setError]     = useState<string | null>(null);
   const [obsMap,    setObsMap]    = useState<Record<number, string>>({});
-
   const [alertaPdf, setAlertaPdf] = useState<{ visible: boolean; folios: string[] }>({
-    visible: false,
-    folios:  [],
+    visible: false, folios: [],
   });
+  const [chatProducto, setChatProducto] = useState<number | null>(null);
 
   useEffect(() => { cargar(); }, []);
 
@@ -199,11 +204,9 @@ export function EditarDisenoReal({
         estadoId,
         observaciones: obsMap[id] || undefined,
       });
-
       const actualizado = await getDisenoByPedido(pedido.no_pedido);
       setDiseno(actualizado);
       onEstadoChange(pedido.no_pedido, resultado.estado_cabecera_id ?? actualizado.estado_id);
-
       if (estadoId === ESTADO.APROBADO && resultado.orden_generada && resultado.no_produccion) {
         try {
           await descargarPdfOrden(pedido.no_pedido, resultado.no_produccion);
@@ -212,7 +215,6 @@ export function EditarDisenoReal({
           console.error("Error al generar PDF:", pdfErr);
         }
       }
-
     } catch (e: any) {
       alert(e.response?.data?.error || "Error al actualizar estado");
     } finally {
@@ -247,14 +249,28 @@ export function EditarDisenoReal({
   const total     = diseno.total_productos;
   const aprobados = diseno.aprobados;
   const conOrden  = (diseno as any).con_orden ?? 0;
-
-  const eg = aprobados === total && total > 0 ? "aprobado" :
-             aprobados > 0                    ? "en_proceso" : "pendiente";
+  const eg = aprobados === total && total > 0 ? "aprobado" : aprobados > 0 ? "en_proceso" : "pendiente";
 
   return (
     <div className="space-y-5">
 
-      {alertaPdf.visible && (
+      {/* ── Banner de acceso restringido para usuarios con solo "Orden de Diseño" ── */}
+      {soloChat && (
+        <div className="flex items-start gap-3 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3">
+          <svg className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <div>
+            <p className="text-sm font-semibold text-blue-800">Acceso de consulta y chat</p>
+            <p className="text-xs text-blue-600 mt-0.5">
+              Puedes comunicarte con el equipo de diseño a través del chat de cada producto. La aprobación y edición de diseños corresponde al responsable de diseño.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Alerta PDF — solo visible para diseño */}
+      {alertaPdf.visible && puedeEditarDiseno && (
         <div className="flex items-start gap-3 bg-green-50 border-2 border-green-400 rounded-xl px-4 py-4 shadow-md">
           <div className="flex-shrink-0 w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
             <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -283,6 +299,7 @@ export function EditarDisenoReal({
         </div>
       )}
 
+      {/* Info pedido */}
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
         <p className="font-semibold text-gray-900">{pedido.cliente || "—"}</p>
         <p className="text-sm text-gray-500">{pedido.empresa || "—"}</p>
@@ -292,7 +309,8 @@ export function EditarDisenoReal({
         </p>
       </div>
 
-      {!(diseno as any).anticipo_cubierto && (
+      {/* Aviso anticipo — solo para diseño */}
+      {puedeEditarDiseno && !(diseno as any).anticipo_cubierto && (
         <div className="flex items-center gap-3 rounded-xl px-4 py-3 border bg-amber-50 border-amber-200">
           <span className="text-lg flex-shrink-0">⚠️</span>
           <div>
@@ -306,41 +324,48 @@ export function EditarDisenoReal({
         </div>
       )}
 
-      <div className="grid grid-cols-4 gap-3">
-        {[
-          { label: "Total",      value: total,             color: "text-gray-700"   },
-          { label: "Aprobados",  value: aprobados,         color: "text-green-700"  },
-          { label: "Pendientes", value: diseno.pendientes, color: "text-orange-600" },
-          { label: "Con orden",  value: conOrden,          color: "text-blue-700"   },
-        ].map(item => (
-          <div key={item.label} className="bg-gray-50 rounded-xl p-3 text-center border border-gray-100">
-            <p className={`text-2xl font-bold ${item.color}`}>{item.value}</p>
-            <p className="text-xs text-gray-400 mt-0.5">{item.label}</p>
-          </div>
-        ))}
-      </div>
+      {/* Estadísticas — solo para diseño */}
+      {puedeEditarDiseno && (
+        <div className="grid grid-cols-4 gap-3">
+          {[
+            { label: "Total",      value: total,             color: "text-gray-700"   },
+            { label: "Aprobados",  value: aprobados,         color: "text-green-700"  },
+            { label: "Pendientes", value: diseno.pendientes, color: "text-orange-600" },
+            { label: "Con orden",  value: conOrden,          color: "text-blue-700"   },
+          ].map(item => (
+            <div key={item.label} className="bg-gray-50 rounded-xl p-3 text-center border border-gray-100">
+              <p className={`text-2xl font-bold ${item.color}`}>{item.value}</p>
+              <p className="text-xs text-gray-400 mt-0.5">{item.label}</p>
+            </div>
+          ))}
+        </div>
+      )}
 
-      <div className={`flex items-center gap-3 rounded-xl px-4 py-3 border ${
-        eg === "aprobado"   ? "bg-green-50 border-green-200"  :
-        eg === "en_proceso" ? "bg-blue-50 border-blue-200"    :
-                              "bg-yellow-50 border-yellow-200"
-      }`}>
-        <span className="text-lg">
-          {eg === "aprobado" ? "✓" : eg === "en_proceso" ? "🔄" : "⏱️"}
-        </span>
-        <p className={`font-semibold text-sm ${
-          eg === "aprobado"   ? "text-green-800" :
-          eg === "en_proceso" ? "text-blue-800"  : "text-yellow-800"
+      {/* Estado global — solo para diseño */}
+      {puedeEditarDiseno && (
+        <div className={`flex items-center gap-3 rounded-xl px-4 py-3 border ${
+          eg === "aprobado"   ? "bg-green-50 border-green-200"  :
+          eg === "en_proceso" ? "bg-blue-50 border-blue-200"    :
+                                "bg-yellow-50 border-yellow-200"
         }`}>
-          {eg === "aprobado"
-            ? `Todos los diseños aprobados — ${aprobados}/${total}`
-            : eg === "en_proceso"
-              ? `En proceso — ${aprobados}/${total} diseños aprobados`
-              : `Pendiente — 0/${total} diseños aprobados`}
-        </p>
-      </div>
+          <span className="text-lg">
+            {eg === "aprobado" ? "✓" : eg === "en_proceso" ? "🔄" : "⏱️"}
+          </span>
+          <p className={`font-semibold text-sm ${
+            eg === "aprobado"   ? "text-green-800" :
+            eg === "en_proceso" ? "text-blue-800"  : "text-yellow-800"
+          }`}>
+            {eg === "aprobado"
+              ? `Todos los diseños aprobados — ${aprobados}/${total}`
+              : eg === "en_proceso"
+                ? `En proceso — ${aprobados}/${total} diseños aprobados`
+                : `Pendiente — 0/${total} diseños aprobados`}
+          </p>
+        </div>
+      )}
 
-      {!diseno.diseno_completado && (
+      {/* Botón aprobar todos — solo diseño */}
+      {puedeEditarDiseno && !diseno.diseno_completado && (
         <button
           onClick={handleAprobarTodos}
           disabled={guardando !== null}
@@ -353,11 +378,16 @@ export function EditarDisenoReal({
         </button>
       )}
 
+      {/* Lista de productos */}
       <div className="space-y-3">
         {diseno.productos.map((producto: any) => {
           const isGuardando = guardando === producto.iddiseno_producto;
           const aprobado    = producto.estado_id === ESTADO.APROBADO;
           const enProceso   = producto.estado_id === ESTADO.EN_PROCESO;
+
+          // Si es soloChat y el producto no tiene orden de diseño, no mostrar la tarjeta
+          // (el usuario de "Orden de Diseño" solo ve productos que tengan chat activo)
+          if (soloChat && !producto.idorden_diseno) return null;
 
           return (
             <div
@@ -367,6 +397,7 @@ export function EditarDisenoReal({
                 enProceso ? "border-blue-200"  : "border-gray-200"
               }`}
             >
+              {/* Nombre y estado badge */}
               <div className="flex items-start justify-between gap-3 mb-3">
                 <div className="flex items-center gap-2 flex-1 min-w-0">
                   <span>{aprobado ? "✓" : enProceso ? "🔄" : "⏱️"}</span>
@@ -380,19 +411,20 @@ export function EditarDisenoReal({
                 </span>
               </div>
 
+              {/* Cantidad — visible para todos */}
               {(producto.cantidad || producto.kilogramos) && (
                 <div className="mb-3 px-3 py-2 bg-gray-50 rounded-lg border border-gray-100">
                   <p className="text-xs text-gray-500 mb-1 font-medium">Cantidad aprobada por cliente:</p>
                   <p className="text-sm font-semibold text-gray-800">
                     {producto.modo_cantidad === "kilo" && producto.kilogramos
                       ? `${Number(producto.kilogramos).toFixed(2)} kg (${Number(producto.cantidad).toLocaleString()} piezas)`
-                      : `${Number(producto.cantidad).toLocaleString()} piezas`
-                    }
+                      : `${Number(producto.cantidad).toLocaleString()} piezas`}
                   </p>
                 </div>
               )}
 
-              {producto.orden_generada && (
+              {/* Orden producción generada — solo diseño */}
+              {puedeEditarDiseno && producto.orden_generada && (
                 <div className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded-lg mb-3">
                   <svg className="w-4 h-4 text-green-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
@@ -403,7 +435,8 @@ export function EditarDisenoReal({
                 </div>
               )}
 
-              {aprobado && !producto.orden_generada && (
+              {/* Esperando anticipo — solo diseño */}
+              {puedeEditarDiseno && aprobado && !producto.orden_generada && (
                 <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg mb-3">
                   <svg className="w-4 h-4 text-amber-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
@@ -414,78 +447,131 @@ export function EditarDisenoReal({
                 </div>
               )}
 
-              <div className="mb-3">
-                <label className="block text-xs font-medium text-gray-500 mb-1">
-                  Observaciones / cambios solicitados
-                </label>
-                <textarea
-                  value={obsMap[producto.iddiseno_producto] ?? ""}
-                  onChange={e => setObsMap(prev => ({
-                    ...prev, [producto.iddiseno_producto]: e.target.value,
-                  }))}
-                  rows={2}
-                  placeholder="Ej: Cliente solicitó cambiar el color azul por verde"
-                  className="w-full px-3 py-2 text-xs border border-gray-200 rounded-lg text-gray-700 bg-gray-50 focus:ring-2 focus:ring-blue-300 focus:border-transparent resize-none"
-                />
-              </div>
+              {/* Observaciones — solo diseño */}
+              {puedeEditarDiseno && (
+                <div className="mb-3">
+                  <label className="block text-xs font-medium text-gray-500 mb-1">
+                    Observaciones / cambios solicitados
+                  </label>
+                  <textarea
+                    value={obsMap[producto.iddiseno_producto] ?? ""}
+                    onChange={e => setObsMap(prev => ({
+                      ...prev, [producto.iddiseno_producto]: e.target.value,
+                    }))}
+                    rows={2}
+                    placeholder="Ej: Cliente solicitó cambiar el color azul por verde"
+                    className="w-full px-3 py-2 text-xs border border-gray-200 rounded-lg text-gray-700 bg-gray-50 focus:ring-2 focus:ring-blue-300 focus:border-transparent resize-none"
+                  />
+                </div>
+              )}
 
-              <div className="flex gap-2">
-                <button
-                  onClick={() => handleCambiarEstado(producto.iddiseno_producto, ESTADO.EN_PROCESO)}
-                  disabled={isGuardando || enProceso}
-                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-semibold transition-all ${
-                    enProceso
-                      ? "bg-blue-100 text-blue-700 cursor-default"
-                      : "bg-blue-500 hover:bg-blue-600 text-white disabled:opacity-50"
-                  }`}
-                >
-                  {isGuardando
-                    ? <div className="w-3 h-3 rounded-full border-2 border-current border-t-transparent animate-spin" />
-                    : <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              {/* Botones de estado — solo diseño */}
+              {puedeEditarDiseno && (
+                <div className="flex gap-2 mb-3">
+                  <button
+                    onClick={() => handleCambiarEstado(producto.iddiseno_producto, ESTADO.EN_PROCESO)}
+                    disabled={isGuardando || enProceso}
+                    className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-semibold transition-all ${
+                      enProceso
+                        ? "bg-blue-100 text-blue-700 cursor-default"
+                        : "bg-blue-500 hover:bg-blue-600 text-white disabled:opacity-50"
+                    }`}
+                  >
+                    {isGuardando
+                      ? <div className="w-3 h-3 rounded-full border-2 border-current border-t-transparent animate-spin" />
+                      : <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                    }
+                    En proceso
+                  </button>
+
+                  <button
+                    onClick={() => handleCambiarEstado(producto.iddiseno_producto, ESTADO.APROBADO)}
+                    disabled={isGuardando || aprobado}
+                    className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-semibold transition-all ${
+                      aprobado
+                        ? "bg-green-100 text-green-700 cursor-default"
+                        : "bg-green-600 hover:bg-green-700 text-white disabled:opacity-50"
+                    }`}
+                  >
+                    {isGuardando
+                      ? <div className="w-3 h-3 rounded-full border-2 border-current border-t-transparent animate-spin" />
+                      : <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                        </svg>
+                    }
+                    {aprobado ? "Aprobado ✓" : "Aprobar"}
+                  </button>
+
+                  {producto.estado_id !== ESTADO.PENDIENTE && !producto.orden_generada && (
+                    <button
+                      onClick={() => handleCambiarEstado(producto.iddiseno_producto, ESTADO.PENDIENTE)}
+                      disabled={isGuardando}
+                      className="py-2 px-3 rounded-lg text-xs font-semibold text-gray-500 hover:bg-gray-100 border border-gray-200 transition-all disabled:opacity-50"
+                      title="Restablecer a pendiente"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                       </svg>
-                  }
-                  En proceso
-                </button>
+                    </button>
+                  )}
+                </div>
+              )}
 
-                <button
-                  onClick={() => handleCambiarEstado(producto.iddiseno_producto, ESTADO.APROBADO)}
-                  disabled={isGuardando || aprobado}
-                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-semibold transition-all ${
-                    aprobado
-                      ? "bg-green-100 text-green-700 cursor-default"
-                      : "bg-green-600 hover:bg-green-700 text-white disabled:opacity-50"
-                  }`}
-                >
-                  {isGuardando
-                    ? <div className="w-3 h-3 rounded-full border-2 border-current border-t-transparent animate-spin" />
-                    : <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                      </svg>
-                  }
-                  {aprobado ? "Aprobado ✓" : "Aprobar"}
-                </button>
-
-                {producto.estado_id !== ESTADO.PENDIENTE && !producto.orden_generada && (
+              {/* Chat por producto — visible para ambos privilegios si hay orden de diseño */}
+              {producto.idorden_diseno && user && (puedeEditarDiseno || puedeOrdenDiseno) && (
+                <div className="mt-2 border border-gray-200 rounded-xl overflow-hidden">
                   <button
-                    onClick={() => handleCambiarEstado(producto.iddiseno_producto, ESTADO.PENDIENTE)}
-                    disabled={isGuardando}
-                    className="py-2 px-3 rounded-lg text-xs font-semibold text-gray-500 hover:bg-gray-100 border border-gray-200 transition-all disabled:opacity-50"
-                    title="Restablecer a pendiente"
+                    onClick={() => setChatProducto(prev =>
+                      prev === producto.idorden_diseno ? null : producto.idorden_diseno
+                    )}
+                    className="w-full flex items-center justify-between px-4 py-2.5 bg-gray-50 hover:bg-gray-100 transition-colors"
                   >
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    <div className="flex items-center gap-2">
+                      <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                      </svg>
+                      <span className="text-xs font-semibold text-gray-800">
+                        {producto.no_orden_diseno}
+                      </span>
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                        producto.orden_diseno_estado === "aprobado"
+                          ? "bg-green-100 text-green-700"
+                          : "bg-blue-100 text-blue-700"
+                      }`}>
+                        {producto.orden_diseno_estado === "aprobado" ? "✓ Aprobado" : "En revisión"}
+                      </span>
+                    </div>
+                    <svg
+                      className={`w-4 h-4 text-gray-400 transition-transform ${
+                        chatProducto === producto.idorden_diseno ? "rotate-180" : ""
+                      }`}
+                      fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                     </svg>
                   </button>
-                )}
-              </div>
+
+                  {chatProducto === producto.idorden_diseno && (
+                    <ChatRevision
+                      idorden={producto.idorden_diseno}
+                      usuarioId={user.id}
+                      onClose={() => setChatProducto(null)}
+                    />
+                  )}
+                </div>
+              )}
             </div>
           );
         })}
       </div>
 
       <div className="flex justify-end pt-2 border-t border-gray-100">
-        <button onClick={onClose} className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm font-medium">
+        <button
+          onClick={onClose}
+          className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm font-medium"
+        >
           Cerrar
         </button>
       </div>
@@ -494,6 +580,13 @@ export function EditarDisenoReal({
 }
 
 export default function Diseno() {
+  const { user } = useAuth();
+
+  // Necesario para ajustar el label del botón en la tabla según privilegio
+  const { puedeEditarDiseno } = usePermisos({
+    puedeEditarDiseno: "Editar Diseño",
+  });
+
   const [pedidos,      setPedidos]      = useState<Pedido[]>([]);
   const [loading,      setLoading]      = useState(false);
   const [busqueda,     setBusqueda]     = useState("");
@@ -534,7 +627,6 @@ export default function Diseno() {
     );
   });
 
-  // Resetear a página 1 cuando cambia la búsqueda
   useEffect(() => { setPagina(1); }, [busqueda]);
 
   const paginados = filtrados.slice((pagina - 1) * POR_PAGINA, pagina * POR_PAGINA);
@@ -561,7 +653,11 @@ export default function Diseno() {
   return (
     <Dashboard>
       <h1 className="text-2xl font-bold mb-4">Gestión de Diseños</h1>
-      <p className="text-slate-400 mb-6">Administra y aprueba los diseños de productos de cada pedido.</p>
+      <p className="text-slate-400 mb-6">
+        {puedeEditarDiseno
+          ? "Administra y aprueba los diseños de productos de cada pedido."
+          : "Consulta el estado de los diseños y comunícate con el equipo a través del chat."}
+      </p>
 
       <div className="mb-6">
         <div className="relative">
@@ -618,8 +714,12 @@ export default function Diseno() {
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm">{getEstadoBadge(ped)}</td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                  <button onClick={() => handleEditar(ped)} className="text-blue-600 hover:text-blue-900 font-semibold">
-                    Ver/Editar
+                  {/* Etiqueta del botón según privilegio */}
+                  <button
+                    onClick={() => handleEditar(ped)}
+                    className="text-blue-600 hover:text-blue-900 font-semibold"
+                  >
+                    {puedeEditarDiseno ? "Ver/Editar" : "Ver / Chat"}
                   </button>
                 </td>
               </tr>
@@ -630,15 +730,14 @@ export default function Diseno() {
             )}
           </tbody>
         </table>
-        <Paginador
-          total={filtrados.length}
-          pagina={pagina}
-          porPagina={POR_PAGINA}
-          onChange={setPagina}
-        />
+        <Paginador total={filtrados.length} pagina={pagina} porPagina={POR_PAGINA} onChange={setPagina} />
       </div>
 
-      <Modal isOpen={modalOpen} onClose={handleCerrar} title="Gestionar Diseños">
+      <Modal
+        isOpen={modalOpen}
+        onClose={handleCerrar}
+        title={puedeEditarDiseno ? "Gestionar Diseños" : "Orden de Diseño — Chat"}
+      >
         {pedidoActivo && (
           <EditarDisenoReal
             pedido={pedidoActivo}

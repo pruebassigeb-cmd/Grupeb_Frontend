@@ -86,6 +86,8 @@ export async function generarPdfPedido(pedido: PedidoPdf): Promise<void> {
   const HEAD_FONT_SIZE_DEFAULT = 8;
   const headFontSizeMap: Record<number, number> = {
     3:  7, // Tintas
+    4:  7, // Caras
+    6:  7, // Calibre
     8:  7, // Asa/Suaje
     9: 6.5,
     10: 6.5,   // Laminado

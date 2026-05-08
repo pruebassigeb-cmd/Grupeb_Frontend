@@ -1,9 +1,9 @@
 import jsPDF from "jspdf";
+import QRCode from "qrcode";
 import { cargarLogoBase64 } from "./Pdfutils";
 import type { EstadoCuenta } from "./estadoCuentaService";
 import logoUrl from "../assets/grupeblanco.png";
 
-// ─── Paleta estrictamente blanco y negro ────────────────────
 const BLACK:   [number, number, number] = [0,   0,   0  ];
 const WHITE:   [number, number, number] = [255, 255, 255];
 const GRAY_90: [number, number, number] = [25,  25,  25 ];
@@ -12,8 +12,6 @@ const GRAY_30: [number, number, number] = [180, 180, 180];
 const GRAY_10: [number, number, number] = [235, 235, 235];
 const GRAY_05: [number, number, number] = [248, 248, 248];
 
-
-// ─── Helpers ────────────────────────────────────────────────
 const f = (v: any): string =>
   v === null || v === undefined || String(v).trim() === "" ? "—" : String(v).trim();
 
@@ -34,7 +32,16 @@ function formatFecha(iso: string | null): string {
   } catch { return iso; }
 }
 
-// ─── Fila de totales ─────────────────────────────────────────
+async function generarQRBase64(texto: string): Promise<string | null> {
+  try {
+    return await QRCode.toDataURL(texto, {
+      width:  150,
+      margin: 1,
+      color: { dark: "#000000", light: "#ffffff" },
+    });
+  } catch { return null; }
+}
+
 function filaTotales(
   doc:    jsPDF,
   label:  string,
@@ -88,18 +95,19 @@ export async function generarPdfEstadoCuentaSimple(
   datos: EstadoCuenta
 ): Promise<void> {
   const logoBase64 = await cargarLogoBase64(logoUrl);
+  const qrWaBase64 = await generarQRBase64("https://wa.me/523339540924");
 
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   const PW  = 210;
   const PH  = 297;
   const M   = 13;
-  const CW  = PW - M * 2; // 184mm
+  const CW  = PW - M * 2;
 
   const herramentalTotal = datos.herramental_total ?? 0;
   const tieneHerramental = herramentalTotal > 0;
 
   // ══════════════════════════════════════════════════════════
-  // BANDA SUPERIOR NEGRA
+  // BANDA SUPERIOR
   // ══════════════════════════════════════════════════════════
   const bandaH = 28;
   const logoW  = 30;
@@ -149,19 +157,19 @@ export async function generarPdfEstadoCuentaSimple(
   doc.setFont("helvetica", "normal");
   doc.setFontSize(9);
   doc.setTextColor(...GRAY_60);
-  doc.text("Guadalajara, Jalisco", M, y);
+  doc.text("Tlajomulco de Zúñiga, Jalisco", M, y);
 
   y += 7;
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10);
   doc.setTextColor(...GRAY_60);
-  doc.text("At'n:", M, y);
-  const atnLabelW = doc.getTextWidth("At'n: ");
+  doc.text("Atención: ", M, y);
+  const atnLabelW = doc.getTextWidth("Atención: ");
   doc.setFont("helvetica", "bold");
   doc.setFontSize(11);
   doc.setTextColor(...GRAY_90);
-  doc.text(f(datos.cliente), M + atnLabelW, y);
+  doc.text(f(datos.atencion ?? datos.cliente), M + atnLabelW, y);
 
   y += 6;
 
@@ -201,14 +209,24 @@ export async function generarPdfEstadoCuentaSimple(
   const colPre  = CW * 0.14;
   const colTot  = CW - colProd - colCant - colMat - colImp - colPre;
 
-  interface TabHeader { label: string; w: number; right?: boolean }
-  const tabHeaders: TabHeader[] = [
-    { label: "Producto / Medida", w: colProd              },
-    { label: "Cantidad",          w: colCant, right: true },
-    { label: "Material",          w: colMat               },
-    { label: "Impresión",         w: colImp               },
-    { label: "Precio unit.",      w: colPre,  right: true },
-    { label: "Total",             w: colTot,  right: true },
+  const xCols = [
+    M,
+    M + colProd,
+    M + colProd + colCant,
+    M + colProd + colCant + colMat,
+    M + colProd + colCant + colMat + colImp,
+    M + colProd + colCant + colMat + colImp + colPre,
+  ];
+  const wCols = [colProd, colCant, colMat, colImp, colPre, colTot];
+
+  interface ColDef { label: string; align: "left" | "center" }
+  const colDefs: ColDef[] = [
+    { label: "Producto / Medida", align: "left"   },
+    { label: "Cantidad",          align: "center" },
+    { label: "Material",          align: "center" },
+    { label: "Impresión",         align: "center" },
+    { label: "Precio unit.",      align: "center" },
+    { label: "Total",             align: "center" },
   ];
 
   const thH = 7;
@@ -218,16 +236,14 @@ export async function generarPdfEstadoCuentaSimple(
   doc.setLineWidth(0.2);
   doc.rect(M, y, CW, thH);
 
-  let hx = M;
-  tabHeaders.forEach(h => {
+  colDefs.forEach((col, i) => {
     doc.setFont("helvetica", "bold");
     doc.setFontSize(8);
     doc.setTextColor(...GRAY_60);
-    const tx = h.right ? hx + h.w - 2 : hx + 2;
-    doc.text(h.label, tx, y + thH / 2 + 1.5, {
-      align: h.right ? "right" : "left",
-    });
-    hx += h.w;
+    const x = col.align === "left"
+      ? xCols[i] + 2
+      : xCols[i] + wCols[i] / 2;
+    doc.text(col.label, x, y + thH / 2 + 1.5, { align: col.align });
   });
 
   y += thH;
@@ -246,14 +262,14 @@ export async function generarPdfEstadoCuentaSimple(
       ? prod.precio_total_real / prod.cantidad_real
       : 0;
 
-    interface Col { value: string; w: number; right?: boolean; bold?: boolean }
-    const cols: Col[] = [
-      { value: productoMedida,                   w: colProd                          },
-      { value: fmtNum(prod.cantidad_real),        w: colCant, right: true            },
-      { value: f(prod.material),                 w: colMat                          },
-      { value: f(prod.impresion),                w: colImp                          },
-      { value: fmtMoney(precioUnit),             w: colPre,  right: true            },
-      { value: fmtMoney(prod.precio_total_real), w: colTot,  right: true, bold: true },
+    interface RowCol { value: string; align: "left" | "center"; bold?: boolean }
+    const rowCols: RowCol[] = [
+      { value: productoMedida,                  align: "left"               },
+      { value: fmtNum(prod.cantidad_real),       align: "center"            },
+      { value: f(prod.material),                 align: "center"            },
+      { value: f(prod.impresion),                align: "center"            },
+      { value: fmtMoney(precioUnit),             align: "center"            },
+      { value: fmtMoney(prod.precio_total_real), align: "center", bold: true },
     ];
 
     doc.setFillColor(...bg);
@@ -262,25 +278,23 @@ export async function generarPdfEstadoCuentaSimple(
     doc.setLineWidth(0.15);
     doc.line(M, y + rowH, M + CW, y + rowH);
 
-    let rx = M;
-    cols.forEach(col => {
+    rowCols.forEach((col, i) => {
       doc.setFont("helvetica", col.bold ? "bold" : "normal");
       doc.setFontSize(8.5);
       doc.setTextColor(...GRAY_90);
-      const tx = col.right ? rx + col.w - 2 : rx + 2;
-      doc.text(col.value, tx, y + rowH / 2 + 1, {
-        align:    col.right ? "right" : "left",
-        maxWidth: col.w - 4,
+      const x = col.align === "left"
+        ? xCols[i] + 2
+        : xCols[i] + wCols[i] / 2;
+      doc.text(col.value, x, y + rowH / 2 + 1, {
+        align:    col.align,
+        maxWidth: wCols[i] - 4,
       });
-      rx += col.w;
     });
 
     y += rowH;
 
-    // ── Fila herramental del producto ────────────────────────
     if (prod.herramental_aprobado === true && prod.herramental_precio != null && prod.herramental_precio > 0) {
       const herrH = 16;
-
       doc.setFillColor(250, 246, 235);
       doc.rect(M, y, CW, herrH, "F");
       doc.setDrawColor(200, 170, 120);
@@ -349,17 +363,18 @@ export async function generarPdfEstadoCuentaSimple(
   filaTotales(doc, "Sub-Total",    fmtMoney(datos.subtotal_real), ty, totLX, totVX, totX, totW);
   ty += totalesLineH;
 
-  filaTotales(doc, "I.V.A. (16%)", fmtMoney(datos.iva_real),      ty, totLX, totVX, totX, totW, { gris: true });
+  filaTotales(doc, "I.V.A. (16%)", fmtMoney(datos.iva_real), ty, totLX, totVX, totX, totW, { gris: true });
   ty += totalesLineH;
 
-  filaTotales(doc, "Total",        fmtMoney(datos.total_real),    ty, totLX, totVX, totX, totW, { bold: true, separador: true });
+  filaTotales(doc, "Total", fmtMoney(datos.total_real), ty, totLX, totVX, totX, totW, { bold: true, separador: true });
   ty += totalesLineH;
 
-  // ── Anticipo req.: $0.00 si fue autorizado por crédito ────
   filaTotales(
     doc,
-    "Anticipo req.",
-    datos.es_credito_anticipo ? fmtMoney(0) : fmtMoney(datos.anticipo),
+    "Anticipo ",
+    datos.es_credito_anticipo
+      ? fmtMoney(0)
+      : fmtMoney(datos.primer_pago_anticipo ?? datos.anticipo),
     ty, totLX, totVX, totX, totW,
     { gris: true }
   );
@@ -373,7 +388,6 @@ export async function generarPdfEstadoCuentaSimple(
     { destacado: true }
   );
 
-  // Nota a la izquierda del bloque totales
   doc.setFont("helvetica", "italic");
   doc.setFontSize(8);
   doc.setTextColor(...GRAY_60);
@@ -382,7 +396,6 @@ export async function generarPdfEstadoCuentaSimple(
     M, y + 8 + 8, { maxWidth: totX - M - 4 }
   );
 
-  // Nota herramental a la izquierda si aplica
   if (tieneHerramental) {
     doc.setFont("helvetica", "italic");
     doc.setFontSize(7.5);
@@ -406,64 +419,81 @@ export async function generarPdfEstadoCuentaSimple(
   y += 10;
 
   // ══════════════════════════════════════════════════════════
-  // PIE — DATOS BANCARIOS + CONTACTO
+  // PIE — 3 columnas: BANCO | QR WHATSAPP | CONTACTO
   // ══════════════════════════════════════════════════════════
-  const colBancoW    = CW * 0.52;
-  const colContactoX = M + colBancoW + 8;
-  const yPieStart    = y;
+  const QR_SIZE   = 20;
+  const colBancoW = CW * 0.45;
+  const colConW   = CW * 0.35;
+  const espacioQr = CW - colBancoW - colConW;
 
-  // ── Columna izquierda ──
+  const xBanco    = M;
+  const xContacto = M + colBancoW + espacioQr;
+
+  // QR: centrado horizontalmente en el hueco, borde superior = yPie (mismo que títulos)
+  const xQr = xBanco + colBancoW + (espacioQr - QR_SIZE) / 2 - 5;
+  const yQr = y - 4;   // ← alineado con "Datos para transferencia" y "Contacto"
+  const yPie = y;
+
+  // ── Col 1: Banco ──────────────────────────────────────────
   doc.setFont("helvetica", "bold");
   doc.setFontSize(9);
   doc.setTextColor(...GRAY_90);
-  doc.text("Datos para transferencia", M, y);
-
-  y += 6;
+  doc.text("Datos para transferencia", xBanco, yPie);
 
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(8.5);
+  doc.setFontSize(8);
   doc.setTextColor(...GRAY_60);
   doc.text(
-    "Favor de realizar su depósito a cualquiera de las siguientes cuentas y enviar comprobante por WhatsApp.",
-    M, y, { maxWidth: colBancoW }
+    "Favor de realizar su depósito a cualquiera de las\nsiguientes cuentas y enviar comprobante por WhatsApp.",
+    xBanco, yPie + 6, { maxWidth: colBancoW }
   );
 
-  y += 13;
-
   doc.setFillColor(...GRAY_90);
-  doc.rect(M, y - 1.5, 24, 7, "F");
+  doc.rect(xBanco, yPie + 19, 22, 6.5, "F");
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(8.5);
+  doc.setFontSize(8);
   doc.setTextColor(...WHITE);
-  doc.text("Banamex", M + 12, y + 3.2, { align: "center" });
+  doc.text("Banamex", xBanco + 11, yPie + 23.5, { align: "center" });
   doc.setTextColor(...BLACK);
-
-  y += 9;
 
   const datoBancario = (label: string, value: string, yy: number) => {
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(8.5);
+    doc.setFontSize(12);
     doc.setTextColor(...GRAY_60);
-    doc.text(`${label}:`, M, yy);
+    doc.text(`${label}:`, xBanco, yy);
     const lw = doc.getTextWidth(`${label}:  `);
     doc.setFont("helvetica", "bold");
     doc.setTextColor(...GRAY_90);
-    doc.text(value, M + lw, yy);
+    doc.text(value, xBanco + lw, yy);
     doc.setTextColor(...BLACK);
   };
 
-  datoBancario("Cuenta",      "70010708964",          y); y += 6;
-  datoBancario("CLABE",       "002320700107089643",   y); y += 6;
-  datoBancario("A nombre de", "Grupeb S.A. de C.V.", y);
+  datoBancario("Cuenta",      "70010708964",         yPie + 30);
+  datoBancario("CLABE",       "002320700107089643",  yPie + 37);
+  datoBancario("A nombre de", "Grupeb S.A. de C.V.", yPie + 44);
 
-  // ── Columna derecha ──
-  let yc = yPieStart;
+  // ── Col 2: QR centrado + número ───────────────────────────
+  if (qrWaBase64) {
+    try {
+      doc.addImage(qrWaBase64, "PNG", xQr, yQr, QR_SIZE, QR_SIZE);
+    } catch { /* silencioso */ }
+  }
 
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(7.5);
+  doc.setTextColor(...GRAY_60);
+  doc.text("WhatsApp", xQr + QR_SIZE / 2, yQr + QR_SIZE + 4, { align: "center" });
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(10);
+  doc.setTextColor(...GRAY_90);
+  doc.text("333 954 0924", xQr + QR_SIZE / 2, yQr + QR_SIZE + 10, { align: "center" });
+
+  // ── Col 3: Contacto ───────────────────────────────────────
   doc.setFont("helvetica", "bold");
   doc.setFontSize(9);
   doc.setTextColor(...GRAY_90);
-  doc.text("Contacto", colContactoX, yc);
-  yc += 7;
+  doc.text("Contacto", xContacto, yPie);
 
   const contactoItems = [
     "Departamento de Ventas",
@@ -471,16 +501,17 @@ export async function generarPdfEstadoCuentaSimple(
     "Tels. (33) 3180-3373 · 3125-9595 · 3180-1460",
     "www.grupoeb.com.mx",
   ];
+  let yc = yPie + 7;
   contactoItems.forEach(item => {
     doc.setFont("helvetica", "normal");
     doc.setFontSize(8.5);
     doc.setTextColor(...GRAY_60);
-    doc.text(item, colContactoX, yc, { maxWidth: CW - colBancoW - 8 });
+    doc.text(item, xContacto, yc, { maxWidth: colConW });
     yc += 5.5;
   });
 
   // ══════════════════════════════════════════════════════════
-  // BANDA INFERIOR NEGRA
+  // BANDA INFERIOR
   // ══════════════════════════════════════════════════════════
   const pieH = 14;
   const pieY = PH - pieH;

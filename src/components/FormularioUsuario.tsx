@@ -6,7 +6,7 @@ import type { Privilegio } from "../types/privilegio.types";
 import type { CreateUsuarioRequest, UpdateUsuarioRequest, Usuario } from "../types/usuario.types";
 
 // Roles que tienen privilegios base en BD y no requieren selección manual
-const ROLES_CON_PRIVILEGIOS_BASE = ["Planta", "Ventas"];
+const ROLES_CON_PRIVILEGIOS_BASE = ["Planta", "Ventas", "Diseño"];
 
 interface FormularioUsuarioProps {
   onSubmit: (datos: CreateUsuarioRequest | UpdateUsuarioRequest) => void;
@@ -184,7 +184,6 @@ export default function FormularioUsuario({
     const rolSeleccionado = roles.find(r => r.idroles === datos.roles_idroles);
     const rolNombre       = rolSeleccionado?.nombre ?? "";
 
-    // Roles con privilegios base en BD no requieren selección manual
     const tienePrivilegiosBase = ROLES_CON_PRIVILEGIOS_BASE.includes(rolNombre);
 
     if (
@@ -379,9 +378,8 @@ export default function FormularioUsuario({
             <p className="text-green-700 text-sm mt-1">No es necesario asignar privilegios individuales</p>
           </div>
         ) : esRolConBase && datos.privilegios && datos.privilegios.length > 0 && !datos.privilegios.some(
-          p => privilegios.find(priv => priv.idprivilegios === p && !["Acceso Planta", "Crear/Editar/Aprobar/Rechazar Cotizaciones", "Crear/Editar/Eliminar Pedidos", "Editar Anticipo y Liquidacion"].includes(priv.privilegio))
-        ) ? (
-          // Rol con solo privilegios base — mostrar info y permitir agregar más
+          p => privilegios.find(priv => priv.idprivilegios === p && !!["Acceso Planta", "Crear/Editar/Aprobar/Rechazar Cotizaciones", "Crear/Editar/Eliminar Pedidos", "Editar Anticipo y Liquidacion", "Orden de Diseño", "Editar Diseño"].includes(priv.privilegio)
+        )) ? (
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
             <p className="text-blue-800 font-medium text-sm">
               ✓ Este rol incluye sus privilegios base automáticamente

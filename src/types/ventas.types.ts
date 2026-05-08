@@ -56,6 +56,10 @@ export interface DisenoProducto {
   estado:               string;
   observaciones:        string | null;
   fecha:                string;
+  // ── Orden de Diseño ──────────────────
+  idorden_diseno?:      number | null;
+  no_orden_diseno?:     string | null;
+  orden_diseno_estado?: string | null;
 }
 
 export interface Diseno {
@@ -74,6 +78,7 @@ export interface Diseno {
   pendientes:            number;
   diseno_completado:     boolean;
   tiene_rechazados:      boolean;
+
 }
 
 export interface CondicionesProduccion {

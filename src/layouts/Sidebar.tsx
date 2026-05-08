@@ -8,20 +8,20 @@ interface DashboardProps {
 }
 
 interface MenuItem {
-  name:      string;
-  path?:     string;
-  permiso?:  string;
+  name: string;
+  path?: string;
+  permiso?: string;
   permisoOr?: string[]; // visible si tiene CUALQUIERA de estos permisos
-  subItems:  { name: string; path: string; permiso?: string }[];
+  subItems: { name: string; path: string; permiso?: string }[];
 }
 
 export default function Dashboard({ children }: DashboardProps) {
-  const [open,          setOpen]          = useState(false);
-  const [isMobile,      setIsMobile]      = useState(false);
+  const [open, setOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
   const [expandedMenus, setExpandedMenus] = useState<string[]>([]);
 
-  const navigate        = useNavigate();
-  const location        = useLocation();
+  const navigate = useNavigate();
+  const location = useLocation();
   const { user, logout, tienePermiso } = useAuth();
 
   const handleLogout = async () => {
@@ -42,47 +42,50 @@ export default function Dashboard({ children }: DashboardProps) {
 
   const menuItems: MenuItem[] = [
     {
-      name:    "Usuarios",
-      path:    "/usuarios",
+      name: "Usuarios",
+      path: "/usuarios",
       permiso: "Crear/Editar/Eliminar Usuarios",
       subItems: [],
     },
     {
-      name:    "Clientes",
-      path:    "/clientes",
+      name: "Clientes",
+      path: "/clientes",
       permiso: "Crear/Editar/Eliminar Clientes",
       subItems: [],
     },
     {
-      name:    "Dar alta productos",
+      name: "Dar alta productos",
       permiso: "Dar de alta productos",
       subItems: [
         { name: "Plástico", path: "/plastico", permiso: "Dar de alta productos" },
       ],
     },
     {
-      name:    "Cotización",
-      path:    "/cotizar",
+      name: "Cotización",
+      path: "/cotizar",
       permiso: "Crear/Editar/Aprobar/Rechazar Cotizaciones",
       subItems: [],
     },
     {
-      name:    "Pedido",
-      path:    "/pedido",
+      name: "Pedido",
+      path: "/pedido",
       permiso: "Crear/Editar/Eliminar Pedidos",
       subItems: [],
     },
     {
-      name:    "Diseño",
-      path:    "/diseno",
-      permiso: "Editar Diseño",
+      // ── DISEÑO ──────────────────────────────────────────────────────────
+      // Visible para quien tenga "Editar Diseño" (rol Diseño, acciones completas)
+      // O "Orden de Diseño" (cualquier rol, acceso solo a chat)
+      name: "Diseño",
+      path: "/diseno",
+      permisoOr: ["Editar Diseño", "Orden de Diseño"],
       subItems: [],
     },
     {
       // Seguimiento — visible para acceso_total, operadores de planta,
       // o quien tenga el privilegio "Ver Seguimiento"
-      name:      "Seguimiento",
-      path:      "/seguimiento",
+      name: "Seguimiento",
+      path: "/seguimiento",
       permisoOr: [
         "Ver Seguimiento",
         "Acceso Planta",
@@ -94,17 +97,30 @@ export default function Dashboard({ children }: DashboardProps) {
       subItems: [],
     },
     {
-      name:    "Anticipo / Liquidación",
-      path:    "/anticipolicacion",
+      name: "Envíos",
+      path: "/envios",
+      permiso: "Gestionar Envios",
+      subItems: [],
+    },
+    {
+      name: "Anticipo / Liquidación",
+      path: "/anticipolicacion",
       permiso: "Editar Anticipo y Liquidacion",
       subItems: [],
     },
     {
-      name:    "Precios productos",
+      name: "Precios productos",
       permiso: "Modificar Catalogo de precios",
       subItems: [
         { name: "Plástico", path: "/precioplastico", permiso: "Modificar Catalogo de precios" },
       ],
+    },
+
+    {
+      name: "Archivos",
+      path: "/archivos",
+      subItems: [],
+      // sin permiso = visible para todos los usuarios autenticados
     },
   ];
 
@@ -139,8 +155,8 @@ export default function Dashboard({ children }: DashboardProps) {
     path && location.pathname.startsWith(path);
 
   const renderMenuItem = (item: MenuItem) => {
-    const hasSub      = item.subItems.length > 0;
-    const expanded    = expandedMenus.includes(item.name);
+    const hasSub = item.subItems.length > 0;
+    const expanded = expandedMenus.includes(item.name);
     const activeParent =
       (item.path && isActive(item.path)) ||
       item.subItems.some((s) => isActive(s.path));
