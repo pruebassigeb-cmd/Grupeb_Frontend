@@ -116,12 +116,12 @@ export default function Dashboard({ children }: DashboardProps) {
       ],
     },
 
-    {
+    /*{
       name: "Archivos",
       path: "/archivos",
       subItems: [],
       // sin permiso = visible para todos los usuarios autenticados
-    },
+    },*/
   ];
 
   // Filtrar items según permisos del usuario
