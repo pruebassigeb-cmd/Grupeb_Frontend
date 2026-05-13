@@ -56,7 +56,7 @@ export const CONFIG_PRODUCTOS: Record<string, ConfigProducto> = {
     medidas: [
       { key: "altura", label: "Altura", position: "left" },
       { key: "ancho", label: "Ancho", position: "top" },
-      { key: "solapa", label: "Solapa", position: "top-inside" },
+      { key: "refuerzo", label: "Refuerzo", position: "top-inside" },
       { key: "fuelleFondo", label: "Fuelle fondo", position: "bottom" },
     ],
   },
@@ -135,7 +135,6 @@ export default function SelectorProducto({
     fuelleLateral1: "",
     fuelleLateral2: "",
     refuerzo: "",
-    solapa: "",
   });
 
   const [mostrarDropdownTipo, setMostrarDropdownTipo] = useState(false);
@@ -343,7 +342,6 @@ export default function SelectorProducto({
                       fuelleLateral1: "",
                       fuelleLateral2: "",
                       refuerzo: "",
-                      solapa: "",
                     });
                     if (tipo.nombre === "Bolsa celofán") {
                       const materialBopp = catalogos.materiales.find(
@@ -437,7 +435,6 @@ export default function SelectorProducto({
                         fuelleLateral1: "",
                         fuelleLateral2: "",
                         refuerzo: "",
-                        solapa: "",
                       });
                     }
                     setCalibre("");

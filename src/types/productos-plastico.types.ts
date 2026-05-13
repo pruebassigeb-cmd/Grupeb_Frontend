@@ -115,8 +115,7 @@ export type MedidaKey =
   | "fuelleFondo"
   | "fuelleLateral1"
   | "fuelleLateral2"
-  | "refuerzo"
-  | "solapa";
+  | "refuerzo";
 
 export interface DatosProducto {
   tipoProducto: string;
@@ -145,6 +144,6 @@ export interface ConfigProducto {
 // ========================
 
 export const FORMATO_MEDIDAS = {
-  verticales: ["altura", "fuelleFondo", "refuerzo", "solapa"] as MedidaKey[],
+  verticales: ["altura", "fuelleFondo", "refuerzo"] as MedidaKey[],
   horizontales: ["ancho", "fuelleLateral1", "fuelleLateral2"] as MedidaKey[],
 } as const;

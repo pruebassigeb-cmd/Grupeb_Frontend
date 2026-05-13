@@ -107,7 +107,6 @@
 //       fuelleLateral1: "",
 //       fuelleLateral2: "",
 //       refuerzo: "",
-//       solapa: "",
 //     },
 //     medidasFormateadas: "30x40",
 //     bolsasPorKilo: "88.652"
@@ -125,7 +124,6 @@
 //       fuelleLateral1: "",
 //       fuelleLateral2: "",
 //       refuerzo: "",
-//       solapa: "",
 //     },
 //     medidasFormateadas: "40x50",
 //     bolsasPorKilo: "66.489"
@@ -143,7 +141,6 @@
 //       fuelleLateral1: "8",
 //       fuelleLateral2: "8",
 //       refuerzo: "5",
-//       solapa: "",
 //     },
 //     medidasFormateadas: "30+10+5x40+8+8",
 //     bolsasPorKilo: "55.320"
@@ -160,8 +157,7 @@
 //       fuelleFondo: "10",
 //       fuelleLateral1: "",
 //       fuelleLateral2: "",
-//       refuerzo: "",
-//       solapa: "5",
+//       refuerzo: "5",
 //     },
 //     medidasFormateadas: "30+10+5x40",
 //     bolsasPorKilo: "47.234"
@@ -205,7 +201,6 @@
 //       fuelleLateral1: "",
 //       fuelleLateral2: "",
 //       refuerzo: "",
-//       solapa: "",
 //     },
 //     medidasFormateadas: "",
 //   });
@@ -222,7 +217,6 @@
 //       fuelleLateral1: "",
 //       fuelleLateral2: "",
 //       refuerzo: "",
-//       solapa: "",
 //     },
 //     medidasFormateadas: "",
 //     nombreCompleto: "",
@@ -373,7 +367,6 @@
 //           fuelleLateral1: "",
 //           fuelleLateral2: "",
 //           refuerzo: "",
-//           solapa: "",
 //         },
 //         medidasFormateadas: "",
 //       });
@@ -389,7 +382,6 @@
 //           fuelleLateral1: "",
 //           fuelleLateral2: "",
 //           refuerzo: "",
-//           solapa: "",
 //         },
 //         medidasFormateadas: "",
 //         nombreCompleto: "",

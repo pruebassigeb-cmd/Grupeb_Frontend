@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback } from "react";
 import { getRegimenesFiscales, getMetodosPago, getFormasPago } from "../services/catalogosService";
 import type { RegimenFiscal, MetodoPago, FormaPago } from "../types/clientes.types";
 import type { CreateClienteRequest, UpdateClienteRequest, Cliente } from "../types/clientes.types";
-
+import { showAlert } from './CustomAlert';
+import { buscarCodigoPostal } from "../services/codigoPostalService";
 const MONEDAS = [
   { codigo: "MXN", nombre: "Peso mexicano (MXN)" },
   { codigo: "USD", nombre: "Dólar estadounidense (USD)" },
@@ -22,28 +23,27 @@ interface FormularioClienteProps {
   clienteEditar?: Cliente | null;
 }
 
+type OpcionCP = {
+  colonia: string;
+  poblacion: string;
+  estado: string;
+};
+
 // ── Hook CP ─────────────────────────────────────────────────────────────────
 function useCodigoPostal() {
   const [cargandoCP, setCargandoCP] = useState(false);
   const [errorCP,    setErrorCP]    = useState<string | null>(null);
 
-  const buscarCP = useCallback(async (cp: string): Promise<{ poblacion: string; estado: string } | null> => {
-    if (cp.length !== 5) return null;
+  const buscarCP = useCallback(async (cp: string): Promise<OpcionCP[]> => {
+    if (cp.length !== 5) return [];
     setCargandoCP(true);
     setErrorCP(null);
     try {
-      const res = await fetch(`https://api.zippopotam.us/mx/${cp}`);
-      if (!res.ok) throw new Error("No encontrado");
-      const data = await res.json();
-      const lugar = data.places?.[0];
-      if (!lugar) throw new Error("Sin datos");
-      return {
-        poblacion: lugar["place name"] || "",
-        estado:    lugar["state"]      || "",
-      };
+      const data = await buscarCodigoPostal(cp);
+      return data;
     } catch {
       setErrorCP("CP no encontrado — puedes capturar los datos manualmente");
-      return null;
+      return [];
     } finally {
       setCargandoCP(false);
     }
@@ -61,6 +61,9 @@ export default function FormularioCliente({ onSubmit, onCancel, clienteEditar }:
 
   const { buscarCP: buscarCPPrincipal, cargandoCP: cargandoCPPrincipal, errorCP: errorCPPrincipal, setErrorCP: setErrorCPPrincipal } = useCodigoPostal();
   const { buscarCP: buscarCPEnvio,     cargandoCP: cargandoCPEnvio,     errorCP: errorCPEnvio,     setErrorCP: setErrorCPEnvio     } = useCodigoPostal();
+
+  const [opcionesCPPrincipal, setOpcionesCPPrincipal] = useState<OpcionCP[]>([]);
+  const [opcionesCPEnvio, setOpcionesCPEnvio] = useState<OpcionCP[]>([]);
 
   const esEdicion = !!clienteEditar;
 
@@ -122,37 +125,49 @@ export default function FormularioCliente({ onSubmit, onCancel, clienteEditar }:
   // ── CP domicilio principal ───────────────────────────────────────────────
   const handleCodigoPostalChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const valor = e.target.value.replace(/\D/g, "");
-    setDatos((prev) => ({ ...prev, codigo_postal: valor }));
+    setDatos((prev) => ({ ...prev, codigo_postal: valor, colonia: "", poblacion: "", estado: "" }));
+    setOpcionesCPPrincipal([]);
     setErrorCPPrincipal(null);
     if (valor.length === 5) {
-      buscarCPPrincipal(valor).then((resultado) => {
-        if (resultado) {
-          setDatos((prev) => ({
-            ...prev,
-            poblacion: resultado.poblacion,
-            estado:    resultado.estado,
-          }));
-        }
+      buscarCPPrincipal(valor).then((opciones) => {
+        setOpcionesCPPrincipal(opciones);
       });
     }
+  };
+
+  const handleSeleccionCPPrincipal = (colonia: string) => {
+    const opcion = opcionesCPPrincipal.find(o => o.colonia === colonia);
+    if (!opcion) return;
+    setDatos(prev => ({
+      ...prev,
+      colonia: opcion.colonia,
+      poblacion: opcion.poblacion,
+      estado: opcion.estado,
+    }));
   };
 
   // ── CP dirección de envío ────────────────────────────────────────────────
   const handleCodigoPostalEnvioChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const valor = e.target.value.replace(/\D/g, "");
-    setDatos((prev) => ({ ...prev, envio_codigo_postal: valor }));
+    setDatos((prev) => ({ ...prev, envio_codigo_postal: valor, envio_colonia: "", envio_poblacion: "", envio_estado: "" }));
+    setOpcionesCPEnvio([]);
     setErrorCPEnvio(null);
     if (valor.length === 5) {
-      buscarCPEnvio(valor).then((resultado) => {
-        if (resultado) {
-          setDatos((prev) => ({
-            ...prev,
-            envio_poblacion: resultado.poblacion,
-            envio_estado:    resultado.estado,
-          }));
-        }
+      buscarCPEnvio(valor).then((opciones) => {
+        setOpcionesCPEnvio(opciones);
       });
     }
+  };
+
+  const handleSeleccionCPEnvio = (colonia: string) => {
+    const opcion = opcionesCPEnvio.find(o => o.colonia === colonia);
+    if (!opcion) return;
+    setDatos(prev => ({
+      ...prev,
+      envio_colonia: opcion.colonia,
+      envio_poblacion: opcion.poblacion,
+      envio_estado: opcion.estado,
+    }));
   };
 
   // ── Botón "Misma Dirección" ──────────────────────────────────────────────
@@ -183,7 +198,7 @@ export default function FormularioCliente({ onSubmit, onCancel, clienteEditar }:
       await onSubmit(datosFinales);
     } catch (error: any) {
       console.error("Error al guardar cliente:", error);
-      if (error.response?.data?.error) alert(`Error: ${error.response.data.error}`);
+      if (error.response?.data?.error) showAlert(`Error: ${error.response.data.error}`);
     } finally {
       setLoading(false);
     }
@@ -276,17 +291,15 @@ export default function FormularioCliente({ onSubmit, onCancel, clienteEditar }:
 
           <div>
             <label className={labelClass}>Domicilio</label>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 gap-4">
               <input type="text" name="domicilio" value={datos.domicilio} onChange={handleInputChange}
                 className={inputClass} placeholder="Calle" />
               <input type="text" name="numero" value={datos.numero} onChange={handleInputChange}
                 className={inputClass} placeholder="Número" />
-              <input type="text" name="colonia" value={datos.colonia} onChange={handleInputChange}
-                className={inputClass} placeholder="Colonia" />
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-4 gap-4">
             {/* ── CP principal inline (sin sub-componente) ── */}
             <div>
               <label className={labelClass}>
@@ -320,6 +333,34 @@ export default function FormularioCliente({ onSubmit, onCancel, clienteEditar }:
                   </svg>
                   {errorCPPrincipal}
                 </p>
+              )}
+            </div>
+
+            <div>
+              <label className={labelClass}>Colonia</label>
+              {opcionesCPPrincipal.length > 0 ? (
+                <select
+                  name="colonia"
+                  value={datos.colonia || ""}
+                  onChange={(e) => handleSeleccionCPPrincipal(e.target.value)}
+                  className={inputClass}
+                >
+                  <option value="">Selecciona colonia...</option>
+                  {opcionesCPPrincipal.map((opcion, index) => (
+                    <option key={`${opcion.colonia}-${index}`} value={opcion.colonia}>
+                      {opcion.colonia}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type="text"
+                  name="colonia"
+                  value={datos.colonia || ""}
+                  onChange={handleInputChange}
+                  className={inputClass}
+                  placeholder="Colonia"
+                />
               )}
             </div>
 
@@ -465,17 +506,15 @@ export default function FormularioCliente({ onSubmit, onCancel, clienteEditar }:
         <div className="space-y-4">
           <div>
             <label className={labelClass}>Domicilio de Envío</label>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 gap-4">
               <input type="text" name="envio_domicilio" value={datos.envio_domicilio || ""} onChange={handleInputChange}
                 className={inputClass} placeholder="Calle" />
               <input type="text" name="envio_numero" value={datos.envio_numero || ""} onChange={handleInputChange}
                 className={inputClass} placeholder="Número" />
-              <input type="text" name="envio_colonia" value={datos.envio_colonia || ""} onChange={handleInputChange}
-                className={inputClass} placeholder="Colonia" />
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-4 gap-4">
             {/* ── CP envío inline (sin sub-componente) ── */}
             <div>
               <label className={labelClass}>
@@ -509,6 +548,34 @@ export default function FormularioCliente({ onSubmit, onCancel, clienteEditar }:
                   </svg>
                   {errorCPEnvio}
                 </p>
+              )}
+            </div>
+
+            <div>
+              <label className={labelClass}>Colonia</label>
+              {opcionesCPEnvio.length > 0 ? (
+                <select
+                  name="envio_colonia"
+                  value={datos.envio_colonia || ""}
+                  onChange={(e) => handleSeleccionCPEnvio(e.target.value)}
+                  className={inputClass}
+                >
+                  <option value="">Selecciona colonia...</option>
+                  {opcionesCPEnvio.map((opcion, index) => (
+                    <option key={`${opcion.colonia}-${index}`} value={opcion.colonia}>
+                      {opcion.colonia}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type="text"
+                  name="envio_colonia"
+                  value={datos.envio_colonia || ""}
+                  onChange={handleInputChange}
+                  className={inputClass}
+                  placeholder="Colonia"
+                />
               )}
             </div>
 

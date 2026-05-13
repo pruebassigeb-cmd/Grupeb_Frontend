@@ -5,7 +5,15 @@ import {
 } from "../services/enviosService";
 import type { Paqueteria } from "../types/envios.types";
 import { inputClass, labelClass, buildMapsUrl, copiarLink } from "./enviosConstants";
+import { showAlert } from './CustomAlert';
+import { showConfirm } from './CustomConfirm';
+import { buscarCodigoPostal } from "../services/codigoPostalService";
 
+type OpcionCP = {
+  colonia: string;
+  poblacion: string;
+  estado: string;
+};
 const emptyForm = {
   nombre:    "",
   telefono:  "",
@@ -26,6 +34,7 @@ export default function TabPaqueterias() {
   const [editando,     setEditando]     = useState<Paqueteria | null>(null);
   const [guardando,    setGuardando]    = useState(false);
   const [form,         setForm]         = useState(emptyForm);
+  const [opcionesCP,   setOpcionesCP]   = useState<OpcionCP[]>([]);
   const [buscandoCP,   setBuscandoCP]   = useState(false);
   const [errorCP,      setErrorCP]      = useState<string | null>(null);
 
@@ -34,41 +43,46 @@ export default function TabPaqueterias() {
   const cargar = async () => {
     setLoading(true);
     try { setPaqueterias(await getPaqueterias()); }
-    catch { alert("Error al cargar paqueterías"); }
+    catch { showAlert("Error al cargar paqueterías"); }
     finally { setLoading(false); }
   };
 
-  const buscarCP = (cp: string) => {
+  const buscarCP = async (cp: string) => {
     setBuscandoCP(true);
     setErrorCP(null);
-    fetch(`https://api.zippopotam.us/mx/${cp}`)
-      .then(res => { if (!res.ok) throw new Error(); return res.json(); })
-      .then(data => {
-        const lugar = data.places?.[0];
-        if (lugar) {
-          setForm(prev => ({
-            ...prev,
-            poblacion: lugar["place name"] || prev.poblacion,
-            estado:    lugar["state"]       || prev.estado,
-          }));
-        } else {
-          setErrorCP("CP no encontrado, captura manualmente");
-        }
-      })
-      .catch(() => setErrorCP("No se pudo consultar el CP, captura manualmente"))
-      .finally(() => setBuscandoCP(false));
+    try {
+      const opciones = await buscarCodigoPostal(cp);
+      setOpcionesCP(opciones);
+    } catch {
+      setErrorCP("CP no encontrado, captura manualmente");
+    } finally {
+      setBuscandoCP(false);
+    }
   };
 
   const handleCpChange = (valor: string) => {
     const limpio = valor.replace(/\D/g, "").slice(0, 5);
-    setForm(prev => ({ ...prev, cp: limpio }));
+    setForm(prev => ({ ...prev, cp: limpio, colonia: "", poblacion: "", estado: "" }));
+    setOpcionesCP([]);
     setErrorCP(null);
     if (limpio.length === 5) buscarCP(limpio);
+  };
+
+  const handleSeleccionCP = (colonia: string) => {
+    const opcion = opcionesCP.find(o => o.colonia === colonia);
+    if (!opcion) return;
+    setForm(prev => ({
+      ...prev,
+      colonia: opcion.colonia,
+      poblacion: opcion.poblacion,
+      estado: opcion.estado,
+    }));
   };
 
   const abrirCrear = () => {
     setEditando(null);
     setForm(emptyForm);
+    setOpcionesCP([]);
     setErrorCP(null);
     setModalOpen(true);
   };
@@ -86,12 +100,13 @@ export default function TabPaqueterias() {
       poblacion: p.poblacion || "",
       estado:    p.estado    || "",
     });
+    setOpcionesCP([]);
     setErrorCP(null);
     setModalOpen(true);
   };
 
   const handleGuardar = async () => {
-    if (!form.nombre.trim()) { alert("El nombre es requerido"); return; }
+    if (!form.nombre.trim()) { showAlert("El nombre es requerido"); return; }
     setGuardando(true);
     try {
       const data = {
@@ -110,7 +125,7 @@ export default function TabPaqueterias() {
       setModalOpen(false);
       await cargar();
     } catch (e: any) {
-      alert(e.response?.data?.error || "Error al guardar");
+      showAlert(e.response?.data?.error || "Error al guardar");
     } finally {
       setGuardando(false);
     }
@@ -120,13 +135,13 @@ export default function TabPaqueterias() {
     try {
       await updatePaqueteria(p.idpaqueteria, { nombre: p.nombre, activo: !p.activo });
       await cargar();
-    } catch { alert("Error al actualizar estado"); }
+    } catch { showAlert("Error al actualizar estado"); }
   };
 
   const handleEliminar = async (id: number) => {
-    if (!confirm("¿Eliminar esta paquetería?")) return;
+    if (!await showConfirm("¿Eliminar esta paquetería?")) return;
     try { await deletePaqueteria(id); await cargar(); }
-    catch (e: any) { alert(e.response?.data?.error || "Error al eliminar"); }
+    catch (e: any) { showAlert(e.response?.data?.error || "Error al eliminar"); }
   };
 
   const getMapsUrl = (p: Paqueteria) =>
@@ -325,12 +340,6 @@ export default function TabPaqueterias() {
             </div>
             <div className="grid grid-cols-2 gap-3 mt-3">
               <div>
-                <label className={labelClass}>Colonia</label>
-                <input type="text" value={form.colonia}
-                  onChange={e => setForm({ ...form, colonia: e.target.value })}
-                  className={inputClass} placeholder="Centro" />
-              </div>
-              <div>
                 <label className={labelClass}>
                   C.P.
                   {buscandoCP && (
@@ -342,12 +351,33 @@ export default function TabPaqueterias() {
                   inputMode="numeric"
                   value={form.cp}
                   onChange={e => handleCpChange(e.target.value)}
-                  className={inputClass}
+                  className={errorCP ? `${inputClass} border-orange-300` : inputClass}
                   placeholder="44100"
                   maxLength={5}
                 />
                 {errorCP && (
                   <p className="mt-1 text-xs text-amber-600">{errorCP}</p>
+                )}
+              </div>
+              <div>
+                <label className={labelClass}>Colonia</label>
+                {opcionesCP.length > 0 ? (
+                  <select
+                    value={form.colonia}
+                    onChange={(e) => handleSeleccionCP(e.target.value)}
+                    className={inputClass}
+                  >
+                    <option value="">Selecciona colonia...</option>
+                    {opcionesCP.map((opcion, index) => (
+                      <option key={`${opcion.colonia}-${index}`} value={opcion.colonia}>
+                        {opcion.colonia}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input type="text" value={form.colonia}
+                    onChange={e => setForm({ ...form, colonia: e.target.value })}
+                    className={inputClass} placeholder="Centro" />
                 )}
               </div>
             </div>

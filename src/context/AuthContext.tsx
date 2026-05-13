@@ -12,6 +12,7 @@ interface User {
   rol?:         string;
   acceso_total?: boolean;
   privilegios:  string[];
+  foto_url?:    string;  // URL firmada de la foto (opcional)
 }
 
 interface AuthContextType {
@@ -19,7 +20,8 @@ interface AuthContextType {
   login:   (correo: string, codigo: string) => Promise<void>;
   logout:  () => Promise<void>;
   loading: boolean;
-  tienePermiso: (permiso: string) => boolean;
+  tienePermiso:   (permiso: string) => boolean;
+  refreshFotoUrl: (foto_url: string | null) => void; // para actualizar foto sin re-login
 }
 
 // ==========================
@@ -30,7 +32,6 @@ const getSavedUser = (): User | null => {
     const raw = localStorage.getItem("user");
     if (!raw) return null;
     const parsed = JSON.parse(raw);
-    // Garantizar que privilegios siempre sea array
     return { ...parsed, privilegios: parsed.privilegios ?? [] };
   } catch {
     return null;
@@ -60,6 +61,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const usuario: User = {
       ...data.usuario,
       privilegios: data.usuario.privilegios ?? [],
+      foto_url:    data.usuario.foto_url ?? undefined,
     };
     setUser(usuario);
     saveUser(usuario);
@@ -76,7 +78,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  // Helper reactivo para verificar permisos desde cualquier componente
+  // Actualizar foto_url en contexto y localStorage sin re-login
+  // (útil cuando el usuario edita su propio perfil)
+  const refreshFotoUrl = (foto_url: string | null) => {
+    setUser(prev => {
+      if (!prev) return prev;
+      const updated = { ...prev, foto_url: foto_url ?? undefined };
+      saveUser(updated);
+      return updated;
+    });
+  };
+
   const tienePermiso = (permiso: string): boolean => {
     if (!user) return false;
     if (user.acceso_total) return true;
@@ -84,7 +96,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, loading, tienePermiso }}>
+    <AuthContext.Provider value={{ user, login, logout, loading, tienePermiso, refreshFotoUrl }}>
       {children}
     </AuthContext.Provider>
   );

@@ -1,3 +1,4 @@
+import { showAlert } from './CustomAlert';
 export const OBSERVACIONES = [
   { value: "E",  label: "E — Entrega realizada" },
   { value: "RA", label: "RA — Retraso por ausencia de cliente" },
@@ -64,5 +65,5 @@ export const buildMapsUrl = (calle: string, numero: string, colonia: string, pob
 };
 
 export const copiarLink = (url: string) => {
-  navigator.clipboard.writeText(url).then(() => alert("Link copiado al portapapeles"));
+  navigator.clipboard.writeText(url).then(() => showAlert("Link copiado al portapapeles"));
 };

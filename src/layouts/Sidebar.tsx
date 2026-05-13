@@ -11,7 +11,8 @@ interface MenuItem {
   name: string;
   path?: string;
   permiso?: string;
-  permisoOr?: string[]; // visible si tiene CUALQUIERA de estos permisos
+  permisoOr?: string[];
+  accesoTotal?: boolean;
   subItems: { name: string; path: string; permiso?: string }[];
 }
 
@@ -73,17 +74,12 @@ export default function Dashboard({ children }: DashboardProps) {
       subItems: [],
     },
     {
-      // ── DISEÑO ──────────────────────────────────────────────────────────
-      // Visible para quien tenga "Editar Diseño" (rol Diseño, acciones completas)
-      // O "Orden de Diseño" (cualquier rol, acceso solo a chat)
       name: "Diseño",
       path: "/diseno",
       permisoOr: ["Editar Diseño", "Orden de Diseño"],
       subItems: [],
     },
     {
-      // Seguimiento — visible para acceso_total, operadores de planta,
-      // o quien tenga el privilegio "Ver Seguimiento"
       name: "Seguimiento",
       path: "/seguimiento",
       permisoOr: [
@@ -115,17 +111,22 @@ export default function Dashboard({ children }: DashboardProps) {
         { name: "Plástico", path: "/precioplastico", permiso: "Modificar Catalogo de precios" },
       ],
     },
-
-    /*{
+    {
       name: "Archivos",
       path: "/archivos",
+      accesoTotal: true,
       subItems: [],
-      // sin permiso = visible para todos los usuarios autenticados
-    },*/
+    },
+    {
+      name: "Backups BD",
+      path: "/backups",
+      accesoTotal: true,
+      subItems: [],
+    },
   ];
 
-  // Filtrar items según permisos del usuario
   const menuFiltrado = menuItems.filter((item) => {
+    if (item.accesoTotal) return user?.acceso_total === true;
     if (!item.permiso && !item.permisoOr) return true;
     if (user?.acceso_total) return true;
     if (item.permiso && tienePermiso(item.permiso)) return true;
@@ -212,13 +213,35 @@ export default function Dashboard({ children }: DashboardProps) {
     );
   };
 
+  // ── Avatar del usuario ──────────────────────────────────────────────────────
+  const UserAvatar = ({ size = "md" }: { size?: "sm" | "md" }) => {
+    const dim = size === "sm" ? "w-7 h-7 text-xs" : "w-10 h-10 text-sm";
+    return (
+      <div className={`${dim} rounded-full overflow-hidden bg-slate-600 border border-slate-500
+        flex items-center justify-center flex-shrink-0`}>
+        {user?.foto_url ? (
+          <img
+            src={user.foto_url}
+            alt={user.nombre}
+            className="w-full h-full object-cover"
+            onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+          />
+        ) : (
+          <span className="font-semibold text-white">
+            {user?.nombre?.[0]?.toUpperCase()}{user?.apellido?.[0]?.toUpperCase()}
+          </span>
+        )}
+      </div>
+    );
+  };
+
   const UserFooter = () => (
     <div className="border-t border-slate-700 p-4 mt-auto space-y-2">
       <div className="flex items-center gap-2 bg-slate-700 px-3 py-2 rounded text-white text-sm">
-        👤{" "}
-        <div>
-          <p className="font-medium">{user?.nombre} {user?.apellido}</p>
-          <p className="text-slate-400 text-xs">{user?.rol}</p>
+        <UserAvatar size="md" />
+        <div className="min-w-0">
+          <p className="font-medium truncate">{user?.nombre} {user?.apellido}</p>
+          <p className="text-slate-400 text-xs truncate">{user?.rol}</p>
         </div>
       </div>
       <button
@@ -278,8 +301,9 @@ export default function Dashboard({ children }: DashboardProps) {
             <div className="flex justify-between px-4 py-3">
               <button onClick={() => setOpen(true)} className="text-xl">☰</button>
               <h1 onClick={() => navigate("/home")} className="font-bold cursor-pointer">GRUPEB</h1>
-              <div className="flex gap-2 bg-slate-200 px-3 py-2 rounded text-sm">
-                👤 {user?.nombre}
+              <div className="flex items-center gap-2 bg-slate-200 px-3 py-2 rounded text-sm">
+                <UserAvatar size="sm" />
+                <span>{user?.nombre}</span>
               </div>
             </div>
           </header>

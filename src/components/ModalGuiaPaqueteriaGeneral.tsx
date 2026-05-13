@@ -1,8 +1,10 @@
 import { useState, useEffect } from "react";
-import { getGuiaPaqueteriaGeneral, getProductosSat, updateClavesSatBultos } from "../services/enviosService";
+import { getGuiaPaqueteriaGeneral, getProductosSat } from "../services/enviosService";
 import { generarGuiaPaqueteriaGeneral } from "../utils/generarGuiaPaqueteriaGeneral";
 import { inputClass, labelClass } from "./enviosConstants";
 import type { GuiaPaqueteriaGeneral, ProductoSat } from "../types/envios.types";
+import { showAlert } from './CustomAlert';
+
 
 interface Props {
   idenvio: number;
@@ -25,6 +27,16 @@ export default function ModalGuiaPaqueteriaGeneral({ idenvio, onClose }: Props) 
   const [claves,       setClaves]       = useState<ClavesBulto[]>([]);
   const [productosSat, setProductosSat] = useState<ProductoSat[]>([]);
   const [error,        setError]        = useState<string | null>(null);
+
+  // Nuevos campos: tipo de cobro y asegurado
+  type TipoCobro = "pagado" | "por_cobrar" | "cobrar_al_regreso";
+  const OPCIONES_COBRO: { value: TipoCobro; label: string }[] = [
+    { value: "pagado",            label: "Pagado"            },
+    { value: "por_cobrar",        label: "Por cobrar"        },
+    { value: "cobrar_al_regreso", label: "Cobrar al regreso" },
+  ];
+  const [tipoCobro, setTipoCobro] = useState<TipoCobro>("pagado");
+  const [asegurado, setAsegurado] = useState(false);
 
   // ── 1. Cargar datos + catálogo SAT ──
   useEffect(() => {
@@ -63,20 +75,16 @@ export default function ModalGuiaPaqueteriaGeneral({ idenvio, onClose }: Props) 
 
     const incompleto = claves.some(c => !c.clave_producto_sat.trim() || !c.clave_unidad_sat.trim());
     if (incompleto) {
-      alert("Por favor completa la clave de producto SAT y clave de unidad SAT para todos los bultos.");
+      showAlert("Por favor completa la clave de producto SAT y clave de unidad SAT para todos los bultos.");
       return;
     }
 
     setPaso("guardando");
     try {
-      await updateClavesSatBultos(idenvio, claves.map(c => ({
-        idbulto:            c.idbulto,
-        clave_producto_sat: c.clave_producto_sat,
-        clave_unidad_sat:   c.clave_unidad_sat,
-      })));
-
       const datosConClaves: GuiaPaqueteriaGeneral = {
         ...datos,
+        tipo_cobro: tipoCobro,
+        asegurado,
         bultos: datos.bultos.map(b => {
           const c = claves.find(x => x.idbulto === b.idbulto);
           return {
@@ -90,7 +98,7 @@ export default function ModalGuiaPaqueteriaGeneral({ idenvio, onClose }: Props) 
       generarGuiaPaqueteriaGeneral(datosConClaves);
       onClose();
     } catch {
-      alert("Error al guardar las claves SAT. Intenta de nuevo.");
+      showAlert("Error al generar la guía. Intenta de nuevo.");
       setPaso("claves");
     }
   };
@@ -114,6 +122,51 @@ export default function ModalGuiaPaqueteriaGeneral({ idenvio, onClose }: Props) 
         Ingresa las claves SAT para cada bulto. Se guardarán para la próxima vez.
       </div>
 
+      {/* ── Tipo de cobro y Asegurado ── */}
+      <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-3">
+
+        {/* Tipo de cobro */}
+        <div>
+          <label className={labelClass}>Tipo de cobro *</label>
+          <div className="flex gap-1 mt-1">
+            {OPCIONES_COBRO.map(op => (
+              <button
+                key={op.value}
+                type="button"
+                onClick={() => setTipoCobro(op.value)}
+                disabled={paso === "guardando"}
+                className={`flex-1 py-1.5 rounded text-xs font-medium transition-colors border ${
+                  tipoCobro === op.value
+                    ? "bg-blue-600 text-white border-blue-600"
+                    : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"
+                }`}>
+                {op.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Asegurado */}
+        <div className="flex items-center gap-3 pt-1 border-t border-gray-200">
+          <label className={labelClass}>¿Va asegurado?</label>
+          <button
+            type="button"
+            onClick={() => setAsegurado(v => !v)}
+            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
+              asegurado ? "bg-blue-600" : "bg-gray-300"
+            }`}>
+            <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+              asegurado ? "translate-x-6" : "translate-x-1"
+            }`} />
+          </button>
+          <span className="text-sm text-gray-600 font-medium">
+            {asegurado ? "Sí" : "No"}
+          </span>
+        </div>
+
+      </div>
+
+      {/* ── Claves SAT por bulto ── */}
       {claves.map((c, idx) => {
         const bultoDatos = datos?.bultos.find(b => b.idbulto === c.idbulto);
         return (

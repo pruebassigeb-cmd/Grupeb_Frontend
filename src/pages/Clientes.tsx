@@ -5,6 +5,10 @@ import { useState, useEffect } from "react";
 import { getClientes, getClienteById, createCliente, updateCliente, deleteCliente } from "../services/clientesService";
 import type { Cliente } from "../types/clientes.types";
 import type { CreateClienteRequest, UpdateClienteRequest } from "../types/clientes.types";
+import { showAlert } from '../components/CustomAlert';
+import { showConfirm } from '../components/CustomConfirm';
+
+
 
 export default function Clientes() {
   const [modalOpen,     setModalOpen]     = useState(false);
@@ -24,7 +28,7 @@ export default function Clientes() {
       setClientes(data);
     } catch (error) {
       console.error("Error al cargar clientes:", error);
-      alert("Error al cargar clientes");
+      showAlert("Error al cargar clientes");
     } finally {
       setLoading(false);
     }
@@ -62,20 +66,20 @@ const clientesFiltrados = clientes.filter((cliente) => {
       setModalOpen(true);
     } catch (error) {
       console.error("Error al cargar cliente:", error);
-      alert("Error al cargar datos del cliente");
+      showAlert("Error al cargar datos del cliente");
     }
   };
 
   const handleEliminar = async (id: number) => {
-    if (!confirm("¿Estás seguro de eliminar este cliente?")) return;
+    if (!await showConfirm("¿Estás seguro de eliminar este cliente?")) return;
 
     try {
       await deleteCliente(id);
       await cargarClientes();
-      alert("Cliente eliminado exitosamente");
+      showAlert("Cliente eliminado exitosamente");
     } catch (error) {
       console.error("Error al eliminar cliente:", error);
-      alert("Error al eliminar cliente");
+      showAlert("Error al eliminar cliente");
     }
   };
 
@@ -88,10 +92,10 @@ const clientesFiltrados = clientes.filter((cliente) => {
     try {
       if (clienteEditar) {
         await updateCliente(clienteEditar.idclientes, datos as UpdateClienteRequest);
-        alert("Cliente actualizado exitosamente");
+        showAlert("Cliente actualizado exitosamente");
       } else {
         await createCliente(datos as CreateClienteRequest);
-        alert("Cliente creado exitosamente");
+        showAlert("Cliente creado exitosamente");
       }
 
       await cargarClientes();
@@ -100,7 +104,7 @@ const clientesFiltrados = clientes.filter((cliente) => {
     } catch (error: any) {
       console.error("Error al guardar cliente:", error);
       const mensaje = error.response?.data?.error || "Error al guardar cliente";
-      alert(mensaje);
+      showAlert(mensaje);
     }
   };
 

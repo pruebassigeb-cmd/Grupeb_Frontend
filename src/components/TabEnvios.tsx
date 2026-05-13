@@ -14,6 +14,10 @@ import {
 } from "./enviosConstants";
 import FormularioEnvioIndividual from "./FormularioEnvioIndividual";
 import type { PedidoDisponible, BultoPedido, Envio, CarritoPedido } from "../types/envios.types";
+import { showAlert } from './CustomAlert';
+import { showConfirm } from './CustomConfirm';
+
+
 
 interface Props {
   carrito:         CarritoPedido[];
@@ -38,7 +42,7 @@ export default function TabEnvios({ carrito, onCarritoChange }: Props) {
   const cargar = async () => {
     setLoading(true);
     try { setPedidos(await getPedidosDisponibles()); }
-    catch { alert("Error al cargar pedidos"); }
+    catch { showAlert("Error al cargar pedidos"); }
     finally { setLoading(false); }
   };
 
@@ -63,7 +67,7 @@ export default function TabEnvios({ carrito, onCarritoChange }: Props) {
     setBultosSeleccionados([]);
     setLoadingBultos(true);
     try { await recargarDetalle(pedido.idsolicitud); }
-    catch { alert("Error al cargar bultos"); }
+    catch { showAlert("Error al cargar bultos"); }
     finally { setLoadingBultos(false); }
   };
 
@@ -90,7 +94,7 @@ export default function TabEnvios({ carrito, onCarritoChange }: Props) {
       await onCarritoChange();
       setBultosSeleccionados([]);
       await recargarDetalle(pedido.idsolicitud);
-    } catch { alert("Error al agregar al carrito"); }
+    } catch { showAlert("Error al agregar al carrito"); }
     finally { setAgregando(false); }
   };
 
@@ -99,23 +103,23 @@ export default function TabEnvios({ carrito, onCarritoChange }: Props) {
       await updateEstadoEnvio(idenvio, estado);
       if (pedidoExpandido) await recargarDetalle(pedidoExpandido);
       await cargar();
-    } catch { alert("Error al cambiar estado"); }
+    } catch { showAlert("Error al cambiar estado"); }
   };
 
   const handleEliminarEnvio = async (idenvio: number) => {
-    if (!confirm("¿Cancelar este envío?")) return;
+    if (!await showConfirm("¿Cancelar este envío?")) return;
     try {
       await deleteEnvio(idenvio);
       if (pedidoExpandido) await recargarDetalle(pedidoExpandido);
       await cargar();
-    } catch { alert("Error al cancelar envío"); }
+    } catch { showAlert("Error al cancelar envío"); }
   };
 
   const handleGenerarNota = async (idenvio: number) => {
     try {
       const nota = await getOrCreateNotaRemision(idenvio);
       await generarNotaRemision(nota);
-    } catch { alert("Error al generar nota de remisión"); }
+    } catch { showAlert("Error al generar nota de remisión"); }
   };
 
   const numeroBulto = (idbulto: number) => bultos.findIndex(b => b.idbulto === idbulto) + 1;

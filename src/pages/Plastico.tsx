@@ -12,6 +12,8 @@ import type {
 } from "../types/productos-plastico.types";
 import type { Tarifa } from "../types/tarifas.types";
 import { calcularPorKiloStr, calcularCelofanBopp } from "../utils/calcularPorKilo";
+import { showAlert } from '../components/CustomAlert';
+
 
 // ✅ Hardcodeado temporal para celofán hasta que se construya su tabla en BD
 const COSTOS_CELOFAN: Record<number, number> = {
@@ -35,7 +37,7 @@ export default function Plastico() {
     gramos: undefined,
     medidas: {
       altura: "", ancho: "", fuelleFondo: "",
-      fuelleLateral1: "", fuelleLateral2: "", refuerzo: "", solapa: "",
+      fuelleLateral1: "", fuelleLateral2: "", refuerzo: "",
     },
     medidasFormateadas: "",
     nombreCompleto: "",
@@ -109,17 +111,17 @@ export default function Plastico() {
 
   const guardarProducto = async () => {
     if (!datosProducto.tipoProductoId || !datosProducto.materialId || !datosProducto.calibreId) {
-      alert("Por favor completa todos los campos requeridos");
+      showAlert("Por favor completa todos los campos requeridos");
       return;
     }
 
     if (!bolsasPorKilo) {
-      alert("No se pudo calcular las bolsas por kilo");
+      showAlert("No se pudo calcular las bolsas por kilo");
       return;
     }
 
     if (!datosProducto.medidas.altura || !datosProducto.medidas.ancho) {
-      alert("Altura y Ancho son obligatorios");
+      showAlert("Altura y Ancho son obligatorios");
       return;
     }
 
@@ -131,12 +133,12 @@ export default function Plastico() {
         tipo_producto_plastico_id: datosProducto.tipoProductoId,
         material_plastico_id:      datosProducto.materialId,
         calibre_id:                datosProducto.calibreId,
-        altura:       parseInt(datosProducto.medidas.altura),
-        ancho:        parseInt(datosProducto.medidas.ancho),
-        fuelle_fondo: datosProducto.medidas.fuelleFondo    ? parseInt(datosProducto.medidas.fuelleFondo)    : 0,
-        fuelle_latIz: datosProducto.medidas.fuelleLateral1 ? parseInt(datosProducto.medidas.fuelleLateral1) : 0,
-        fuelle_latDe: datosProducto.medidas.fuelleLateral2 ? parseInt(datosProducto.medidas.fuelleLateral2) : 0,
-        refuerzo:     datosProducto.medidas.refuerzo       ? parseInt(datosProducto.medidas.refuerzo)       : 0,
+        altura:       parseFloat(datosProducto.medidas.altura),
+        ancho:        parseFloat(datosProducto.medidas.ancho),
+        fuelle_fondo: datosProducto.medidas.fuelleFondo    ? parseFloat(datosProducto.medidas.fuelleFondo)    : 0,
+        fuelle_latIz: datosProducto.medidas.fuelleLateral1 ? parseFloat(datosProducto.medidas.fuelleLateral1) : 0,
+        fuelle_latDe: datosProducto.medidas.fuelleLateral2 ? parseFloat(datosProducto.medidas.fuelleLateral2) : 0,
+        refuerzo:     datosProducto.medidas.refuerzo       ? parseFloat(datosProducto.medidas.refuerzo)       : 0,
         medida:       datosProducto.medidasFormateadas,
         por_kilo:     parseFloat(bolsasPorKilo),
       };
@@ -145,7 +147,7 @@ export default function Plastico() {
 
 const prod = response.producto as typeof response.producto & { identificador?: string };
 
-alert(
+showAlert(
   `✅ Producto creado exitosamente\n\n🔖 Identificador: ${prod.identificador ?? "—"}\n📦 Bolsas por kilo: ${prod.por_kilo}`
 );
 
@@ -157,7 +159,7 @@ alert(
         gramos: undefined,
         medidas: {
           altura: "", ancho: "", fuelleFondo: "",
-          fuelleLateral1: "", fuelleLateral2: "", refuerzo: "", solapa: "",
+          fuelleLateral1: "", fuelleLateral2: "", refuerzo: "",
         },
         medidasFormateadas: "",
         nombreCompleto: "",
@@ -175,7 +177,7 @@ alert(
           data?.error ||
           data?.details?.join(", ") ||
           "Error al guardar el producto";
-        alert(`❌ Error: ${errorMessage}`);
+        showAlert(`❌ Error: ${errorMessage}`);
       }
     } finally {
       setGuardando(false);

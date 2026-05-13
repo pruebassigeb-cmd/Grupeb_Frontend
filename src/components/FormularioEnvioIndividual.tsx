@@ -5,6 +5,8 @@ import { inputClass, labelClass } from "./enviosConstants";
 import ModalFormatoCastores       from "./ModalFormatoCastores";
 import ModalFormatoTresGuerras    from "./ModalFormatoTresGuerras";
 import ModalGuiaPaqueteriaGeneral from "./ModalGuiaPaqueteriaGeneral";
+import { showAlert } from './CustomAlert';
+
 
 interface Props {
   pedido:    PedidoDisponible;
@@ -39,7 +41,7 @@ export default function FormularioEnvioIndividual({ pedido, bultosIds, onSuccess
         setConductores(c);
         setUnidades(u.filter(x => x.activo));
         setPaqueterias(p.filter(x => x.activo));
-      } catch { alert("Error al cargar catálogos"); }
+      } catch { showAlert("Error al cargar catálogos"); }
       finally { setCargandoCatalogos(false); }
     };
     cargar();
@@ -54,10 +56,10 @@ export default function FormularioEnvioIndividual({ pedido, bultosIds, onSuccess
 
   const handleSubmit = async () => {
     if (tipo === "local" && (!form.usuarios_idusuario || !form.unidades_idunidad)) {
-      alert("Selecciona un chofer y una unidad"); return;
+      showAlert("Selecciona un chofer y una unidad"); return;
     }
     if (tipo === "paqueteria" && !form.paqueteria_idpaqueteria) {
-      alert("Selecciona una paquetería"); return;
+      showAlert("Selecciona una paquetería"); return;
     }
     setLoading(true);
     try {
@@ -91,7 +93,7 @@ export default function FormularioEnvioIndividual({ pedido, bultosIds, onSuccess
         onSuccess(tipo === "local" ? nuevoId ?? undefined : undefined);
       }
     } catch (error: any) {
-      alert(error.response?.data?.error || "Error al registrar envío");
+      showAlert(error.response?.data?.error || "Error al registrar envío");
     } finally {
       setLoading(false);
     }

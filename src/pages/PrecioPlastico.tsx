@@ -2,6 +2,8 @@ import { useState, useEffect } from "react";
 import Dashboard from "../layouts/Sidebar";
 import { getTarifas, updateTarifasBatch } from "../services/tarifas.service";
 import type { Tarifa } from "../types/tarifas.types";
+import { showAlert } from '../components/CustomAlert';
+
 
 interface PrecioRow {
   kilos: number;
@@ -74,7 +76,7 @@ export default function PrecioPlastico() {
       setTextos(buildTextos(preciosArray));
     } catch (error) {
       console.error("Error al cargar tarifas:", error);
-      alert("Error al cargar tarifas");
+      showAlert("Error al cargar tarifas");
     } finally {
       setLoading(false);
     }
@@ -144,11 +146,11 @@ export default function PrecioPlastico() {
 
       setEditando(false);
       setMostrarConfirmacion(false);
-      alert("Tarifas actualizadas exitosamente");
+      showAlert("Tarifas actualizadas exitosamente");
     } catch (error: any) {
       console.error("Error al guardar tarifas:", error);
       const mensaje = error.response?.data?.error || "Error al guardar tarifas";
-      alert(mensaje);
+      showAlert(mensaje);
     } finally {
       setGuardando(false);
     }

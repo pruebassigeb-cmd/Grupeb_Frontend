@@ -182,8 +182,13 @@ const ALTO_COPIA = 130;
 const SEP        = 7;
 
 export const generarNotaRemision = async (data: NotaRemisionData): Promise<void> => {
-  const doc = new jsPDF({ unit: "mm", format: "letter", orientation: "portrait" });
-  const W   = 215.9;
+  const doc = new jsPDF({
+    unit:        "mm",
+    format:      [215.9, 279.4],  // ← dimensiones explícitas carta
+    orientation: "portrait",
+  });
+
+  const W = 215.9;
 
   dibujarNota(doc, data, 5);
 
@@ -203,8 +208,13 @@ export const generarNotaRemision = async (data: NotaRemisionData): Promise<void>
 
 // ── Múltiples notas en un solo PDF (para procesar carrito) ──
 export const generarNotasMultiples = async (notas: NotaRemisionData[]): Promise<void> => {
-  const doc = new jsPDF({ unit: "mm", format: "letter", orientation: "portrait" });
-  const W   = 215.9;
+  const doc = new jsPDF({
+    unit:        "mm",
+    format:      [215.9, 279.4],  // ← dimensiones explícitas carta
+    orientation: "portrait",
+  });
+
+  const W = 215.9;
 
   notas.forEach((nota, index) => {
     if (index > 0) doc.addPage();

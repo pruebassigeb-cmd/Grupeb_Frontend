@@ -9,6 +9,8 @@ import { inputClass, labelClass } from "./enviosConstants";
 import ModalFormatoCastores       from "./ModalFormatoCastores";
 import ModalFormatoTresGuerras    from "./ModalFormatoTresGuerras";
 import ModalGuiaPaqueteriaGeneral from "./ModalGuiaPaqueteriaGeneral";
+import { showAlert } from './CustomAlert';
+
 
 interface Props {
   carrito:   CarritoPedido[];
@@ -53,7 +55,7 @@ export default function FormularioProcesarCarrito({ carrito, onSuccess, onCancel
         const [c, u] = await Promise.all([getConductores(), getUnidades()]);
         setConductores(c);
         setUnidades(u.filter(x => x.activo));
-      } catch { alert("Error al cargar catálogos"); }
+      } catch { showAlert("Error al cargar catálogos"); }
       finally { setCargandoCatalogos(false); }
     };
     cargarCatalogos();
@@ -90,10 +92,10 @@ export default function FormularioProcesarCarrito({ carrito, onSuccess, onCancel
 
   const handleSubmit = async () => {
     if (hayBultosLocales && (!form.usuarios_idusuario || !form.unidades_idunidad)) {
-      alert("Hay bultos con envío local — selecciona chofer y unidad"); return;
+      showAlert("Hay bultos con envío local — selecciona chofer y unidad"); return;
     }
     if (totalSeleccionados === 0) {
-      alert("Selecciona al menos un bulto"); return;
+      showAlert("Selecciona al menos un bulto"); return;
     }
 
     setLoading(true);
@@ -146,7 +148,7 @@ export default function FormularioProcesarCarrito({ carrito, onSuccess, onCancel
 
       await onSuccess();
     } catch (error: any) {
-      alert(error.response?.data?.error || "Error al procesar envío");
+      showAlert(error.response?.data?.error || "Error al procesar envío");
     } finally {
       setLoading(false);
     }

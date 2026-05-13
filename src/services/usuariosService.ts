@@ -27,6 +27,11 @@ export const deleteUsuario = async (id: number) => {
   return response.data;
 };
 
+export const toggleActivoUsuario = async (id: number) => {
+  const response = await api.patch(`/usuarios/${id}/toggle-activo`);
+  return response.data;
+};
+
 export const getUsuariosDiseno = async (): Promise<UsuarioParticipante[]> => {
   const response = await api.get<UsuarioParticipante[]>("/usuarios/diseno/lista");
   return response.data;

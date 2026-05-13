@@ -2,6 +2,10 @@ import { useState } from "react";
 import type { RevisionDiseno } from "../types/ordenDiseno.types";
 import { usePermisos } from "../hooks/usePermiso";
 import api from "../services/api";
+import { showAlert } from './CustomAlert';
+import { showConfirm } from './CustomConfirm';
+
+
 
 const fmtFecha = (iso: string) => {
   try {
@@ -26,13 +30,13 @@ export default function HistorialVersiones({ revisiones, idorden, onActualizar }
   const [marcando, setMarcando] = useState<number | null>(null);
 
   const handleMarcarFinal = async (revId: number) => {
-    if (!confirm("¿Marcar esta revisión como versión final? Esta versión nunca será eliminada automáticamente.")) return;
+    if (!await showConfirm("¿Marcar esta revisión como versión final? Esta versión nunca será eliminada automáticamente.")) return;
     setMarcando(revId);
     try {
       await api.patch(`/orden-diseno/${idorden}/revision/${revId}/version-final`);
       onActualizar();
     } catch (e: any) {
-      alert(e.response?.data?.error || "Error al marcar versión final");
+      showAlert(e.response?.data?.error || "Error al marcar versión final");
     } finally {
       setMarcando(null);
     }

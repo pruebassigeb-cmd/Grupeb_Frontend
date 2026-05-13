@@ -12,6 +12,10 @@ import {
 import { generarPdfCotizacion } from "../services/generarPdfCotizacion";
 import type { CatalogosPlastico } from "../types/productos-plastico.types";
 import type { Cotizacion } from "../types/cotizaciones.types";
+import { showAlert } from '../components/CustomAlert';
+import { showConfirm } from '../components/CustomConfirm';
+
+
 
 const ITEMS_POR_PAGINA = 7;
 
@@ -248,11 +252,11 @@ export default function Cotizaciones() {
 
   const handleEliminar = async (cot: Cotizacion) => {
     if (cot.estado === "Aprobada") return;
-    if (!confirm("¿Estás seguro de eliminar esta cotización?")) return;
+    if (!await showConfirm("¿Estás seguro de eliminar esta cotización?")) return;
     try {
       await eliminarCotizacion(cot.no_cotizacion);
       setCotizaciones(prev => prev.filter(c => c.no_cotizacion !== cot.no_cotizacion));
-    } catch (e: any) { alert(e.response?.data?.error || "Error al eliminar"); }
+    } catch (e: any) { showAlert(e.response?.data?.error || "Error al eliminar"); }
   };
 
   const handleEditar       = (cot: Cotizacion) => { setCotizacionEditando(cot); setModalEditarOpen(true); };

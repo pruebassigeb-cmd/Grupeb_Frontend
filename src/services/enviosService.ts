@@ -225,3 +225,27 @@ export const updateClavesSatBultos = async (
 ): Promise<void> => {
   await api.patch(`/envios/${idenvio}/claves-sat`, { bultos });
 };
+
+// ==========================
+// BULTOS POR ORDEN DE PRODUCCIÓN
+// (para ModalEnvioSeguimiento — filtra bultos y envíos de una orden específica)
+// ==========================
+export interface BultoConEnvio extends BultoPedido {
+  nombre_producto: string;
+  medida:          string;
+}
+
+export interface BultosPorProduccionResponse {
+  bultos: BultoConEnvio[];
+  envios: Envio[];
+}
+
+export const getBultosPorProduccion = async (
+  idsolicitud:  number,
+  idproduccion: number,
+): Promise<BultosPorProduccionResponse> => {
+  const res = await api.get<BultosPorProduccionResponse>(
+    `/envios/pedidos/${idsolicitud}/bultos-por-produccion/${idproduccion}`,
+  );
+  return res.data;
+};

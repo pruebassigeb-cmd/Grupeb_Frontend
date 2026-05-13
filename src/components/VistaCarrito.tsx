@@ -1,6 +1,10 @@
 import { useState } from "react";
 import { quitarDelCarrito, vaciarCarrito, asignarPaqueteriaCarrito } from "../services/enviosService";
 import type { CarritoPedido, Paqueteria } from "../types/envios.types";
+import { showAlert } from './CustomAlert';
+import { showConfirm } from './CustomConfirm';
+
+
 
 interface Props {
   carrito:         CarritoPedido[];
@@ -39,16 +43,16 @@ export default function VistaCarrito({ carrito, paqueterias, onCarritoChange, on
     try {
       await quitarDelCarrito(idbulto);
       await onCarritoChange();
-    } catch { alert("Error al quitar bulto"); }
+    } catch { showAlert("Error al quitar bulto"); }
   };
 
   const handleVaciar = async () => {
-    if (!confirm("¿Vaciar todo el carrito?")) return;
+    if (!await showConfirm("¿Vaciar todo el carrito?")) return;
     setVaciando(true);
     try {
       await vaciarCarrito();
       await onCarritoChange();
-    } catch { alert("Error al vaciar carrito"); }
+    } catch { showAlert("Error al vaciar carrito"); }
     finally { setVaciando(false); }
   };
 
@@ -61,7 +65,7 @@ export default function VistaCarrito({ carrito, paqueterias, onCarritoChange, on
       try {
         await Promise.all(pedido.bultos.map(b => asignarPaqueteriaCarrito(b.idcarrito, null)));
         await onCarritoChange();
-      } catch { alert("Error al actualizar"); }
+      } catch { showAlert("Error al actualizar"); }
       finally { setAsignando(null); }
     }
   };
@@ -72,7 +76,7 @@ export default function VistaCarrito({ carrito, paqueterias, onCarritoChange, on
     try {
       await Promise.all(pedido.bultos.map(b => asignarPaqueteriaCarrito(b.idcarrito, idpaqueteria)));
       await onCarritoChange();
-    } catch { alert("Error al asignar paquetería"); }
+    } catch { showAlert("Error al asignar paquetería"); }
     finally { setAsignando(null); }
   };
 

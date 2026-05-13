@@ -3,6 +3,10 @@ import Modal from "./Modal";
 import { getUnidades, createUnidad, updateUnidad, deleteUnidad } from "../services/enviosService";
 import type { Unidad } from "../types/envios.types";
 import { inputClass, labelClass } from "./enviosConstants";
+import { showAlert } from './CustomAlert';
+import { showConfirm } from './CustomConfirm';
+
+
 
 const emptyForm = {
   tipo: "", marca: "", modelo: "", placa: "",
@@ -22,7 +26,7 @@ export default function TabUnidades() {
   const cargar = async () => {
     setLoading(true);
     try { setUnidades(await getUnidades()); }
-    catch { alert("Error al cargar unidades"); }
+    catch { showAlert("Error al cargar unidades"); }
     finally { setLoading(false); }
   };
 
@@ -46,18 +50,18 @@ export default function TabUnidades() {
         color: u.color, propietario: u.propietario, activo: !u.activo,
       });
       await cargar();
-    } catch { alert("Error al actualizar estado"); }
+    } catch { showAlert("Error al actualizar estado"); }
   };
 
   const handleEliminar = async (id: number) => {
-    if (!confirm("¿Eliminar esta unidad?")) return;
+    if (!await showConfirm("¿Eliminar esta unidad?")) return;
     try { await deleteUnidad(id); await cargar(); }
-    catch (e: any) { alert(e.response?.data?.error || "Error al eliminar"); }
+    catch (e: any) { showAlert(e.response?.data?.error || "Error al eliminar"); }
   };
 
   const handleGuardar = async () => {
     if (!form.tipo || !form.marca || !form.modelo || !form.placa) {
-      alert("Tipo, marca, modelo y placa son requeridos"); return;
+      showAlert("Tipo, marca, modelo y placa son requeridos"); return;
     }
     setGuardando(true);
     try {
@@ -65,7 +69,7 @@ export default function TabUnidades() {
       else await createUnidad(form);
       setModalOpen(false);
       await cargar();
-    } catch (e: any) { alert(e.response?.data?.error || "Error al guardar"); }
+    } catch (e: any) { showAlert(e.response?.data?.error || "Error al guardar"); }
     finally { setGuardando(false); }
   };
 

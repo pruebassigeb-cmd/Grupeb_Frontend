@@ -10,6 +10,10 @@ import { generarPdfPedido } from "../services/generarPdfPedido";
 import { getVentaByPedido } from "../services/ventasservice";
 import type { CatalogosPlastico } from "../types/productos-plastico.types";
 import type { Pedido } from "../types/cotizaciones.types";
+import { showAlert } from '../components/CustomAlert';
+import { showConfirm } from '../components/CustomConfirm';
+
+
 
 const ITEMS_POR_PAGINA = 7;
 
@@ -253,7 +257,7 @@ export default function Pedidos() {
       });
     } catch (e) {
       console.error("❌ Error al obtener venta para PDF:", e);
-      alert("No se pudo generar el PDF. Verifica que la venta esté registrada.");
+      showAlert("No se pudo generar el PDF. Verifica que la venta esté registrada.");
     }
   };
 
@@ -261,7 +265,7 @@ export default function Pedidos() {
     const origen = ped.no_cotizacion
       ? `\nOrigen: ${ped.no_cotizacion} (también será eliminada).`
       : "";
-    const confirmar = confirm(
+    const confirmar = await showConfirm(
       `⚠️ CANCELAR PEDIDO ${ped.no_pedido}\n\n` +
       `Esta acción eliminará permanentemente:\n` +
       `• El pedido y todos sus productos\n` +
@@ -275,11 +279,11 @@ export default function Pedidos() {
     } catch (e: any) {
       const data = e.response?.data;
       if (data?.motivo === "pagos") {
-        alert(`🚫 No se puede cancelar el Pedido ${ped.no_pedido}\n\n${data.detalle}`);
+        showAlert(`🚫 No se puede cancelar el Pedido ${ped.no_pedido}\n\n${data.detalle}`);
       } else if (data?.motivo === "diseno") {
-        alert(`🚫 No se puede cancelar el Pedido ${ped.no_pedido}\n\n${data.detalle}`);
+        showAlert(`🚫 No se puede cancelar el Pedido ${ped.no_pedido}\n\n${data.detalle}`);
       } else {
-        alert(data?.error || "Error al cancelar el pedido");
+        showAlert(data?.error || "Error al cancelar el pedido");
       }
     }
   };

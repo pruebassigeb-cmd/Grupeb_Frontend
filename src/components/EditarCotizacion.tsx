@@ -8,6 +8,8 @@ import {
 } from "../services/cotizacionesService";
 import { generarPdfPedido } from "../services/generarPdfPedido";
 import { getVentaByPedido } from "../services/ventasservice";
+import { showConfirm } from './CustomConfirm';
+
 
 const ESTADO_ID = {
   PENDIENTE:  1,
@@ -240,7 +242,7 @@ export default function EditarCotizacion({
         totalDetallesAprobados === 0
           ? "¿Estás seguro de rechazar esta cotización sin haber aprobado ninguna opción?"
           : "¿Estás seguro de rechazar esta cotización?";
-      if (!confirm(msg)) return;
+      if (!await showConfirm(msg)) return;
     }
 
     setGuardando(true);

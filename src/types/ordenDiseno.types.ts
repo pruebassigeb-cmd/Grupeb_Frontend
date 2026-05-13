@@ -33,6 +33,7 @@ export interface ArchivoRevision {
   tipo:          string;
   mime_type:     string;
   resource_type: string;
+  categoria:     "render" | "master" | "otro";
 }
 
 export interface RevisionDiseno {
@@ -44,6 +45,7 @@ export interface RevisionDiseno {
   subido_por_id:        number;
   subido_por_nombre:    string;
   subido_por_apellido:  string;
+  es_version_final:     boolean;
   archivos:             ArchivoRevision[];
 }
 

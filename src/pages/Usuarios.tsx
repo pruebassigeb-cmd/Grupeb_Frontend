@@ -2,15 +2,17 @@ import Dashboard from "../layouts/Sidebar";
 import Modal from "../components/Modal";
 import FormularioUsuario from "../components/FormularioUsuario";
 import { useState, useEffect } from "react";
-import { getUsuarios, getUsuarioById, createUsuario, updateUsuario, deleteUsuario } from "../services/usuariosService";
+import { getUsuarios, getUsuarioById, createUsuario, updateUsuario, deleteUsuario, toggleActivoUsuario } from "../services/usuariosService";
 import type { Usuario } from "../types/usuario.types";
 import type { CreateUsuarioRequest, UpdateUsuarioRequest } from "../types/usuario.types";
+import { showAlert } from '../components/CustomAlert';
+import { showConfirm } from '../components/CustomConfirm';
 
 export default function Usuarios() {
-  const [modalOpen, setModalOpen] = useState(false);
-  const [busqueda, setBusqueda] = useState("");
-  const [usuarios, setUsuarios] = useState<Usuario[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [modalOpen, setModalOpen]       = useState(false);
+  const [busqueda, setBusqueda]         = useState("");
+  const [usuarios, setUsuarios]         = useState<Usuario[]>([]);
+  const [loading, setLoading]           = useState(true);
   const [usuarioEditar, setUsuarioEditar] = useState<Usuario | null>(null);
 
   useEffect(() => {
@@ -24,32 +26,24 @@ export default function Usuarios() {
       setUsuarios(data);
     } catch (error) {
       console.error("Error al cargar usuarios:", error);
-      alert("Error al cargar usuarios");
+      showAlert("Error al cargar usuarios");
     } finally {
       setLoading(false);
     }
   };
 
-  const normalizarTexto = (texto: string) => {
-    return texto
-      .toLowerCase()
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .replace(/[.,\-]/g, "")
-      .trim();
-  };
+  const normalizarTexto = (texto: string) =>
+    texto.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[.,\-]/g, "").trim();
 
   const usuariosFiltrados = usuarios.filter((usuario) => {
     if (!busqueda) return true;
-
-    const terminoBusqueda = normalizarTexto(busqueda);
-
+    const t = normalizarTexto(busqueda);
     return (
-      normalizarTexto(usuario.nombre).includes(terminoBusqueda) ||
-      normalizarTexto(usuario.apellido).includes(terminoBusqueda) ||
-      normalizarTexto(usuario.correo).includes(terminoBusqueda) ||
-      normalizarTexto(usuario.telefono || "").includes(terminoBusqueda) ||
-      normalizarTexto(usuario.rol || "").includes(terminoBusqueda)
+      normalizarTexto(usuario.nombre).includes(t) ||
+      normalizarTexto(usuario.apellido).includes(t) ||
+      normalizarTexto(usuario.correo).includes(t) ||
+      normalizarTexto(usuario.telefono || "").includes(t) ||
+      normalizarTexto(usuario.rol || "").includes(t)
     );
   });
 
@@ -60,20 +54,35 @@ export default function Usuarios() {
       setModalOpen(true);
     } catch (error) {
       console.error("Error al cargar usuario:", error);
-      alert("Error al cargar datos del usuario");
+      showAlert("Error al cargar datos del usuario");
     }
   };
 
   const handleEliminar = async (id: number) => {
-    if (!confirm("¿Estás seguro de eliminar este usuario?")) return;
-
+    if (!await showConfirm("¿Estás seguro de eliminar este usuario?")) return;
     try {
       await deleteUsuario(id);
       await cargarUsuarios();
-      alert("Usuario eliminado exitosamente");
+      showAlert("Usuario eliminado exitosamente");
     } catch (error) {
       console.error("Error al eliminar usuario:", error);
-      alert("Error al eliminar usuario");
+      showAlert("Error al eliminar usuario");
+    }
+  };
+
+  const handleToggleActivo = async (id: number, nombreCompleto: string, activo: boolean) => {
+    const accion = activo ? "desactivar" : "activar";
+    if (!await showConfirm(`¿Estás seguro de ${accion} a ${nombreCompleto}?`)) return;
+    try {
+      await toggleActivoUsuario(id);
+      // Actualizar estado local inmediatamente sin esperar fetch
+      setUsuarios(prev => prev.map(u =>
+        u.idusuario === id ? { ...u, activo: !activo } : u
+      ));
+      showAlert(`Usuario ${activo ? "desactivado" : "activado"} exitosamente`);
+    } catch (error) {
+      console.error("Error al cambiar estado:", error);
+      showAlert("Error al cambiar estado del usuario");
     }
   };
 
@@ -86,19 +95,18 @@ export default function Usuarios() {
     try {
       if (usuarioEditar) {
         await updateUsuario(usuarioEditar.idusuario, datos as UpdateUsuarioRequest);
-        alert("Usuario actualizado exitosamente");
+        showAlert("Usuario actualizado exitosamente");
       } else {
         await createUsuario(datos as CreateUsuarioRequest);
-        alert("Usuario creado exitosamente");
+        showAlert("Usuario creado exitosamente");
       }
-      
       await cargarUsuarios();
       setModalOpen(false);
       setUsuarioEditar(null);
     } catch (error: any) {
       console.error("Error al guardar usuario:", error);
       const mensaje = error.response?.data?.error || "Error al guardar usuario";
-      alert(mensaje);
+      showAlert(mensaje);
     }
   };
 
@@ -110,10 +118,7 @@ export default function Usuarios() {
   return (
     <Dashboard>
       <h1 className="text-2xl font-bold mb-4">Usuarios</h1>
-
-      <p className="text-slate-400 mb-6">
-        Gestiona los usuarios del sistema GRUPEB.
-      </p>
+      <p className="text-slate-400 mb-6">Gestiona los usuarios del sistema GRUPEB.</p>
 
       {/* BUSCADOR */}
       <div className="mb-6">
@@ -125,18 +130,10 @@ export default function Usuarios() {
             placeholder="Buscar por nombre, apellido, correo, teléfono o rol..."
             className="w-full px-4 py-3 pl-12 border border-gray-300 rounded-lg text-gray-900 bg-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
-          <svg
-            className="w-5 h-5 text-gray-400 absolute left-4 top-1/2 -translate-y-1/2"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-            />
+          <svg className="w-5 h-5 text-gray-400 absolute left-4 top-1/2 -translate-y-1/2"
+            fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
           </svg>
         </div>
         {busqueda && (
@@ -151,11 +148,11 @@ export default function Usuarios() {
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Nombre
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Foto
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Apellido
+                Nombre
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Correo
@@ -167,6 +164,9 @@ export default function Usuarios() {
                 Rol
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Estado
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Acciones
               </th>
             </tr>
@@ -175,36 +175,85 @@ export default function Usuarios() {
           <tbody className="bg-white divide-y divide-gray-200">
             {loading ? (
               <tr>
-                <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
+                <td colSpan={7} className="px-6 py-8 text-center text-gray-500">
                   Cargando usuarios...
                 </td>
               </tr>
             ) : usuariosFiltrados.length > 0 ? (
               usuariosFiltrados.map((usuario) => (
                 <tr key={usuario.idusuario} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-  {`${usuario.nombre} ${usuario.apellido}`}
-</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {usuario.apellido}
+
+                  {/* FOTO */}
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    <div className="w-10 h-10 rounded-full overflow-hidden bg-gray-100 border border-gray-200 flex items-center justify-center flex-shrink-0">
+                      {usuario.foto_url ? (
+                        <img
+                          src={usuario.foto_url}
+                          alt={`${usuario.nombre} ${usuario.apellido}`}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            // Si la URL firmada expira, mostrar iniciales
+                            (e.target as HTMLImageElement).style.display = "none";
+                          }}
+                        />
+                      ) : (
+                        <span className="text-sm font-semibold text-gray-500">
+                          {usuario.nombre?.[0]?.toUpperCase()}{usuario.apellido?.[0]?.toUpperCase()}
+                        </span>
+                      )}
+                    </div>
                   </td>
+
+                  {/* NOMBRE */}
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                    {`${usuario.nombre} ${usuario.apellido}`}
+                  </td>
+
+                  {/* CORREO */}
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {usuario.correo}
                   </td>
+
+                  {/* TELÉFONO */}
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {usuario.telefono || "—"}
                   </td>
+
+                  {/* ROL */}
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    <span
-                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        usuario.acceso_total
-                          ? "bg-purple-100 text-purple-800"
-                          : "bg-blue-100 text-blue-800"
-                      }`}
-                    >
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                      usuario.acceso_total
+                        ? "bg-purple-100 text-purple-800"
+                        : "bg-blue-100 text-blue-800"
+                    }`}>
                       {usuario.rol || "Usuario"}
                     </span>
                   </td>
+
+                  {/* ESTADO — badge clickeable */}
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <button
+                      onClick={() => handleToggleActivo(
+                        usuario.idusuario,
+                        `${usuario.nombre} ${usuario.apellido}`,
+                        usuario.activo !== false
+                      )}
+                      title={usuario.activo !== false ? "Click para desactivar" : "Click para activar"}
+                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                        transition-opacity hover:opacity-75 cursor-pointer
+                        ${usuario.activo !== false
+                          ? "bg-green-100 text-green-800"
+                          : "bg-red-100 text-red-800"
+                        }`}
+                    >
+                      <span className={`w-1.5 h-1.5 rounded-full mr-1.5 ${
+                        usuario.activo !== false ? "bg-green-500" : "bg-red-500"
+                      }`} />
+                      {usuario.activo !== false ? "Activo" : "Inactivo"}
+                    </button>
+                  </td>
+
+                  {/* ACCIONES */}
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                     <button
                       onClick={() => handleEditar(usuario.idusuario)}
@@ -223,7 +272,7 @@ export default function Usuarios() {
               ))
             ) : (
               <tr>
-                <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
+                <td colSpan={7} className="px-6 py-8 text-center text-gray-500">
                   {busqueda
                     ? `No se encontraron usuarios que coincidan con "${busqueda}"`
                     : "No hay usuarios registrados"}
@@ -245,13 +294,13 @@ export default function Usuarios() {
       </div>
 
       {/* MODAL */}
-      <Modal 
-        isOpen={modalOpen} 
-        onClose={handleCancelar} 
+      <Modal
+        isOpen={modalOpen}
+        onClose={handleCancelar}
         title={usuarioEditar ? "Editar Usuario" : "Nuevo Usuario"}
       >
-        <FormularioUsuario 
-          onSubmit={handleSubmit} 
+        <FormularioUsuario
+          onSubmit={handleSubmit}
           onCancel={handleCancelar}
           usuarioEditar={usuarioEditar}
         />

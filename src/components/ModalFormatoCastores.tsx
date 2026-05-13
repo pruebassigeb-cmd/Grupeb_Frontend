@@ -4,6 +4,8 @@ import { inputClass, labelClass } from "./enviosConstants";
 import { getFormatoCastores, getProductosSat, updateClavesSatBultos } from "../services/enviosService";
 import { generarFormatoCastores } from "../utils/generarFormatoCastores";
 import type { ProductoSat } from "../types/envios.types";
+import { showAlert } from './CustomAlert';
+
 
 interface BultoForm {
   idbulto:            number;
@@ -66,7 +68,7 @@ export default function ModalFormatoCastores({ idenvio, onClose }: Props) {
           clave_producto_sat: b.clave_producto_sat || "",
           clave_unidad_sat:   b.clave_unidad_sat   || "",
         })));
-      } catch { alert("Error al cargar datos del formato"); }
+      } catch { showAlert("Error al cargar datos del formato"); }
       finally { setLoading(false); }
     };
     cargar();
@@ -79,7 +81,7 @@ export default function ModalFormatoCastores({ idenvio, onClose }: Props) {
   };
 
   const handleGenerar = async () => {
-    if (!requiereFactura) { alert("Indica si requiere factura"); return; }
+    if (!requiereFactura) { showAlert("Indica si requiere factura"); return; }
     setGenerando(true);
     try {
       // Guardar claves SAT en BD antes de generar
@@ -104,7 +106,7 @@ export default function ModalFormatoCastores({ idenvio, onClose }: Props) {
       onClose();
     } catch (e) {
       console.error("Error generando PDF:", e);
-      alert("Error al generar el formato");
+      showAlert("Error al generar el formato");
     } finally {
       setGenerando(false);
     }

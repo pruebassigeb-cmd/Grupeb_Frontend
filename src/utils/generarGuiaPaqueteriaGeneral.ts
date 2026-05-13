@@ -1,8 +1,8 @@
 import jsPDF from "jspdf";
 import type { GuiaPaqueteriaGeneral } from "../types/envios.types";
 
-// A4 portrait: 210mm x 297mm
-// jsPDF: format:"a4", orientation:"portrait"
+// Carta: 215.9mm x 279.4mm
+// jsPDF: format:"letter", orientation:"portrait"
 
 function txt(doc: jsPDF, text: string, x: number, y: number, size: number = 8) {
   if (!text) return;
@@ -22,10 +22,10 @@ export function generarGuiaPaqueteriaGeneral(datos: GuiaPaqueteriaGeneral): void
   const doc = new jsPDF({
     orientation: "portrait",
     unit:        "mm",
-    format:      "a4",
+    format:      "letter",   // carta 215.9 × 279.4 mm
   });
 
-  const PW = 210;
+  const PW = 215.9;
   const ML = 12;
   const MR = 12;
   const CW = PW - ML - MR;
@@ -49,7 +49,6 @@ export function generarGuiaPaqueteriaGeneral(datos: GuiaPaqueteriaGeneral): void
   doc.setFont("helvetica", "normal");
   txt(doc, "FOLIO", ML + CW - 40, 18, 7);
   doc.setFont("helvetica", "bold");
-  // Folio en gris claro en lugar de amarillo
   doc.setTextColor(210, 210, 210);
   txt(doc, folio, ML + CW - 40, 24, 12);
 
@@ -57,40 +56,52 @@ export function generarGuiaPaqueteriaGeneral(datos: GuiaPaqueteriaGeneral): void
   doc.setFont("helvetica", "normal");
 
   // ══════════════════════════════════════════
-  // FILA INFO: Pedido / Fecha / Bultos
+  // FILA INFO: Pedido / Fecha / Bultos / Tipo + Seguro
   // ══════════════════════════════════════════
   const Y_INFO = 33;
-  const COL_W  = CW / 3;
+  const COL_W  = CW / 5;   // 5 columnas iguales
 
-  for (let i = 0; i < 3; i++) {
-    // Fondo gris muy claro en lugar de azul
+  for (let i = 0; i < 5; i++) {
     doc.setFillColor(240, 240, 240);
     rect(doc, ML + i * COL_W, Y_INFO, COL_W - 1, 12, "FD");
   }
 
-  // Etiquetas en gris medio en lugar de gris azulado
+  // Labels
   doc.setTextColor(100, 100, 100);
   txt(doc, "NO. PEDIDO",     ML + 3,               Y_INFO + 4, 7);
-  txt(doc, "FECHA DE ENVÍO", ML + COL_W + 3,        Y_INFO + 4, 7);
+  txt(doc, "FECHA DE ENVÍO", ML + COL_W + 3,       Y_INFO + 4, 7);
   txt(doc, "TOTAL BULTOS",   ML + COL_W * 2 + 3,   Y_INFO + 4, 7);
+  txt(doc, "TIPO DE COBRO",  ML + COL_W * 3 + 3,   Y_INFO + 4, 7);
+  txt(doc, "ASEGURADO",      ML + COL_W * 4 + 3,   Y_INFO + 4, 7);
 
+  // Valores
   doc.setFont("helvetica", "bold");
   doc.setTextColor(0, 0, 0);
-  txt(doc, datos.no_pedido, ML + 3, Y_INFO + 9, 10);
+
+  txt(doc, datos.no_pedido,           ML + 3,             Y_INFO + 9, 10);
   txt(doc, new Date(datos.fecha_envio).toLocaleDateString("es-MX", {
-    day: "2-digit", month: "long", year: "numeric"
-  }), ML + COL_W + 3, Y_INFO + 9, 9);
+    day: "2-digit", month: "long", year: "numeric",
+  }),                                  ML + COL_W + 3,     Y_INFO + 9, 8);
   txt(doc, String(datos.total_bultos), ML + COL_W * 2 + 3, Y_INFO + 9, 10);
+
+  const cobroLabel = datos.tipo_cobro === "pagado"
+    ? "Pagado"
+    : datos.tipo_cobro === "por_cobrar"
+      ? "Por cobrar"
+      : "Cobrar al regreso";
+  txt(doc, cobroLabel, ML + COL_W * 3 + 3, Y_INFO + 9, 8);
+
+  doc.setFont("helvetica", "normal");
+  txt(doc, datos.asegurado ? "Sí" : "No", ML + COL_W * 4 + 3, Y_INFO + 9, 10);
 
   doc.setFont("helvetica", "normal");
 
   // ══════════════════════════════════════════
   // REMITENTE / DESTINATARIO
   // ══════════════════════════════════════════
-  const Y_PARTES = 50;
+  const Y_PARTES = 50;   // Y_INFO(33) + 12(alto celda) + 5(margen)
   const HALF     = CW / 2 - 1;
 
-  // Etiquetas — fondo gris claro en lugar de gris medio
   doc.setFillColor(200, 200, 200);
   rect(doc, ML,            Y_PARTES, HALF, 6, "FD");
   rect(doc, ML + HALF + 2, Y_PARTES, HALF, 6, "FD");
@@ -100,19 +111,16 @@ export function generarGuiaPaqueteriaGeneral(datos: GuiaPaqueteriaGeneral): void
   txt(doc, "REMITENTE",    ML + 2,        Y_PARTES + 4, 7);
   txt(doc, "DESTINATARIO", ML + HALF + 4, Y_PARTES + 4, 7);
 
-  // Cajas de datos
   const BOX_H = 38;
   doc.setDrawColor(160, 160, 160);
   rect(doc, ML, Y_PARTES + 6, HALF, BOX_H, "S");
 
-  // Destinatario con borde más grueso en negro
   doc.setDrawColor(30, 30, 30);
   doc.setLineWidth(0.5);
   rect(doc, ML + HALF + 2, Y_PARTES + 6, HALF, BOX_H, "S");
   doc.setLineWidth(0.2);
   doc.setDrawColor(0, 0, 0);
 
-  // Datos remitente
   doc.setFont("helvetica", "bold");
   doc.setTextColor(0, 0, 0);
   txt(doc, datos.remitente.nombre_empresa, ML + 2, Y_PARTES + 12, 9);
@@ -124,7 +132,6 @@ export function generarGuiaPaqueteriaGeneral(datos: GuiaPaqueteriaGeneral): void
   txt(doc, `${datos.remitente.estado}  C.P. ${datos.remitente.codigo_postal}`, ML + 2, Y_PARTES + 33, 8);
   txt(doc, datos.remitente.telefonos,     ML + 2, Y_PARTES + 38, 8);
 
-  // Datos destinatario
   const DX = ML + HALF + 4;
   doc.setFont("helvetica", "bold");
   txt(doc, datos.destinatario.impresion || datos.destinatario.nombre, DX, Y_PARTES + 12, 10);
@@ -147,7 +154,6 @@ export function generarGuiaPaqueteriaGeneral(datos: GuiaPaqueteriaGeneral): void
   const ROW_H   = 9;
   const HEAD_H  = 7;
 
-  // Header — fondo negro, texto blanco (igual que encabezado)
   doc.setFillColor(30, 30, 30);
   rect(doc, ML, Y_TABLA, CW, HEAD_H, "F");
   doc.setTextColor(255, 255, 255);
@@ -166,7 +172,6 @@ export function generarGuiaPaqueteriaGeneral(datos: GuiaPaqueteriaGeneral): void
   datos.bultos.forEach((bulto, idx) => {
     const Y = Y_TABLA + HEAD_H + idx * ROW_H;
 
-    // Filas alternas en gris muy claro en lugar de azul claro
     if (idx % 2 === 0) {
       doc.setFillColor(240, 240, 240);
       rect(doc, ML, Y, CW, ROW_H, "FD");
@@ -179,7 +184,6 @@ export function generarGuiaPaqueteriaGeneral(datos: GuiaPaqueteriaGeneral): void
     txt(doc, String(idx + 1), ML + 2,  Y + 7, 8);
     txt(doc, producto,         ML + 8,  Y + 7, 8);
 
-    // Claves SAT en bold negro
     doc.setFont("helvetica", "bold");
     doc.text(bulto.clave_producto_sat || "—", ML + 80,  Y + 7);
     doc.text(bulto.clave_unidad_sat   || "—", ML + 115, Y + 7);
@@ -202,7 +206,7 @@ export function generarGuiaPaqueteriaGeneral(datos: GuiaPaqueteriaGeneral): void
   });
 
   // ══════════════════════════════════════════
-  // OBSERVACIONES — fondo gris claro en lugar de amarillo
+  // OBSERVACIONES
   // ══════════════════════════════════════════
   const Y_OBS = Y_TABLA + HEAD_H + datos.bultos.length * ROW_H + 8;
 
@@ -220,7 +224,7 @@ export function generarGuiaPaqueteriaGeneral(datos: GuiaPaqueteriaGeneral): void
   // ══════════════════════════════════════════
   // PIE DE PÁGINA
   // ══════════════════════════════════════════
-  const Y_PIE = 282;
+  const Y_PIE = 274;
   doc.setDrawColor(150, 150, 150);
   line(doc, ML, Y_PIE, ML + CW, Y_PIE);
   doc.setFont("helvetica", "normal");

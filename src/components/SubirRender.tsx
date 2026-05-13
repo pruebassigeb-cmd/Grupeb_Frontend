@@ -1,6 +1,7 @@
 import { useState, useRef } from "react";
 import api from "../services/api";
 import { subirRevision } from "../services/ordenDisenoService";
+import { showAlert } from './CustomAlert';
 
 interface Props {
   idorden:   number;
@@ -10,10 +11,23 @@ interface Props {
   onCancel:  () => void;
 }
 
+type CategoriaArchivo = "render" | "master" | "otro";
+
+interface ArchivoConCategoria {
+  file:      File;
+  categoria: CategoriaArchivo;
+}
+
+const CATEGORIA_LABELS: Record<CategoriaArchivo, string> = {
+  render: "🖼️ Render",
+  master: "🎨 Master Graphic",
+  otro:   "📄 Otro",
+};
+
 export default function SubirRender({
   idorden, noPedido, tipo, onSuccess, onCancel,
 }: Props) {
-  const [archivos,      setArchivos]      = useState<File[]>([]);
+  const [archivos,      setArchivos]      = useState<ArchivoConCategoria[]>([]);
   const [observaciones, setObservaciones] = useState("");
   const [subiendo,      setSubiendo]      = useState(false);
   const [progreso,      setProgreso]      = useState(0);
@@ -23,9 +37,12 @@ export default function SubirRender({
 
   const handleArchivos = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
-    const nuevos = Array.from(e.target.files);
+    const nuevos: ArchivoConCategoria[] = Array.from(e.target.files).map(file => ({
+      file,
+      // Para tipo render, por defecto la categoría es "render"; para feedback es "otro"
+      categoria: tipo === "render" ? "render" : "otro",
+    }));
     setArchivos(prev => [...prev, ...nuevos]);
-    // Reset del input para permitir volver a seleccionar los mismos archivos
     if (inputRef.current) inputRef.current.value = "";
   };
 
@@ -40,9 +57,13 @@ export default function SubirRender({
     setArchivos(prev => prev.filter((_, i) => i !== idx));
   };
 
+  const cambiarCategoria = (idx: number, categoria: CategoriaArchivo) => {
+    setArchivos(prev => prev.map((a, i) => i === idx ? { ...a, categoria } : a));
+  };
+
   const handleSubmit = async () => {
     if (archivos.length === 0) {
-      alert("Debes seleccionar al menos un archivo.");
+      showAlert("Debes seleccionar al menos un archivo.");
       return;
     }
 
@@ -54,12 +75,12 @@ export default function SubirRender({
       const total = archivos.length;
 
       for (let i = 0; i < total; i++) {
+        const { file, categoria } = archivos[i];
         const formData = new FormData();
-        formData.append("archivo", archivos[i]);
-        formData.append(
-          "tipo",
-          archivos[i].type === "application/pdf" ? "pdf" : "imagen"
-        );
+        formData.append("archivo",    file);
+        formData.append("carpeta",    "disenos");
+        formData.append("tipo",       file.type === "application/pdf" ? "pdf" : "imagen");
+        formData.append("categoria",  categoria);
 
         const res = await api.post("/archivos/upload", formData, {
           headers: { "Content-Type": "multipart/form-data" },
@@ -79,14 +100,14 @@ export default function SubirRender({
       onSuccess();
     } catch (error: any) {
       console.error("Error al subir:", error);
-      alert(error.response?.data?.error || "Error al subir archivos");
+      showAlert(error.response?.data?.error || "Error al subir archivos");
     } finally {
       setSubiendo(false);
       setProgreso(0);
     }
   };
 
-  const tamanoTotal = archivos.reduce((acc, f) => acc + f.size, 0);
+  const tamanoTotal = archivos.reduce((acc, a) => acc + a.file.size, 0);
 
   return (
     <div className="space-y-4">
@@ -112,13 +133,14 @@ export default function SubirRender({
               Todo lo que subas en esta acción contará como una sola versión
             </p>
             <p className="text-xs text-amber-600 mt-0.5">
-              Si tienes varias imágenes o PDFs para esta entrega, agrégalos todos antes de enviar. Cualquier archivo que subas después generará una nueva versión del render.
+              Si tienes varias imágenes o PDFs para esta entrega, agrégalos todos antes de enviar.
+              Puedes marcar cada archivo como <strong>Render</strong>, <strong>Master Graphic</strong> u <strong>Otro</strong>.
             </p>
           </div>
         </div>
       )}
 
-      {/* Observaciones — primero para que no interfiera con el selector */}
+      {/* Observaciones */}
       <div>
         <label className="block text-xs font-medium text-gray-600 mb-1">
           {tipo === "render" ? "Notas para el cliente (opcional)" : "Descripción del feedback"}
@@ -136,7 +158,7 @@ export default function SubirRender({
         />
       </div>
 
-      {/* Drop zone — usa onMouseDown para no robar foco del textarea */}
+      {/* Drop zone */}
       <div
         onMouseDown={e => e.preventDefault()}
         onClick={abrirSelector}
@@ -157,7 +179,7 @@ export default function SubirRender({
         />
       </div>
 
-      {/* Lista de archivos */}
+      {/* Lista de archivos con selector de categoría */}
       {archivos.length > 0 && (
         <div className="space-y-2">
           <div className="flex items-center justify-between">
@@ -169,35 +191,63 @@ export default function SubirRender({
             </p>
           </div>
 
-          {archivos.map((archivo, idx) => (
-            <div key={idx} className="flex items-center gap-2 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg">
-              {archivo.type === "application/pdf" ? (
-                <svg className="w-4 h-4 text-red-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                </svg>
-              ) : (
-                <svg className="w-4 h-4 text-blue-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
+          {archivos.map((item, idx) => (
+            <div key={idx} className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 space-y-2">
+              {/* Fila nombre + eliminar */}
+              <div className="flex items-center gap-2">
+                {item.file.type === "application/pdf" ? (
+                  <svg className="w-4 h-4 text-red-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                  </svg>
+                ) : (
+                  <svg className="w-4 h-4 text-blue-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                )}
+                <span className="text-xs text-gray-700 flex-1 truncate">{item.file.name}</span>
+                <span className="text-xs text-gray-400 flex-shrink-0">
+                  {(item.file.size / 1024 / 1024).toFixed(1)} MB
+                </span>
+                <button
+                  onMouseDown={e => e.preventDefault()}
+                  onClick={() => eliminarArchivo(idx)}
+                  disabled={subiendo}
+                  className="text-red-400 hover:text-red-600 flex-shrink-0 disabled:opacity-50"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              {/* Selector de categoría — solo visible en tipo render */}
+              {tipo === "render" && (
+                <div className="flex gap-1.5">
+                  {(["render", "master", "otro"] as CategoriaArchivo[]).map(cat => (
+                    <button
+                      key={cat}
+                      onMouseDown={e => e.preventDefault()}
+                      onClick={() => cambiarCategoria(idx, cat)}
+                      disabled={subiendo}
+                      className={`flex-1 py-1 px-2 rounded-lg text-xs font-semibold border transition-colors disabled:opacity-50 ${
+                        item.categoria === cat
+                          ? cat === "render"
+                            ? "bg-blue-600 text-white border-blue-600"
+                            : cat === "master"
+                            ? "bg-purple-600 text-white border-purple-600"
+                            : "bg-gray-500 text-white border-gray-500"
+                          : "bg-white text-gray-500 border-gray-300 hover:border-gray-400"
+                      }`}
+                    >
+                      {CATEGORIA_LABELS[cat]}
+                    </button>
+                  ))}
+                </div>
               )}
-              <span className="text-xs text-gray-700 flex-1 truncate">{archivo.name}</span>
-              <span className="text-xs text-gray-400 flex-shrink-0">
-                {(archivo.size / 1024 / 1024).toFixed(1)} MB
-              </span>
-              <button
-                onMouseDown={e => e.preventDefault()}
-                onClick={() => eliminarArchivo(idx)}
-                disabled={subiendo}
-                className="text-red-400 hover:text-red-600 flex-shrink-0 disabled:opacity-50"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
             </div>
           ))}
 
-          {/* Botón para agregar más archivos */}
+          {/* Botón agregar más */}
           <button
             onMouseDown={e => e.preventDefault()}
             onClick={abrirSelector}

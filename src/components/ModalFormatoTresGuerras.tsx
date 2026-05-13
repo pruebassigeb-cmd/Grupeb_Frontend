@@ -5,6 +5,8 @@ import { getProductosSat, updateClavesSatBultos } from "../services/enviosServic
 import { generarFormatoTresGuerras } from "../utils/generarFormatoTresGuerras";
 import type { ProductoSat } from "../types/envios.types";
 import api from "../services/api";
+import { showAlert } from './CustomAlert';
+
 
 interface BultoForm {
   idbulto:            number;
@@ -61,7 +63,7 @@ export default function ModalFormatoTresGuerras({ idenvio, onClose }: Props) {
           clave_unidad_sat:   b.clave_unidad_sat   || "",
           clave_producto_sat: b.clave_producto_sat || "",
         })));
-      } catch { alert("Error al cargar datos del formato"); }
+      } catch { showAlert("Error al cargar datos del formato"); }
       finally { setLoading(false); }
     };
     cargar();
@@ -116,7 +118,7 @@ export default function ModalFormatoTresGuerras({ idenvio, onClose }: Props) {
       onClose();
     } catch (e) {
       console.error("Error generando PDF:", e);
-      alert("Error al generar el formato");
+      showAlert("Error al generar el formato");
     } finally {
       setGenerando(false);
     }

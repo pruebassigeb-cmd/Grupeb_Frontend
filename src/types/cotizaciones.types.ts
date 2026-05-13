@@ -20,7 +20,6 @@ export interface MedidasProducto {
   fuelleLateral1: string;
   fuelleLateral2: string;
   refuerzo:       string;
-  solapa:         string;
 }
 
 // ============================================================

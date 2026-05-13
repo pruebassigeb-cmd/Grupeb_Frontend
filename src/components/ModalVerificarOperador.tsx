@@ -4,7 +4,7 @@ import api from "../services/api";
 // ==========================
 // TIPOS
 // ==========================
-type Proceso = "extrusion" | "impresion" | "bolseo" | "asa_flexible";
+type Proceso = "extrusion" | "impresion" | "bolseo" | "asa_flexible" | "orden_diseno";
 
 interface Operador {
   id:       number;
@@ -23,6 +23,7 @@ const NOMBRE_PROCESO: Record<Proceso, string> = {
   impresion:    "Impresión",
   bolseo:       "Bolseo",
   asa_flexible: "Asa Flexible",
+  orden_diseno: "Orden de Diseño",
 };
 
 // ==========================
@@ -82,7 +83,7 @@ export default function ModalVerificarOperador({
             Verificar operador
           </h2>
           <p className="text-slate-400 text-sm mt-1">
-            Ingresa tus credenciales para operar{" "}
+            Ingresa tus credenciales para acceder a{" "}
             <span className="text-blue-400 font-medium">
               {NOMBRE_PROCESO[proceso]}
             </span>

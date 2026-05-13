@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { getRegimenesFiscales, getMetodosPago, getFormasPago } from "../services/catalogosService";
 import type { RegimenFiscal, MetodoPago, FormaPago } from "../types/clientes.types";
+import { buscarCodigoPostal } from "../services/codigoPostalService";
 
 const MONEDAS = [
   { codigo: "MXN", nombre: "Peso mexicano (MXN)" },
@@ -46,6 +47,12 @@ interface ClienteCompleto {
   moneda: string;
 }
 
+type OpcionCP = {
+  colonia: string;
+  poblacion: string;
+  estado: string;
+};
+
 export default function EditarCliente({
   cliente,
   onSubmit,
@@ -57,6 +64,10 @@ export default function EditarCliente({
   const [regimenesFiscales, setRegimenesFiscales] = useState<RegimenFiscal[]>([]);
   const [metodosPago,       setMetodosPago]       = useState<MetodoPago[]>([]);
   const [formasPago,        setFormasPago]        = useState<FormaPago[]>([]);
+
+  const [opcionesCP, setOpcionesCP] = useState<OpcionCP[]>([]);
+  const [cargandoCP, setCargandoCP] = useState(false);
+  const [errorCP, setErrorCP] = useState<string | null>(null);
 
   useEffect(() => { cargarCatalogos(); }, []);
 
@@ -86,6 +97,36 @@ export default function EditarCliente({
       ...datos,
       [name]: camposNumericos.includes(name) ? parseInt(value) : value,
     });
+  };
+
+  const handleCodigoPostalChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const valor = e.target.value.replace(/\D/g, "");
+    setDatos((prev) => ({ ...prev, codigoPostal: valor, colonia: "", poblacion: "", estado: "" }));
+    setOpcionesCP([]);
+    setErrorCP(null);
+
+    if (valor.length === 5) {
+      setCargandoCP(true);
+      try {
+        const opciones = await buscarCodigoPostal(valor);
+        setOpcionesCP(opciones);
+      } catch {
+        setErrorCP("CP no encontrado");
+      } finally {
+        setCargandoCP(false);
+      }
+    }
+  };
+
+  const handleSeleccionCP = (colonia: string) => {
+    const opcion = opcionesCP.find(o => o.colonia === colonia);
+    if (!opcion) return;
+    setDatos(prev => ({
+      ...prev,
+      colonia: opcion.colonia,
+      poblacion: opcion.poblacion,
+      estado: opcion.estado,
+    }));
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -154,27 +195,55 @@ export default function EditarCliente({
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Domicilio</label>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 gap-4">
               <input type="text" name="calle" value={datos.calle} onChange={handleInputChange}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white placeholder-gray-400"
                 placeholder="Calle" />
               <input type="text" name="numero" value={datos.numero} onChange={handleInputChange}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white placeholder-gray-400"
                 placeholder="# Número" />
-              <input type="text" name="colonia" value={datos.colonia} onChange={handleInputChange}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white placeholder-gray-400"
-                placeholder="Colonia" />
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-4 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Código Postal</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Código Postal
+                {cargandoCP && <span className="ml-2 text-xs text-blue-500 animate-pulse">Buscando...</span>}
+              </label>
               <input type="text" name="codigoPostal" value={datos.codigoPostal}
-                onChange={(e) => setDatos({ ...datos, codigoPostal: e.target.value.replace(/\D/g, "") })}
+                onChange={handleCodigoPostalChange}
                 maxLength={5}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white placeholder-gray-400"
+                className={`w-full px-4 py-2 border ${errorCP ? "border-orange-300" : "border-gray-300"} rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white placeholder-gray-400`}
                 placeholder="44100" />
+              {errorCP && <p className="text-xs text-orange-600 mt-1">{errorCP}</p>}
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Colonia</label>
+              {opcionesCP.length > 0 ? (
+                <select
+                  name="colonia"
+                  value={datos.colonia || ""}
+                  onChange={(e) => handleSeleccionCP(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white"
+                >
+                  <option value="">Selecciona colonia...</option>
+                  {opcionesCP.map((opcion, index) => (
+                    <option key={`${opcion.colonia}-${index}`} value={opcion.colonia}>
+                      {opcion.colonia}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type="text"
+                  name="colonia"
+                  value={datos.colonia}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white placeholder-gray-400"
+                  placeholder="Colonia"
+                />
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Población</label>

@@ -13,13 +13,34 @@ import type { Venta, MetodoPago } from "../types/ventas.types";
 import type { Pedido } from "../types/cotizaciones.types";
 import Modal from "../components/Modal";
 import ModalProcesoIndividual from "../components/ModalProcesoIndividual";
+import ModalEnvioSeguimiento from "../components/ModalEnvioSeguimiento";
+import ChatRevision from "../components/ChatRevision";
 import { EditarAntLiqReal } from "./AnticipoLiquidacion";
 import { EditarDisenoReal } from "./Diseno";
 import { useAuth } from "../context/AuthContext";
 import { usePermiso } from "../hooks/usePermiso";
 import ModalVerificarOperador from "../components/ModalVerificarOperador";
+import { showAlert } from '../components/CustomAlert';
+
 
 const ITEMS_POR_PAGINA = 20;
+
+const diasDesde = (fecha: string | null): number | null => {
+  if (!fecha) return null;
+  const diff = Date.now() - new Date(fecha).getTime();
+  return Math.floor(diff / (1000 * 60 * 60 * 24));
+};
+
+const obtenerColorEstadoProceso = (estado: string, fechaEstado: string | null): string => {
+  if (estado === "finalizado" || estado === "no-aplica" || estado === "aprobado" || estado === "pagado") {
+    return obtenerColorEstado(estado);
+  }
+  if (estado === "resagado") return "bg-gray-800 text-white border-gray-700";
+  const dias = diasDesde(fechaEstado);
+  if (dias !== null && dias >= 10) return "bg-gray-600 text-white border-gray-500";
+  if (dias !== null && dias >= 7)  return "bg-red-600 text-white border-red-700";
+  return obtenerColorEstado(estado);
+};
 
 const obtenerColorEstado = (estado: string) => {
   switch (estado) {
@@ -32,7 +53,7 @@ const obtenerColorEstado = (estado: string) => {
     case "pendiente":
       return "bg-orange-100 text-orange-800 border-orange-300";
     case "resagado":
-      return "bg-black text-white border-black";
+      return "bg-gray-800 text-white border-gray-700";
     case "no-aplica":
       return "bg-gray-100 text-gray-400 border-gray-200";
     default:
@@ -48,39 +69,56 @@ const obtenerTextoEstado = (estado: string) => {
   return mapa[estado] ?? "–";
 };
 
-const Badge = ({ estado, clickable = false, onClick }: { estado: string; clickable?: boolean; onClick?: () => void }) => {
-  const base   = `inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold border ${obtenerColorEstado(estado)}`;
+const Badge = ({
+  estado, fechaEstado = null, clickable = false, onClick,
+}: {
+  estado: string; fechaEstado?: string | null; clickable?: boolean; onClick?: () => void;
+}) => {
+  const dias   = diasDesde(fechaEstado);
+  const color  = obtenerColorEstadoProceso(estado, fechaEstado);
+  const titulo = dias !== null && (estado === "pendiente" || estado === "proceso")
+    ? `${estado} · ${dias} día${dias !== 1 ? "s" : ""} sin cambio`
+    : estado;
+  const base   = `inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold border ${color}`;
   const cursor = clickable && estado !== "no-aplica" ? "cursor-pointer hover:scale-110 hover:shadow-md transition-transform" : "";
   return (
-    <span title={estado} className={`${base} ${cursor}`}
+    <span title={titulo} className={`${base} ${cursor}`}
       onClick={clickable && estado !== "no-aplica" ? onClick : undefined}>
       {obtenerTextoEstado(estado)}
     </span>
   );
 };
 
-const BadgeTexto = ({ estado }: { estado: string }) => {
+const BadgeTexto = ({ estado, fechaEstado = null }: { estado: string; fechaEstado?: string | null }) => {
   const textos: Record<string, string> = {
     finalizado: "Finalizado", proceso: "En Proceso", pendiente: "Pendiente",
     resagado: "Resagado", "no-aplica": "N/A", aprobado: "Aprobado", pagado: "Pagado ✓",
   };
+  const color  = obtenerColorEstadoProceso(estado, fechaEstado);
+  const dias   = diasDesde(fechaEstado);
+  const titulo = dias !== null ? `${textos[estado] ?? estado} · ${dias} día${dias !== 1 ? "s" : ""}` : undefined;
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium border ${obtenerColorEstado(estado)}`}>
+    <span title={titulo} className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium border ${color}`}>
       {textos[estado] ?? estado}
     </span>
   );
 };
 
-const BadgeTextoBtn = ({ estado, onClick, cargando = false }: { estado: string; onClick: () => void; cargando?: boolean }) => {
+const BadgeTextoBtn = ({ estado, fechaEstado = null, onClick, cargando = false }: {
+  estado: string; fechaEstado?: string | null; onClick: () => void; cargando?: boolean;
+}) => {
   const textos: Record<string, string> = {
     finalizado: "Finalizado", proceso: "En Proceso", pendiente: "Pendiente",
     resagado: "Resagado", "no-aplica": "N/A", aprobado: "Aprobado", pagado: "Pagado ✓",
   };
+  const color  = obtenerColorEstadoProceso(estado, fechaEstado);
+  const dias   = diasDesde(fechaEstado);
+  const titulo = dias !== null ? `${textos[estado] ?? estado} · ${dias} día${dias !== 1 ? "s" : ""}` : "Abrir módulo";
   return (
-    <button onClick={onClick} disabled={cargando} title="Abrir módulo"
+    <button onClick={onClick} disabled={cargando} title={titulo}
       className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium border transition-all
         hover:brightness-95 hover:shadow-sm active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed
-        ${obtenerColorEstado(estado)}`}>
+        ${color}`}>
       {cargando && <div className="w-2.5 h-2.5 border-2 border-current border-t-transparent rounded-full animate-spin" />}
       {textos[estado] ?? estado}
     </button>
@@ -94,9 +132,6 @@ const IconoPdf = () => (
   </svg>
 );
 
-// ─────────────────────────────────────────────
-// BOTON PDF PEDIDO (columna N° Pedido)
-// ─────────────────────────────────────────────
 function BotonPdfPedido({ pedido }: { pedido: PedidoSeguimiento }) {
   const [descargando, setDescargando] = useState(false);
 
@@ -145,13 +180,9 @@ function BotonPdfPedido({ pedido }: { pedido: PedidoSeguimiento }) {
   const handleDescargar = async () => {
     setDescargando(true);
     try {
-      const [todos, venta] = await Promise.all([
-        getPedidos(),
-        getVentaByPedido(pedido.no_pedido),
-      ]);
+      const [todos, venta] = await Promise.all([getPedidos(), getVentaByPedido(pedido.no_pedido)]);
       const ped: Pedido | undefined = (todos as Pedido[]).find(p => p.no_pedido === pedido.no_pedido);
-      if (!ped) { alert("No se encontró el pedido."); return; }
-
+      if (!ped) { showAlert("No se encontró el pedido."); return; }
       await generarPdfPedido({
         no_pedido:      ped.no_pedido,
         no_cotizacion:  ped.no_cotizacion  ?? null,
@@ -179,34 +210,24 @@ function BotonPdfPedido({ pedido }: { pedido: PedidoSeguimiento }) {
         productos:      buildProductosPdf(ped.productos),
       });
     } catch {
-      alert("No se pudo generar el PDF del pedido.");
-    } finally {
-      setDescargando(false);
-    }
+      showAlert("No se pudo generar el PDF del pedido.");
+    } finally { setDescargando(false); }
   };
 
   return (
     <div className="flex items-center gap-1.5">
       <span className="text-xs font-medium text-blue-600 whitespace-nowrap">{pedido.no_pedido}</span>
-      <button
-        onClick={handleDescargar}
-        disabled={descargando}
-        title="Descargar PDF del pedido"
-        className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white text-xs font-medium rounded transition-colors"
-      >
+      <button onClick={handleDescargar} disabled={descargando} title="Descargar PDF del pedido"
+        className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white text-xs font-medium rounded transition-colors">
         {descargando
           ? <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
-          : <IconoPdf />
-        }
+          : <IconoPdf />}
         PDF
       </button>
     </div>
   );
 }
 
-// ─────────────────────────────────────────────
-// BOTON ESTADO DE CUENTA PDF
-// ─────────────────────────────────────────────
 function BotonEstadoCuentaPdf({ noPedido }: { noPedido: string }) {
   const [descargando, setDescargando] = useState(false);
   const handleDescargar = async () => {
@@ -216,7 +237,7 @@ function BotonEstadoCuentaPdf({ noPedido }: { noPedido: string }) {
       await generarPdfEstadoCuentaSimple(datos);
     } catch (e: any) {
       const msg = e?.response?.data?.detalle || e?.response?.data?.error || null;
-      alert(msg
+      showAlert(msg
         ? `Estado de cuenta no disponible:\n${msg}`
         : "El estado de cuenta aun no esta disponible. Verifica que todos los procesos hayan finalizado."
       );
@@ -224,22 +245,17 @@ function BotonEstadoCuentaPdf({ noPedido }: { noPedido: string }) {
   };
   return (
     <div className="flex items-center justify-center">
-      <button onClick={handleDescargar} disabled={descargando}
-        title="Descargar estado de cuenta cliente"
+      <button onClick={handleDescargar} disabled={descargando} title="Descargar estado de cuenta cliente"
         className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white text-xs font-medium rounded transition-colors">
         {descargando
           ? <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
-          : <IconoPdf />
-        }
+          : <IconoPdf />}
         {descargando ? "..." : "PDF"}
       </button>
     </div>
   );
 }
 
-// ─────────────────────────────────────────────
-// BOTON PDF ORDEN DE PRODUCCION
-// ─────────────────────────────────────────────
 function BotonPdfDirecto({ pedido }: { pedido: PedidoSeguimiento }) {
   const [descargando, setDescargando] = useState(false);
   const handleDescargar = async () => {
@@ -248,36 +264,67 @@ function BotonPdfDirecto({ pedido }: { pedido: PedidoSeguimiento }) {
       const data = await getOrdenProduccion(pedido.no_pedido);
       const producto: OrdenProduccionProducto | undefined =
         data.productos.find((p: any) => p.no_produccion === pedido.no_produccion);
-      if (!producto) { alert("No se encontro la orden."); return; }
+      if (!producto) { showAlert("No se encontro la orden."); return; }
       await generarPdfOrdenProduccion({
-        no_pedido: data.no_pedido, no_produccion: producto.no_produccion,
-        fecha: data.fecha, fecha_produccion: producto.fecha_produccion,
+        no_pedido:               data.no_pedido,
+        no_produccion:           producto.no_produccion,
+        fecha:                   data.fecha,
+        fecha_produccion:        producto.fecha_produccion,
         fecha_aprobacion_diseno: producto.fecha_aprobacion_diseno,
-        observaciones_diseno: producto.observaciones_diseno ?? null,
-        cliente: data.cliente, empresa: data.empresa, telefono: data.telefono,
-        correo: data.correo, impresion: data.impresion, prioridad: data.prioridad ?? false,
-        nombre_producto: producto.nombre_producto, categoria: producto.categoria,
-        material: producto.material, calibre: producto.calibre, medida: producto.medida,
-        altura: producto.altura, ancho: producto.ancho, fuelle_fondo: producto.fuelle_fondo,
-        fuelle_lat_iz: producto.fuelle_lat_iz, fuelle_lat_de: producto.fuelle_lat_de,
-        refuerzo: producto.refuerzo, por_kilo: producto.por_kilo, medidas: producto.medidas,
-        tintas: producto.tintas, caras: producto.caras, bk: producto.bk, foil: producto.foil,
-        alto_rel: producto.alto_rel, laminado: producto.laminado, uv_br: producto.uv_br,
-        pigmentos: producto.pigmentos, pantones: producto.pantones, asa_suaje: producto.asa_suaje,
-        color_asa_nombre: producto.color_asa_nombre ?? null,
-        medida_troquel: producto.medida_troquel ?? null, observacion: producto.observacion,
-        cantidad: producto.cantidad, kilogramos: producto.kilogramos, modo_cantidad: producto.modo_cantidad,
-        repeticion_extrusion: producto.repeticion_extrusion ?? null,
-        repeticion_metro: producto.repeticion_metro ?? null,
-        metros: producto.metros ?? null, ancho_bobina: producto.ancho_bobina ?? null,
-        repeticion_kidder: producto.repeticion_kidder ?? null,
-        repeticion_sicosa: producto.repeticion_sicosa ?? null,
-        fecha_entrega: producto.fecha_entrega ?? null,
-        kilos: producto.kilos ?? null, kilos_merma: producto.kilos_merma ?? null,
-        pzas: producto.pzas ?? null, pzas_merma: producto.pzas_merma ?? null,
-        kilos_extruir: producto.kilos_extruir ?? null, metros_extruir: producto.metros_extruir ?? null,
+        observaciones_diseno:    producto.observaciones_diseno    ?? null,
+        cliente:                 data.cliente,
+        empresa:                 data.empresa,
+        telefono:                data.telefono,
+        correo:                  data.correo,
+        impresion:               data.impresion,
+        prioridad:               data.prioridad ?? false,
+        nombre_producto:         producto.nombre_producto,
+        categoria:               producto.categoria,
+        material:                producto.material,
+        calibre:                 producto.calibre,
+        medida:                  producto.medida,
+        altura:                  producto.altura,
+        ancho:                   producto.ancho,
+        fuelle_fondo:            producto.fuelle_fondo,
+        fuelle_lat_iz:           producto.fuelle_lat_iz,
+        fuelle_lat_de:           producto.fuelle_lat_de,
+        refuerzo:                producto.refuerzo,
+        por_kilo:                producto.por_kilo,
+        medidas:                 producto.medidas,
+        tintas:                  producto.tintas,
+        caras:                   producto.caras,
+        bk:                      producto.bk,
+        foil:                    producto.foil,
+        alto_rel:                producto.alto_rel,
+        laminado:                producto.laminado,
+        uv_br:                   producto.uv_br,
+        pigmentos:               producto.pigmentos,
+        pantones:                producto.pantones,
+        asa_suaje:               producto.asa_suaje,
+        color_asa_nombre:        producto.color_asa_nombre  ?? null,
+        medida_troquel:          producto.medida_troquel    ?? null,
+        observacion:             producto.observacion,
+        cantidad:                producto.cantidad,
+        kilogramos:              producto.kilogramos,
+        modo_cantidad:           producto.modo_cantidad,
+        repeticion_extrusion:    producto.repeticion_extrusion ?? null,
+        repeticion_metro:        producto.repeticion_metro     ?? null,
+        metros:                  producto.metros               ?? null,
+        ancho_bobina:            producto.ancho_bobina         ?? null,
+        repeticion_kidder:       producto.repeticion_kidder    ?? null,
+        repeticion_sicosa:       producto.repeticion_sicosa    ?? null,
+        fecha_entrega:           producto.fecha_entrega        ?? null,
+        kilos:                   producto.kilos                ?? null,
+        kilos_merma:             producto.kilos_merma          ?? null,
+        pzas:                    producto.pzas                 ?? null,
+        pzas_merma:              producto.pzas_merma           ?? null,
+        kilos_extruir:           producto.kilos_extruir        ?? null,
+        metros_extruir:          producto.metros_extruir       ?? null,
+        // ── Imágenes de diseño ──
+        url_render:              (producto as any).url_render  ?? null,
+        url_master:              (producto as any).url_master  ?? null,
       });
-    } catch { alert("No se pudo generar el PDF."); }
+    } catch { showAlert("No se pudo generar el PDF."); }
     finally { setDescargando(false); }
   };
   return (
@@ -287,8 +334,7 @@ function BotonPdfDirecto({ pedido }: { pedido: PedidoSeguimiento }) {
         className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white text-xs font-medium rounded transition-colors">
         {descargando
           ? <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
-          : <IconoPdf />
-        }
+          : <IconoPdf />}
         PDF
       </button>
     </div>
@@ -310,9 +356,6 @@ function RenderOrdenProduccion({ pedido }: { pedido: PedidoSeguimiento }) {
   return <BotonPdfDirecto pedido={pedido} />;
 }
 
-// ─────────────────────────────────────────────
-// PAGINADOR
-// ─────────────────────────────────────────────
 function Paginador({
   total, paginaActual, totalPaginas, inicio, irAPagina,
 }: {
@@ -328,7 +371,6 @@ function Paginador({
     if (paginaActual < totalPaginas - 2) pags.push("...");
     pags.push(totalPaginas);
   }
-
   return (
     <div className="flex items-center justify-between px-4 py-3 bg-white border-t border-gray-200">
       <p className="text-sm text-gray-500">
@@ -351,9 +393,7 @@ function Paginador({
             ? <span key={`e${i}`} className="px-2 text-gray-400 text-sm">…</span>
             : <button key={p} onClick={() => irAPagina(p as number)}
                 className={`w-8 h-8 rounded-md text-sm font-medium transition-colors ${
-                  p === paginaActual
-                    ? "bg-blue-600 text-white shadow"
-                    : "text-gray-600 hover:bg-gray-100"
+                  p === paginaActual ? "bg-blue-600 text-white shadow" : "text-gray-600 hover:bg-gray-100"
                 }`}>{p}</button>
         )}
         <button onClick={() => irAPagina(paginaActual + 1)} disabled={paginaActual === totalPaginas}
@@ -367,17 +407,14 @@ function Paginador({
   );
 }
 
-// ─────────────────────────────────────────────
-// TABLA — columnas y header
-// ─────────────────────────────────────────────
 const COLUMNAS = [
   "Fecha", "N° Pedido", "Impresion", "Tipo",
-  "Anticipo", "Diseno", "Orden",
+  "Anticipo", "OD", "Diseno", "Orden",
   "Ext", "Imp", "Bol", "Asa",
   "E. Cta", "Pago", "Envio",
 ];
 const COLS_CENTRADAS = new Set([
-  "Anticipo", "Diseno", "Orden",
+  "Anticipo", "OD", "Diseno", "Orden",
   "Ext", "Imp", "Bol", "Asa",
   "E. Cta", "Pago", "Envio",
 ]);
@@ -397,9 +434,6 @@ const renderThead = (oscuro = false) => (
   </thead>
 );
 
-// ─────────────────────────────────────────────
-// COMPONENTE PRINCIPAL
-// ─────────────────────────────────────────────
 export default function Seguimiento() {
   const [pedidos,          setPedidos]          = useState<PedidoSeguimiento[]>([]);
   const [cargando,         setCargando]         = useState(true);
@@ -408,20 +442,19 @@ export default function Seguimiento() {
   const [pantallaCompleta, setPantallaCompleta] = useState(false);
   const [paginaActual,     setPaginaActual]     = useState(1);
 
-  const [modalProceso, setModalProceso] = useState<{
-    pedido: PedidoSeguimiento; nombreProceso: string;
-  } | null>(null);
-
+  const [modalProceso,     setModalProceso]     = useState<{ pedido: PedidoSeguimiento; nombreProceso: string } | null>(null);
   const [modalAnticipo,    setModalAnticipo]    = useState<{ venta: Venta; metodos: MetodoPago[] } | null>(null);
   const [cargandoAnticipo, setCargandoAnticipo] = useState<string | null>(null);
   const [modalDiseno,      setModalDiseno]      = useState<Pedido | null>(null);
+  const [modalEnvio,       setModalEnvio]       = useState<PedidoSeguimiento | null>(null);
+  const [modalOD,          setModalOD]          = useState<PedidoSeguimiento | null>(null);
 
   const [modalVerificacion, setModalVerificacion] = useState<{
     pedido: PedidoSeguimiento;
-    proceso: "extrusion" | "impresion" | "bolseo" | "asa_flexible";
+    proceso: "extrusion" | "impresion" | "bolseo" | "asa_flexible" | "orden_diseno";
   } | null>(null);
 
-  const { user } = useAuth();
+  const { user }         = useAuth();
   const esAccesoTotal    = user?.acceso_total ?? false;
   const puedeExtrusion   = esAccesoTotal || usePermiso("Operar Extrusión");
   const puedeImpresion   = esAccesoTotal || usePermiso("Operar Impresión");
@@ -429,6 +462,8 @@ export default function Seguimiento() {
   const puedeAsaFlexible = esAccesoTotal || usePermiso("Operar Asa Flexible");
   const esRolPlanta      = usePermiso("Acceso Planta");
   const puedeVerECta     = esAccesoTotal || usePermiso("Editar Anticipo y Liquidacion");
+  const puedeVerEnvio    = esAccesoTotal || usePermiso("Gestionar Envios");
+  const puedeVerOD       = esAccesoTotal || usePermiso("Orden de Diseño");
 
   useEffect(() => {
     cargar();
@@ -437,7 +472,6 @@ export default function Seguimiento() {
     return () => document.removeEventListener("visibilitychange", onVisible);
   }, []);
 
-  // Reset pagina al cambiar filtro
   useEffect(() => { setPaginaActual(1); }, [filtroTipo]);
 
   const cargar = async () => {
@@ -453,13 +487,10 @@ export default function Seguimiento() {
     if (cargandoAnticipo) return;
     setCargandoAnticipo(pedido.no_pedido);
     try {
-      const [venta, metodos] = await Promise.all([
-        getVentaByPedido(pedido.no_pedido),
-        getMetodosPago(),
-      ]);
+      const [venta, metodos] = await Promise.all([getVentaByPedido(pedido.no_pedido), getMetodosPago()]);
       setModalAnticipo({ venta, metodos });
     } catch {
-      alert("No se pudo cargar la informacion de anticipo.");
+      showAlert("No se pudo cargar la informacion de anticipo.");
     } finally { setCargandoAnticipo(null); }
   };
 
@@ -476,7 +507,6 @@ export default function Seguimiento() {
     } as any);
   };
 
-  // ── Filtrado y paginación ──
   const pedidosFiltrados = filtroTipo === "todos"
     ? pedidos
     : pedidos.filter(p => (p.tipo_producto || "").toLowerCase().includes(filtroTipo));
@@ -496,11 +526,22 @@ export default function Seguimiento() {
     const pagadoReal     = pedido.saldo_venta != null ? pedido.saldo_venta <= 0.01 : pedido.pago_completo;
     const estadoPago     = pagadoReal ? "pagado" : pedido.anticipo_cubierto ? "proceso" : "pendiente";
 
-    const tieneOrden = !!pedido.no_produccion && !!pedido.idproduccion;
-    const extEstado  = tieneOrden ? pedido.extrusion_estado    : "no-aplica";
-    const impEstado  = tieneOrden ? pedido.impresion_estado    : "no-aplica";
-    const bolEstado  = tieneOrden ? pedido.bolseo_estado       : "no-aplica";
-    const asaEstado  = tieneOrden ? pedido.asa_flexible_estado : "no-aplica";
+    const tieneOrden  = !!pedido.no_produccion && !!pedido.idproduccion;
+    const extEstado   = tieneOrden ? pedido.extrusion_estado    : "no-aplica";
+    const impEstado   = tieneOrden ? pedido.impresion_estado    : "no-aplica";
+    const bolEstado   = tieneOrden ? pedido.bolseo_estado       : "no-aplica";
+    const asaEstado   = tieneOrden ? pedido.asa_flexible_estado : "no-aplica";
+    const estadoEnvio = tieneOrden ? "pendiente" : "no-aplica";
+
+    const odEstadoRaw = (pedido as any).od_estado as string | null;
+    const odId        = (pedido as any).idorden_diseno as number | null;
+    const estadoOD    = odEstadoRaw === "aprobado"
+      ? "aprobado"
+      : odEstadoRaw === "en_revision"
+        ? "proceso"
+        : odEstadoRaw === "rechazado"
+          ? "detenido"
+          : "no-aplica";
 
     const abrirProceso = (nombreProceso: string) => {
       if (!tieneOrden) return;
@@ -508,7 +549,7 @@ export default function Seguimiento() {
     };
 
     return (
-      <tr key={`${pedido.no_pedido}-${pedido.no_produccion ?? idx}`}
+      <tr key={`${pedido.no_pedido}-${pedido.no_produccion ?? "sin-op"}-${idx}`}
         className="hover:bg-gray-50 transition-colors border-t border-gray-200">
 
         <td className={`${px} ${txt} text-gray-900 whitespace-nowrap`}>
@@ -526,68 +567,79 @@ export default function Seguimiento() {
           </span>
         </td>
 
+        {/* ANTICIPO */}
         <td className={`${px} text-center`}>
           {esAccesoTotal
-            ? <BadgeTextoBtn estado={estadoAnticipo} cargando={cargandoAnticipo === pedido.no_pedido} onClick={() => abrirAnticipo(pedido)} />
-            : <BadgeTexto estado={estadoAnticipo} />
+            ? <BadgeTextoBtn estado={estadoAnticipo} fechaEstado={(pedido as any).anticipo_fecha_estado} cargando={cargandoAnticipo === pedido.no_pedido} onClick={() => abrirAnticipo(pedido)} />
+            : <BadgeTexto estado={estadoAnticipo} fechaEstado={(pedido as any).anticipo_fecha_estado} />
           }
         </td>
 
+        {/* OD — abre ChatRevision */}
+        <td className={`${px} text-center`}>
+          {odId ? (
+            (puedeVerOD || esRolPlanta) ? (
+              <BadgeTextoBtn
+                estado={estadoOD}
+                fechaEstado={(pedido as any).od_fecha_estado}
+                onClick={() => {
+                  puedeVerOD
+                    ? setModalOD(pedido)
+                    : setModalVerificacion({ pedido, proceso: "orden_diseno" });
+                }}
+              />
+            ) : (
+              <BadgeTexto estado={estadoOD} fechaEstado={(pedido as any).od_fecha_estado} />
+            )
+          ) : (
+            <BadgeTexto estado="no-aplica" />
+          )}
+        </td>
+
+        {/* DISEÑO */}
         <td className={`${px} text-center`}>
           {esAccesoTotal
-            ? <BadgeTextoBtn estado={estadoDiseño} onClick={() => abrirDiseno(pedido)} />
-            : <BadgeTexto estado={estadoDiseño} />
+            ? <BadgeTextoBtn estado={estadoDiseño} fechaEstado={(pedido as any).diseno_fecha_estado} onClick={() => abrirDiseno(pedido)} />
+            : <BadgeTexto estado={estadoDiseño} fechaEstado={(pedido as any).diseno_fecha_estado} />
           }
         </td>
 
         <td className={`${px} text-center`}><RenderOrdenProduccion pedido={pedido} /></td>
 
         <td className={`${px} text-center`}>
-          <Badge estado={extEstado}
+          <Badge estado={extEstado} fechaEstado={pedido.extrusion_fecha_estado}
             clickable={tieneOrden && extEstado !== "no-aplica" && (puedeExtrusion || esRolPlanta)}
             onClick={() => {
               if (!tieneOrden) return;
-              puedeExtrusion
-                ? abrirProceso("extrusion")
-                : setModalVerificacion({ pedido, proceso: "extrusion" });
-            }}
-          />
+              puedeExtrusion ? abrirProceso("extrusion") : setModalVerificacion({ pedido, proceso: "extrusion" });
+            }} />
         </td>
 
         <td className={`${px} text-center`}>
-          <Badge estado={impEstado}
+          <Badge estado={impEstado} fechaEstado={pedido.impresion_fecha_estado}
             clickable={tieneOrden && impEstado !== "no-aplica" && (puedeImpresion || esRolPlanta)}
             onClick={() => {
               if (!tieneOrden) return;
-              puedeImpresion
-                ? abrirProceso("impresion")
-                : setModalVerificacion({ pedido, proceso: "impresion" });
-            }}
-          />
+              puedeImpresion ? abrirProceso("impresion") : setModalVerificacion({ pedido, proceso: "impresion" });
+            }} />
         </td>
 
         <td className={`${px} text-center`}>
-          <Badge estado={bolEstado}
+          <Badge estado={bolEstado} fechaEstado={pedido.bolseo_fecha_estado}
             clickable={tieneOrden && bolEstado !== "no-aplica" && (puedeBolseo || esRolPlanta)}
             onClick={() => {
               if (!tieneOrden) return;
-              puedeBolseo
-                ? abrirProceso("bolseo")
-                : setModalVerificacion({ pedido, proceso: "bolseo" });
-            }}
-          />
+              puedeBolseo ? abrirProceso("bolseo") : setModalVerificacion({ pedido, proceso: "bolseo" });
+            }} />
         </td>
 
         <td className={`${px} text-center`}>
-          <Badge estado={asaEstado}
+          <Badge estado={asaEstado} fechaEstado={pedido.asa_flexible_fecha_estado}
             clickable={tieneOrden && asaEstado !== "no-aplica" && (puedeAsaFlexible || esRolPlanta)}
             onClick={() => {
               if (!tieneOrden) return;
-              puedeAsaFlexible
-                ? abrirProceso("asa_flexible")
-                : setModalVerificacion({ pedido, proceso: "asa_flexible" });
-            }}
-          />
+              puedeAsaFlexible ? abrirProceso("asa_flexible") : setModalVerificacion({ pedido, proceso: "asa_flexible" });
+            }} />
         </td>
 
         <td className={`${px} text-center`}>
@@ -599,23 +651,27 @@ export default function Seguimiento() {
 
         <td className={`${px} text-center`}>
           {esAccesoTotal
-            ? <BadgeTextoBtn
-                estado={estadoPago}
-                cargando={cargandoAnticipo === pedido.no_pedido}
-                onClick={() => abrirAnticipo(pedido)}
-              />
-            : <BadgeTexto estado={estadoPago} />
+            ? <BadgeTextoBtn estado={estadoPago} fechaEstado={(pedido as any).pago_fecha_estado} cargando={cargandoAnticipo === pedido.no_pedido} onClick={() => abrirAnticipo(pedido)} />
+            : <BadgeTexto estado={estadoPago} fechaEstado={(pedido as any).pago_fecha_estado} />
           }
         </td>
 
-        <td className={`${px} text-center`}><BadgeTexto estado="pendiente" /></td>
+        {/* ENVÍO */}
+        <td className={`${px} text-center`}>
+          {tieneOrden ? (
+            puedeVerEnvio ? (
+              <BadgeTextoBtn estado={estadoEnvio} fechaEstado={(pedido as any).envio_fecha_estado} onClick={() => setModalEnvio(pedido)} />
+            ) : (
+              <BadgeTexto estado={estadoEnvio} fechaEstado={(pedido as any).envio_fecha_estado} />
+            )
+          ) : (
+            <BadgeTexto estado="no-aplica" />
+          )}
+        </td>
       </tr>
     );
   };
 
-  // ─────────────────────────────────────────────
-  // MODALES
-  // ─────────────────────────────────────────────
   const modales = (
     <>
       {modalProceso && (
@@ -659,17 +715,41 @@ export default function Seguimiento() {
           onSuccess={() => {
             const { pedido, proceso } = modalVerificacion;
             setModalVerificacion(null);
-            setModalProceso({ pedido, nombreProceso: proceso });
+            if (proceso === "orden_diseno") {
+              setModalOD(pedido);
+            } else {
+              setModalProceso({ pedido, nombreProceso: proceso });
+            }
           }}
           onCancel={() => setModalVerificacion(null)}
         />
       )}
+
+      {modalEnvio && (
+        <ModalEnvioSeguimiento
+          pedido={modalEnvio}
+          onClose={() => setModalEnvio(null)}
+          onActualizar={cargar}
+        />
+      )}
+
+      {/* ── MODAL ORDEN DE DISEÑO — usa ChatRevision ── */}
+      {modalOD && (
+        <Modal
+          isOpen={!!modalOD}
+          onClose={() => { setModalOD(null); cargar(); }}
+          title={`Orden de Diseño — ${modalOD.no_pedido}`}
+        >
+          <ChatRevision
+            idorden={(modalOD as any).idorden_diseno as number}
+            usuarioId={user?.id ?? 0}
+            onClose={() => { setModalOD(null); cargar(); }}
+          />
+        </Modal>
+      )}
     </>
   );
 
-  // ─────────────────────────────────────────────
-  // ESTADOS DE CARGA / ERROR
-  // ─────────────────────────────────────────────
   if (cargando) return (
     <Dashboard>
       <div className="flex items-center justify-center h-64">
@@ -692,9 +772,6 @@ export default function Seguimiento() {
     </Dashboard>
   );
 
-  // ─────────────────────────────────────────────
-  // VISTA PANTALLA COMPLETA (sin paginador, muestra todo)
-  // ─────────────────────────────────────────────
   if (pantallaCompleta) return (
     <>
       <div className="p-6 min-h-screen bg-gray-50">
@@ -718,9 +795,6 @@ export default function Seguimiento() {
     </>
   );
 
-  // ─────────────────────────────────────────────
-  // VISTA NORMAL
-  // ─────────────────────────────────────────────
   return (
     <Dashboard>
       <div className="mb-6">
@@ -756,8 +830,8 @@ export default function Seguimiento() {
             { color: "bg-green-500",  label: "Finalizado / Aprobado / Pagado" },
             { color: "bg-yellow-400", label: "En Proceso" },
             { color: "bg-orange-400", label: "Pendiente" },
-            { color: "bg-red-500",    label: "Detenido" },
-            { color: "bg-black",      label: "Resagado" },
+            { color: "bg-red-700",    label: "Detenido +7 días (crítico)" },
+            { color: "bg-gray-600",   label: "Resagado / +10 días sin cambio" },
             { color: "bg-gray-300",   label: "No Aplica" },
           ].map(l => (
             <div key={l.label} className="flex items-center gap-1.5">

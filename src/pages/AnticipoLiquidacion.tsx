@@ -17,6 +17,10 @@ import { generarPdfHistorialPagos } from "../services/generarPdfHistorialPagos";
 import { getEstadoCuenta } from "../services/estadoCuentaService";
 import type { EstadoCuenta } from "../services/estadoCuentaService";
 import type { Venta, VentaPago, MetodoPago } from "../types/ventas.types";
+import { showAlert } from '../components/CustomAlert';
+import { showConfirm } from '../components/CustomConfirm';
+
+
 
 const ESTADO = { PENDIENTE: 1, EN_PROCESO: 2, PAGADO: 6 } as const;
 const POR_PAGINA = 10;
@@ -97,6 +101,9 @@ async function descargarPdfOrden(noPedido: string, noProduccion: string): Promis
     pzas_merma:              producto.pzas_merma           ?? null,
     kilos_extruir:           producto.kilos_extruir        ?? null,
     metros_extruir:          producto.metros_extruir       ?? null,
+
+    url_render:              (producto as any).url_render  ?? null,
+    url_master:              (producto as any).url_master  ?? null,
   });
 }
 
@@ -583,7 +590,7 @@ export function EditarAntLiqReal({
   };
 
   const handleAutorizarCredito = async () => {
-    if (!confirm(
+    if (!await showConfirm(
       `¿Autorizar el anticipo por crédito?\n\n` +
       `Esto activará la producción sin registrar ningún pago.\n` +
       `El saldo pendiente seguirá siendo $${fmt(saldo)}.`
@@ -610,10 +617,10 @@ export function EditarAntLiqReal({
   };
 
   const handleEliminarPago = async (pago: VentaPago) => {
-    if (!confirm(`¿Eliminar el pago de $${fmt(pago.monto)}?`)) return;
+    if (!await showConfirm(`¿Eliminar el pago de $${fmt(pago.monto)}?`)) return;
     setEliminando(pago.idventa_pago);
     try { await eliminarPago(pago.idventa_pago); await recargar(); }
-    catch (e: any) { alert(e.response?.data?.error || "Error al eliminar pago"); }
+    catch (e: any) { showAlert(e.response?.data?.error || "Error al eliminar pago"); }
     finally { setEliminando(null); }
   };
 

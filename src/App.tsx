@@ -16,7 +16,8 @@ import EstadoCuenta from "./components/EstadoCuenta.tsx";
 import SinAcceso from "./pages/SinAcceso";
 import EditarPedido from "./components/EditarPedido.tsx";
 import Envios from "./pages/Envios";
-import GestorArchivos from "./components/GestorArchivos"; // 👈 nuevo
+import GestorArchivos from "./components/GestorArchivos";
+import GestorBackups from "./components/GestorBackups.tsx"; 
 
 const PERMISOS = {
   usuarios:     "Crear/Editar/Eliminar Usuarios",
@@ -126,6 +127,11 @@ function App() {
           {/* Archivos */}
           <Route path="/archivos" element={
             <ProtectedRoute><GestorArchivos /></ProtectedRoute>
+          } />
+
+          {/* Backups BD — solo admins (accesoTotal), protección extra por código dentro del componente */}
+          <Route path="/backups" element={
+            <ProtectedRoute><GestorBackups /></ProtectedRoute>
           } />
 
           {/* Catch-all */}

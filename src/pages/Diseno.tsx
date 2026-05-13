@@ -10,6 +10,10 @@ import type { Pedido } from "../types/cotizaciones.types";
 import ChatRevision from "../components/ChatRevision";
 import { useAuth } from "../context/AuthContext";
 import { usePermisos } from "../hooks/usePermiso";
+import { showAlert } from '../components/CustomAlert';
+import { showConfirm } from '../components/CustomConfirm';
+
+
 
 const ESTADO = { PENDIENTE: 1, EN_PROCESO: 2, APROBADO: 3 } as const;
 const POR_PAGINA = 10;
@@ -32,6 +36,8 @@ async function descargarPdfOrden(noPedido: string, noProduccion: string): Promis
   const data = await getOrdenProduccion(noPedido);
   const producto = data.productos.find((p: any) => p.no_produccion === noProduccion);
   if (!producto) throw new Error(`Producto con folio ${noProduccion} no encontrado`);
+
+
   await generarPdfOrdenProduccion({
     no_pedido:               data.no_pedido,
     no_produccion:           producto.no_produccion,
@@ -87,6 +93,9 @@ async function descargarPdfOrden(noPedido: string, noProduccion: string): Promis
     pzas_merma:              producto.pzas_merma           ?? null,
     kilos_extruir:           producto.kilos_extruir        ?? null,
     metros_extruir:          producto.metros_extruir       ?? null,
+    // ── Imágenes de diseño ──
+    url_render:              (producto as any).url_render  ?? null,
+    url_master:              (producto as any).url_master  ?? null,
   });
 }
 
@@ -164,7 +173,6 @@ export function EditarDisenoReal({
     puedeOrdenDiseno:  "Orden de Diseño",
   });
 
-  // Usuario con solo "Orden de Diseño" — acceso restringido a chat únicamente
   const soloChat = puedeOrdenDiseno && !puedeEditarDiseno;
 
   const [diseno,    setDiseno]    = useState<Diseno | null>(null);
@@ -216,14 +224,14 @@ export function EditarDisenoReal({
         }
       }
     } catch (e: any) {
-      alert(e.response?.data?.error || "Error al actualizar estado");
+      showAlert(e.response?.data?.error || "Error al actualizar estado");
     } finally {
       setGuardando(null);
     }
   };
 
   const handleAprobarTodos = async () => {
-    if (!diseno || !confirm("¿Aprobar TODOS los productos?")) return;
+    if (!diseno || !await showConfirm("¿Aprobar TODOS los productos?")) return;
     for (const p of diseno.productos) {
       if (p.estado_id !== ESTADO.APROBADO) {
         await handleCambiarEstado(p.iddiseno_producto, ESTADO.APROBADO);
@@ -254,7 +262,7 @@ export function EditarDisenoReal({
   return (
     <div className="space-y-5">
 
-      {/* ── Banner de acceso restringido para usuarios con solo "Orden de Diseño" ── */}
+      {/* Banner acceso restringido */}
       {soloChat && (
         <div className="flex items-start gap-3 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3">
           <svg className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -269,7 +277,7 @@ export function EditarDisenoReal({
         </div>
       )}
 
-      {/* Alerta PDF — solo visible para diseño */}
+      {/* Alerta PDF */}
       {alertaPdf.visible && puedeEditarDiseno && (
         <div className="flex items-start gap-3 bg-green-50 border-2 border-green-400 rounded-xl px-4 py-4 shadow-md">
           <div className="flex-shrink-0 w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
@@ -309,7 +317,7 @@ export function EditarDisenoReal({
         </p>
       </div>
 
-      {/* Aviso anticipo — solo para diseño */}
+      {/* Aviso anticipo */}
       {puedeEditarDiseno && !(diseno as any).anticipo_cubierto && (
         <div className="flex items-center gap-3 rounded-xl px-4 py-3 border bg-amber-50 border-amber-200">
           <span className="text-lg flex-shrink-0">⚠️</span>
@@ -324,7 +332,7 @@ export function EditarDisenoReal({
         </div>
       )}
 
-      {/* Estadísticas — solo para diseño */}
+      {/* Estadísticas */}
       {puedeEditarDiseno && (
         <div className="grid grid-cols-4 gap-3">
           {[
@@ -341,7 +349,7 @@ export function EditarDisenoReal({
         </div>
       )}
 
-      {/* Estado global — solo para diseño */}
+      {/* Estado global */}
       {puedeEditarDiseno && (
         <div className={`flex items-center gap-3 rounded-xl px-4 py-3 border ${
           eg === "aprobado"   ? "bg-green-50 border-green-200"  :
@@ -364,7 +372,7 @@ export function EditarDisenoReal({
         </div>
       )}
 
-      {/* Botón aprobar todos — solo diseño */}
+      {/* Botón aprobar todos */}
       {puedeEditarDiseno && !diseno.diseno_completado && (
         <button
           onClick={handleAprobarTodos}
@@ -385,8 +393,6 @@ export function EditarDisenoReal({
           const aprobado    = producto.estado_id === ESTADO.APROBADO;
           const enProceso   = producto.estado_id === ESTADO.EN_PROCESO;
 
-          // Si es soloChat y el producto no tiene orden de diseño, no mostrar la tarjeta
-          // (el usuario de "Orden de Diseño" solo ve productos que tengan chat activo)
           if (soloChat && !producto.idorden_diseno) return null;
 
           return (
@@ -411,7 +417,7 @@ export function EditarDisenoReal({
                 </span>
               </div>
 
-              {/* Cantidad — visible para todos */}
+              {/* Cantidad */}
               {(producto.cantidad || producto.kilogramos) && (
                 <div className="mb-3 px-3 py-2 bg-gray-50 rounded-lg border border-gray-100">
                   <p className="text-xs text-gray-500 mb-1 font-medium">Cantidad aprobada por cliente:</p>
@@ -423,7 +429,7 @@ export function EditarDisenoReal({
                 </div>
               )}
 
-              {/* Orden producción generada — solo diseño */}
+              {/* Orden producción generada */}
               {puedeEditarDiseno && producto.orden_generada && (
                 <div className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded-lg mb-3">
                   <svg className="w-4 h-4 text-green-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -435,7 +441,7 @@ export function EditarDisenoReal({
                 </div>
               )}
 
-              {/* Esperando anticipo — solo diseño */}
+              {/* Esperando anticipo */}
               {puedeEditarDiseno && aprobado && !producto.orden_generada && (
                 <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg mb-3">
                   <svg className="w-4 h-4 text-amber-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -447,7 +453,7 @@ export function EditarDisenoReal({
                 </div>
               )}
 
-              {/* Observaciones — solo diseño */}
+              {/* Observaciones */}
               {puedeEditarDiseno && (
                 <div className="mb-3">
                   <label className="block text-xs font-medium text-gray-500 mb-1">
@@ -465,7 +471,7 @@ export function EditarDisenoReal({
                 </div>
               )}
 
-              {/* Botones de estado — solo diseño */}
+              {/* Botones de estado */}
               {puedeEditarDiseno && (
                 <div className="flex gap-2 mb-3">
                   <button
@@ -519,7 +525,7 @@ export function EditarDisenoReal({
                 </div>
               )}
 
-              {/* Chat por producto — visible para ambos privilegios si hay orden de diseño */}
+              {/* Chat por producto */}
               {producto.idorden_diseno && user && (puedeEditarDiseno || puedeOrdenDiseno) && (
                 <div className="mt-2 border border-gray-200 rounded-xl overflow-hidden">
                   <button
@@ -580,9 +586,6 @@ export function EditarDisenoReal({
 }
 
 export default function Diseno() {
-  const { user } = useAuth();
-
-  // Necesario para ajustar el label del botón en la tabla según privilegio
   const { puedeEditarDiseno } = usePermisos({
     puedeEditarDiseno: "Editar Diseño",
   });
@@ -714,7 +717,6 @@ export default function Diseno() {
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm">{getEstadoBadge(ped)}</td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                  {/* Etiqueta del botón según privilegio */}
                   <button
                     onClick={() => handleEditar(ped)}
                     className="text-blue-600 hover:text-blue-900 font-semibold"

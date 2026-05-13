@@ -12,7 +12,8 @@ const api = axios.create({
   baseURL: API_URL,
   withCredentials: false,
   headers: {
-    "Content-Type": "application/json",
+    "Content-Type": "application/json; charset=utf-8",
+    "Accept":       "application/json; charset=utf-8",
   },
 });
 
@@ -28,16 +29,25 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
+// Rutas donde un 401 NO debe cerrar la sesión.
+// Pueden devolver 401 por credenciales incorrectas, no por token expirado.
+const RUTAS_SIN_LOGOUT = [
+  "/auth/",
+  "/backups/verificar-codigo",
+  "/backups/manual",
+  "/backups/schedule",
+];
+
 // Interceptor de response: manejo de errores
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    const url = error.config?.url || "";
-    const is401 = error.response?.status === 401;
-    const isAuthRoute = url.includes("/auth/");
+    const url     = error.config?.url || "";
+    const is401   = error.response?.status === 401;
+    const excluir = RUTAS_SIN_LOGOUT.some((ruta) => url.includes(ruta));
 
-    // Solo limpiar y redirigir si el 401 no viene de rutas de auth
-    if (is401 && !isAuthRoute) {
+    // Solo cerrar sesión si el 401 viene de una ruta que SÍ requiere token válido
+    if (is401 && !excluir) {
       localStorage.removeItem("user");
       localStorage.removeItem("token");
       window.location.href = "/";

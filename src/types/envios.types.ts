@@ -140,6 +140,7 @@ export interface Envio {
   unidad:                 { idunidad: number; nombre: string }  | null;
   paqueteria:             { idpaqueteria: number; nombre: string } | null;
   total_bultos:           number;
+  
 }
 
 export interface CreateEnvioRequest {
@@ -279,12 +280,12 @@ export interface FormatoCastoresRemitente {
   ciudad:         string;
   estado:         string;
   codigo_postal:  string;
-  correo:         string;   // ← nuevo
+  correo:         string;
 }
 
 export interface FormatoCastoresDestinatario {
   nombre:        string;
-  razon_social:  string;   // ← nuevo
+  razon_social:  string;
   rfc:           string;
   telefonos:     string;
   domicilio:     string;
@@ -340,4 +341,6 @@ export interface GuiaPaqueteriaGeneral {
     clave_producto_sat: string;
     clave_unidad_sat:   string;
   }[];
+  tipo_cobro?: "pagado" | "por_cobrar" | "cobrar_al_regreso";
+  asegurado?:  boolean;
 }

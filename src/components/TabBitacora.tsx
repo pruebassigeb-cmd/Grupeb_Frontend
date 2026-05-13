@@ -14,11 +14,26 @@ import ModalGuiaPaqueteria        from "./ModalGuiaPaqueteria";
 import ModalFormatoCastores       from "./ModalFormatoCastores";
 import ModalFormatoTresGuerras    from "./ModalFormatoTresGuerras";
 import ModalGuiaPaqueteriaGeneral from "./ModalGuiaPaqueteriaGeneral";
+import ModalFotoEnvio             from "./ModalFotoEnvio";
 import type { BitacoraRegistro, UpdateBitacoraRequest, EnvioPaqueteria } from "../types/envios.types";
+import { showAlert } from './CustomAlert';
+
 
 const esCastores    = (nombre: string) => nombre.toLowerCase().includes("castores");
 const esTresGuerras = (nombre: string) => nombre.toLowerCase().includes("tres guerras");
 const esGeneral     = (nombre: string) => !esCastores(nombre) && !esTresGuerras(nombre);
+
+// Icono de cámara compacto para botones de tabla
+const IconoCamara = () => (
+  <svg viewBox="0 0 16 14" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-3 h-3">
+    <rect x="1" y="3" width="14" height="10" rx="1.5" fill="currentColor" fillOpacity="0.15" stroke="currentColor" strokeWidth="1.2"/>
+    <path d="M5.5 3V2C5.5 1.72 5.72 1.5 6 1.5H10C10.28 1.5 10.5 1.72 10.5 2V3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+    <circle cx="8" cy="8" r="2.5" stroke="currentColor" strokeWidth="1.2"/>
+    <circle cx="8" cy="8" r="1" fill="currentColor" fillOpacity="0.4"/>
+    <circle cx="9" cy="6.5" r="0.45" fill="currentColor" fillOpacity="0.7"/>
+    <rect x="2" y="4.5" width="2" height="1.5" rx="0.5" fill="currentColor" fillOpacity="0.5"/>
+  </svg>
+);
 
 export default function TabBitacora() {
   const [seccion,     setSeccion]     = useState<"local" | "paqueteria">("local");
@@ -36,6 +51,10 @@ export default function TabBitacora() {
   const [modalTresGuerras, setModalTresGuerras] = useState<number | null>(null);
   const [modalGuiaGeneral, setModalGuiaGeneral] = useState<number | null>(null);
 
+  // Modal foto
+  const [modalFotoPaq,   setModalFotoPaq]   = useState<EnvioPaqueteria | null>(null);
+  const [modalFotoLocal, setModalFotoLocal] = useState<BitacoraRegistro | null>(null);
+
   useEffect(() => { cargar(); }, [seccion]);
 
   const cargar = async () => {
@@ -43,18 +62,18 @@ export default function TabBitacora() {
     try {
       if (seccion === "local") setRegistros(await getBitacora());
       else setEnviosPaq(await getEnviosPaqueteria());
-    } catch { alert("Error al cargar datos"); }
+    } catch { showAlert("Error al cargar datos"); }
     finally { setLoading(false); }
   };
 
   const handleHoraSalida  = async (id: number) => {
     try { await registrarHoraSalida(id);  await cargar(); }
-    catch { alert("Error al registrar hora de salida"); }
+    catch { showAlert("Error al registrar hora de salida"); }
   };
 
   const handleHoraLlegada = async (id: number) => {
     try { await registrarHoraLlegada(id); await cargar(); }
-    catch { alert("Error al registrar hora de llegada"); }
+    catch { showAlert("Error al registrar hora de llegada"); }
   };
 
   const toDatetimeLocal = (iso: string) => {
@@ -82,7 +101,7 @@ export default function TabBitacora() {
       await updateBitacora(editando.idbitacora, data);
       setEditando(null);
       await cargar();
-    } catch { alert("Error al guardar cambios"); }
+    } catch { showAlert("Error al guardar cambios"); }
     finally { setGuardando(false); }
   };
 
@@ -98,20 +117,20 @@ export default function TabBitacora() {
       await updateGuiaEnvio(editandoPaq.idenvio, guia);
       setEditandoPaq(null);
       await cargar();
-    } catch { alert("Error al guardar guía"); }
+    } catch { showAlert("Error al guardar guía"); }
     finally { setGuardando(false); }
   };
 
   const handleCambiarEstadoPaq = async (idenvio: number, estado: string) => {
     try { await updateEstadoEnvio(idenvio, estado); await cargar(); }
-    catch { alert("Error al cambiar estado"); }
+    catch { showAlert("Error al cambiar estado"); }
   };
 
   const handleGenerarNota = async (idenvio: number) => {
     try {
       const nota = await getOrCreateNotaRemision(idenvio);
       await generarNotaRemision(nota);
-    } catch { alert("Error al generar nota de remisión"); }
+    } catch { showAlert("Error al generar nota de remisión"); }
   };
 
   if (loading) return (
@@ -159,62 +178,81 @@ export default function TabBitacora() {
                 <tbody className="divide-y divide-gray-100">
                   {registros.length === 0 ? (
                     <tr><td colSpan={12} className="px-4 py-8 text-center text-gray-400">No hay registros en la bitácora</td></tr>
-                  ) : registros.map(r => (
-                    <tr key={r.idbitacora} className="hover:bg-gray-50">
-                      <td className="px-3 py-3 text-gray-700 whitespace-nowrap">
-                        {new Date(r.fecha).toLocaleDateString("es-MX")}
-                      </td>
-                      <td className="px-3 py-3 text-gray-700 whitespace-nowrap text-xs">{r.unidad.nombre}</td>
-                      <td className="px-3 py-3 text-gray-700 whitespace-nowrap">{r.chofer.nombre}</td>
-                      <td className="px-3 py-3 text-blue-600 font-medium whitespace-nowrap">{r.no_pedido}</td>
-                      <td className="px-3 py-3 whitespace-nowrap">
-                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                          r.envio.es_parcialidad
-                            ? "bg-orange-100 text-orange-700"
-                            : "bg-green-100 text-green-700"
-                        }`}>
-                          {r.envio.es_parcialidad ? "Parcialidad" : "Completo"}
-                        </span>
-                      </td>
-                      <td className="px-3 py-3 whitespace-nowrap text-xs">
-                        {r.hora_salida
-                          ? <span className="text-gray-700">{formatFechaHora(r.hora_salida)}</span>
-                          : <button onClick={() => handleHoraSalida(r.idbitacora)}
-                              className="text-xs px-2 py-1 bg-yellow-100 text-yellow-800 rounded hover:bg-yellow-200">
-                              Marcar salida
-                            </button>
-                        }
-                      </td>
-                      <td className="px-3 py-3 whitespace-nowrap text-xs">
-                        {r.hora_llegada
-                          ? <span className="text-gray-700">{formatFechaHora(r.hora_llegada)}</span>
-                          : r.hora_salida
-                            ? <button onClick={() => handleHoraLlegada(r.idbitacora)}
-                                className="text-xs px-2 py-1 bg-green-100 text-green-800 rounded hover:bg-green-200">
-                                Marcar llegada
+                  ) : registros.map(r => {
+                    // LOCAL: bloqueado si ya tiene número de guía registrado en el backend
+                    const bloqueado = !!r.envio.numero_guia;
+                    return (
+                      <tr key={r.idbitacora} className="hover:bg-gray-50">
+                        <td className="px-3 py-3 text-gray-700 whitespace-nowrap">
+                          {new Date(r.fecha).toLocaleDateString("es-MX")}
+                        </td>
+                        <td className="px-3 py-3 text-gray-700 whitespace-nowrap text-xs">{r.unidad.nombre}</td>
+                        <td className="px-3 py-3 text-gray-700 whitespace-nowrap">{r.chofer.nombre}</td>
+                        <td className="px-3 py-3 text-blue-600 font-medium whitespace-nowrap">{r.no_pedido}</td>
+                        <td className="px-3 py-3 whitespace-nowrap">
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                            r.envio.es_parcialidad
+                              ? "bg-orange-100 text-orange-700"
+                              : "bg-green-100 text-green-700"
+                          }`}>
+                            {r.envio.es_parcialidad ? "Parcialidad" : "Completo"}
+                          </span>
+                        </td>
+                        <td className="px-3 py-3 whitespace-nowrap text-xs">
+                          {r.hora_salida
+                            ? <span className="text-gray-700">{formatFechaHora(r.hora_salida)}</span>
+                            : <button onClick={() => handleHoraSalida(r.idbitacora)}
+                                className="text-xs px-2 py-1 bg-yellow-100 text-yellow-800 rounded hover:bg-yellow-200">
+                                Marcar salida
                               </button>
+                          }
+                        </td>
+                        <td className="px-3 py-3 whitespace-nowrap text-xs">
+                          {r.hora_llegada
+                            ? <span className="text-gray-700">{formatFechaHora(r.hora_llegada)}</span>
+                            : r.hora_salida
+                              ? <button onClick={() => handleHoraLlegada(r.idbitacora)}
+                                  className="text-xs px-2 py-1 bg-green-100 text-green-800 rounded hover:bg-green-200">
+                                  Marcar llegada
+                                </button>
+                              : <span className="text-gray-300">-</span>
+                          }
+                        </td>
+                        <td className="px-3 py-3 text-gray-500 whitespace-nowrap text-xs">{r.envio.numero_guia || "-"}</td>
+                        <td className="px-3 py-3 text-gray-700 whitespace-nowrap">{r.cliente}</td>
+                        <td className="px-3 py-3 text-center">
+                          {r.observacion
+                            ? <span className="font-bold text-gray-700">{r.observacion}</span>
                             : <span className="text-gray-300">-</span>
-                        }
-                      </td>
-                      <td className="px-3 py-3 text-gray-500 whitespace-nowrap text-xs">{r.envio.numero_guia || "-"}</td>
-                      <td className="px-3 py-3 text-gray-700 whitespace-nowrap">{r.cliente}</td>
-                      <td className="px-3 py-3 text-center">
-                        {r.observacion
-                          ? <span className="font-bold text-gray-700">{r.observacion}</span>
-                          : <span className="text-gray-300">-</span>
-                        }
-                      </td>
-                      <td className="px-3 py-3 text-gray-500 text-xs whitespace-nowrap">{r.firma || "-"}</td>
-                      <td className="px-3 py-3">
-                        <div className="flex items-center gap-2">
-                          <button onClick={() => abrirEdicion(r)}
-                            className="text-xs text-blue-600 hover:text-blue-800 font-medium">Editar</button>
-                          <button onClick={() => handleGenerarNota(r.envio.idenvio)}
-                            className="text-xs text-green-600 hover:text-green-800 font-medium">Nota</button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                          }
+                        </td>
+                        <td className="px-3 py-3 text-gray-500 text-xs whitespace-nowrap">{r.firma || "-"}</td>
+                        <td className="px-3 py-3">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <button onClick={() => abrirEdicion(r)}
+                              className="text-xs text-blue-600 hover:text-blue-800 font-medium">Editar</button>
+                            <button onClick={() => handleGenerarNota(r.envio.idenvio)}
+                              className="text-xs text-green-600 hover:text-green-800 font-medium">Nota</button>
+
+                            {/* Botón Foto — local */}
+                            <button
+                              onClick={() => setModalFotoLocal(r)}
+                              disabled={bloqueado}
+                              title={bloqueado ? "Guía ya registrada — no se permiten más fotos" : "Subir foto de entrega"}
+                              className={`text-xs px-2 py-1 rounded font-medium flex items-center gap-1 transition-colors ${
+                                bloqueado
+                                  ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                                  : "bg-gray-800 text-white hover:bg-gray-700"
+                              }`}
+                            >
+                              <IconoCamara />
+                              {bloqueado ? "Foto ✓" : "Foto"}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -241,79 +279,98 @@ export default function TabBitacora() {
                 <tbody className="divide-y divide-gray-100">
                   {enviosPaq.length === 0 ? (
                     <tr><td colSpan={10} className="px-4 py-8 text-center text-gray-400">No hay envíos por paquetería registrados</td></tr>
-                  ) : enviosPaq.map(e => (
-                    <tr key={e.idenvio} className="hover:bg-gray-50">
-                      <td className="px-3 py-3 text-gray-700 whitespace-nowrap text-xs">
-                        {new Date(e.fecha_envio).toLocaleDateString("es-MX")}
-                      </td>
-                      <td className="px-3 py-3 text-blue-600 font-medium whitespace-nowrap">{e.no_pedido}</td>
-                      <td className="px-3 py-3 text-gray-700 whitespace-nowrap">{e.cliente}</td>
-                      <td className="px-3 py-3 text-gray-700 whitespace-nowrap">{e.paqueteria.nombre}</td>
-                      <td className="px-3 py-3 whitespace-nowrap">
-                        {e.numero_guia
-                          ? <span className="text-gray-700 font-mono text-xs">{e.numero_guia}</span>
-                          : <span className="text-orange-500 text-xs font-medium">Sin guía</span>
-                        }
-                      </td>
-                      <td className="px-3 py-3 text-center text-gray-600 text-xs">{e.total_bultos}</td>
-                      <td className="px-3 py-3 whitespace-nowrap">
-                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                          e.es_parcialidad
-                            ? "bg-orange-100 text-orange-700"
-                            : "bg-green-100 text-green-700"
-                        }`}>
-                          {e.es_parcialidad ? "Parcialidad" : "Completo"}
-                        </span>
-                      </td>
-                      <td className="px-3 py-3 text-gray-600 text-xs whitespace-nowrap">
-                        {e.costo_flete != null ? `$${Number(e.costo_flete).toLocaleString("es-MX")}` : "-"}
-                      </td>
-                      <td className="px-3 py-3">
-                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${ESTADO_BADGE[e.estado]}`}>
-                          {ESTADO_LABEL[e.estado]}
-                        </span>
-                      </td>
-                      <td className="px-3 py-3">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <button onClick={() => abrirEdicionPaq(e)}
-                            className="text-xs text-blue-600 hover:text-blue-800 font-medium">
-                            {e.numero_guia ? "Editar guía" : "Agregar guía"}
-                          </button>
+                  ) : enviosPaq.map(e => {
+                    // PAQUETERÍA: bloqueado si ya tiene número de guía registrado en el backend
+                    const bloqueado = !!e.numero_guia;
+                    return (
+                      <tr key={e.idenvio} className="hover:bg-gray-50">
+                        <td className="px-3 py-3 text-gray-700 whitespace-nowrap text-xs">
+                          {new Date(e.fecha_envio).toLocaleDateString("es-MX")}
+                        </td>
+                        <td className="px-3 py-3 text-blue-600 font-medium whitespace-nowrap">{e.no_pedido}</td>
+                        <td className="px-3 py-3 text-gray-700 whitespace-nowrap">{e.cliente}</td>
+                        <td className="px-3 py-3 text-gray-700 whitespace-nowrap">{e.paqueteria.nombre}</td>
+                        <td className="px-3 py-3 whitespace-nowrap">
+                          {e.numero_guia
+                            ? <span className="text-gray-700 font-mono text-xs">{e.numero_guia}</span>
+                            : <span className="text-orange-500 text-xs font-medium">Sin guía</span>
+                          }
+                        </td>
+                        <td className="px-3 py-3 text-center text-gray-600 text-xs">{e.total_bultos}</td>
+                        <td className="px-3 py-3 whitespace-nowrap">
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                            e.es_parcialidad
+                              ? "bg-orange-100 text-orange-700"
+                              : "bg-green-100 text-green-700"
+                          }`}>
+                            {e.es_parcialidad ? "Parcialidad" : "Completo"}
+                          </span>
+                        </td>
+                        <td className="px-3 py-3 text-gray-600 text-xs whitespace-nowrap">
+                          {e.costo_flete != null ? `$${Number(e.costo_flete).toLocaleString("es-MX")}` : "-"}
+                        </td>
+                        <td className="px-3 py-3">
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${ESTADO_BADGE[e.estado]}`}>
+                            {ESTADO_LABEL[e.estado]}
+                          </span>
+                        </td>
+                        <td className="px-3 py-3">
+                          <div className="flex items-center gap-2 flex-wrap">
 
-                          {/* Formato Castores */}
-                          {esCastores(e.paqueteria.nombre) && (
-                            <button onClick={() => setModalCastores(e.idenvio)}
-                              className="text-xs px-2 py-1 bg-orange-100 text-orange-700 rounded hover:bg-orange-200 font-medium">
-                              Formato Castores
-                            </button>
-                          )}
+                            {e.estado !== "entregado" && (
+                              <button onClick={() => abrirEdicionPaq(e)}
+                                className="text-xs text-blue-600 hover:text-blue-800 font-medium">
+                                {e.numero_guia ? "Editar guía" : "Agregar guía"}
+                              </button>
+                            )}
 
-                          {/* Formato Tres Guerras */}
-                          {esTresGuerras(e.paqueteria.nombre) && (
-                            <button onClick={() => setModalTresGuerras(e.idenvio)}
-                              className="text-xs px-2 py-1 bg-red-100 text-red-700 rounded hover:bg-red-200 font-medium">
-                              Formato Tres Guerras
-                            </button>
-                          )}
+                            {esCastores(e.paqueteria.nombre) && (
+                              <button onClick={() => setModalCastores(e.idenvio)}
+                                className="text-xs px-2 py-1 bg-orange-100 text-orange-700 rounded hover:bg-orange-200 font-medium">
+                                Formato Castores
+                              </button>
+                            )}
 
-                          {/* Guía general para otras paqueterías */}
-                          {esGeneral(e.paqueteria.nombre) && (
-                            <button onClick={() => setModalGuiaGeneral(e.idenvio)}
-                              className="text-xs px-2 py-1 bg-indigo-100 text-indigo-700 rounded hover:bg-indigo-200 font-medium">
-                              Guía de envío
-                            </button>
-                          )}
+                            {esTresGuerras(e.paqueteria.nombre) && (
+                              <button onClick={() => setModalTresGuerras(e.idenvio)}
+                                className="text-xs px-2 py-1 bg-red-100 text-red-700 rounded hover:bg-red-200 font-medium">
+                                Formato Tres Guerras
+                              </button>
+                            )}
 
-                          {e.estado === "preparando" && (
-                            <button onClick={() => handleCambiarEstadoPaq(e.idenvio, "entregado")}
-                              className="text-xs px-2 py-1 bg-green-100 text-green-800 rounded hover:bg-green-200">
-                              Entregado a paquetería
+                            {esGeneral(e.paqueteria.nombre) && (
+                              <button onClick={() => setModalGuiaGeneral(e.idenvio)}
+                                className="text-xs px-2 py-1 bg-indigo-100 text-indigo-700 rounded hover:bg-indigo-200 font-medium">
+                                Guía de envío
+                              </button>
+                            )}
+
+                            {/* Botón Foto — paquetería */}
+                            <button
+                              onClick={() => setModalFotoPaq(e)}
+                              disabled={bloqueado}
+                              title={bloqueado ? "Guía ya registrada — no se permiten más fotos" : "Subir foto y registrar guía"}
+                              className={`text-xs px-2 py-1 rounded font-medium flex items-center gap-1 transition-colors ${
+                                bloqueado
+                                  ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                                  : "bg-gray-800 text-white hover:bg-gray-700"
+                              }`}
+                            >
+                              <IconoCamara />
+                              {bloqueado ? "Foto ✓" : "Foto"}
                             </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+
+                            {e.estado === "preparando" && (
+                              <button onClick={() => handleCambiarEstadoPaq(e.idenvio, "entregado")}
+                                className="text-xs px-2 py-1 bg-green-100 text-green-800 rounded hover:bg-green-200">
+                                Entregado a paquetería
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -321,7 +378,7 @@ export default function TabBitacora() {
         </div>
       )}
 
-      {/* Modales edición */}
+      {/* ── Modales edición ── */}
       {editando && (
         <ModalEditarBitacora
           registro={editando}
@@ -344,7 +401,6 @@ export default function TabBitacora() {
         />
       )}
 
-      {/* Modal formato Castores */}
       {modalCastores !== null && (
         <ModalFormatoCastores
           idenvio={modalCastores}
@@ -352,7 +408,6 @@ export default function TabBitacora() {
         />
       )}
 
-      {/* Modal formato Tres Guerras */}
       {modalTresGuerras !== null && (
         <ModalFormatoTresGuerras
           idenvio={modalTresGuerras}
@@ -360,11 +415,30 @@ export default function TabBitacora() {
         />
       )}
 
-      {/* Modal guía general otras paqueterías */}
       {modalGuiaGeneral !== null && (
         <ModalGuiaPaqueteriaGeneral
           idenvio={modalGuiaGeneral}
           onClose={() => setModalGuiaGeneral(null)}
+        />
+      )}
+
+      {/* Modal foto — paquetería */}
+      {modalFotoPaq !== null && (
+        <ModalFotoEnvio
+          modo="paqueteria"
+          envio={modalFotoPaq}
+          onClose={() => setModalFotoPaq(null)}
+          onCompletado={cargar}
+        />
+      )}
+
+      {/* Modal foto — reparto local */}
+      {modalFotoLocal !== null && (
+        <ModalFotoEnvio
+          modo="local"
+          registro={modalFotoLocal}
+          onClose={() => setModalFotoLocal(null)}
+          onCompletado={cargar}
         />
       )}
     </div>

@@ -82,6 +82,9 @@ export interface OrdenProduccionData {
   bolsas_calculadas?:    number | null;
   codigo_kliche?:        string | null;
   ubicacion_kliche?:     string | null;
+  // ── Imágenes de diseño — vienen como data URL base64 desde el backend ──
+  url_render?: string | null;
+  url_master?: string | null;
 }
 
 const BLACK:     [number, number, number] = [0,   0,   0];
@@ -95,11 +98,9 @@ const LABEL_SIZE = 7;
 const f = (v: any) =>
   v === null || v === undefined || String(v).trim() === "" ? "" : String(v).trim();
 
-// ── Formato de kilos con separador de miles y 2 decimales ──
 const formatKilos = (n: number) =>
   n.toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-// ── Calcula ancho de película y bolseo según tipo de fuelle ──
 function calcularAnchoPeliculaYBolseo(data: OrdenProduccionData): {
   anchoPelicula: string;
   bolseo: string;
@@ -124,6 +125,20 @@ function calcularAnchoPeliculaYBolseo(data: OrdenProduccionData): {
       anchoPelicula: total > 0 ? String(total) : "",
       bolseo:        has(data.ancho) ? String(n(data.ancho)) : "",
     };
+  }
+}
+
+// ── El backend ya mandó la imagen como data URL base64 — solo extraemos base64 y format ──
+function dataUrlToImgData(dataUrl: string): { base64: string; format: string } | null {
+  try {
+    if (!dataUrl.startsWith("data:")) return null;
+    const mime   = dataUrl.split(";")[0].split(":")[1] || "image/png";
+    const base64 = dataUrl.split(",")[1];
+    if (!base64) return null;
+    const format = mime.includes("jpeg") || mime.includes("jpg") ? "JPEG" : "PNG";
+    return { base64, format };
+  } catch {
+    return null;
   }
 }
 
@@ -285,7 +300,6 @@ function bloqueBultosAlmacen(
   celdaHeader(doc, "BULTOS", x, y, bultosW, labelH, 9);
   const bultosDataY = y + labelH;
   const bultosDataH = h - labelH;
-  const colW3       = bultosW / 3;
 
   doc.setDrawColor(BLACK[0], BLACK[1], BLACK[2]);
   doc.setLineWidth(0.2);
@@ -293,6 +307,7 @@ function bloqueBultosAlmacen(
   doc.setFont("helvetica", "normal");
   doc.setFontSize(LABEL_SIZE);
   doc.setTextColor(GRAY_DARK[0], GRAY_DARK[1], GRAY_DARK[2]);
+  const colW3 = bultosW / 3;
   doc.text("Bultos",  x + colW3 * 0 + 1.5, bultosDataY + 4.5);
   doc.text("Medidas", x + colW3 * 1 + 1.5, bultosDataY + 4.5);
   doc.text("Peso",    x + colW3 * 2 + 1.5, bultosDataY + 4.5);
@@ -305,8 +320,8 @@ function bloqueBultosAlmacen(
   const almCol1W = almW / 2;
   const almCol2W = almW - almCol1W;
 
-  celdaLabel(doc, "Piezas Recibidas", "", almX,            almDataY,        almCol1W, almRowH, LABEL_SIZE, 11, false);
-  celdaLabel(doc, "Ubicacion",        "", almX + almCol1W, almDataY,        almCol2W, almRowH, LABEL_SIZE, 11, false);
+  celdaLabel(doc, "Piezas Recibidas", "", almX,            almDataY,             almCol1W, almRowH, LABEL_SIZE, 11, false);
+  celdaLabel(doc, "Ubicacion",        "", almX + almCol1W, almDataY,             almCol2W, almRowH, LABEL_SIZE, 11, false);
 
   doc.setDrawColor(BLACK[0], BLACK[1], BLACK[2]);
   doc.setLineWidth(0.2);
@@ -342,10 +357,19 @@ export async function generarPdfOrdenProduccion(data: OrdenProduccionData): Prom
   const repeticionStr = construirRepeticionStr(data);
   const pantStr       = parsePantones(data.pantones);
 
-  // ── Calcular ancho película y bolseo ──
+console.log("🔍 url_render primeros 50 chars:", data.url_render?.substring(0, 50));
+console.log("🔍 url_master primeros 50 chars:", data.url_master?.substring(0, 50));
+
+  // ── Las imágenes llegan como data URL base64 desde el backend ──
+  const renderImg = data.url_render ? dataUrlToImgData(data.url_render) : null;
+  const masterImg = data.url_master ? dataUrlToImgData(data.url_master) : null;
+
+  console.log("🖼️ renderImg:", renderImg ? `OK (${renderImg.format})` : "null");
+  console.log("🎨 masterImg:", masterImg ? `OK (${masterImg.format})` : "null");
+
   const { anchoPelicula, bolseo: bolseoCalculado } = calcularAnchoPeliculaYBolseo(data);
 
-  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "letter" });
   const PW = 210;
   const PH = 297;
   const M  = 8;
@@ -430,8 +454,7 @@ export async function generarPdfOrdenProduccion(data: OrdenProduccionData): Prom
     data.prioridad ? RED[1] : BLACK[1],
     data.prioridad ? RED[2] : BLACK[2]
   );
-  const prioridadTexto = data.prioridad ? "URGENTE" : "Normal";
-  doc.text(prioridadTexto, M + impW + entW + priW / 2, y + fila3H - 3, { align: "center" });
+  doc.text(data.prioridad ? "URGENTE" : "Normal", M + impW + entW + priW / 2, y + fila3H - 3, { align: "center" });
   doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);
 
   celdaLabel(doc, "Pedido", data.no_pedido ? data.no_pedido.trim() : "—",
@@ -457,7 +480,6 @@ export async function generarPdfOrdenProduccion(data: OrdenProduccionData): Prom
   const kilosTotH = fila4H * 2;
   const secH      = kilosTotH / 3;
 
-  // ── FIX: kilosVal con separador de miles ──
   const kilosVal = data.kilos_merma != null
     ? formatKilos(Number(data.kilos_merma))
     : data.kilogramos != null
@@ -482,7 +504,6 @@ export async function generarPdfOrdenProduccion(data: OrdenProduccionData): Prom
         ? data.pzas.toLocaleString("es-MX")
         : "";
 
-  // Sección Kilos
   doc.setDrawColor(BLACK[0], BLACK[1], BLACK[2]);
   doc.setLineWidth(0.2);
   doc.rect(kilos4X, y, kilos4W, secH);
@@ -497,7 +518,6 @@ export async function generarPdfOrdenProduccion(data: OrdenProduccionData): Prom
     doc.text(kilosVal, kilos4X + kilos4W / 2, y + secH - 1.5, { align: "center" });
   }
 
-  // Sección mts
   doc.setDrawColor(BLACK[0], BLACK[1], BLACK[2]);
   doc.rect(kilos4X, y + secH, kilos4W, secH);
   doc.setFont("helvetica", "normal");
@@ -511,7 +531,6 @@ export async function generarPdfOrdenProduccion(data: OrdenProduccionData): Prom
     doc.text(mtsVal, kilos4X + kilos4W / 2, y + secH * 2 - 1.5, { align: "center" });
   }
 
-  // Sección Bolsas
   doc.setDrawColor(BLACK[0], BLACK[1], BLACK[2]);
   doc.rect(kilos4X, y + secH * 2, kilos4W, secH);
   doc.setFont("helvetica", "normal");
@@ -573,9 +592,9 @@ export async function generarPdfOrdenProduccion(data: OrdenProduccionData): Prom
     doc.text(repeticionStr, M + 2, y + 8.5, { maxWidth: repW6 - 3 });
   }
 
-  celdaLabel(doc, "Cod. Kliche", f(data.codigo_kliche),          M + repW6,                    y, codK6W, fila6H, LABEL_SIZE, 12);
-  celdaLabel(doc, "Ubicación",     f(data.ubicacion_kliche ?? ""), M + repW6 + codK6W,            y, ubic6W, fila6H, LABEL_SIZE, 12);
-  celdaLabel(doc, "Pantones",      pantStr !== "—" ? pantStr : "", M + repW6 + codK6W + ubic6W,   y, pan6W,  fila6H, LABEL_SIZE, 12);
+  celdaLabel(doc, "Cod. Kliche",  f(data.codigo_kliche),          M + repW6,                   y, codK6W, fila6H, LABEL_SIZE, 12);
+  celdaLabel(doc, "Ubicación",    f(data.ubicacion_kliche ?? ""), M + repW6 + codK6W,           y, ubic6W, fila6H, LABEL_SIZE, 12);
+  celdaLabel(doc, "Pantones",     pantStr !== "—" ? pantStr : "", M + repW6 + codK6W + ubic6W,  y, pan6W,  fila6H, LABEL_SIZE, 12);
   y += fila6H;
 
   // ── FILA 6 — Asa/Suaje | Bolseo | Observaciones ──
@@ -668,6 +687,7 @@ export async function generarPdfOrdenProduccion(data: OrdenProduccionData): Prom
   const renderH    = espacioTotal - autDisenoH;
   const labelDerH  = 6;
 
+  // Autorización de diseño
   doc.setDrawColor(BLACK[0], BLACK[1], BLACK[2]);
   doc.setLineWidth(0.2);
   doc.rect(colDerX, bloqueY, colDerW, autDisenoH);
@@ -701,12 +721,71 @@ export async function generarPdfOrdenProduccion(data: OrdenProduccionData): Prom
   doc.text("Autorizó Diseño", colDerX + colDerW / 2, bloqueY + autDisenoH - 2, { align: "center" });
   doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);
 
-  // — Render Cliente —
+  // ── Render Cliente ──
   const renderY = bloqueY + autDisenoH;
   doc.setDrawColor(BLACK[0], BLACK[1], BLACK[2]);
   doc.setLineWidth(0.2);
   doc.rect(colDerX, renderY, colDerW, renderH);
   celdaHeader(doc, "Render Cliente", colDerX, renderY, colDerW, labelDerH, 9);
+
+  if (renderImg) {
+    const imgPad = 2;
+    const imgX   = colDerX + imgPad;
+    const imgY   = renderY + labelDerH + imgPad;
+    const imgW   = colDerW - imgPad * 2;
+    const imgH   = renderH - labelDerH - imgPad * 2;
+    try {
+      doc.addImage(renderImg.base64, renderImg.format, imgX, imgY, imgW, imgH, undefined, "FAST");
+    } catch (e) {
+      console.error("❌ addImage render error:", e);
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════
+  // HOJA 2 — Master Graphic (solo si existe)
+  // ══════════════════════════════════════════════════════════
+  if (masterImg) {
+    doc.addPage();
+
+    const mM  = 10;
+    const mCW = PW - mM * 2;
+    const mCH = PH - mM * 2;
+
+    const hdrH = 14;
+    doc.setFillColor(GRAY_DARK[0], GRAY_DARK[1], GRAY_DARK[2]);
+    doc.rect(mM, mM, mCW, hdrH, "FD");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(13);
+    doc.setTextColor(WHITE[0], WHITE[1], WHITE[2]);
+    doc.text("MASTER GRAPHIC", mM + mCW / 2, mM + hdrH / 2 + 2.5, { align: "center" });
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    const subTxt = `${f(data.no_produccion ?? `PED-${data.no_pedido}`)}  ·  Pedido ${data.no_pedido}  ·  ${f(data.nombre_producto)}`;
+    doc.text(subTxt, mM + mCW / 2, mM + hdrH - 2.5, { align: "center" });
+    doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);
+
+    const masterPad = 4;
+    const masterX   = mM + masterPad;
+    const masterY   = mM + hdrH + masterPad;
+    const masterW   = mCW - masterPad * 2;
+    const masterH   = mCH - hdrH - masterPad * 2;
+
+    doc.setDrawColor(BLACK[0], BLACK[1], BLACK[2]);
+    doc.setLineWidth(0.3);
+    doc.rect(masterX, masterY, masterW, masterH);
+
+    try {
+      doc.addImage(masterImg.base64, masterImg.format, masterX, masterY, masterW, masterH, undefined, "FAST");
+    } catch (e) {
+      console.error("❌ addImage master error:", e);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+      doc.setTextColor(GRAY_MED[0], GRAY_MED[1], GRAY_MED[2]);
+      doc.text("No se pudo cargar la imagen del Master Graphic", masterX + masterW / 2, masterY + masterH / 2, { align: "center" });
+      doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);
+    }
+  }
 
   doc.save(`OrdenProduccion_${data.no_produccion ?? data.no_pedido}.pdf`);
 }
