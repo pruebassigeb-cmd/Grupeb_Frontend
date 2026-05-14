@@ -3,20 +3,23 @@ import Dashboard from "../layouts/Sidebar";
 import Modal from "../components/Modal";
 import { getCarrito, getPaqueterias } from "../services/enviosService";
 import type { CarritoPedido, Paqueteria } from "../types/envios.types";
-import TabEnvios      from "../components/TabEnvios";
-import TabBitacora    from "../components/TabBitacora";
-import TabUnidades    from "../components/TabUnidades";
-import TabPaqueterias from "../components/TabPaqueterias";
+import TabEnvios           from "../components/TabEnvios";
+import TabBitacora         from "../components/TabBitacora";
+import TabUnidades         from "../components/TabUnidades";
+import TabPaqueterias      from "../components/TabPaqueterias";
+import TabHistorialReportes from "../components/TabHistorialReportes"; // ← NUEVO
 import VistaCarrito              from "../components/VistaCarrito";
 import FormularioProcesarCarrito from "../components/FormularioProcesarCarrito";
 
-type Tab = "envios" | "bitacora" | "unidades" | "paqueterias";
+// ── NUEVO: "historial" añadido al tipo ──
+type Tab = "envios" | "bitacora" | "unidades" | "paqueterias" | "historial";
 
 const TABS: { key: Tab; label: string }[] = [
   { key: "envios",      label: "Envíos"             },
   { key: "bitacora",    label: "Bitácora de Reparto" },
   { key: "unidades",    label: "Unidades"            },
   { key: "paqueterias", label: "Paqueterías"         },
+  { key: "historial",   label: "Historial / Reportes" }, // ← NUEVO
 ];
 
 export default function Envios() {
@@ -66,7 +69,7 @@ export default function Envios() {
       <p className="text-slate-400 mb-6">Gestiona los envíos, bitácora, unidades y paqueterías.</p>
 
       {/* TABS */}
-      <div className="flex border-b border-gray-200 mb-6 gap-1">
+      <div className="flex border-b border-gray-200 mb-6 gap-1 flex-wrap">
         {TABS.map(t => (
           <button key={t.key} onClick={() => setTabActual(t.key)}
             className={`px-5 py-2.5 text-sm font-medium rounded-t-lg transition-colors ${
@@ -83,6 +86,7 @@ export default function Envios() {
       {tabActual === "bitacora"    && <TabBitacora />}
       {tabActual === "unidades"    && <TabUnidades />}
       {tabActual === "paqueterias" && <TabPaqueterias />}
+      {tabActual === "historial"   && <TabHistorialReportes />}  {/* ← NUEVO */}
 
       {/* MODAL CARRITO */}
       {modalCarrito && (

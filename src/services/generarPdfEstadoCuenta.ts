@@ -87,6 +87,7 @@ export async function generarPdfEstadoCuenta(
   pagos: VentaPago[]
 ): Promise<void> {
   const logoBase64 = await cargarLogoBase64(logoUrl);
+  const sinIva     = (datos as any).sin_iva === true;
 
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   const PW = 210;
@@ -256,7 +257,6 @@ export async function generarPdfEstadoCuenta(
     doc.setTextColor(...BLACK);
     y += rowH;
 
-    // ── Fila herramental del producto ────────────────────────
     if (prod.herramental_aprobado === true && prod.herramental_precio != null && prod.herramental_precio > 0) {
       const herrH = 14;
       doc.setFillColor(250, 246, 235);
@@ -393,16 +393,20 @@ export async function generarPdfEstadoCuenta(
   const finH   = 13;
   const colFin = CW / 6;
 
+  // sin_iva: mostrar $0.00, misma etiqueta siempre
+  const ivaOriginalMostrar = sinIva ? 0 : datos.iva_original;
+  const ivaRealMostrar     = sinIva ? 0 : datos.iva_real;
+
   const finCols: {
     label: string; value: string;
     bold?: boolean; color?: [number,number,number]; fill?: [number,number,number];
   }[] = [
-    { label: "Subtotal Original", value: fmtMoney(datos.subtotal_original), fill: WHITE },
-    { label: "IVA 16% Original",  value: fmtMoney(datos.iva_original),      fill: WHITE },
-    { label: "Total Original",    value: fmtMoney(datos.total_original),    bold: true, fill: WHITE },
-    { label: "Subtotal Real",     value: fmtMoney(datos.subtotal_real),     color: GRAY_XDARK, fill: GRAY_LIGHT },
-    { label: "IVA 16% Real",      value: fmtMoney(datos.iva_real),          color: GRAY_XDARK, fill: GRAY_LIGHT },
-    { label: "Total Real",        value: fmtMoney(datos.total_real),        bold: true, color: BLACK, fill: GRAY_SOFT },
+    { label: "Subtotal Original", value: fmtMoney(datos.subtotal_original),  fill: WHITE },
+    { label: "I.V.A. 16% Original", value: fmtMoney(ivaOriginalMostrar),     fill: WHITE },
+    { label: "Total Original",    value: fmtMoney(datos.total_original),      bold: true, fill: WHITE },
+    { label: "Subtotal Real",     value: fmtMoney(datos.subtotal_real),       color: GRAY_XDARK, fill: GRAY_LIGHT },
+    { label: "I.V.A. 16% Real",   value: fmtMoney(ivaRealMostrar),           color: GRAY_XDARK, fill: GRAY_LIGHT },
+    { label: "Total Real",        value: fmtMoney(datos.total_real),          bold: true, color: BLACK, fill: GRAY_SOFT },
   ];
 
   finCols.forEach((col, i) => {
@@ -411,7 +415,6 @@ export async function generarPdfEstadoCuenta(
   });
   y += finH;
 
-  // ── Herramental en resumen financiero ────────────────────
   if (tieneHerramental) {
     const herrFinH = 14;
     doc.setFillColor(250, 246, 235);
@@ -452,7 +455,6 @@ export async function generarPdfEstadoCuenta(
   const abonoW = colFin;
   const saldoW = CW - difW - anticW - abonoW;
 
-  // ── Anticipo: $0.00 si fue autorizado por crédito ─────────
   const anticipoValor = datos.es_credito_anticipo ? fmtMoney(0) : fmtMoney(datos.anticipo);
 
   celda(doc, "Diferencia Total",   difStr,        M,                       y, difW,   finH, { bold: true, color: difColor, fill: difFill });

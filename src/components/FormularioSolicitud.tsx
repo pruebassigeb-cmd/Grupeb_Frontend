@@ -138,6 +138,7 @@ interface DatosCotizacion {
   observaciones: string;
   tipo?: "cotizacion" | "pedido";
   prioridad?: boolean;
+  sin_iva?: boolean;
 }
 
 // ─── Datos vacíos de cliente completo ────────────────────────────────────────
@@ -204,6 +205,7 @@ export default function FormularioCotizacion({
     productos: [],
     observaciones: "",
     prioridad: false,
+    sin_iva: false, 
   });
 
   const [datosClienteCompleto, setDatosClienteCompleto] = useState<CreateClienteRequest>(clienteVacio);
@@ -2144,6 +2146,28 @@ export default function FormularioCotizacion({
             </div>
           </div>
         )}
+
+
+        
+
+{/* Toggle Sin IVA */}
+<div className="flex items-center gap-3 py-3 px-4 bg-emerald-50 border border-emerald-200 rounded-lg mb-4">
+  <input
+    type="checkbox"
+    id="chk-sin-iva"
+    checked={datos.sin_iva ?? false}
+    onChange={(e) => setDatos(prev => ({ ...prev, sin_iva: e.target.checked }))}
+    className="w-5 h-5 rounded border-emerald-400 text-emerald-600 focus:ring-emerald-400 cursor-pointer"
+  />
+  <label htmlFor="chk-sin-iva" className="flex items-center gap-2 cursor-pointer select-none">
+    <span className="text-emerald-700 font-semibold text-sm">Sin IVA</span>
+    <span className="text-emerald-500 text-xs">(exento de IVA en todo el proceso)</span>
+  </label>
+</div>
+
+
+
+
 
         {/* Prioridad (solo pedido directo) */}
         {modo === "pedido" && (

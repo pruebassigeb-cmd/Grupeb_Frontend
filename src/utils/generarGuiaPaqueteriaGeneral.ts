@@ -22,7 +22,7 @@ export function generarGuiaPaqueteriaGeneral(datos: GuiaPaqueteriaGeneral): void
   const doc = new jsPDF({
     orientation: "portrait",
     unit:        "mm",
-    format:      "letter",   // carta 215.9 × 279.4 mm
+    format:      "letter",
   });
 
   const PW = 215.9;
@@ -56,50 +56,69 @@ export function generarGuiaPaqueteriaGeneral(datos: GuiaPaqueteriaGeneral): void
   doc.setFont("helvetica", "normal");
 
   // ══════════════════════════════════════════
-  // FILA INFO: Pedido / Fecha / Bultos / Tipo + Seguro
+  // FILA 1: Pedido / Fecha / Bultos / Tipo cobro / Asegurado
   // ══════════════════════════════════════════
-  const Y_INFO = 33;
-  const COL_W  = CW / 5;   // 5 columnas iguales
+  const Y_INFO1 = 33;
+  const COL_W   = CW / 5;
 
   for (let i = 0; i < 5; i++) {
     doc.setFillColor(240, 240, 240);
-    rect(doc, ML + i * COL_W, Y_INFO, COL_W - 1, 12, "FD");
+    rect(doc, ML + i * COL_W, Y_INFO1, COL_W - 1, 12, "FD");
   }
 
-  // Labels
   doc.setTextColor(100, 100, 100);
-  txt(doc, "NO. PEDIDO",     ML + 3,               Y_INFO + 4, 7);
-  txt(doc, "FECHA DE ENVÍO", ML + COL_W + 3,       Y_INFO + 4, 7);
-  txt(doc, "TOTAL BULTOS",   ML + COL_W * 2 + 3,   Y_INFO + 4, 7);
-  txt(doc, "TIPO DE COBRO",  ML + COL_W * 3 + 3,   Y_INFO + 4, 7);
-  txt(doc, "ASEGURADO",      ML + COL_W * 4 + 3,   Y_INFO + 4, 7);
+  txt(doc, "NO. PEDIDO",     ML + 3,               Y_INFO1 + 4, 7);
+  txt(doc, "FECHA DE ENVÍO", ML + COL_W + 3,       Y_INFO1 + 4, 7);
+  txt(doc, "TOTAL BULTOS",   ML + COL_W * 2 + 3,   Y_INFO1 + 4, 7);
+  txt(doc, "TIPO DE COBRO",  ML + COL_W * 3 + 3,   Y_INFO1 + 4, 7);
+  txt(doc, "ASEGURADO",      ML + COL_W * 4 + 3,   Y_INFO1 + 4, 7);
 
-  // Valores
   doc.setFont("helvetica", "bold");
   doc.setTextColor(0, 0, 0);
 
-  txt(doc, datos.no_pedido,           ML + 3,             Y_INFO + 9, 10);
+  txt(doc, datos.no_pedido,            ML + 3,             Y_INFO1 + 9, 10);
   txt(doc, new Date(datos.fecha_envio).toLocaleDateString("es-MX", {
     day: "2-digit", month: "long", year: "numeric",
-  }),                                  ML + COL_W + 3,     Y_INFO + 9, 8);
-  txt(doc, String(datos.total_bultos), ML + COL_W * 2 + 3, Y_INFO + 9, 10);
+  }),                                   ML + COL_W + 3,     Y_INFO1 + 9, 8);
+  txt(doc, String(datos.total_bultos),  ML + COL_W * 2 + 3, Y_INFO1 + 9, 10);
 
   const cobroLabel = datos.tipo_cobro === "pagado"
     ? "Pagado"
     : datos.tipo_cobro === "por_cobrar"
       ? "Por cobrar"
       : "Cobrar al regreso";
-  txt(doc, cobroLabel, ML + COL_W * 3 + 3, Y_INFO + 9, 8);
+  txt(doc, cobroLabel, ML + COL_W * 3 + 3, Y_INFO1 + 9, 8);
 
   doc.setFont("helvetica", "normal");
-  txt(doc, datos.asegurado ? "Sí" : "No", ML + COL_W * 4 + 3, Y_INFO + 9, 10);
+  txt(doc, datos.asegurado ? "Sí" : "No", ML + COL_W * 4 + 3, Y_INFO1 + 9, 10);
+
+  // ══════════════════════════════════════════
+  // FILA 2: Factura / Tipo de entrega
+  // ══════════════════════════════════════════
+  const Y_INFO2 = Y_INFO1 + 14;   // 47
+  const HALF_CW = CW / 2;
+
+  doc.setFillColor(248, 248, 248);
+  rect(doc, ML,             Y_INFO2, HALF_CW - 1, 10, "FD");
+  rect(doc, ML + HALF_CW,   Y_INFO2, HALF_CW - 1, 10, "FD");
+
+  doc.setTextColor(100, 100, 100);
+  doc.setFont("helvetica", "normal");
+  txt(doc, "FACTURA",         ML + 3,          Y_INFO2 + 3.5, 7);
+  txt(doc, "TIPO DE ENTREGA", ML + HALF_CW + 3, Y_INFO2 + 3.5, 7);
+
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(0, 0, 0);
+  txt(doc, datos.requiere_factura ? "Con factura" : "Sin factura", ML + 3,           Y_INFO2 + 8.5, 9);
+  txt(doc, datos.tipo_entrega === "domicilio" ? "A domicilio" : "Ocurre",
+    ML + HALF_CW + 3, Y_INFO2 + 8.5, 9);
 
   doc.setFont("helvetica", "normal");
 
   // ══════════════════════════════════════════
   // REMITENTE / DESTINATARIO
   // ══════════════════════════════════════════
-  const Y_PARTES = 50;   // Y_INFO(33) + 12(alto celda) + 5(margen)
+  const Y_PARTES = Y_INFO2 + 15;   // 62
   const HALF     = CW / 2 - 1;
 
   doc.setFillColor(200, 200, 200);
@@ -125,12 +144,12 @@ export function generarGuiaPaqueteriaGeneral(datos: GuiaPaqueteriaGeneral): void
   doc.setTextColor(0, 0, 0);
   txt(doc, datos.remitente.nombre_empresa, ML + 2, Y_PARTES + 12, 9);
   doc.setFont("helvetica", "normal");
-  txt(doc, datos.remitente.razon_social,  ML + 2, Y_PARTES + 17, 8);
-  txt(doc, datos.remitente.rfc,           ML + 2, Y_PARTES + 21, 8);
-  txt(doc, datos.remitente.domicilio,     ML + 2, Y_PARTES + 25, 8);
+  txt(doc, datos.remitente.razon_social,   ML + 2, Y_PARTES + 17, 8);
+  txt(doc, datos.remitente.rfc,            ML + 2, Y_PARTES + 21, 8);
+  txt(doc, datos.remitente.domicilio,      ML + 2, Y_PARTES + 25, 8);
   txt(doc, `${datos.remitente.colonia}, ${datos.remitente.ciudad}`, ML + 2, Y_PARTES + 29, 8);
   txt(doc, `${datos.remitente.estado}  C.P. ${datos.remitente.codigo_postal}`, ML + 2, Y_PARTES + 33, 8);
-  txt(doc, datos.remitente.telefonos,     ML + 2, Y_PARTES + 38, 8);
+  txt(doc, datos.remitente.telefonos,      ML + 2, Y_PARTES + 38, 8);
 
   const DX = ML + HALF + 4;
   doc.setFont("helvetica", "bold");
@@ -139,13 +158,13 @@ export function generarGuiaPaqueteriaGeneral(datos: GuiaPaqueteriaGeneral): void
   if (datos.destinatario.impresion && datos.destinatario.impresion !== datos.destinatario.nombre) {
     txt(doc, datos.destinatario.nombre, DX, Y_PARTES + 17, 8);
   }
-  txt(doc, datos.destinatario.rfc,      DX, Y_PARTES + 21, 8);
-  txt(doc, datos.destinatario.domicilio, DX, Y_PARTES + 25, 8);
+  txt(doc, datos.destinatario.rfc,       DX, Y_PARTES + 21, 8);
+  txt(doc, datos.destinatario.domicilio,  DX, Y_PARTES + 25, 8);
   txt(doc, `${datos.destinatario.colonia}, ${datos.destinatario.ciudad}`, DX, Y_PARTES + 29, 8);
   doc.setFont("helvetica", "bold");
   txt(doc, `${datos.destinatario.estado}  C.P. ${datos.destinatario.codigo_postal}`, DX, Y_PARTES + 33, 9);
   doc.setFont("helvetica", "normal");
-  txt(doc, datos.destinatario.telefonos, DX, Y_PARTES + 38, 8);
+  txt(doc, datos.destinatario.telefonos,  DX, Y_PARTES + 38, 8);
 
   // ══════════════════════════════════════════
   // TABLA DE BULTOS

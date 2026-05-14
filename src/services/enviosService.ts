@@ -9,6 +9,10 @@ import type {
   CarritoPedido, ProcesarCarritoRequest,
   ProductoSat,
   GuiaPaqueteriaGeneral,
+  FiltrosHistorialLocal,
+  FiltrosHistorialPaqueteria,
+  HistorialLocalItem,
+  HistorialPaqueteriaItem,
 } from "../types/envios.types";
 
 // ==========================
@@ -247,5 +251,31 @@ export const getBultosPorProduccion = async (
   const res = await api.get<BultosPorProduccionResponse>(
     `/envios/pedidos/${idsolicitud}/bultos-por-produccion/${idproduccion}`,
   );
+  return res.data;
+};
+
+// ── helpers ──────────────────────────────────────────────────
+function toQueryString(params: Record<string, any>): string {
+  const p = new URLSearchParams();
+  Object.entries(params).forEach(([k, v]) => {
+    if (v !== undefined && v !== null && v !== "") p.append(k, String(v));
+  });
+  const qs = p.toString();
+  return qs ? `?${qs}` : "";
+}
+ 
+// ── Historial local ───────────────────────────────────────────
+export const getHistorialLocal = async (
+  filtros: FiltrosHistorialLocal = {}
+): Promise<HistorialLocalItem[]> => {
+  const res = await api.get<HistorialLocalItem[]>(`/historial/local${toQueryString(filtros)}`);
+  return res.data;
+};
+ 
+// ── Historial paquetería ──────────────────────────────────────
+export const getHistorialPaqueteria = async (
+  filtros: FiltrosHistorialPaqueteria = {}
+): Promise<HistorialPaqueteriaItem[]> => {
+  const res = await api.get<HistorialPaqueteriaItem[]>(`/historial/paqueteria${toQueryString(filtros)}`);
   return res.data;
 };

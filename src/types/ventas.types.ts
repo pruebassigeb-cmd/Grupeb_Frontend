@@ -5,13 +5,14 @@ export interface MetodoPago {
 }
 
 export interface VentaPago {
-  idventa_pago:  number;
-  monto:         number;
-  es_anticipo:   boolean;
-  observacion:   string | null;
-  fecha:         string;
-  metodo_pago:   string;
-  idmetodo_pago: number;
+  idventa_pago:        number;
+  monto:               number;
+  es_anticipo:         boolean;
+  es_credito_anticipo: boolean;   // ← nuevo
+  observacion:         string | null;
+  fecha:               string;
+  metodo_pago:         string;
+  idmetodo_pago:       number;
 }
 
 export interface Venta {
@@ -46,6 +47,8 @@ export interface Venta {
   correo:                string;
   impresion?:            string | null;
   pagos:                 VentaPago[];
+  // ── Crédito ───────────────────────────────────────────────
+  es_credito_anticipo?:  boolean;   // ← nuevo
 }
 
 export interface DisenoProducto {
@@ -78,7 +81,6 @@ export interface Diseno {
   pendientes:            number;
   diseno_completado:     boolean;
   tiene_rechazados:      boolean;
-
 }
 
 export interface CondicionesProduccion {

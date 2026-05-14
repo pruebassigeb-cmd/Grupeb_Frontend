@@ -343,4 +343,72 @@ export interface GuiaPaqueteriaGeneral {
   }[];
   tipo_cobro?: "pagado" | "por_cobrar" | "cobrar_al_regreso";
   asegurado?:  boolean;
+  requiere_factura: boolean;
+  tipo_entrega:     "domicilio" | "ocurre";
+}
+
+// ── Filtros ──────────────────────────────────────────────────
+ 
+export interface FiltrosHistorialLocal {
+  fecha_inicio?: string; // YYYY-MM-DD
+  fecha_fin?:    string;
+  idunidad?:     number;
+  idusuario?:    number;
+  no_pedido?:    string;
+  cliente?:      string;
+}
+ 
+export interface FiltrosHistorialPaqueteria {
+  fecha_inicio?: string;
+  fecha_fin?:    string;
+  idpaqueteria?: number;
+  numero_guia?:  string;
+  no_pedido?:    string;
+  cliente?:      string;
+  estado?:       "preparando" | "en_camino" | "entregado";
+}
+ 
+// ── Registros ────────────────────────────────────────────────
+ 
+export interface HistorialLocalItem {
+  idbitacora:        number;
+  fecha:             string;
+  hora_salida:       string | null;
+  hora_llegada:      string | null;
+  observacion:       "E" | "RA" | "RD" | "PD" | null;
+  observacion_extra: string | null;
+  firma:             string | null;
+  idenvio:           number;
+  estado:            "preparando" | "en_camino" | "entregado";
+  es_parcialidad:    boolean;
+  no_pedido:         string;
+  cliente:           string;
+  total_bultos:      number;
+  chofer: {
+    idusuario: number;
+    nombre:    string;
+  };
+  unidad: {
+    idunidad: number;
+    tipo:     string;
+    nombre:   string;
+  };
+}
+ 
+export interface HistorialPaqueteriaItem {
+  idenvio:                number;
+  estado:                 "preparando" | "en_camino" | "entregado";
+  es_parcialidad:         boolean;
+  numero_guia:            string | null;
+  costo_flete:            number | null;
+  fecha_envio:            string;
+  fecha_entrega_estimada: string | null;
+  observaciones:          string | null;
+  no_pedido:              string;
+  cliente:                string;
+  total_bultos:           number;
+  paqueteria: {
+    idpaqueteria: number;
+    nombre:       string;
+  };
 }

@@ -20,10 +20,14 @@ import type { Venta, VentaPago, MetodoPago } from "../types/ventas.types";
 import { showAlert } from '../components/CustomAlert';
 import { showConfirm } from '../components/CustomConfirm';
 
-
-
 const ESTADO = { PENDIENTE: 1, EN_PROCESO: 2, PAGADO: 6 } as const;
 const POR_PAGINA = 10;
+
+// ── Porcentaje de referencia visual ──────────────────────────────────────────
+// El backend activa producción al 40% del total.
+// El anticipo guardado en BD (y que ve el cliente) es el 50%.
+// En el frontend solo usamos ANTICIPO_VALIDACION_MIN para dibujar la barra.
+const ANTICIPO_VALIDACION_MIN = 0.40;
 
 const fmt = (n: number) =>
   Number(n).toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -36,9 +40,19 @@ const fmtFecha = (iso: string) => {
   } catch { return iso; }
 };
 
-function calcularEstado(abono: number, anticipo: number, saldo: number): number {
-  if (saldo <= 0.01)     return ESTADO.PAGADO;
-  if (abono >= anticipo) return ESTADO.EN_PROCESO;
+// ─────────────────────────────────────────────────────────────────────────────
+// calcularEstado: recibe es_credito_anticipo para que el estado en tabla
+// sea EN_PROCESO aunque el abono sea 0 si el crédito fue autorizado.
+// Usa anticipo (50% de BD) como umbral visual.
+// ─────────────────────────────────────────────────────────────────────────────
+function calcularEstado(
+  abono: number,
+  anticipo: number,
+  saldo: number,
+  esCreditoAnticipo: boolean = false
+): number {
+  if (saldo <= 0.01)                          return ESTADO.PAGADO;
+  if (abono >= anticipo || esCreditoAnticipo) return ESTADO.EN_PROCESO;
   return ESTADO.PENDIENTE;
 }
 
@@ -101,15 +115,14 @@ async function descargarPdfOrden(noPedido: string, noProduccion: string): Promis
     pzas_merma:              producto.pzas_merma           ?? null,
     kilos_extruir:           producto.kilos_extruir        ?? null,
     metros_extruir:          producto.metros_extruir       ?? null,
-
     url_render:              (producto as any).url_render  ?? null,
     url_master:              (producto as any).url_master  ?? null,
   });
 }
 
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 // PAGINADOR
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 function Paginador({
   total, pagina, porPagina, onChange,
 }: {
@@ -117,10 +130,8 @@ function Paginador({
 }) {
   const totalPaginas = Math.ceil(total / porPagina);
   if (totalPaginas <= 1) return null;
-
   const desde = (pagina - 1) * porPagina + 1;
-  const hasta = Math.min(pagina * porPagina, total);
-
+  const hasta  = Math.min(pagina * porPagina, total);
   return (
     <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 bg-white">
       <p className="text-sm text-gray-500">
@@ -162,13 +173,11 @@ function Paginador({
   );
 }
 
-// ════════════════════════════════════════════════════════════
+// ─────────────────────────────────────────────────────────────────────────────
 // SECCIÓN ESTADO DE CUENTA
-// ════════════════════════════════════════════════════════════
+// ─────────────────────────────────────────────────────────────────────────────
 function SeccionEstadoCuenta({
-  noPedido,
-  pagos,
-  onActualizar,
+  noPedido, pagos, onActualizar,
 }: {
   noPedido:     string;
   pagos:        VentaPago[];
@@ -191,14 +200,15 @@ function SeccionEstadoCuenta({
       setDatos(data);
       setCargado(true);
       onActualizar({
-        saldo:            data.saldo,
-        anticipo:         data.anticipo,
-        abono:            data.abono,
-        subtotal_real:    data.subtotal_real,
-        iva_real:         data.iva_real,
-        total_real:       data.total_real,
-        diferencia_total: data.diferencia_total,
-        estado_id:        data.estado_id,
+        saldo:               data.saldo,
+        anticipo:            data.anticipo,
+        abono:               data.abono,
+        subtotal_real:       data.subtotal_real,
+        iva_real:            data.iva_real,
+        total_real:          data.total_real,
+        diferencia_total:    data.diferencia_total,
+        estado_id:           data.estado_id,
+        es_credito_anticipo: data.es_credito_anticipo,
       });
     } catch (e: any) {
       const msg = e.response?.data?.detalle || e.response?.data?.error || "Error al cargar estado de cuenta";
@@ -208,10 +218,7 @@ function SeccionEstadoCuenta({
     }
   };
 
-  // ── Carga automática al montar — actualiza barra sin que el usuario abra el desplegable ──
-  useEffect(() => {
-    cargar();
-  }, []);
+  useEffect(() => { cargar(); }, []);
 
   const handleToggle = () => {
     const nuevo = !expandido;
@@ -243,7 +250,6 @@ function SeccionEstadoCuenta({
           <span className="text-indigo-600 text-sm">📊</span>
           <span className="text-sm font-semibold text-indigo-800">Estado de Cuenta</span>
           <span className="text-xs text-indigo-500 font-normal">(precio final basado en producción real)</span>
-          {/* Indicador sutil de carga en background */}
           {cargando && (
             <div className="w-3 h-3 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
           )}
@@ -282,7 +288,6 @@ function SeccionEstadoCuenta({
                 {datos.productos.map(prod => {
                   const diffPzas   = prod.diferencia_piezas;
                   const diffPrecio = prod.diferencia_precio;
-                  // Unidad según modo del pedido
                   const esKiloProd = (prod as any).modo_cantidad === "kilo";
                   const unidadProd = esKiloProd ? "kg" : "pzas";
                   return (
@@ -413,7 +418,6 @@ function SeccionEstadoCuenta({
                       <div className="space-y-1 text-xs">
                         <div className="flex justify-between"><span className="text-gray-500">Subtotal</span><span className="text-blue-700">${fmt(datos.subtotal_real)}</span></div>
                         <div className="flex justify-between"><span className="text-gray-500">IVA 16%</span><span className="text-blue-700">${fmt(datos.iva_real)}</span></div>
-            
                         <div className="flex justify-between font-semibold border-t border-blue-100 pt-1"><span className="text-gray-600">Total</span><span className="text-blue-800">${fmt(datos.total_real)}</span></div>
                       </div>
                     </div>
@@ -490,9 +494,9 @@ function SeccionEstadoCuenta({
   );
 }
 
-// ════════════════════════════════════════════════════════════
+// ─────────────────────────────────────────────────────────────────────────────
 // MODAL DETALLE / PAGOS
-// ════════════════════════════════════════════════════════════
+// ─────────────────────────────────────────────────────────────────────────────
 export function EditarAntLiqReal({
   venta: ventaInicial,
   metodos,
@@ -510,7 +514,7 @@ export function EditarAntLiqReal({
   const [esAnticipo,      setEsAnticipo]      = useState(false);
   const [montoEsAnticipo, setMontoEsAnticipo] = useState(false);
   const [observacion,     setObservacion]     = useState("");
-  const [fechaPago,       setFechaPago]       = useState(""); // "" = hoy (backend usa NOW())
+  const [fechaPago,       setFechaPago]       = useState("");
   const [guardando,       setGuardando]       = useState(false);
   const [eliminando,      setEliminando]      = useState<number | null>(null);
   const [error,           setError]           = useState<string | null>(null);
@@ -520,26 +524,38 @@ export function EditarAntLiqReal({
     visible: false, folios: [],
   });
 
+  // anticipo = 50% guardado en BD — es lo que ve el cliente
   const anticipo    = Number(venta.anticipo);
   const saldo       = Number(venta.saldo);
   const totalPagado = Number(venta.abono);
   const totalRef    = Number(venta.total_real ?? venta.total);
 
+  // Leer es_credito_anticipo del objeto venta
+  const esCreditoAnticipo = !!(venta as any).es_credito_anticipo;
+
+  // ── Solo para la barra visual: dónde cae el 40% en la barra ──────────────
+  const umbralActivacion = Number((Number(venta.total) * ANTICIPO_VALIDACION_MIN).toFixed(2));
+
+  // ── Lógica de estado visual — siempre contra el 50% (anticipo de BD) ─────
+  // anticreditoActivo: producción arrancó pero el cliente aún no cubre el 50%
   const anticreditoActivo =
     Number(venta.estado_id) >= ESTADO.EN_PROCESO &&
     totalPagado < anticipo - 0.01;
 
+  // anticipoCubierto: el cliente llegó al 50% oficial O fue por crédito
   const anticipoCubierto =
     totalPagado >= anticipo - 0.01 ||
+    esCreditoAnticipo ||
     anticreditoActivo;
 
   const anticipoRestante = Math.max(anticipo - totalPagado, 0);
-  const pagado           = saldo <= 0.01;
+
+  // pagado usa calcularEstado con esCreditoAnticipo y anticipo del 50%
+  const pagado = calcularEstado(totalPagado, anticipo, saldo, esCreditoAnticipo) === ESTADO.PAGADO;
+
   const pctPagado        = totalRef > 0 ? Math.min((totalPagado / totalRef) * 100, 100) : 0;
   const herramentalTotal = Number(venta.herramental_total ?? 0);
-
-  // Fecha máxima permitida = hoy
-  const hoy = new Date().toISOString().split("T")[0];
+  const hoy              = new Date().toISOString().split("T")[0];
 
   const recargar = async () => {
     const actualizada = await getVentaByPedido(venta.no_pedido);
@@ -566,10 +582,10 @@ export function EditarAntLiqReal({
     try {
       const response = await registrarPago(venta.idventas, {
         metodoPagoId,
-        monto:      montoNum,
+        monto:       montoNum,
         esAnticipo,
         observacion: observacion.trim() || undefined,
-        fecha:       fechaPago || null, // null = backend usa NOW()
+        fecha:       fechaPago || null,
       });
       await recargar();
       setMonto(""); setObservacion(""); setFechaPago("");
@@ -684,7 +700,8 @@ export function EditarAntLiqReal({
             { label: "Subtotal orig.",  value: fmt(venta.subtotal), color: "text-gray-700"               },
             { label: "IVA 16%",         value: fmt(venta.iva),      color: "text-gray-500"               },
             { label: "Total orig.",     value: fmt(venta.total),    color: "text-gray-900 font-bold"     },
-            { label: "Anticipo (40%)",  value: fmt(anticipo),       color: "text-blue-700 font-semibold" },
+            // 50% — anticipo oficial que ve el cliente
+            { label: "Anticipo (50%)",  value: fmt(anticipo),       color: "text-blue-700 font-semibold" },
           ].map(item => (
             <div key={item.label} className="bg-gray-50 rounded-xl p-3 text-center border border-gray-100">
               <p className="text-xs text-gray-400 mb-1">{item.label}</p>
@@ -725,7 +742,10 @@ export function EditarAntLiqReal({
           <span className="text-sm font-bold text-gray-900">{pctPagado.toFixed(1)}%</span>
         </div>
         <div className="w-full bg-gray-200 rounded-full h-3 relative">
+          {/* Línea azul en 40% — referencia visual de activación de producción */}
           <div className="absolute top-0 bottom-0 w-0.5 bg-blue-400 z-10" style={{ left: "40%" }} />
+          {/* Línea naranja en 50% — anticipo oficial que ve el cliente */}
+          <div className="absolute top-0 bottom-0 w-0.5 bg-orange-400 z-10" style={{ left: "50%" }} />
           <div className={`h-3 rounded-full transition-all duration-500 ${
             pctPagado >= 100 ? "bg-emerald-500" : pctPagado >= 40 ? "bg-blue-500" : "bg-yellow-500"
           }`} style={{ width: `${pctPagado}%` }} />
@@ -739,19 +759,24 @@ export function EditarAntLiqReal({
         <p className="text-center text-xs mt-1 text-blue-500">
           {pagado
             ? "✓ Pedido pagado"
-            : anticreditoActivo
-              ? "🤝 Anticipo a crédito — pago pendiente"
-              : anticipoCubierto
-                ? "✓ Anticipo cubierto — falta liquidar saldo"
-                : `↑ Línea azul = anticipo requerido (40%) · Faltan $${fmt(anticipoRestante)}`}
+            : esCreditoAnticipo && !anticreditoActivo
+              ? "🤝 Anticipo a crédito autorizado — producción en curso"
+              : anticreditoActivo
+                ? "🤝 Anticipo a crédito — pago pendiente"
+                : anticipoCubierto
+                  ? "✓ Anticipo cubierto — falta liquidar saldo"
+                  : `↑ Azul = producción activa desde 40% · Naranja = anticipo oficial 50% · Faltan $${fmt(anticipoRestante)}`}
         </p>
 
-        {!pagado && anticreditoActivo && (
+        {/* Badge crédito */}
+        {esCreditoAnticipo && !pagado && (
           <div className="mt-3 flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
             <span className="text-amber-500 text-sm">🤝</span>
             <p className="text-xs text-amber-800 font-medium">
-              Anticipo a crédito — pago pendiente · Faltan{" "}
-              <span className="font-bold">${fmt(anticipoRestante)}</span> por cobrar
+              Anticipo autorizado por crédito
+              {totalPagado < anticipo - 0.01 && (
+                <> · Faltan <span className="font-bold">${fmt(anticipoRestante)}</span> por cobrar</>
+              )}
             </p>
           </div>
         )}
@@ -800,14 +825,19 @@ export function EditarAntLiqReal({
                 className="flex items-center justify-between bg-white border border-gray-100 rounded-xl px-4 py-3 shadow-sm">
                 <div className="flex items-center gap-3">
                   <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
-                    pago.es_anticipo ? "bg-blue-100 text-blue-700" : "bg-emerald-100 text-emerald-700"
+                    pago.es_credito_anticipo ? "bg-amber-100 text-amber-700"
+                    : pago.es_anticipo       ? "bg-blue-100 text-blue-700"
+                    :                          "bg-emerald-100 text-emerald-700"
                   }`}>
-                    {pago.es_anticipo ? "A" : "$"}
+                    {pago.es_credito_anticipo ? "🤝" : pago.es_anticipo ? "A" : "$"}
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
                       <p className="text-sm font-semibold text-gray-800">${fmt(pago.monto)}</p>
-                      {pago.es_anticipo && (
+                      {pago.es_credito_anticipo && (
+                        <span className="text-xs px-1.5 py-0.5 bg-amber-50 text-amber-700 rounded font-medium">Crédito</span>
+                      )}
+                      {pago.es_anticipo && !pago.es_credito_anticipo && (
                         <span className="text-xs px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded font-medium">Anticipo</span>
                       )}
                     </div>
@@ -836,7 +866,9 @@ export function EditarAntLiqReal({
       {!pagado ? (
         <div className="bg-gray-50 rounded-xl border border-gray-200 p-4">
           <h4 className="text-sm font-semibold text-gray-700 mb-4">
-            {anticreditoActivo ? "Registrar pago — Anticipo a crédito pendiente" : "Registrar pago"}
+            {esCreditoAnticipo && totalPagado < anticipo - 0.01
+              ? "Registrar pago — Anticipo a crédito pendiente"
+              : "Registrar pago"}
           </h4>
 
           {error && (
@@ -865,13 +897,11 @@ export function EditarAntLiqReal({
                 />
               </div>
               <div className="flex gap-2 mt-1 flex-wrap">
-                {totalPagado < anticipo - 0.01 && (
+                {totalPagado < anticipo - 0.01 && !esCreditoAnticipo && (
                   <button type="button"
                     onClick={() => { setMonto(anticipoRestante.toFixed(2)); setEsAnticipo(true); setMontoEsAnticipo(true); }}
                     className="text-xs text-blue-600 hover:text-blue-800 underline">
-                    {anticreditoActivo
-                      ? `Pagar anticipo a crédito ($${fmt(anticipoRestante)})`
-                      : `Anticipo restante ($${fmt(anticipoRestante)})`}
+                    Anticipo restante (${fmt(anticipoRestante)})
                   </button>
                 )}
                 <button type="button"
@@ -894,17 +924,14 @@ export function EditarAntLiqReal({
             </div>
           </div>
 
-          {/* Fecha del pago + Observación */}
+          {/* Fecha + Observación */}
           <div className="grid grid-cols-2 gap-3 mb-3">
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">
                 Fecha del pago
                 <span className="ml-1 text-gray-400 font-normal">(vacío = hoy)</span>
               </label>
-              <input
-                type="date"
-                value={fechaPago}
-                max={hoy}
+              <input type="date" value={fechaPago} max={hoy}
                 onChange={e => setFechaPago(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white focus:ring-2 focus:ring-blue-400 text-sm"
               />
@@ -924,24 +951,23 @@ export function EditarAntLiqReal({
           </div>
 
           <div className="flex items-center justify-between">
-            {!anticipoCubierto || anticreditoActivo ? (
+            {!anticipoCubierto ? (
               <label className={`flex items-center gap-2 ${montoEsAnticipo ? "cursor-default" : "cursor-not-allowed opacity-40"}`}>
                 <input type="checkbox" checked={esAnticipo} readOnly disabled={!montoEsAnticipo}
                   className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
                 <span className={`text-sm ${montoEsAnticipo ? "text-blue-700 font-medium" : "text-gray-400"}`}>
-                  {montoEsAnticipo
-                    ? anticreditoActivo ? "✓ Anticipo a crédito — pago pendiente" : "✓ Anticipo"
-                    : anticreditoActivo ? "Anticipo a crédito — pago pendiente"   : "Anticipo"}
+                  {montoEsAnticipo ? "✓ Anticipo" : "Anticipo"}
                 </span>
               </label>
             ) : (
               <span className="text-xs text-emerald-600 font-medium">
-                ✓ Anticipo cubierto — este pago es abono normal
+                {esCreditoAnticipo ? "🤝 Anticipo a crédito autorizado" : "✓ Anticipo cubierto"} — este pago es abono normal
               </span>
             )}
 
             <div className="flex items-center gap-2">
-              {!anticipoCubierto && !anticreditoActivo && (
+              {/* Solo mostrar si NO es ya crédito Y NO está cubierto */}
+              {!anticipoCubierto && !esCreditoAnticipo && (
                 <button type="button" onClick={handleAutorizarCredito} disabled={autorizando}
                   className="flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 disabled:bg-amber-300 text-white rounded-lg font-medium text-sm transition-colors">
                   {autorizando
@@ -986,9 +1012,9 @@ export function EditarAntLiqReal({
   );
 }
 
-// ════════════════════════════════════════════════════════════
+// ─────────────────────────────────────────────────────────────────────────────
 // PÁGINA PRINCIPAL
-// ════════════════════════════════════════════════════════════
+// ─────────────────────────────────────────────────────────────────────────────
 export default function AnticipoLiquidacion() {
   const [ventas,          setVentas]          = useState<Venta[]>([]);
   const [metodos,         setMetodos]         = useState<MetodoPago[]>([]);
@@ -1054,10 +1080,11 @@ export default function AnticipoLiquidacion() {
   const ventasPaginadas = ventasFiltradas.slice((pagina - 1) * POR_PAGINA, pagina * POR_PAGINA);
 
   const getEstadoBadge = (v: Venta) => {
-    const abono    = Number(v.abono);
-    const anticipo = Number(v.anticipo);
-    const saldo    = Number(v.saldo);
-    const estado   = calcularEstado(abono, anticipo, saldo);
+    const abono             = Number(v.abono);
+    const anticipo          = Number(v.anticipo);
+    const saldo             = Number(v.saldo);
+    const esCreditoAnticipo = !!(v as any).es_credito_anticipo;
+    const estado = calcularEstado(abono, anticipo, saldo, esCreditoAnticipo);
 
     if (estado === ESTADO.PAGADO) return (
       <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">
@@ -1067,7 +1094,7 @@ export default function AnticipoLiquidacion() {
     if (estado === ESTADO.EN_PROCESO) return (
       <div className="flex flex-col gap-1">
         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-          🔄 En proceso
+          {esCreditoAnticipo ? "🤝 A crédito" : "🔄 En proceso"}
         </span>
         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-50 text-orange-700">
           ${fmt(saldo)} pendiente

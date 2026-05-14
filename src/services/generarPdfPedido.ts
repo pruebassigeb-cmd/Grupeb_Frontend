@@ -28,6 +28,7 @@ interface PedidoPdf {
   total:          number;
   anticipo:       number;
   saldo:          number;
+  sin_iva?:       boolean;          // ← NUEVO
   celular?:        string | null;
   razon_social?:   string | null;
   rfc?:            string | null;
@@ -42,6 +43,7 @@ interface PedidoPdf {
 
 export async function generarPdfPedido(pedido: PedidoPdf): Promise<void> {
   const logoBase64 = pedido.logoBase64 ?? await cargarLogoBase64(logoUrl);
+  const sinIva     = pedido.sin_iva === true;
 
   const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "letter" });
   const PW  = 279.4;
@@ -81,16 +83,14 @@ export async function generarPdfPedido(pedido: PedidoPdf): Promise<void> {
     "Cantidad / Precio", "Importe",
   ];
 
-  // fontSize por columna para el header
-  // General: 8  |  Tintas (3): 7.5  |  Asa/Suaje (8): 7.5  |  Laminado (10): 7
   const HEAD_FONT_SIZE_DEFAULT = 8;
   const headFontSizeMap: Record<number, number> = {
-    3:  7, // Tintas
-    4:  7, // Caras
-    6:  7, // Calibre
-    8:  7, // Asa/Suaje
-    9: 6.5,
-    10: 6.5,   // Laminado
+    3:  7,
+    4:  7,
+    6:  7,
+    8:  7,
+    9:  6.5,
+    10: 6.5,
   };
 
   const bodyRows: any[][] = [];
@@ -190,20 +190,16 @@ export async function generarPdfPedido(pedido: PedidoPdf): Promise<void> {
     alternateRowStyles: { fillColor: GRAY_ROW },
     columnStyles,
     didParseCell(data) {
-      // ── Header ──
       if (data.section === "head") {
-        // Color especial en columnas Cantidad/Precio e Importe
         if (data.column.index === 14 || data.column.index === 15) {
           data.cell.styles.fillColor = GRAY_MED;
         }
-        // fontSize especial por columna: Tintas, Asa/Suaje, Laminado
         const customSize = headFontSizeMap[data.column.index];
         if (customSize !== undefined) {
           data.cell.styles.fontSize = customSize;
         }
       }
 
-      // ── Body: filas combo (Obs / Herramental) ──
       if (data.section === "body") {
         const raw     = data.row.raw as any[];
         const raw0    = String(raw?.[0] ?? "");
@@ -259,9 +255,10 @@ export async function generarPdfPedido(pedido: PedidoPdf): Promise<void> {
     doc.addPage();
   }
 
+  // ── sin_iva: pasar iva=0 al pie del pedido ────────────────────────────────
   dibujarCajasPie(doc, pedido.productos, [], {
     subtotal: pedido.subtotal,
-    iva:      pedido.iva,
+    iva:      sinIva ? 0 : pedido.iva,
     total:    pedido.total,
     anticipo: pedido.anticipo,
   });

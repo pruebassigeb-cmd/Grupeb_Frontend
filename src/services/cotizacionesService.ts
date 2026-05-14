@@ -9,6 +9,7 @@ export const getCotizaciones = async () => {
 export const crearCotizacion = async (datos: {
   clienteId?: number;
   tipo?:      "cotizacion" | "pedido";
+  sin_iva?:   boolean;
   productos: {
     productoId?:              number;
     cantidades:               [number, number, number];
@@ -84,12 +85,13 @@ export const crearCotizacion = async (datos: {
     };
   });
 
-  console.log("🔍 prioridad antes de enviar:", datos.prioridad);
+  console.log("🔍 prioridad antes de enviar:", datos.prioridad, "| sin_iva:", datos.sin_iva);
 
   const response = await api.post("/cotizaciones", {
     clienteId: datos.clienteId,
-    tipo:      datos.tipo ?? "cotizacion",
+    tipo:      datos.tipo      ?? "cotizacion",
     prioridad: datos.prioridad ?? false,
+    sin_iva:   datos.sin_iva   ?? false,   // ← FIX: enviar sin_iva al backend
     productos,
   });
 

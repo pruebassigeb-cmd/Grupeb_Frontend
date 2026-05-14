@@ -96,6 +96,7 @@ export async function generarPdfEstadoCuentaSimple(
 ): Promise<void> {
   const logoBase64 = await cargarLogoBase64(logoUrl);
   const qrWaBase64 = await generarQRBase64("https://wa.me/523339540924");
+  const sinIva     = (datos as any).sin_iva === true;
 
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   const PW  = 210;
@@ -360,10 +361,17 @@ export async function generarPdfEstadoCuentaSimple(
 
   let ty = y + 8 + 4 + totalesLineH;
 
-  filaTotales(doc, "Sub-Total",    fmtMoney(datos.subtotal_real), ty, totLX, totVX, totX, totW);
+  filaTotales(doc, "Sub-Total", fmtMoney(datos.subtotal_real), ty, totLX, totVX, totX, totW);
   ty += totalesLineH;
 
-  filaTotales(doc, "I.V.A. (16%)", fmtMoney(datos.iva_real), ty, totLX, totVX, totX, totW, { gris: true });
+  // sin_iva: mostrar $0.00, misma etiqueta siempre
+  filaTotales(
+    doc,
+    "I.V.A. (16%)",
+    fmtMoney(sinIva ? 0 : datos.iva_real),
+    ty, totLX, totVX, totX, totW,
+    { gris: true }
+  );
   ty += totalesLineH;
 
   filaTotales(doc, "Total", fmtMoney(datos.total_real), ty, totLX, totVX, totX, totW, { bold: true, separador: true });
@@ -392,7 +400,7 @@ export async function generarPdfEstadoCuentaSimple(
   doc.setFontSize(8);
   doc.setTextColor(...GRAY_60);
   doc.text(
-    "Los montos reflejan la cantidad\ny producción real producida.",
+    "Los montos reflejan la cantidad\ny producción real.",
     M, y + 8 + 8, { maxWidth: totX - M - 4 }
   );
 
@@ -429,9 +437,8 @@ export async function generarPdfEstadoCuentaSimple(
   const xBanco    = M;
   const xContacto = M + colBancoW + espacioQr;
 
-  // QR: centrado horizontalmente en el hueco, borde superior = yPie (mismo que títulos)
-  const xQr = xBanco + colBancoW + (espacioQr - QR_SIZE) / 2 - 5;
-  const yQr = y - 4;   // ← alineado con "Datos para transferencia" y "Contacto"
+  const xQr  = xBanco + colBancoW + (espacioQr - QR_SIZE) / 2 - 5;
+  const yQr  = y - 4;
   const yPie = y;
 
   // ── Col 1: Banco ──────────────────────────────────────────
@@ -472,7 +479,7 @@ export async function generarPdfEstadoCuentaSimple(
   datoBancario("CLABE",       "002320700107089643",  yPie + 37);
   datoBancario("A nombre de", "Grupeb S.A. de C.V.", yPie + 44);
 
-  // ── Col 2: QR centrado + número ───────────────────────────
+  // ── Col 2: QR ─────────────────────────────────────────────
   if (qrWaBase64) {
     try {
       doc.addImage(qrWaBase64, "PNG", xQr, yQr, QR_SIZE, QR_SIZE);

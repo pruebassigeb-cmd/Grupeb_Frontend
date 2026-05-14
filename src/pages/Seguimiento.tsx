@@ -132,7 +132,10 @@ const IconoPdf = () => (
   </svg>
 );
 
-function BotonPdfPedido({ pedido }: { pedido: PedidoSeguimiento }) {
+// ─────────────────────────────────────────────────────────────────────────────
+// BotonPdfPedido — ahora recibe puedePdf para controlar el acceso
+// ─────────────────────────────────────────────────────────────────────────────
+function BotonPdfPedido({ pedido, puedePdf }: { pedido: PedidoSeguimiento; puedePdf: boolean }) {
   const [descargando, setDescargando] = useState(false);
 
   const resolverCalibre = (p: any): string => {
@@ -213,6 +216,15 @@ function BotonPdfPedido({ pedido }: { pedido: PedidoSeguimiento }) {
       showAlert("No se pudo generar el PDF del pedido.");
     } finally { setDescargando(false); }
   };
+
+  // Sin permiso: solo muestra el número de pedido sin botón PDF
+  if (!puedePdf) {
+    return (
+      <span className="text-xs font-medium text-blue-600 whitespace-nowrap">
+        {pedido.no_pedido}
+      </span>
+    );
+  }
 
   return (
     <div className="flex items-center gap-1.5">
@@ -320,7 +332,6 @@ function BotonPdfDirecto({ pedido }: { pedido: PedidoSeguimiento }) {
         pzas_merma:              producto.pzas_merma           ?? null,
         kilos_extruir:           producto.kilos_extruir        ?? null,
         metros_extruir:          producto.metros_extruir       ?? null,
-        // ── Imágenes de diseño ──
         url_render:              (producto as any).url_render  ?? null,
         url_master:              (producto as any).url_master  ?? null,
       });
@@ -456,14 +467,19 @@ export default function Seguimiento() {
 
   const { user }         = useAuth();
   const esAccesoTotal    = user?.acceso_total ?? false;
-  const puedeExtrusion   = esAccesoTotal || usePermiso("Operar Extrusión");
-  const puedeImpresion   = esAccesoTotal || usePermiso("Operar Impresión");
-  const puedeBolseo      = esAccesoTotal || usePermiso("Operar Bolseo");
-  const puedeAsaFlexible = esAccesoTotal || usePermiso("Operar Asa Flexible");
-  const esRolPlanta      = usePermiso("Acceso Planta");
-  const puedeVerECta     = esAccesoTotal || usePermiso("Editar Anticipo y Liquidacion");
-  const puedeVerEnvio    = esAccesoTotal || usePermiso("Gestionar Envios");
-  const puedeVerOD       = esAccesoTotal || usePermiso("Orden de Diseño");
+
+  // ── Permisos ──
+  const puedeExtrusion    = esAccesoTotal || usePermiso("Operar Extrusión");
+  const puedeImpresion    = esAccesoTotal || usePermiso("Operar Impresión");
+  const puedeBolseo       = esAccesoTotal || usePermiso("Operar Bolseo");
+  const puedeAsaFlexible  = esAccesoTotal || usePermiso("Operar Asa Flexible");
+  const esRolPlanta       = usePermiso("Acceso Planta");
+  const puedeVerECta      = esAccesoTotal || usePermiso("Editar Anticipo y Liquidacion");
+  const puedeVerEnvio     = esAccesoTotal || usePermiso("Gestionar Envios");
+  const puedeVerOD        = esAccesoTotal || usePermiso("Orden de Diseño");
+
+  // ── NUEVO: permiso para descargar PDF del pedido ──
+  const puedePdfPedido    = esAccesoTotal || usePermiso("Descargar PDF Pedido");
 
   useEffect(() => {
     cargar();
@@ -556,8 +572,9 @@ export default function Seguimiento() {
           {new Date(pedido.fecha).toLocaleDateString("es-MX")}
         </td>
 
+        {/* N° PEDIDO — pasa el permiso al botón */}
         <td className={`${px} whitespace-nowrap`}>
-          <BotonPdfPedido pedido={pedido} />
+          <BotonPdfPedido pedido={pedido} puedePdf={puedePdfPedido} />
         </td>
 
         <td className={`${px} ${txt} text-gray-900`}>{pedido.impresion}</td>
@@ -575,7 +592,7 @@ export default function Seguimiento() {
           }
         </td>
 
-        {/* OD — abre ChatRevision */}
+        {/* OD */}
         <td className={`${px} text-center`}>
           {odId ? (
             (puedeVerOD || esRolPlanta) ? (
@@ -625,7 +642,7 @@ export default function Seguimiento() {
         </td>
 
         <td className={`${px} text-center`}>
-          <Badge estado={bolEstado} fechaEstado={pedido.bolseo_fecha_estado}
+          <Badge estado={bolEstado} fechaEstado={pedido.bolseo_estado}
             clickable={tieneOrden && bolEstado !== "no-aplica" && (puedeBolseo || esRolPlanta)}
             onClick={() => {
               if (!tieneOrden) return;
@@ -733,7 +750,6 @@ export default function Seguimiento() {
         />
       )}
 
-      {/* ── MODAL ORDEN DE DISEÑO — usa ChatRevision ── */}
       {modalOD && (
         <Modal
           isOpen={!!modalOD}

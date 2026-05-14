@@ -23,6 +23,7 @@ interface CotizacionPdf {
   logoBase64?:    string;
   productos:      ProductoPdf[];
   total:          number;
+  sin_iva?:       boolean;          // ← NUEVO
   celular?:        string | null;
   razon_social?:   string | null;
   rfc?:            string | null;
@@ -37,6 +38,7 @@ interface CotizacionPdf {
 
 export async function generarPdfCotizacion(cotizacion: CotizacionPdf): Promise<void> {
   const logoBase64 = cotizacion.logoBase64 ?? await cargarLogoBase64(logoUrl);
+  const sinIva     = cotizacion.sin_iva === true;
 
   const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "letter" });
   const PW  = 274.9;
@@ -44,7 +46,6 @@ export async function generarPdfCotizacion(cotizacion: CotizacionPdf): Promise<v
   const M   = 10;
   const COT_FOOTER_H = 55;
 
-  // ← await aquí
   const y = await dibujarEncabezado({
     doc,
     logoBase64,
@@ -66,7 +67,7 @@ export async function generarPdfCotizacion(cotizacion: CotizacionPdf): Promise<v
     codigo_postal:  cotizacion.codigo_postal  ?? null,
     poblacion:      cotizacion.poblacion      ?? null,
     estado_cliente: cotizacion.estado_cliente ?? null,
-    cliente_id:     cotizacion.cliente_id     ?? null, 
+    cliente_id:     cotizacion.cliente_id     ?? null,
   });
 
   const maxDet      = Math.max(...cotizacion.productos.map(p => p.detalles.length), 1);
@@ -243,14 +244,26 @@ export async function generarPdfCotizacion(cotizacion: CotizacionPdf): Promise<v
     doc.addPage();
   }
 
-  dibujarCajasPie(doc, cotizacion.productos, [
-    "• Precios más IVA.",
-    "• Tiempo de entrega: 30-35 días después de autorizado el diseño.",
-    "• L.A.B. Guadalajara. EL FLETE VA POR CUENTA DEL CLIENTE.",
-    "• Condiciones de Pago: 50% ANTICIPO, resto contra entrega.",
-    "• Esta cotización puede variar +/- 10% en la cantidad final.",
-    "• Precios sujetos a cambio sin previo aviso.",
-  ]);
+  // ── Condiciones de venta: ajustar línea de IVA según sin_iva ─────────────
+  const condLines = sinIva
+    ? [
+        "• Precios SIN IVA (exento).",
+        "• Tiempo de entrega: 30-35 días después de autorizado el diseño.",
+        "• L.A.B. Guadalajara. EL FLETE VA POR CUENTA DEL CLIENTE.",
+        "• Condiciones de Pago: 50% ANTICIPO, resto contra entrega.",
+        "• Esta cotización puede variar +/- 10% en la cantidad final.",
+        "• Precios sujetos a cambio sin previo aviso.",
+      ]
+    : [
+        "• Precios más IVA.",
+        "• Tiempo de entrega: 30-35 días después de autorizado el diseño.",
+        "• L.A.B. Guadalajara. EL FLETE VA POR CUENTA DEL CLIENTE.",
+        "• Condiciones de Pago: 50% ANTICIPO, resto contra entrega.",
+        "• Esta cotización puede variar +/- 10% en la cantidad final.",
+        "• Precios sujetos a cambio sin previo aviso.",
+      ];
+
+  dibujarCajasPie(doc, cotizacion.productos, condLines);
 
   dibujarPiePagina(doc, "COTIZACION", cotizacion.no_cotizacion, cotizacion.fecha);
 
