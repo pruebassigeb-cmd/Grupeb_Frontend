@@ -15,7 +15,7 @@ const CARPETAS_OPTIONS: { value: CarpetaFrontend; label: string }[] = [
   { value: "disenos",      label: "Diseños"         },
   { value: "pdfs",         label: "PDFs"            },
   { value: "fotos-envios", label: "Fotos de Envíos" },
-  { value: "backups",      label: "Backups BD"      },
+  /*{ value: "backups",      label: "Backups BD"      },*/
 ];
 
 // Carpetas que requieren código de admin para abrirse
@@ -651,7 +651,7 @@ export default function GestorArchivos() {
                 { label: "Diseños",         value: estadisticas.por_carpeta.disenos,      color: "bg-blue-50 text-blue-700"   },
                 { label: "PDFs",            value: estadisticas.por_carpeta.pdfs,         color: "bg-red-50 text-red-700"     },
                 { label: "Fotos de Envíos", value: estadisticas.por_carpeta.fotos_envios, color: "bg-green-50 text-green-700" },
-                { label: "Backups BD",      value: estadisticas.por_carpeta.backups,      color: "bg-gray-100 text-gray-700"  },
+               /* { label: "Backups BD",      value: estadisticas.por_carpeta.backups,      color: "bg-gray-100 text-gray-700"  },*/
               ].map(item => (
                 <div key={item.label} className={`rounded-xl px-3 py-2 ${item.color}`}>
                   <p className="text-xs font-semibold">{item.label}</p>

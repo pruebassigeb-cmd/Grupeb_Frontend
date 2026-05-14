@@ -117,12 +117,12 @@ export default function Dashboard({ children }: DashboardProps) {
       accesoTotal: true,
       subItems: [],
     },
-    {
+    /*{
       name: "Backups BD",
       path: "/backups",
       accesoTotal: true,
       subItems: [],
-    },
+    },*/
   ];
 
   const menuFiltrado = menuItems.filter((item) => {

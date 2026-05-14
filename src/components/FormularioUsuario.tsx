@@ -6,6 +6,7 @@ import type { Privilegio } from "../types/privilegio.types";
 import type { CreateUsuarioRequest, UpdateUsuarioRequest, Usuario } from "../types/usuario.types";
 import { showAlert } from './CustomAlert';
 import api from '../services/api';
+import { buscarCodigoPostal } from "../services/codigoPostalService";
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 const ROLES_CON_PRIVILEGIOS_BASE = ["Planta", "Ventas", "Diseño"];
@@ -13,12 +14,12 @@ const ROLES_CON_PRIVILEGIOS_BASE = ["Planta", "Ventas", "Diseño"];
 const TIPOS_SANGRE = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 
 const ESTADOS_MX = [
-  "Aguascalientes","Baja California","Baja California Sur","Campeche",
-  "Chiapas","Chihuahua","Ciudad de México","Coahuila","Colima","Durango",
-  "Guanajuato","Guerrero","Hidalgo","Jalisco","México","Michoacán",
-  "Morelos","Nayarit","Nuevo León","Oaxaca","Puebla","Querétaro",
-  "Quintana Roo","San Luis Potosí","Sinaloa","Sonora","Tabasco",
-  "Tamaulipas","Tlaxcala","Veracruz","Yucatán","Zacatecas",
+  "Aguascalientes", "Baja California", "Baja California Sur", "Campeche",
+  "Chiapas", "Chihuahua", "Ciudad de México", "Coahuila", "Colima", "Durango",
+  "Guanajuato", "Guerrero", "Hidalgo", "Jalisco", "México", "Michoacán",
+  "Morelos", "Nayarit", "Nuevo León", "Oaxaca", "Puebla", "Querétaro",
+  "Quintana Roo", "San Luis Potosí", "Sinaloa", "Sonora", "Tabasco",
+  "Tamaulipas", "Tlaxcala", "Veracruz", "Yucatán", "Zacatecas",
 ];
 
 // ─── Tipo interno ─────────────────────────────────────────────────────────────
@@ -32,7 +33,7 @@ interface FormularioUsuarioProps {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-const buscarCodigoPostal = async (cp: string): Promise<{ municipio: string; estado: string } | null> => {
+/*const buscarCodigoPostal = async (cp: string): Promise<{ municipio: string; estado: string } | null> => {
   try {
     const res = await fetch(`https://api.zippopotam.us/mx/${cp}`);
     if (!res.ok) return null;
@@ -46,55 +47,57 @@ const buscarCodigoPostal = async (cp: string): Promise<{ municipio: string; esta
   } catch {
     return null;
   }
-};
+};*/
 
 // ═════════════════════════════════════════════════════════════════════════════
 // COMPONENTE
 // ═════════════════════════════════════════════════════════════════════════════
 export default function FormularioUsuario({ onSubmit, onCancel, usuarioEditar }: FormularioUsuarioProps) {
-  const [paso, setPaso]           = useState(1);
-  const [roles, setRoles]         = useState<Rol[]>([]);
+  const [paso, setPaso] = useState(1);
+  const [roles, setRoles] = useState<Rol[]>([]);
   const [privilegios, setPrivilegios] = useState<Privilegio[]>([]);
-  const [loading, setLoading]     = useState(false);
-  const [errores, setErrores]     = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(false);
+  const [errores, setErrores] = useState<Record<string, string>>({});
   const [buscandoCP, setBuscandoCP] = useState(false);
-  const [preview, setPreview]     = useState<string | null>(usuarioEditar?.foto_url || null);
+  const [preview, setPreview] = useState<string | null>(usuarioEditar?.foto_url || null);
   const [subiendoFoto, setSubiendoFoto] = useState(false);
-  const fileInputRef              = useRef<HTMLInputElement>(null);
-  const esEdicion                 = !!usuarioEditar;
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const esEdicion = !!usuarioEditar;
+  const [opcionesColonia, setOpcionesColonia] = useState<{ colonia: string; poblacion: string; estado: string }[]>([]);
+  const [errorCP, setErrorCP] = useState<string | null>(null);
 
   const [datos, setDatos] = useState<FormData>({
     // Paso 1 - básicos
-    correo:        usuarioEditar?.correo        || "",
-    nombre:        usuarioEditar?.nombre        || "",
-    apellido:      usuarioEditar?.apellido      || "",
-    telefono:      usuarioEditar?.telefono      || "",
-    codigo:        "",
+    correo: usuarioEditar?.correo || "",
+    nombre: usuarioEditar?.nombre || "",
+    apellido: usuarioEditar?.apellido || "",
+    telefono: usuarioEditar?.telefono || "",
+    codigo: "",
     roles_idroles: usuarioEditar?.roles_idroles || 0,
-    privilegios:   usuarioEditar?.privilegios   || [],
+    privilegios: usuarioEditar?.privilegios || [],
     // tabla usuarios
     foto_id_archivo: usuarioEditar?.foto_id_archivo || undefined,
-    rfc:      usuarioEditar?.rfc      || "",
-    curp:     usuarioEditar?.curp     || "",
+    rfc: usuarioEditar?.rfc || "",
+    curp: usuarioEditar?.curp || "",
     // tabla usuarios_direccion
-    calle:         usuarioEditar?.calle         || "",
-    numero_ext:    usuarioEditar?.numero_ext    || "",
-    numero_int:    usuarioEditar?.numero_int    || "",
-    colonia:       usuarioEditar?.colonia       || "",
+    calle: usuarioEditar?.calle || "",
+    numero_ext: usuarioEditar?.numero_ext || "",
+    numero_int: usuarioEditar?.numero_int || "",
+    colonia: usuarioEditar?.colonia || "",
     codigo_postal: usuarioEditar?.codigo_postal || "",
-    municipio:     usuarioEditar?.municipio     || "",
-    estado:        usuarioEditar?.estado        || "",
+    municipio: usuarioEditar?.municipio || "",
+    estado: usuarioEditar?.estado || "",
     // tabla usuarios_ficha_medica
-    fecha_nacimiento:      usuarioEditar?.fecha_nacimiento
+    fecha_nacimiento: usuarioEditar?.fecha_nacimiento
       ? usuarioEditar.fecha_nacimiento.split("T")[0] : "",
-    nss:                   usuarioEditar?.nss                   || "",
-    tipo_sangre:           usuarioEditar?.tipo_sangre           || "",
-    alergias:              usuarioEditar?.alergias              || "",
-    enfermedades:          usuarioEditar?.enfermedades          || "",
-    medicamentos:          usuarioEditar?.medicamentos          || "",
-    emergencia_nombre:     usuarioEditar?.emergencia_nombre     || "",
+    nss: usuarioEditar?.nss || "",
+    tipo_sangre: usuarioEditar?.tipo_sangre || "",
+    alergias: usuarioEditar?.alergias || "",
+    enfermedades: usuarioEditar?.enfermedades || "",
+    medicamentos: usuarioEditar?.medicamentos || "",
+    emergencia_nombre: usuarioEditar?.emergencia_nombre || "",
     emergencia_parentesco: usuarioEditar?.emergencia_parentesco || "",
-    emergencia_telefono:   usuarioEditar?.emergencia_telefono   || "",
+    emergencia_telefono: usuarioEditar?.emergencia_telefono || "",
     fotoFile: null,
   });
 
@@ -128,17 +131,29 @@ export default function FormularioUsuario({ onSubmit, onCancel, usuarioEditar }:
   const handleCodigoPostalChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value.replace(/\D/g, "").slice(0, 5);
     set("codigo_postal", value);
+    setErrorCP(null);
+    setOpcionesColonia([]);
+
     if (value.length === 5) {
       setBuscandoCP(true);
-      const info = await buscarCodigoPostal(value);
-      if (info) {
-        setDatos(prev => ({
-          ...prev,
-          municipio: info.municipio || prev.municipio,
-          estado:    info.estado    || prev.estado,
-        }));
+      try {
+        const opciones = await buscarCodigoPostal(value);
+        if (opciones && opciones.length > 0) {
+          setDatos(prev => ({
+            ...prev,
+            municipio: opciones[0].poblacion || prev.municipio,
+            estado: opciones[0].estado || prev.estado,
+            colonia: "",
+          }));
+          setOpcionesColonia(opciones);
+        } else {
+          setErrorCP("CP no encontrado — captura colonia, municipio y estado manualmente");
+        }
+      } catch {
+        setErrorCP("CP no encontrado — captura colonia, municipio y estado manualmente");
+      } finally {
+        setBuscandoCP(false);
       }
-      setBuscandoCP(false);
     }
   };
 
@@ -160,9 +175,9 @@ export default function FormularioUsuario({ onSubmit, onCancel, usuarioEditar }:
 
   const subirFotoAArchivos = async (file: File): Promise<number> => {
     const formData = new FormData();
-    formData.append("archivo",   file);
-    formData.append("carpeta",   "usuarios");
-    formData.append("tipo",      "imagen");
+    formData.append("archivo", file);
+    formData.append("carpeta", "usuarios");
+    formData.append("tipo", "imagen");
     formData.append("categoria", "otro");
     const res = await api.post("/archivos/upload", formData, {
       headers: { "Content-Type": "multipart/form-data" },
@@ -243,11 +258,11 @@ export default function FormularioUsuario({ onSubmit, onCancel, usuarioEditar }:
     e.preventDefault();
 
     const rolSeleccionado = roles.find(r => r.idroles === datos.roles_idroles);
-    const rolNombre       = rolSeleccionado?.nombre ?? "";
-    const tienePrivBase   = ROLES_CON_PRIVILEGIOS_BASE.includes(rolNombre);
+    const rolNombre = rolSeleccionado?.nombre ?? "";
+    const tienePrivBase = ROLES_CON_PRIVILEGIOS_BASE.includes(rolNombre);
 
     if (!rolSeleccionado?.acceso_total && !tienePrivBase &&
-        (!datos.privilegios || datos.privilegios.length === 0)) {
+      (!datos.privilegios || datos.privilegios.length === 0)) {
       showAlert("Debe seleccionar al menos un privilegio para usuarios sin acceso total");
       setPaso(2);
       return;
@@ -270,9 +285,9 @@ export default function FormularioUsuario({ onSubmit, onCancel, usuarioEditar }:
       const datosFinales: any = {
         ...resto,
         foto_id_archivo,
-        nombre:   datos.nombre.trim(),
+        nombre: datos.nombre.trim(),
         apellido: datos.apellido.trim(),
-        correo:   datos.correo.trim().toLowerCase(),
+        correo: datos.correo.trim().toLowerCase(),
         telefono: datos.telefono ? datos.telefono.replace(/\D/g, "") : undefined,
       };
 
@@ -281,10 +296,10 @@ export default function FormularioUsuario({ onSubmit, onCancel, usuarioEditar }:
 
       // Limpiar strings vacíos → null para los opcionales
       const opcionales = [
-        "rfc","curp",
-        "calle","numero_ext","numero_int","colonia","codigo_postal","municipio","estado",
-        "fecha_nacimiento","nss","tipo_sangre","alergias","enfermedades","medicamentos",
-        "emergencia_nombre","emergencia_parentesco","emergencia_telefono",
+        "rfc", "curp",
+        "calle", "numero_ext", "numero_int", "colonia", "codigo_postal", "municipio", "estado",
+        "fecha_nacimiento", "nss", "tipo_sangre", "alergias", "enfermedades", "medicamentos",
+        "emergencia_nombre", "emergencia_parentesco", "emergencia_telefono",
       ];
       for (const campo of opcionales) {
         if (datosFinales[campo] === "") datosFinales[campo] = null;
@@ -306,10 +321,10 @@ export default function FormularioUsuario({ onSubmit, onCancel, usuarioEditar }:
   };
 
   // ─── Derivados ─────────────────────────────────────────────────────────────
-  const rolSeleccionado  = roles.find(r => r.idroles === datos.roles_idroles);
+  const rolSeleccionado = roles.find(r => r.idroles === datos.roles_idroles);
   const tieneAccesoTotal = rolSeleccionado?.acceso_total || false;
-  const rolNombre        = rolSeleccionado?.nombre ?? "";
-  const esRolConBase     = ROLES_CON_PRIVILEGIOS_BASE.includes(rolNombre);
+  const rolNombre = rolSeleccionado?.nombre ?? "";
+  const esRolConBase = ROLES_CON_PRIVILEGIOS_BASE.includes(rolNombre);
 
   // ─── Clases ────────────────────────────────────────────────────────────────
   const input = (campo?: string) =>
@@ -337,7 +352,7 @@ export default function FormularioUsuario({ onSubmit, onCancel, usuarioEditar }:
                   <div className={`flex items-center justify-center w-9 h-9 rounded-full text-sm font-semibold transition-colors
                     ${paso > n ? "bg-green-600 text-white"
                       : paso === n ? "bg-blue-600 text-white"
-                      : "bg-gray-200 text-gray-500"}`}>
+                        : "bg-gray-200 text-gray-500"}`}>
                     {paso > n ? "✓" : n}
                   </div>
                   <span className={`text-xs mt-1 hidden sm:block ${paso === n ? "text-blue-600 font-medium" : "text-gray-400"}`}>
@@ -429,9 +444,9 @@ export default function FormularioUsuario({ onSubmit, onCancel, usuarioEditar }:
                 {preview
                   ? <img src={preview} alt="Foto" className="w-full h-full object-cover" />
                   : <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-                        d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                    </svg>
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                      d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
                 }
               </div>
               <div className="flex gap-2">
@@ -551,16 +566,56 @@ export default function FormularioUsuario({ onSubmit, onCancel, usuarioEditar }:
             <div className="col-span-2">
               <label className={label}>
                 Código Postal
-                {buscandoCP && <span className="ml-2 text-xs text-blue-500 animate-pulse">Buscando...</span>}
+                {buscandoCP && (
+                  <span className="ml-2 text-xs text-blue-500 animate-pulse">Buscando...</span>
+                )}
               </label>
-              <input type="text" value={datos.codigo_postal || ""}
-                onChange={handleCodigoPostalChange} maxLength={5}
-                className={input()} placeholder="44100" />
+              <input
+                type="text"
+                value={datos.codigo_postal || ""}
+                onChange={handleCodigoPostalChange}
+                maxLength={5}
+                className={`${input()} ${errorCP ? "border-orange-300" : ""}`}
+                placeholder="44100"
+              />
+              {errorCP && (
+                <p className="mt-1 text-xs text-orange-600">{errorCP}</p>
+              )}
             </div>
             <div className="col-span-4">
               <label className={label}>Colonia</label>
-              <input type="text" name="colonia" value={datos.colonia || ""}
-                onChange={handleInputChange} className={input()} placeholder="Centro" />
+              {opcionesColonia.length > 0 ? (
+                <select
+                  name="colonia"
+                  value={datos.colonia || ""}
+                  onChange={(e) => {
+                    const seleccionada = opcionesColonia.find(o => o.colonia === e.target.value);
+                    setDatos(prev => ({
+                      ...prev,
+                      colonia: e.target.value,
+                      municipio: seleccionada?.poblacion || prev.municipio,
+                      estado: seleccionada?.estado || prev.estado,
+                    }));
+                  }}
+                  className={input()}
+                >
+                  <option value="">Selecciona colonia...</option>
+                  {opcionesColonia.map((o, i) => (
+                    <option key={`${o.colonia}-${i}`} value={o.colonia}>
+                      {o.colonia}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type="text"
+                  name="colonia"
+                  value={datos.colonia || ""}
+                  onChange={handleInputChange}
+                  className={input()}
+                  placeholder="Centro"
+                />
+              )}
             </div>
           </div>
 
