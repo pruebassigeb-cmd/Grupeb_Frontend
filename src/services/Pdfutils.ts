@@ -468,6 +468,8 @@ export function dibujarCajasPie(
     { label: "I.V.A.",    value: fmtN(totales.iva),           bold: false },
     { label: "Total",     value: fmtN(totales.total),         bold: true  },
     { label: "Anticipo",  value: fmtN(totales.anticipo ?? 0), bold: false },
+    { label: "Saldo",     value: fmtN(totales.saldo ?? 0),    bold: true  }, // ← AGREGAR
+
   ];
 
   const etW   = tvW * 0.42;

@@ -37,7 +37,6 @@ async function descargarPdfOrden(noPedido: string, noProduccion: string): Promis
   const producto = data.productos.find((p: any) => p.no_produccion === noProduccion);
   if (!producto) throw new Error(`Producto con folio ${noProduccion} no encontrado`);
 
-
   await generarPdfOrdenProduccion({
     no_pedido:               data.no_pedido,
     no_produccion:           producto.no_produccion,
@@ -93,7 +92,6 @@ async function descargarPdfOrden(noPedido: string, noProduccion: string): Promis
     pzas_merma:              producto.pzas_merma           ?? null,
     kilos_extruir:           producto.kilos_extruir        ?? null,
     metros_extruir:          producto.metros_extruir       ?? null,
-    // ── Imágenes de diseño ──
     url_render:              (producto as any).url_render  ?? null,
     url_master:              (producto as any).url_master  ?? null,
   });
@@ -559,11 +557,25 @@ export function EditarDisenoReal({
                     </svg>
                   </button>
 
+                  {/* ← ALTERACIÓN 1: se pasa onDisenoAprobado para sincronizar con Diseno.tsx */}
                   {chatProducto === producto.idorden_diseno && (
                     <ChatRevision
                       idorden={producto.idorden_diseno}
                       usuarioId={user.id}
                       onClose={() => setChatProducto(null)}
+                      onDisenoAprobado={async (noProduccion) => {
+  const chatActual = chatProducto; // guardar antes de recargar
+  await cargar();
+  setChatProducto(chatActual); // restaurar para que no se cierre
+  if (noProduccion) {
+    try {
+      await descargarPdfOrden(pedido.no_pedido, noProduccion);
+      setAlertaPdf({ visible: true, folios: [noProduccion] });
+    } catch (pdfErr) {
+      console.error("Error al generar PDF desde chat:", pdfErr);
+    }
+  }
+}}
                     />
                   )}
                 </div>

@@ -8,11 +8,9 @@ import { showAlert } from './CustomAlert';
 import api from '../services/api';
 import { buscarCodigoPostal } from "../services/codigoPostalService";
 
-// ─── Constantes ───────────────────────────────────────────────────────────────
 const ROLES_CON_PRIVILEGIOS_BASE = ["Planta", "Ventas", "Diseño"];
-
 const TIPOS_SANGRE = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
-
+const MAX_FOTOS_INE = 2;
 const ESTADOS_MX = [
   "Aguascalientes", "Baja California", "Baja California Sur", "Campeche",
   "Chiapas", "Chihuahua", "Ciudad de México", "Coahuila", "Colima", "Durango",
@@ -22,86 +20,74 @@ const ESTADOS_MX = [
   "Tamaulipas", "Tlaxcala", "Veracruz", "Yucatán", "Zacatecas",
 ];
 
-// ─── Tipo interno ─────────────────────────────────────────────────────────────
-type FormData = (CreateUsuarioRequest | UpdateUsuarioRequest) & { fotoFile?: File | null; fotoPreviewUrl?: string | null };
+type FormData = (CreateUsuarioRequest | UpdateUsuarioRequest) & {
+  fotoFile?: File | null;
+};
 
-// ─── Props ────────────────────────────────────────────────────────────────────
+interface ArchivoINE {
+  id_archivo: number;
+  url: string;
+  public_id: string;
+  nombre: string;
+}
+
 interface FormularioUsuarioProps {
-  onSubmit: (datos: CreateUsuarioRequest | UpdateUsuarioRequest) => void;
+  onSubmit: (datos: CreateUsuarioRequest | UpdateUsuarioRequest) => Promise<{ idusuario: number } | void>;
   onCancel: () => void;
   usuarioEditar?: Usuario | null;
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-/*const buscarCodigoPostal = async (cp: string): Promise<{ municipio: string; estado: string } | null> => {
-  try {
-    const res = await fetch(`https://api.zippopotam.us/mx/${cp}`);
-    if (!res.ok) return null;
-    const data = await res.json();
-    const lugar = data.places?.[0];
-    if (!lugar) return null;
-    return {
-      municipio: lugar["place name"] || "",
-      estado:    lugar["state"]      || "",
-    };
-  } catch {
-    return null;
-  }
-};*/
-
-// ═════════════════════════════════════════════════════════════════════════════
-// COMPONENTE
-// ═════════════════════════════════════════════════════════════════════════════
 export default function FormularioUsuario({ onSubmit, onCancel, usuarioEditar }: FormularioUsuarioProps) {
-  const [paso, setPaso] = useState(1);
-  const [roles, setRoles] = useState<Rol[]>([]);
+  const [paso, setPaso]               = useState(1);
+  const [roles, setRoles]             = useState<Rol[]>([]);
   const [privilegios, setPrivilegios] = useState<Privilegio[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [errores, setErrores] = useState<Record<string, string>>({});
-  const [buscandoCP, setBuscandoCP] = useState(false);
-  const [preview, setPreview] = useState<string | null>(usuarioEditar?.foto_url || null);
+  const [loading, setLoading]         = useState(false);
+  const [errores, setErrores]         = useState<Record<string, string>>({});
+  const [buscandoCP, setBuscandoCP]   = useState(false);
+  const [preview, setPreview]         = useState<string | null>(usuarioEditar?.foto_url || null);
   const [subiendoFoto, setSubiendoFoto] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const esEdicion = !!usuarioEditar;
   const [opcionesColonia, setOpcionesColonia] = useState<{ colonia: string; poblacion: string; estado: string }[]>([]);
-  const [errorCP, setErrorCP] = useState<string | null>(null);
+  const [errorCP, setErrorCP]         = useState<string | null>(null);
+  const fileInputRef                  = useRef<HTMLInputElement>(null);
+  const ineInputRef                   = useRef<HTMLInputElement>(null);
+  const esEdicion                     = !!usuarioEditar;
+
+  const [fotosINE, setFotosINE]                           = useState<ArchivoINE[]>([]);
+  const [archivosINEPendientes, setArchivosINEPendientes] = useState<File[]>([]);
+  const [ineAEliminar, setIneAEliminar]                   = useState<number[]>([]);
+  const [subiendoINE, setSubiendoINE]                     = useState(false);
 
   const [datos, setDatos] = useState<FormData>({
-    // Paso 1 - básicos
-    correo: usuarioEditar?.correo || "",
-    nombre: usuarioEditar?.nombre || "",
-    apellido: usuarioEditar?.apellido || "",
-    telefono: usuarioEditar?.telefono || "",
-    codigo: "",
+    correo:        usuarioEditar?.correo        || "",
+    nombre:        usuarioEditar?.nombre        || "",
+    apellido:      usuarioEditar?.apellido      || "",
+    telefono:      usuarioEditar?.telefono      || "",
+    codigo:        "",
     roles_idroles: usuarioEditar?.roles_idroles || 0,
-    privilegios: usuarioEditar?.privilegios || [],
-    // tabla usuarios
+    privilegios:   usuarioEditar?.privilegios   || [],
     foto_id_archivo: usuarioEditar?.foto_id_archivo || undefined,
-    rfc: usuarioEditar?.rfc || "",
-    curp: usuarioEditar?.curp || "",
-    // tabla usuarios_direccion
-    calle: usuarioEditar?.calle || "",
-    numero_ext: usuarioEditar?.numero_ext || "",
-    numero_int: usuarioEditar?.numero_int || "",
-    colonia: usuarioEditar?.colonia || "",
+    rfc:           usuarioEditar?.rfc           || "",
+    curp:          usuarioEditar?.curp          || "",
+    calle:         usuarioEditar?.calle         || "",
+    numero_ext:    usuarioEditar?.numero_ext    || "",
+    numero_int:    usuarioEditar?.numero_int    || "",
+    colonia:       usuarioEditar?.colonia       || "",
     codigo_postal: usuarioEditar?.codigo_postal || "",
-    municipio: usuarioEditar?.municipio || "",
-    estado: usuarioEditar?.estado || "",
-    // tabla usuarios_ficha_medica
+    municipio:     usuarioEditar?.municipio     || "",
+    estado:        usuarioEditar?.estado        || "",
     fecha_nacimiento: usuarioEditar?.fecha_nacimiento
       ? usuarioEditar.fecha_nacimiento.split("T")[0] : "",
-    nss: usuarioEditar?.nss || "",
-    tipo_sangre: usuarioEditar?.tipo_sangre || "",
-    alergias: usuarioEditar?.alergias || "",
-    enfermedades: usuarioEditar?.enfermedades || "",
-    medicamentos: usuarioEditar?.medicamentos || "",
-    emergencia_nombre: usuarioEditar?.emergencia_nombre || "",
+    nss:                   usuarioEditar?.nss                   || "",
+    tipo_sangre:           usuarioEditar?.tipo_sangre           || "",
+    alergias:              usuarioEditar?.alergias              || "",
+    enfermedades:          usuarioEditar?.enfermedades          || "",
+    medicamentos:          usuarioEditar?.medicamentos          || "",
+    emergencia_nombre:     usuarioEditar?.emergencia_nombre     || "",
     emergencia_parentesco: usuarioEditar?.emergencia_parentesco || "",
-    emergencia_telefono: usuarioEditar?.emergencia_telefono || "",
+    emergencia_telefono:   usuarioEditar?.emergencia_telefono   || "",
     fotoFile: null,
   });
 
-  // ── Carga inicial ──────────────────────────────────────────────────────────
   useEffect(() => {
     (async () => {
       try {
@@ -114,7 +100,18 @@ export default function FormularioUsuario({ onSubmit, onCancel, usuarioEditar }:
     })();
   }, []);
 
-  // ── Handlers generales ────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!esEdicion || !usuarioEditar?.idusuario) return;
+    (async () => {
+      try {
+        const res = await api.get(`/usuarios/${usuarioEditar.idusuario}/ine`);
+        setFotosINE(res.data);
+      } catch {
+        // sin fotos aún
+      }
+    })();
+  }, [esEdicion, usuarioEditar?.idusuario]);
+
   const set = (campo: string, valor: any) => {
     setDatos(prev => ({ ...prev, [campo]: valor }));
     if (errores[campo]) setErrores(prev => ({ ...prev, [campo]: "" }));
@@ -127,13 +124,11 @@ export default function FormularioUsuario({ onSubmit, onCancel, usuarioEditar }:
     set(name, name === "roles_idroles" ? parseInt(value) : value);
   };
 
-  // ── Código Postal autofill ────────────────────────────────────────────────
   const handleCodigoPostalChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value.replace(/\D/g, "").slice(0, 5);
     set("codigo_postal", value);
     setErrorCP(null);
     setOpcionesColonia([]);
-
     if (value.length === 5) {
       setBuscandoCP(true);
       try {
@@ -142,8 +137,8 @@ export default function FormularioUsuario({ onSubmit, onCancel, usuarioEditar }:
           setDatos(prev => ({
             ...prev,
             municipio: opciones[0].poblacion || prev.municipio,
-            estado: opciones[0].estado || prev.estado,
-            colonia: "",
+            estado:    opciones[0].estado    || prev.estado,
+            colonia:   "",
           }));
           setOpcionesColonia(opciones);
         } else {
@@ -157,7 +152,6 @@ export default function FormularioUsuario({ onSubmit, onCancel, usuarioEditar }:
     }
   };
 
-  // ── Foto ──────────────────────────────────────────────────────────────────
   const handleFotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -168,24 +162,85 @@ export default function FormularioUsuario({ onSubmit, onCancel, usuarioEditar }:
 
   const handleEliminarFoto = () => {
     setPreview(null);
-    // null explícito para que el back sepa que debe borrar la foto
     setDatos(prev => ({ ...prev, fotoFile: null, foto_id_archivo: null as any }));
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  const subirFotoAArchivos = async (file: File): Promise<number> => {
+  // ── usuario_id para asociar la foto al empleado ────────────────────────────
+  const subirFotoAArchivos = async (file: File, idusuario?: number): Promise<number> => {
     const formData = new FormData();
-    formData.append("archivo", file);
-    formData.append("carpeta", "usuarios");
-    formData.append("tipo", "imagen");
+    formData.append("archivo",   file);
+    formData.append("carpeta",   "usuarios");
+    formData.append("tipo",      "imagen");
     formData.append("categoria", "otro");
+    if (idusuario) formData.append("usuario_id", String(idusuario));
     const res = await api.post("/archivos/upload", formData, {
       headers: { "Content-Type": "multipart/form-data" },
     });
     return res.data.id_archivo;
   };
 
-  // ── Rol y privilegios ────────────────────────────────────────────────────
+  const handleINEChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || e.target.files.length === 0) return;
+    const totalActual  = fotosINE.length + archivosINEPendientes.length;
+    const slotsLibres  = MAX_FOTOS_INE - totalActual;
+    if (slotsLibres <= 0) {
+      showAlert(`Solo se permiten ${MAX_FOTOS_INE} fotos de INE por usuario`);
+      if (ineInputRef.current) ineInputRef.current.value = "";
+      return;
+    }
+    const todosLosArchivos = Array.from(e.target.files);
+    const candidatos       = todosLosArchivos.slice(0, slotsLibres);
+    const nuevos           = candidatos.filter(f => f.size <= 10 * 1024 * 1024);
+    if (nuevos.length < candidatos.length)
+      showAlert("Algunos archivos superan 10 MB y no se agregaron");
+    if (candidatos.length < todosLosArchivos.length)
+      showAlert(`Solo se pueden agregar ${slotsLibres} foto(s) más (límite: ${MAX_FOTOS_INE})`);
+    if (nuevos.length > 0) setArchivosINEPendientes(prev => [...prev, ...nuevos]);
+    if (ineInputRef.current) ineInputRef.current.value = "";
+  };
+
+  const handleEliminarINEPendiente = (idx: number) => {
+    setArchivosINEPendientes(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  const handleEliminarINESubido = (id_archivo: number) => {
+    setIneAEliminar(prev => [...prev, id_archivo]);
+    setFotosINE(prev => prev.filter(f => f.id_archivo !== id_archivo));
+  };
+
+  // ── usuario_id para asociar las INE al empleado ────────────────────────────
+const subirFotosINE = async (idusuario: number) => {
+
+  for (const file of archivosINEPendientes) {
+    const formData = new FormData();
+    formData.append("archivo",    file);
+    formData.append("carpeta",    "usuarios-ine");
+    formData.append("tipo",       "imagen");
+    formData.append("categoria",  "otro");
+    formData.append("usuario_id", String(idusuario));
+    console.log("📤 Subiendo archivo:", file.name, "| usuario_id:", idusuario);
+    try {
+      const res = await api.post("/archivos/upload", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      console.log("✅ INE subida:", res.data);
+    } catch (err: any) {
+      console.error("❌ Error subiendo INE:", err.response?.data || err.message);
+    }
+  }
+};
+
+  const eliminarFotosINE = async () => {
+    for (const id of ineAEliminar) {
+      try {
+        await api.delete(`/archivos/${id}`);
+      } catch {
+        console.error("No se pudo eliminar archivo INE:", id);
+      }
+    }
+  };
+
   const cargarPrivilegiosDelRol = async (rolId: number) => {
     try {
       const privilegiosRol = await getPrivilegiosByRol(rolId);
@@ -216,53 +271,44 @@ export default function FormularioUsuario({ onSubmit, onCancel, usuarioEditar }:
     }));
   };
 
-  // ── Validación paso 1 ────────────────────────────────────────────────────
   const validarPaso1 = (): boolean => {
     const e: Record<string, string> = {};
     if (!datos.nombre?.trim() || datos.nombre.trim().length < 2)
       e.nombre = "El nombre debe tener al menos 2 caracteres";
     else if (!/^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$/.test(datos.nombre))
       e.nombre = "El nombre solo puede contener letras";
-
     if (!datos.apellido?.trim() || datos.apellido.trim().length < 2)
       e.apellido = "El apellido debe tener al menos 2 caracteres";
     else if (!/^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$/.test(datos.apellido))
       e.apellido = "El apellido solo puede contener letras";
-
     if (!datos.correo)
       e.correo = "El correo es requerido";
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(datos.correo))
       e.correo = "El formato del correo no es válido";
-
-    if (datos.telefono?.trim()) {
-      if (datos.telefono.replace(/\D/g, "").length !== 10)
-        e.telefono = "El teléfono debe tener 10 dígitos";
-    }
-
+    if (datos.telefono?.trim() && datos.telefono.replace(/\D/g, "").length !== 10)
+      e.telefono = "El teléfono debe tener 10 dígitos";
     if (!esEdicion) {
       if (!datos.codigo?.trim()) e.codigo = "El código es requerido";
       else if (!/^\d{5}$/.test(datos.codigo)) e.codigo = "El código debe tener exactamente 5 dígitos";
     } else if (datos.codigo?.trim() && !/^\d{5}$/.test(datos.codigo)) {
       e.codigo = "El código debe tener exactamente 5 dígitos";
     }
-
     if (!datos.roles_idroles || datos.roles_idroles === 0)
       e.roles_idroles = "Debe seleccionar un rol";
-
     setErrores(e);
     return Object.keys(e).length === 0;
   };
 
-  // ── Submit ────────────────────────────────────────────────────────────────
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
     const rolSeleccionado = roles.find(r => r.idroles === datos.roles_idroles);
-    const rolNombre = rolSeleccionado?.nombre ?? "";
-    const tienePrivBase = ROLES_CON_PRIVILEGIOS_BASE.includes(rolNombre);
-
-    if (!rolSeleccionado?.acceso_total && !tienePrivBase &&
-      (!datos.privilegios || datos.privilegios.length === 0)) {
+    const rolNombre       = rolSeleccionado?.nombre ?? "";
+    const tienePrivBase   = ROLES_CON_PRIVILEGIOS_BASE.includes(rolNombre);
+    if (
+      !rolSeleccionado?.acceso_total &&
+      !tienePrivBase &&
+      (!datos.privilegios || datos.privilegios.length === 0)
+    ) {
       showAlert("Debe seleccionar al menos un privilegio para usuarios sin acceso total");
       setPaso(2);
       return;
@@ -274,43 +320,65 @@ export default function FormularioUsuario({ onSubmit, onCancel, usuarioEditar }:
       if (datos.fotoFile) {
         setSubiendoFoto(true);
         try {
-          foto_id_archivo = await subirFotoAArchivos(datos.fotoFile);
+          foto_id_archivo = await subirFotoAArchivos(datos.fotoFile, usuarioEditar?.idusuario);
         } finally {
           setSubiendoFoto(false);
         }
       }
 
       const { fotoFile: _, ...resto } = datos;
-
       const datosFinales: any = {
         ...resto,
         foto_id_archivo,
-        nombre: datos.nombre.trim(),
+        nombre:   datos.nombre.trim(),
         apellido: datos.apellido.trim(),
-        correo: datos.correo.trim().toLowerCase(),
+        correo:   datos.correo.trim().toLowerCase(),
         telefono: datos.telefono ? datos.telefono.replace(/\D/g, "") : undefined,
       };
 
       if (esEdicion && (!datosFinales.codigo || datosFinales.codigo.trim() === ""))
         delete datosFinales.codigo;
 
-      // Limpiar strings vacíos → null para los opcionales
       const opcionales = [
         "rfc", "curp",
-        "calle", "numero_ext", "numero_int", "colonia", "codigo_postal", "municipio", "estado",
-        "fecha_nacimiento", "nss", "tipo_sangre", "alergias", "enfermedades", "medicamentos",
+        "calle", "numero_ext", "numero_int", "colonia",
+        "codigo_postal", "municipio", "estado",
+        "fecha_nacimiento", "nss", "tipo_sangre",
+        "alergias", "enfermedades", "medicamentos",
         "emergencia_nombre", "emergencia_parentesco", "emergencia_telefono",
       ];
       for (const campo of opcionales) {
         if (datosFinales[campo] === "") datosFinales[campo] = null;
       }
-      // Si foto_id_archivo es null, mantenerlo así (indica eliminación intencional)
-      // Si es undefined y no hay archivo nuevo, no tocarlo
-      if (datosFinales.foto_id_archivo === undefined && !datos.fotoFile) {
+      if (datosFinales.foto_id_archivo === undefined && !datos.fotoFile)
         delete datosFinales.foto_id_archivo;
+
+      const resultado = await onSubmit(datosFinales);
+
+      const uid: number | undefined =
+        usuarioEditar?.idusuario ??
+        (resultado as any)?.idusuario ??
+        (resultado as any)?.usuario?.idusuario ??
+        (resultado as any)?.usuario?.id;
+
+
+
+      if (!uid) {
+        console.warn("No se obtuvo idusuario para subir fotos INE");
+        return;
       }
 
-      await onSubmit(datosFinales);
+      // Eliminar primero, luego subir
+      if (ineAEliminar.length > 0) {
+        setSubiendoINE(true);
+        try { await eliminarFotosINE(); } finally { setSubiendoINE(false); }
+      }
+
+      if (archivosINEPendientes.length > 0) {
+        setSubiendoINE(true);
+        try { await subirFotosINE(uid); } finally { setSubiendoINE(false); }
+      }
+
     } catch (error: any) {
       console.error("Error al guardar usuario:", error);
       if (error.response?.data?.detalles)
@@ -320,24 +388,20 @@ export default function FormularioUsuario({ onSubmit, onCancel, usuarioEditar }:
     }
   };
 
-  // ─── Derivados ─────────────────────────────────────────────────────────────
-  const rolSeleccionado = roles.find(r => r.idroles === datos.roles_idroles);
+  const rolSeleccionado  = roles.find(r => r.idroles === datos.roles_idroles);
   const tieneAccesoTotal = rolSeleccionado?.acceso_total || false;
-  const rolNombre = rolSeleccionado?.nombre ?? "";
-  const esRolConBase = ROLES_CON_PRIVILEGIOS_BASE.includes(rolNombre);
+  const rolNombre        = rolSeleccionado?.nombre ?? "";
+  const esRolConBase     = ROLES_CON_PRIVILEGIOS_BASE.includes(rolNombre);
+  const totalINE         = fotosINE.length + archivosINEPendientes.length;
 
-  // ─── Clases ────────────────────────────────────────────────────────────────
   const input = (campo?: string) =>
     `w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent
      text-gray-900 bg-white placeholder-gray-400
      ${campo && errores[campo] ? "border-red-500" : "border-gray-300"}`;
-  const label = "block text-sm font-medium text-gray-700 mb-1";
+  const label        = "block text-sm font-medium text-gray-700 mb-1";
   const sectionTitle = "text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3";
+  const pasos        = ["Datos básicos", "Privilegios", "Domicilio", "Ficha médica"];
 
-  // ─── Indicador de pasos ────────────────────────────────────────────────────
-  const pasos = ["Datos básicos", "Privilegios", "Domicilio", "Ficha médica"];
-
-  // ═══════════════════════════════════════════════════════════════════════════
   return (
     <form onSubmit={handleSubmit}>
 
@@ -350,9 +414,7 @@ export default function FormularioUsuario({ onSubmit, onCancel, usuarioEditar }:
               <div key={n} className="flex items-center">
                 <div className="flex flex-col items-center">
                   <div className={`flex items-center justify-center w-9 h-9 rounded-full text-sm font-semibold transition-colors
-                    ${paso > n ? "bg-green-600 text-white"
-                      : paso === n ? "bg-blue-600 text-white"
-                        : "bg-gray-200 text-gray-500"}`}>
+                    ${paso > n ? "bg-green-600 text-white" : paso === n ? "bg-blue-600 text-white" : "bg-gray-200 text-gray-500"}`}>
                     {paso > n ? "✓" : n}
                   </div>
                   <span className={`text-xs mt-1 hidden sm:block ${paso === n ? "text-blue-600 font-medium" : "text-gray-400"}`}>
@@ -368,20 +430,17 @@ export default function FormularioUsuario({ onSubmit, onCancel, usuarioEditar }:
         </div>
       </div>
 
-      {/* ══════════════════════════════════════════════════════════════════════
-          PASO 1 — Datos básicos
-      ══════════════════════════════════════════════════════════════════════ */}
+      {/* ══ PASO 1 ══════════════════════════════════════════════════════════ */}
       <div className={paso === 1 ? "block" : "hidden"}>
         <h3 className="text-lg font-semibold text-gray-900 mb-6">
           {esEdicion ? "Editar Usuario" : "Datos del Usuario"}
         </h3>
-
         <div className="space-y-4">
+
           <div>
             <label className={label}>Correo Electrónico *</label>
             <input type="email" name="correo" value={datos.correo}
-              onChange={handleInputChange} className={input("correo")}
-              placeholder="usuario@grupoeb.com" />
+              onChange={handleInputChange} className={input("correo")} placeholder="usuario@grupoeb.com" />
             {errores.correo && <p className="mt-1 text-sm text-red-600">{errores.correo}</p>}
           </div>
 
@@ -412,59 +471,116 @@ export default function FormularioUsuario({ onSubmit, onCancel, usuarioEditar }:
               <label className={label}>{esEdicion ? "Código (vacío = no cambiar)" : "Código (5 dígitos) *"}</label>
               <input type="text" name="codigo" value={datos.codigo} maxLength={5}
                 onChange={e => set("codigo", e.target.value.replace(/\D/g, ""))}
-                className={input("codigo")}
-                placeholder={esEdicion ? "Dejar vacío para no cambiar" : "12345"} />
+                className={input("codigo")} placeholder={esEdicion ? "Dejar vacío para no cambiar" : "12345"} />
               {errores.codigo && <p className="mt-1 text-sm text-red-600">{errores.codigo}</p>}
             </div>
           </div>
 
-          {/* RFC y CURP */}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className={label}>RFC</label>
               <input type="text" name="rfc" value={datos.rfc || ""}
-                onChange={handleInputChange} maxLength={13}
-                className={input()} placeholder="ABCD901231XXX"
+                onChange={handleInputChange} maxLength={13} className={input()} placeholder="ABCD901231XXX"
                 onInput={e => { (e.target as HTMLInputElement).value = (e.target as HTMLInputElement).value.toUpperCase(); }} />
             </div>
             <div>
               <label className={label}>CURP</label>
               <input type="text" name="curp" value={datos.curp || ""}
-                onChange={handleInputChange} maxLength={18}
-                className={input()} placeholder="ABCD901231HJCXXX01"
+                onChange={handleInputChange} maxLength={18} className={input()} placeholder="ABCD901231HJCXXX01"
                 onInput={e => { (e.target as HTMLInputElement).value = (e.target as HTMLInputElement).value.toUpperCase(); }} />
             </div>
           </div>
 
-          {/* Foto */}
-          <div>
-            <label className={label}>Foto</label>
-            <div className="flex items-center gap-4 p-3 border border-gray-200 rounded-lg bg-gray-50">
-              <div className="w-14 h-14 rounded-full border-2 border-dashed border-gray-300 flex items-center justify-center bg-white overflow-hidden flex-shrink-0">
-                {preview
-                  ? <img src={preview} alt="Foto" className="w-full h-full object-cover" />
-                  : <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-                      d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                  </svg>
-                }
+          {/* Foto perfil + INE */}
+          <div className="grid grid-cols-2 gap-4">
+
+            <div>
+              <label className={label}>Foto de Perfil</label>
+              <div className="p-3 border border-gray-200 rounded-lg bg-gray-50 space-y-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-14 h-14 rounded-full border-2 border-dashed border-gray-300 flex items-center justify-center bg-white overflow-hidden flex-shrink-0">
+                    {preview
+                      ? <img src={preview} alt="Foto" className="w-full h-full object-cover" />
+                      : <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                            d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                        </svg>
+                    }
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <button type="button" onClick={() => fileInputRef.current?.click()}
+                      className="px-3 py-1 text-xs bg-blue-50 text-blue-700 border border-blue-200 rounded-lg hover:bg-blue-100">
+                      {preview ? "Cambiar" : "Subir foto"}
+                    </button>
+                    {preview && (
+                      <button type="button" onClick={handleEliminarFoto}
+                        className="px-3 py-1 text-xs bg-red-50 text-red-600 border border-red-200 rounded-lg hover:bg-red-100">
+                        Eliminar
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <p className="text-xs text-gray-400">JPG, PNG · Máx. 10 MB</p>
+                <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp"
+                  onChange={handleFotoChange} className="hidden" />
               </div>
-              <div className="flex gap-2">
-                <button type="button" onClick={() => fileInputRef.current?.click()}
-                  className="px-3 py-1.5 text-sm bg-blue-50 text-blue-700 border border-blue-200 rounded-lg hover:bg-blue-100">
-                  {preview ? "Cambiar" : "Subir foto"}
-                </button>
-                {preview && (
-                  <button type="button" onClick={handleEliminarFoto}
-                    className="px-3 py-1.5 text-sm bg-red-50 text-red-600 border border-red-200 rounded-lg hover:bg-red-100">
-                    Eliminar
-                  </button>
-                )}
-              </div>
-              <p className="text-xs text-gray-400">JPG, PNG · Máx. 2 MB</p>
-              <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp"
-                onChange={handleFotoChange} className="hidden" />
             </div>
+
+            <div>
+              <label className={label}>
+                Foto(s) INE
+                <span className={`ml-2 text-xs font-normal ${totalINE >= MAX_FOTOS_INE ? "text-amber-600" : "text-gray-400"}`}>
+                  ({totalINE}/{MAX_FOTOS_INE})
+                </span>
+              </label>
+              <div className="p-3 border border-gray-200 rounded-lg bg-gray-50 space-y-3 min-h-[96px]">
+                {(fotosINE.length > 0 || archivosINEPendientes.length > 0) && (
+                  <div className="flex flex-wrap gap-2">
+                    {fotosINE.map(foto => (
+                      <div key={foto.id_archivo} className="relative w-16 h-16 group flex-shrink-0">
+                        <img src={foto.url} alt="INE"
+                          className="w-full h-full object-cover rounded-lg border border-gray-200" />
+                        <button type="button" onClick={() => handleEliminarINESubido(foto.id_archivo)}
+                          className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white rounded-full text-xs
+                            flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow">
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                    {archivosINEPendientes.map((file, idx) => (
+                      <div key={idx} className="relative w-16 h-16 group flex-shrink-0">
+                        <img src={URL.createObjectURL(file)} alt="INE nuevo"
+                          className="w-full h-full object-cover rounded-lg border-2 border-blue-400" />
+                        <div className="absolute bottom-0 left-0 right-0 bg-blue-500/70 rounded-b-lg flex items-center justify-center py-0.5">
+                          <span className="text-white text-[9px] font-medium">Nueva</span>
+                        </div>
+                        <button type="button" onClick={() => handleEliminarINEPendiente(idx)}
+                          className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white rounded-full text-xs
+                            flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow">
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="flex items-center gap-2">
+                  {totalINE < MAX_FOTOS_INE ? (
+                    <button type="button" onClick={() => ineInputRef.current?.click()}
+                      className="px-3 py-1 text-xs bg-blue-50 text-blue-700 border border-blue-200 rounded-lg hover:bg-blue-100">
+                      {totalINE > 0 ? "Agregar más" : "Subir foto(s) INE"}
+                    </button>
+                  ) : (
+                    <span className="text-xs text-amber-600 font-medium">
+                      Límite de {MAX_FOTOS_INE} fotos alcanzado
+                    </span>
+                  )}
+                  <p className="text-xs text-gray-400">JPG, PNG · Máx. 10 MB c/u</p>
+                </div>
+                <input ref={ineInputRef} type="file" accept="image/jpeg,image/png,image/webp"
+                  multiple onChange={handleINEChange} className="hidden" />
+              </div>
+            </div>
+
           </div>
 
           <div>
@@ -493,12 +609,9 @@ export default function FormularioUsuario({ onSubmit, onCancel, usuarioEditar }:
         </div>
       </div>
 
-      {/* ══════════════════════════════════════════════════════════════════════
-          PASO 2 — Privilegios
-      ══════════════════════════════════════════════════════════════════════ */}
+      {/* ══ PASO 2 — Privilegios ════════════════════════════════════════════ */}
       <div className={paso === 2 ? "block" : "hidden"}>
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Seleccionar Privilegios</h3>
-
         {tieneAccesoTotal ? (
           <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
             <p className="text-green-800 font-medium">✓ Este rol tiene acceso total al sistema</p>
@@ -512,7 +625,6 @@ export default function FormularioUsuario({ onSubmit, onCancel, usuarioEditar }:
         ) : (
           <p className="text-gray-600 mb-4 text-sm">Selecciona los privilegios que tendrá este usuario</p>
         )}
-
         <div className="space-y-2 max-h-72 overflow-y-auto">
           {privilegios.map(privilegio => (
             <label key={privilegio.idprivilegios}
@@ -521,13 +633,11 @@ export default function FormularioUsuario({ onSubmit, onCancel, usuarioEditar }:
               <input type="checkbox"
                 checked={datos.privilegios?.includes(privilegio.idprivilegios) || false}
                 onChange={() => handlePrivilegioChange(privilegio.idprivilegios)}
-                disabled={tieneAccesoTotal}
-                className="w-4 h-4 text-blue-600 rounded" />
+                disabled={tieneAccesoTotal} className="w-4 h-4 text-blue-600 rounded" />
               <span className="ml-3 text-sm text-gray-700">{privilegio.privilegio}</span>
             </label>
           ))}
         </div>
-
         <div className="flex justify-end gap-3 mt-6">
           <button type="button" onClick={() => setPaso(1)}
             className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">Atrás</button>
@@ -536,13 +646,10 @@ export default function FormularioUsuario({ onSubmit, onCancel, usuarioEditar }:
         </div>
       </div>
 
-      {/* ══════════════════════════════════════════════════════════════════════
-          PASO 3 — Domicilio
-      ══════════════════════════════════════════════════════════════════════ */}
+      {/* ══ PASO 3 — Domicilio ══════════════════════════════════════════════ */}
       <div className={paso === 3 ? "block" : "hidden"}>
         <h3 className="text-lg font-semibold text-gray-900 mb-1">Domicilio</h3>
         <p className="text-sm text-gray-500 mb-6">Todos los campos son opcionales</p>
-
         <div className="space-y-4">
           <div className="grid grid-cols-6 gap-4">
             <div className="col-span-4">
@@ -561,64 +668,41 @@ export default function FormularioUsuario({ onSubmit, onCancel, usuarioEditar }:
                 onChange={handleInputChange} className={input()} placeholder="A" />
             </div>
           </div>
-
           <div className="grid grid-cols-6 gap-4">
             <div className="col-span-2">
               <label className={label}>
                 Código Postal
-                {buscandoCP && (
-                  <span className="ml-2 text-xs text-blue-500 animate-pulse">Buscando...</span>
-                )}
+                {buscandoCP && <span className="ml-2 text-xs text-blue-500 animate-pulse">Buscando...</span>}
               </label>
-              <input
-                type="text"
-                value={datos.codigo_postal || ""}
-                onChange={handleCodigoPostalChange}
-                maxLength={5}
-                className={`${input()} ${errorCP ? "border-orange-300" : ""}`}
-                placeholder="44100"
-              />
-              {errorCP && (
-                <p className="mt-1 text-xs text-orange-600">{errorCP}</p>
-              )}
+              <input type="text" value={datos.codigo_postal || ""}
+                onChange={handleCodigoPostalChange} maxLength={5}
+                className={`${input()} ${errorCP ? "border-orange-300" : ""}`} placeholder="44100" />
+              {errorCP && <p className="mt-1 text-xs text-orange-600">{errorCP}</p>}
             </div>
             <div className="col-span-4">
               <label className={label}>Colonia</label>
               {opcionesColonia.length > 0 ? (
-                <select
-                  name="colonia"
-                  value={datos.colonia || ""}
-                  onChange={(e) => {
-                    const seleccionada = opcionesColonia.find(o => o.colonia === e.target.value);
+                <select name="colonia" value={datos.colonia || ""}
+                  onChange={e => {
+                    const sel = opcionesColonia.find(o => o.colonia === e.target.value);
                     setDatos(prev => ({
                       ...prev,
-                      colonia: e.target.value,
-                      municipio: seleccionada?.poblacion || prev.municipio,
-                      estado: seleccionada?.estado || prev.estado,
+                      colonia:   e.target.value,
+                      municipio: sel?.poblacion || prev.municipio,
+                      estado:    sel?.estado    || prev.estado,
                     }));
-                  }}
-                  className={input()}
-                >
+                  }} className={input()}>
                   <option value="">Selecciona colonia...</option>
                   {opcionesColonia.map((o, i) => (
-                    <option key={`${o.colonia}-${i}`} value={o.colonia}>
-                      {o.colonia}
-                    </option>
+                    <option key={`${o.colonia}-${i}`} value={o.colonia}>{o.colonia}</option>
                   ))}
                 </select>
               ) : (
-                <input
-                  type="text"
-                  name="colonia"
-                  value={datos.colonia || ""}
-                  onChange={handleInputChange}
-                  className={input()}
-                  placeholder="Centro"
-                />
+                <input type="text" name="colonia" value={datos.colonia || ""}
+                  onChange={handleInputChange} className={input()} placeholder="Centro" />
               )}
             </div>
           </div>
-
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className={label}>Municipio / Población</label>
@@ -635,7 +719,6 @@ export default function FormularioUsuario({ onSubmit, onCancel, usuarioEditar }:
             </div>
           </div>
         </div>
-
         <div className="flex justify-end gap-3 mt-6">
           <button type="button" onClick={() => setPaso(2)}
             className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">Atrás</button>
@@ -644,16 +727,11 @@ export default function FormularioUsuario({ onSubmit, onCancel, usuarioEditar }:
         </div>
       </div>
 
-      {/* ══════════════════════════════════════════════════════════════════════
-          PASO 4 — Ficha Médica
-      ══════════════════════════════════════════════════════════════════════ */}
+      {/* ══ PASO 4 — Ficha Médica ═══════════════════════════════════════════ */}
       <div className={paso === 4 ? "block" : "hidden"}>
         <h3 className="text-lg font-semibold text-gray-900 mb-1">Ficha Médica</h3>
         <p className="text-sm text-gray-500 mb-6">Todos los campos son opcionales</p>
-
         <div className="space-y-6 max-h-[55vh] overflow-y-auto pr-1">
-
-          {/* Datos clínicos */}
           <section>
             <p className={sectionTitle}>Datos clínicos</p>
             <div className="grid grid-cols-2 gap-4">
@@ -679,10 +757,7 @@ export default function FormularioUsuario({ onSubmit, onCancel, usuarioEditar }:
               </div>
             </div>
           </section>
-
           <hr className="border-gray-100" />
-
-          {/* Padecimientos */}
           <section>
             <p className={sectionTitle}>Padecimientos</p>
             <div className="grid grid-cols-1 gap-4">
@@ -709,10 +784,7 @@ export default function FormularioUsuario({ onSubmit, onCancel, usuarioEditar }:
               </div>
             </div>
           </section>
-
           <hr className="border-gray-100" />
-
-          {/* Contacto de emergencia */}
           <section>
             <p className={sectionTitle}>Contacto de Emergencia</p>
             <div className="grid grid-cols-6 gap-4">
@@ -734,19 +806,16 @@ export default function FormularioUsuario({ onSubmit, onCancel, usuarioEditar }:
               </div>
             </div>
           </section>
-
         </div>
-
         <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-100">
           <button type="button" onClick={() => setPaso(3)} disabled={loading}
             className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">Atrás</button>
-          <button type="submit" disabled={loading || subiendoFoto}
+          <button type="submit" disabled={loading || subiendoFoto || subiendoINE}
             className="px-6 py-2 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed">
-            {subiendoFoto
-              ? "Subiendo foto..."
-              : loading
-                ? (esEdicion ? "Guardando..." : "Creando...")
-                : (esEdicion ? "Guardar Cambios" : "Crear Usuario")}
+            {subiendoINE    ? "Subiendo documentos..."
+             : subiendoFoto ? "Subiendo foto..."
+             : loading      ? (esEdicion ? "Guardando..."    : "Creando...")
+             :                (esEdicion ? "Guardar Cambios" : "Crear Usuario")}
           </button>
         </div>
       </div>

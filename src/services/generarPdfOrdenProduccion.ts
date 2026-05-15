@@ -129,17 +129,86 @@ function calcularAnchoPeliculaYBolseo(data: OrdenProduccionData): {
 }
 
 // ── El backend ya mandó la imagen como data URL base64 — solo extraemos base64 y format ──
-function dataUrlToImgData(dataUrl: string): { base64: string; format: string } | null {
+type ImgData = {
+  base64: string;
+  format: "PNG" | "JPEG";
+  dataUrl: string;
+};
+
+function dataUrlToImgData(dataUrl: string): ImgData | null {
   try {
     if (!dataUrl.startsWith("data:")) return null;
+
     const mime   = dataUrl.split(";")[0].split(":")[1] || "image/png";
     const base64 = dataUrl.split(",")[1];
+
     if (!base64) return null;
-    const format = mime.includes("jpeg") || mime.includes("jpg") ? "JPEG" : "PNG";
-    return { base64, format };
+
+    const format: "PNG" | "JPEG" =
+      mime.includes("jpeg") || mime.includes("jpg") ? "JPEG" : "PNG";
+
+    return { base64, format, dataUrl };
   } catch {
     return null;
   }
+}
+
+// ======================================================
+// OBTENER TAMAÑO REAL DE IMAGEN
+// ======================================================
+function getImageSize(imgData: ImgData): Promise<{ width: number; height: number }> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+
+    img.onload = () => {
+      resolve({
+        width: img.naturalWidth || img.width,
+        height: img.naturalHeight || img.height,
+      });
+    };
+
+    img.onerror = reject;
+    img.src = imgData.dataUrl;
+  });
+}
+
+// ======================================================
+// INSERTAR IMAGEN SIN DEFORMAR
+// Se comporta como object-fit: contain;
+// ocupa el máximo espacio posible sin alterar proporción.
+// ======================================================
+async function addImageContain(
+  doc: jsPDF,
+  img: ImgData,
+  x: number,
+  y: number,
+  maxW: number,
+  maxH: number
+): Promise<void> {
+  const size = await getImageSize(img);
+
+  if (!size.width || !size.height) {
+    throw new Error("No se pudo obtener el tamaño de la imagen");
+  }
+
+  const ratio = Math.min(maxW / size.width, maxH / size.height);
+
+  const finalW = size.width * ratio;
+  const finalH = size.height * ratio;
+
+  const finalX = x + (maxW - finalW) / 2;
+  const finalY = y + (maxH - finalH) / 2;
+
+  doc.addImage(
+    img.base64,
+    img.format,
+    finalX,
+    finalY,
+    finalW,
+    finalH,
+    undefined,
+    "FAST"
+  );
 }
 
 function celdaLabel(
@@ -735,7 +804,7 @@ console.log("🔍 url_master primeros 50 chars:", data.url_master?.substring(0, 
     const imgW   = colDerW - imgPad * 2;
     const imgH   = renderH - labelDerH - imgPad * 2;
     try {
-      doc.addImage(renderImg.base64, renderImg.format, imgX, imgY, imgW, imgH, undefined, "FAST");
+      await addImageContain(doc, renderImg, imgX, imgY, imgW, imgH);
     } catch (e) {
       console.error("❌ addImage render error:", e);
     }
@@ -776,7 +845,7 @@ console.log("🔍 url_master primeros 50 chars:", data.url_master?.substring(0, 
     doc.rect(masterX, masterY, masterW, masterH);
 
     try {
-      doc.addImage(masterImg.base64, masterImg.format, masterX, masterY, masterW, masterH, undefined, "FAST");
+      await addImageContain(doc, masterImg, masterX, masterY, masterW, masterH);
     } catch (e) {
       console.error("❌ addImage master error:", e);
       doc.setFont("helvetica", "normal");
