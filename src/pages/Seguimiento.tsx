@@ -132,9 +132,6 @@ const IconoPdf = () => (
   </svg>
 );
 
-// ─────────────────────────────────────────────────────────────────────────────
-// BotonPdfPedido — ahora recibe puedePdf para controlar el acceso
-// ─────────────────────────────────────────────────────────────────────────────
 function BotonPdfPedido({ pedido, puedePdf }: { pedido: PedidoSeguimiento; puedePdf: boolean }) {
   const [descargando, setDescargando] = useState(false);
 
@@ -217,7 +214,6 @@ function BotonPdfPedido({ pedido, puedePdf }: { pedido: PedidoSeguimiento; puede
     } finally { setDescargando(false); }
   };
 
-  // Sin permiso: solo muestra el número de pedido sin botón PDF
   if (!puedePdf) {
     return (
       <span className="text-xs font-medium text-blue-600 whitespace-nowrap">
@@ -445,11 +441,16 @@ const renderThead = (oscuro = false) => (
   </thead>
 );
 
+// ── Helper para normalizar texto en búsqueda ──
+const norm = (t: string) =>
+  (t ?? "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+
 export default function Seguimiento() {
   const [pedidos,          setPedidos]          = useState<PedidoSeguimiento[]>([]);
   const [cargando,         setCargando]         = useState(true);
   const [error,            setError]            = useState<string | null>(null);
   const [filtroTipo,       setFiltroTipo]       = useState("todos");
+  const [busqueda,         setBusqueda]         = useState("");  // ← NUEVO
   const [pantallaCompleta, setPantallaCompleta] = useState(false);
   const [paginaActual,     setPaginaActual]     = useState(1);
 
@@ -468,7 +469,6 @@ export default function Seguimiento() {
   const { user }         = useAuth();
   const esAccesoTotal    = user?.acceso_total ?? false;
 
-  // ── Permisos ──
   const puedeExtrusion    = esAccesoTotal || usePermiso("Operar Extrusión");
   const puedeImpresion    = esAccesoTotal || usePermiso("Operar Impresión");
   const puedeBolseo       = esAccesoTotal || usePermiso("Operar Bolseo");
@@ -477,8 +477,6 @@ export default function Seguimiento() {
   const puedeVerECta      = esAccesoTotal || usePermiso("Editar Anticipo y Liquidacion");
   const puedeVerEnvio     = esAccesoTotal || usePermiso("Gestionar Envios");
   const puedeVerOD        = esAccesoTotal || usePermiso("Orden de Diseño");
-
-  // ── NUEVO: permiso para descargar PDF del pedido ──
   const puedePdfPedido    = esAccesoTotal || usePermiso("Descargar PDF Pedido");
 
   useEffect(() => {
@@ -488,7 +486,8 @@ export default function Seguimiento() {
     return () => document.removeEventListener("visibilitychange", onVisible);
   }, []);
 
-  useEffect(() => { setPaginaActual(1); }, [filtroTipo]);
+  // Resetear página cuando cambian filtros o búsqueda
+  useEffect(() => { setPaginaActual(1); }, [filtroTipo, busqueda]);
 
   const cargar = async () => {
     try {
@@ -523,9 +522,23 @@ export default function Seguimiento() {
     } as any);
   };
 
-  const pedidosFiltrados = filtroTipo === "todos"
-    ? pedidos
-    : pedidos.filter(p => (p.tipo_producto || "").toLowerCase().includes(filtroTipo));
+// ── Filtrado combinado: tipo + búsqueda ──
+const pedidosFiltrados = pedidos.filter(p => {
+  // 1. Filtro por tipo
+  const pasaTipo = filtroTipo === "todos"
+    || norm(p.tipo_producto ?? "").includes(norm(filtroTipo));
+
+  if (!pasaTipo) return false;
+
+  // 2. Filtro por búsqueda
+  if (!busqueda.trim()) return true;
+  const q = norm(busqueda);
+  return (
+    norm(p.no_pedido).includes(q) ||
+    norm(p.no_produccion ?? "").includes(q) ||
+    norm(p.impresion ?? "").includes(q)
+  );
+});
 
   const totalPaginas  = Math.max(1, Math.ceil(pedidosFiltrados.length / ITEMS_POR_PAGINA));
   const paginaSegura  = Math.min(paginaActual, totalPaginas);
@@ -572,7 +585,6 @@ export default function Seguimiento() {
           {new Date(pedido.fecha).toLocaleDateString("es-MX")}
         </td>
 
-        {/* N° PEDIDO — pasa el permiso al botón */}
         <td className={`${px} whitespace-nowrap`}>
           <BotonPdfPedido pedido={pedido} puedePdf={puedePdfPedido} />
         </td>
@@ -818,24 +830,57 @@ export default function Seguimiento() {
         <p className="text-gray-600">Monitorea el estado de todos los pedidos en tiempo real</p>
       </div>
 
-      <div className="bg-white rounded-lg shadow p-4 mb-6">
-        <div className="flex items-center gap-4 flex-wrap">
-          <label className="text-sm font-medium text-gray-700">Filtrar por tipo:</label>
+      {/* ── Filtros y búsqueda ── */}
+      <div className="bg-white rounded-lg shadow p-4 mb-6 space-y-3">
+
+        {/* Buscador */}
+        <div className="relative">
+          <input
+            type="text"
+            value={busqueda}
+            onChange={e => setBusqueda(e.target.value)}
+            placeholder="Buscar por N° pedido, N° orden producción o impresión..."
+            className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+          <svg className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          {busqueda && (
+            <button
+              onClick={() => setBusqueda("")}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
+        </div>
+
+        {/* Filtro por tipo */}
+        <div className="flex items-center gap-3 flex-wrap">
+          <label className="text-sm font-medium text-gray-700">Tipo:</label>
           <div className="flex gap-2 flex-wrap">
             {[
               { key: "todos",    label: "Todos"    },
-              { key: "plastico", label: "Plastico" },
+              { key: "plastico", label: "Plástico" },
               { key: "papel",    label: "Papel"    },
-              { key: "carton",   label: "Carton"   },
+              { key: "carton",   label: "Cartón"   },
             ].map(f => (
               <button key={f.key} onClick={() => setFiltroTipo(f.key)}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
                   filtroTipo === f.key ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                 }`}>
                 {f.label}
               </button>
             ))}
           </div>
+          {/* Contador de resultados */}
+          {(busqueda || filtroTipo !== "todos") && (
+            <span className="text-sm text-gray-500 ml-auto">
+              {pedidosFiltrados.length} resultado{pedidosFiltrados.length !== 1 ? "s" : ""}
+            </span>
+          )}
         </div>
       </div>
 
@@ -893,8 +938,20 @@ export default function Seguimiento() {
 
         {pedidosFiltrados.length === 0 ? (
           <div className="p-8 text-center">
-            <p className="text-lg font-medium text-gray-900">No hay ordenes</p>
-            <p className="text-sm text-gray-500 mt-1">No se encontraron ordenes con los filtros seleccionados</p>
+            <p className="text-lg font-medium text-gray-900">Sin resultados</p>
+            <p className="text-sm text-gray-500 mt-1">
+              {busqueda
+                ? `No se encontraron órdenes para "${busqueda}"`
+                : "No se encontraron órdenes con los filtros seleccionados"}
+            </p>
+            {(busqueda || filtroTipo !== "todos") && (
+              <button
+                onClick={() => { setBusqueda(""); setFiltroTipo("todos"); }}
+                className="mt-3 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700"
+              >
+                Limpiar filtros
+              </button>
+            )}
           </div>
         ) : (
           <Paginador
