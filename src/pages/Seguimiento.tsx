@@ -535,11 +535,14 @@ export default function Seguimiento() {
   })
   // ← AGREGAR: deduplica por no_pedido + no_produccion
   .filter((p, idx, arr) =>
-    arr.findIndex(x =>
-      x.no_pedido === p.no_pedido &&
-      (x.no_produccion ?? "") === (p.no_produccion ?? "")
-    ) === idx
-  );
+  arr.findIndex(x =>
+    x.no_pedido === p.no_pedido &&
+    (x.no_produccion ?? "") === (p.no_produccion ?? "") &&
+    (x.nombre_producto ?? "") === (p.nombre_producto ?? "") &&
+    (x.medida ?? "") === (p.medida ?? "") &&
+    (x.descripcion ?? "") === (p.descripcion ?? "")
+  ) === idx
+);
 
   const totalPaginas = Math.max(1, Math.ceil(pedidosFiltrados.length / ITEMS_POR_PAGINA));
   const paginaSegura = Math.min(paginaActual, totalPaginas);
