@@ -5,7 +5,7 @@ import type {
   Conductor,
   PedidoDisponible, BultoPedido,
   Envio, CreateEnvioRequest,
-  BitacoraRegistro, UpdateBitacoraRequest, EnvioPaqueteria,
+  BitacoraRegistro, UpdateBitacoraRequest, EnvioPaqueteria, EnvioRecoleccion,
   CarritoPedido, ProcesarCarritoRequest,
   ProductoSat,
   GuiaPaqueteriaGeneral,
@@ -127,6 +127,14 @@ export const getEnviosPaqueteria = async (): Promise<EnvioPaqueteria[]> => {
 
 export const updateGuiaEnvio = async (id: number, numero_guia: string): Promise<void> => {
   await api.patch(`/envios/${id}/guia`, { numero_guia });
+};
+
+// ==========================
+// ENVÍOS DE RECOLECCIÓN
+// ==========================
+export const getEnviosRecoleccion = async (): Promise<EnvioRecoleccion[]> => {
+  const res = await api.get<EnvioRecoleccion[]>("/envios/recoleccion");
+  return res.data;
 };
 
 // ==========================
@@ -263,7 +271,7 @@ function toQueryString(params: Record<string, any>): string {
   const qs = p.toString();
   return qs ? `?${qs}` : "";
 }
- 
+
 // ── Historial local ───────────────────────────────────────────
 export const getHistorialLocal = async (
   filtros: FiltrosHistorialLocal = {}
@@ -271,7 +279,7 @@ export const getHistorialLocal = async (
   const res = await api.get<HistorialLocalItem[]>(`/historial/local${toQueryString(filtros)}`);
   return res.data;
 };
- 
+
 // ── Historial paquetería ──────────────────────────────────────
 export const getHistorialPaqueteria = async (
   filtros: FiltrosHistorialPaqueteria = {}

@@ -29,6 +29,7 @@ interface ProductoEdit {
   pantones:                string;
   pigmentos:               string;
   observacion:             string;
+  descripcion:             string; 
   herramental_descripcion: string;
   herramental_precio:      string;
   detalles:                DetalleEdit[];
@@ -343,6 +344,24 @@ function ProductoEditable({
           </div>
         )}
 
+       {/* ── Descripción ── */}
+        <div>
+          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+            Descripción <span className="font-normal text-gray-300">(opcional)</span>
+          </label>
+          <input
+            type="text"
+            value={prod.descripcion}
+            onChange={e => setProductoField(pi, "descripcion", e.target.value)}
+            placeholder="Ej: 1er Grado, Talla M, Color Rojo..."
+            maxLength={150}
+            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-purple-400"
+          />
+          {prod.descripcion && (
+            <p className="mt-1 text-xs text-purple-600 font-medium">✓ {prod.descripcion}</p>
+          )}
+        </div>
+
         {/* ── Observación ── */}
         <div>
           <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
@@ -356,6 +375,9 @@ function ProductoEditable({
             className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-blue-500 resize-none"
           />
         </div>
+
+        {/* ── Herramental ── */}
+
 
         {/* ── Herramental ── */}
         <div className="border border-orange-200 rounded-lg overflow-hidden">
@@ -634,6 +656,7 @@ export default function EditarPedido() {
           pantones:  Array.isArray(p.pantones) ? p.pantones.join(", ") : (p.pantones || ""),
           pigmentos:               p.pigmentos           || "",
           observacion:             p.observacion         || "",
+          descripcion: p.descripcion || "",
           herramental_descripcion: p.herramental_descripcion || "",
           herramental_precio:      p.herramental_precio != null ? String(p.herramental_precio) : "",
           _eliminado:              false,
@@ -705,6 +728,7 @@ export default function EditarPedido() {
           pantones:                p.pantones    || null,
           pigmentos:               p.pigmentos   || null,
           observacion:             p.observacion || null,
+          descripcion: p.descripcion || null,
           herramental_descripcion: p.herramental_descripcion || null,
           herramental_precio:      p.herramental_precio !== "" ? parseSafe(p.herramental_precio) : null,
           idsuaje:                 p.idsuaje      ?? null,

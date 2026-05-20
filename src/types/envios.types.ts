@@ -128,7 +128,7 @@ export interface BultoPedido {
 // ==========================
 export interface Envio {
   idenvio:                number;
-  tipo:                   "local" | "paqueteria";
+  tipo:                   "local" | "paqueteria" | "recoleccion";
   estado:                 "preparando" | "en_camino" | "entregado";
   es_parcialidad:         boolean;
   numero_guia:            string | null;
@@ -140,12 +140,11 @@ export interface Envio {
   unidad:                 { idunidad: number; nombre: string }  | null;
   paqueteria:             { idpaqueteria: number; nombre: string } | null;
   total_bultos:           number;
-  
 }
 
 export interface CreateEnvioRequest {
   idsolicitud:              number;
-  tipo:                     "local" | "paqueteria";
+  tipo:                     "local" | "paqueteria" | "recoleccion";
   usuarios_idusuario?:      number;
   unidades_idunidad?:       number;
   paqueteria_idpaqueteria?: number;
@@ -214,6 +213,22 @@ export interface EnvioPaqueteria {
     nombre:       string;
   };
   total_bultos: number;
+}
+
+// ==========================
+// RECOLECCIÓN
+// ==========================
+export interface EnvioRecoleccion {
+  idenvio:                number;
+  estado:                 "preparando" | "entregado";
+  es_parcialidad:         boolean;
+  fecha_envio:            string;
+  fecha_entrega_estimada: string | null;
+  observaciones:          string | null;
+  no_pedido:              string;
+  cliente:                string;
+  empresa:                string;
+  total_bultos:           number;
 }
 
 // ==========================
@@ -348,16 +363,16 @@ export interface GuiaPaqueteriaGeneral {
 }
 
 // ── Filtros ──────────────────────────────────────────────────
- 
+
 export interface FiltrosHistorialLocal {
-  fecha_inicio?: string; // YYYY-MM-DD
+  fecha_inicio?: string;
   fecha_fin?:    string;
   idunidad?:     number;
   idusuario?:    number;
   no_pedido?:    string;
   cliente?:      string;
 }
- 
+
 export interface FiltrosHistorialPaqueteria {
   fecha_inicio?: string;
   fecha_fin?:    string;
@@ -367,9 +382,9 @@ export interface FiltrosHistorialPaqueteria {
   cliente?:      string;
   estado?:       "preparando" | "en_camino" | "entregado";
 }
- 
+
 // ── Registros ────────────────────────────────────────────────
- 
+
 export interface HistorialLocalItem {
   idbitacora:        number;
   fecha:             string;
@@ -394,7 +409,7 @@ export interface HistorialLocalItem {
     nombre:   string;
   };
 }
- 
+
 export interface HistorialPaqueteriaItem {
   idenvio:                number;
   estado:                 "preparando" | "en_camino" | "entregado";

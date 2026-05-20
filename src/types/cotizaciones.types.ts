@@ -55,6 +55,8 @@ export interface ProductoCotizacion {
   color_asa_nombre?: string | null;
 
   observacion?: string | null;
+  perforacion?: boolean;
+  descripcion?: string | null;
   por_kilo?:    string | null;
 
   // ── Herramental ──────────────────────────────────────────
@@ -93,6 +95,7 @@ export interface Cotizacion extends DatosClientePdf {
   estado_id:      number;
   estado:         string;
   cliente_id:     number;
+  identificar:    string | null;
   cliente:        string;
   telefono:       string;
   correo:         string;
@@ -114,6 +117,7 @@ export interface Pedido extends DatosClientePdf {
   estado:         string;
   prioridad:      boolean;
   cliente_id:     number;
+  identificar:    string | null;
   cliente:        string;
   telefono:       string;
   correo:         string;
@@ -140,6 +144,7 @@ export interface ProductoEnviarCotizacion {
   idsuaje?:      number | null;
   colorAsaId?:   number | null;
   observacion?:  string | null;
+  descripcion?:  string | null;
   pigmentos?:    string | null;
   pantones?:     string | null;
   porKilo?:      string | null;

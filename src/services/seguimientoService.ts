@@ -45,6 +45,7 @@ export interface OrdenProduccionProducto {
   id_medidatro?:           number | null;
   medida_troquel?:         string | null;
   observacion:             string | null;
+  perforacion:             boolean;
   cantidad:                number | null;
   kilogramos:              number | null;
   modo_cantidad:           string;

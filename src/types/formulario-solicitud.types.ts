@@ -23,6 +23,8 @@ export interface Producto {
   idMedidaTroquel?: number | null;
   medidaTroquelTexto?: string | null;
   observacion?: string;
+  descripcion?: string | null; 
+  perforacion?: boolean;
   pantones?: string | null;
   pigmentos?: string | null;
   modoCantidad: "unidad" | "kilo";
@@ -32,6 +34,7 @@ export interface Producto {
 
 export interface DatosCotizacion {
   clienteId?: number;
+  identificar?: string | null;
   cliente: string;
   telefono: string;
   correo: string;
@@ -55,6 +58,7 @@ export interface DatosCotizacion {
   envio_referencia?: string | null;
   productos: Producto[];
   observaciones: string;
+  perforacion?: boolean;
   tipo?: "cotizacion" | "pedido";
   prioridad?: boolean;
   sin_iva?: boolean;

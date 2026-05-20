@@ -402,11 +402,16 @@ export function EditarDisenoReal({
               }`}
             >
               {/* Nombre y estado badge */}
-              <div className="flex items-start justify-between gap-3 mb-3">
-                <div className="flex items-center gap-2 flex-1 min-w-0">
-                  <span>{aprobado ? "✓" : enProceso ? "🔄" : "⏱️"}</span>
-                  <p className="text-sm font-semibold text-gray-900 truncate">{producto.nombre}</p>
-                </div>
+            <div className="flex items-start justify-between gap-3 mb-3">
+  <div className="flex items-center gap-2 flex-1 min-w-0 flex-wrap">
+    <span>{aprobado ? "✓" : enProceso ? "🔄" : "⏱️"}</span>
+    <p className="text-sm font-semibold text-gray-900 truncate">{producto.nombre}</p>
+    {producto.descripcion && (
+      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800 border border-purple-200">
+        {producto.descripcion}
+      </span>
+    )}
+  </div>
                 <span className={`flex-shrink-0 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                   aprobado  ? "bg-green-100 text-green-800" :
                   enProceso ? "bg-blue-100 text-blue-800"   : "bg-yellow-100 text-yellow-800"

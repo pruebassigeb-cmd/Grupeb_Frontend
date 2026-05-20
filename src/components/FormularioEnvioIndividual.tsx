@@ -15,8 +15,10 @@ interface Props {
   onCancel:  () => void;
 }
 
+type TipoEnvio = "local" | "paqueteria" | "recoleccion";
+
 export default function FormularioEnvioIndividual({ pedido, bultosIds, onSuccess, onCancel }: Props) {
-  const [tipo,              setTipo]              = useState<"local" | "paqueteria">("local");
+  const [tipo,              setTipo]              = useState<TipoEnvio>("local");
   const [conductores,       setConductores]       = useState<Conductor[]>([]);
   const [unidades,          setUnidades]          = useState<Unidad[]>([]);
   const [paqueterias,       setPaqueterias]       = useState<Paqueteria[]>([]);
@@ -90,7 +92,8 @@ export default function FormularioEnvioIndividual({ pedido, bultosIds, onSuccess
           setIdenvioNuevo(nuevoId);
         }
       } else {
-        onSuccess(tipo === "local" ? nuevoId ?? undefined : undefined);
+        // local y recoleccion: generar nota de remisión automáticamente
+        onSuccess(nuevoId ?? undefined);
       }
     } catch (error: any) {
       showAlert(error.response?.data?.error || "Error al registrar envío");
@@ -143,23 +146,31 @@ export default function FormularioEnvioIndividual({ pedido, bultosIds, onSuccess
         <p className="text-blue-600 text-xs mt-1">{bultosIds.length} bulto(s) seleccionado(s)</p>
       </div>
 
+      {/* ── Selector tipo de envío ── */}
       <div>
         <label className={labelClass}>Tipo de Envío</label>
         <div className="flex gap-3">
-          {(["local", "paqueteria"] as const).map(t => (
-            <button key={t} type="button" onClick={() => setTipo(t)}
+          {([
+            { value: "local",       label: "Local" },
+            { value: "paqueteria",  label: "Paquetería" },
+            { value: "recoleccion", label: "Recolección" },
+          ] as { value: TipoEnvio; label: string }[]).map(t => (
+            <button key={t.value} type="button" onClick={() => setTipo(t.value)}
               className={`flex-1 py-2.5 rounded-lg border-2 text-sm font-medium transition-colors ${
-                tipo === t
-                  ? "border-blue-600 bg-blue-50 text-blue-700"
+                tipo === t.value
+                  ? t.value === "recoleccion"
+                    ? "border-purple-600 bg-purple-50 text-purple-700"
+                    : "border-blue-600 bg-blue-50 text-blue-700"
                   : "border-gray-200 text-gray-600 hover:border-gray-300"
               }`}>
-              {t === "local" ? "Local" : "Paquetería"}
+              {t.label}
             </button>
           ))}
         </div>
       </div>
 
-      {tipo === "local" ? (
+      {/* ── Campos según tipo ── */}
+      {tipo === "local" && (
         <div className="space-y-3">
           <div>
             <label className={labelClass}>Chofer</label>
@@ -188,7 +199,9 @@ export default function FormularioEnvioIndividual({ pedido, bultosIds, onSuccess
             </select>
           </div>
         </div>
-      ) : (
+      )}
+
+      {tipo === "paqueteria" && (
         <div>
           <label className={labelClass}>Paquetería</label>
           <select value={form.paqueteria_idpaqueteria}
@@ -218,20 +231,42 @@ export default function FormularioEnvioIndividual({ pedido, bultosIds, onSuccess
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className={labelClass}>Costo de Flete (opcional)</label>
-          <input type="text" inputMode="decimal" value={form.costo_flete}
-            onChange={e => setForm({ ...form, costo_flete: e.target.value.replace(/[^0-9.]/g, "") })}
-            className={inputClass} placeholder="0.00" />
+      {tipo === "recoleccion" && (
+        <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 text-sm text-purple-700">
+          <p className="font-medium">📦 Recolección en planta</p>
+          <p className="text-xs mt-1 text-purple-600">
+            El cliente pasa a recoger su pedido. No se asigna chofer ni unidad.
+            Se generará la nota de remisión al registrar.
+          </p>
         </div>
+      )}
+
+      {/* ── Campos opcionales (no aplican para recolección en cuanto a flete) ── */}
+      {tipo !== "recoleccion" && (
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className={labelClass}>Costo de Flete (opcional)</label>
+            <input type="text" inputMode="decimal" value={form.costo_flete}
+              onChange={e => setForm({ ...form, costo_flete: e.target.value.replace(/[^0-9.]/g, "") })}
+              className={inputClass} placeholder="0.00" />
+          </div>
+          <div>
+            <label className={labelClass}>Fecha Estimada de Entrega</label>
+            <input type="date" value={form.fecha_entrega_estimada}
+              onChange={e => setForm({ ...form, fecha_entrega_estimada: e.target.value })}
+              className={inputClass} />
+          </div>
+        </div>
+      )}
+
+      {tipo === "recoleccion" && (
         <div>
-          <label className={labelClass}>Fecha Estimada de Entrega</label>
+          <label className={labelClass}>Fecha estimada de recolección (opcional)</label>
           <input type="date" value={form.fecha_entrega_estimada}
             onChange={e => setForm({ ...form, fecha_entrega_estimada: e.target.value })}
             className={inputClass} />
         </div>
-      </div>
+      )}
 
       <div>
         <label className={labelClass}>Observaciones (opcional)</label>
@@ -246,8 +281,12 @@ export default function FormularioEnvioIndividual({ pedido, bultosIds, onSuccess
           Cancelar
         </button>
         <button type="button" onClick={handleSubmit} disabled={loading}
-          className="px-5 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50">
-          {loading ? "Registrando..." : "Registrar Envío"}
+          className={`px-5 py-2 text-white rounded-lg font-semibold disabled:opacity-50 ${
+            tipo === "recoleccion"
+              ? "bg-purple-600 hover:bg-purple-700"
+              : "bg-blue-600 hover:bg-blue-700"
+          }`}>
+          {loading ? "Registrando..." : tipo === "recoleccion" ? "Registrar Recolección" : "Registrar Envío"}
         </button>
       </div>
     </div>

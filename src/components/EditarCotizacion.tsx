@@ -435,7 +435,15 @@ export default function EditarCotizacion({
               <div key={prod.idcotizacion_producto} className="bg-white border-2 border-gray-200 rounded-lg p-4">
 
                 <div className="mb-3">
-                  <h4 className="font-semibold text-gray-900 text-base">{prod.nombre}</h4>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h4 className="font-semibold text-gray-900 text-base">{prod.nombre}</h4>
+                    {/* ── CHIP DESCRIPCIÓN ── */}
+                    {(prod as any).descripcion && (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800 border border-purple-200">
+                        {(prod as any).descripcion}
+                      </span>
+                    )}
+                  </div>
                   <div className="flex flex-wrap gap-3 mt-1 text-sm text-gray-500">
                     {prod.calibre   && <span>Calibre: <strong className="text-gray-700">{prod.calibre}</strong></span>}
                     <span>Tintas: <strong className="text-gray-700">{prod.tintas}</strong></span>

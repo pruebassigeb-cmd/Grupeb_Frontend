@@ -3,11 +3,14 @@
 // ==========================
 export interface Cliente {
   idclientes: number;
+  identificar?: string | null;
   empresa: string;
   correo: string;
   telefono?: string;
   atencion?: string;
   razon_social?: string;
+  rfc_rs?: string;
+  cp_rs?: string;
   impresion?: string;
   celular?: string;
   fecha?: string;
@@ -49,6 +52,7 @@ export interface Cliente {
 // ==========================
 export interface ClienteBusqueda {
   idclientes: number;
+  identificar?: string | null;
   empresa: string | null;
   correo: string | null;
   telefono: string | null;
@@ -88,6 +92,8 @@ export interface CreateClienteRequest {
   telefono?: string;
   atencion?: string;
   razon_social?: string;
+  rfc_rs?: string;
+  cp_rs?: string;
   impresion?: string;
   celular?: string;
   regimen_fiscal_idregimen_fiscal: number;

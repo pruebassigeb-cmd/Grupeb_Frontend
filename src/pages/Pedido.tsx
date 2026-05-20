@@ -20,16 +20,16 @@ const ITEMS_POR_PAGINA = 7;
 export default function Pedidos() {
   const navigate = useNavigate();
 
-  const [pedidos,      setPedidos]      = useState<Pedido[]>([]);
-  const [loadingPeds,  setLoadingPeds]  = useState(false);
-  const [busqueda,     setBusqueda]     = useState("");
-  const [modalOpen,    setModalOpen]    = useState(false);
-  const [guardando,    setGuardando]    = useState(false);
+  const [pedidos, setPedidos] = useState<Pedido[]>([]);
+  const [loadingPeds, setLoadingPeds] = useState(false);
+  const [busqueda, setBusqueda] = useState("");
+  const [modalOpen, setModalOpen] = useState(false);
+  const [guardando, setGuardando] = useState(false);
   const [errorGuardar, setErrorGuardar] = useState<string | null>(null);
-  const [catalogos,         setCatalogos]         = useState<CatalogosPlastico>({ tiposProducto: [], materiales: [], calibres: [] });
+  const [catalogos, setCatalogos] = useState<CatalogosPlastico>({ tiposProducto: [], materiales: [], calibres: [] });
   const [cargandoCatalogos, setCargandoCatalogos] = useState(false);
-  const [errorCatalogos,    setErrorCatalogos]    = useState("");
-  const [expandidas,   setExpandidas]   = useState<Set<string>>(new Set());
+  const [errorCatalogos, setErrorCatalogos] = useState("");
+  const [expandidas, setExpandidas] = useState<Set<string>>(new Set());
   const [paginaActual, setPaginaActual] = useState(1);
 
   useEffect(() => { cargarCatalogos(); cargarPedidos(); }, []);
@@ -67,9 +67,9 @@ export default function Pedidos() {
     if (!busqueda) return true;
     const t = normalizar(busqueda);
     return (
-      normalizar(p.cliente  ?? "").includes(t) ||
-      normalizar(p.empresa  ?? "").includes(t) ||
-      normalizar(p.correo   ?? "").includes(t) ||
+      normalizar(p.cliente ?? "").includes(t) ||
+      normalizar(p.empresa ?? "").includes(t) ||
+      normalizar(p.correo ?? "").includes(t) ||
       normalizar(p.telefono ?? "").includes(t) ||
       String(p.cliente_id ?? "").includes(busqueda.trim()) ||
       normalizar(p.impresion ?? "").includes(t) ||
@@ -78,11 +78,11 @@ export default function Pedidos() {
     );
   });
 
-  const totalPaginas  = Math.max(1, Math.ceil(pedidosFiltrados.length / ITEMS_POR_PAGINA));
-  const paginaSegura  = Math.min(paginaActual, totalPaginas);
-  const inicio        = (paginaSegura - 1) * ITEMS_POR_PAGINA;
+  const totalPaginas = Math.max(1, Math.ceil(pedidosFiltrados.length / ITEMS_POR_PAGINA));
+  const paginaSegura = Math.min(paginaActual, totalPaginas);
+  const inicio = (paginaSegura - 1) * ITEMS_POR_PAGINA;
   const pedidosPagina = pedidosFiltrados.slice(inicio, inicio + ITEMS_POR_PAGINA);
-  const irAPagina     = (p: number) => setPaginaActual(Math.max(1, Math.min(p, totalPaginas)));
+  const irAPagina = (p: number) => setPaginaActual(Math.max(1, Math.min(p, totalPaginas)));
 
   const resolverCalibre = (p: any): string => {
     const mat = (p.material || "").toUpperCase();
@@ -99,29 +99,30 @@ export default function Pedidos() {
 
   const buildProductosPdf = (productos: any[]) =>
     productos.map((p: any) => ({
-      nombre:             p.nombre,
-      material:           p.material            || "",
-      calibre:            resolverCalibre(p),
-      tintas:             p.tintas,
-      caras:              p.caras,
-      medidasFormateadas: p.medidasFormateadas   || "",
-      medidas:            p.medidas             || {},
-      bk:                 p.bk                  || null,
-      foil:               p.foil                || null,
-      laminado:           p.laminado            || null,
-      uvBr:               (p.uv_br ?? p.uvBr)    || null,
-      pigmentos:          p.pigmentos            || null,
-      pantones:           p.pantones             || null,
-      asa_suaje:          p.asa_suaje            || null,
-      observacion:        p.observacion          || null,
-      por_kilo:           p.por_kilo             || null,
+      nombre: p.nombre,
+      material: p.material || "",
+      calibre: resolverCalibre(p),
+      tintas: p.tintas,
+      caras: p.caras,
+      medidasFormateadas: p.medidasFormateadas || "",
+      medidas: p.medidas || {},
+      bk: p.bk || null,
+      foil: p.foil || null,
+      laminado: p.laminado || null,
+      uvBr: (p.uv_br ?? p.uvBr) || null,
+      pigmentos: p.pigmentos || null,
+      pantones: p.pantones || null,
+      asa_suaje: p.asa_suaje || null,
+      observacion: p.observacion || null,
+      perforacion: p.perforacion ?? false,
+      por_kilo: p.por_kilo || null,
       herramental_descripcion: p.herramental_descripcion ?? null,
-      herramental_precio:      p.herramental_precio      != null ? Number(p.herramental_precio) : null,
-      herramental_aprobado:    p.herramental_aprobado     ?? null,
+      herramental_precio: p.herramental_precio != null ? Number(p.herramental_precio) : null,
+      herramental_aprobado: p.herramental_aprobado ?? null,
       detalles: (p.detalles || []).map((d: any) => ({
-        cantidad:      d.cantidad,
-        precio_total:  d.precio_total,
-        kilogramos:    d.kilogramos   ?? null,
+        cantidad: d.cantidad,
+        precio_total: d.precio_total,
+        kilogramos: d.kilogramos ?? null,
         modo_cantidad: d.modo_cantidad || "unidad",
       })),
     }));
@@ -150,25 +151,26 @@ export default function Pedidos() {
         const productosPdf = datos.productos.map((prod: any) => {
           const modo = prod.modoCantidad || "unidad";
           return {
-            nombre:             prod.nombre || `Producto #${prod.productoId}`,
-            material:           prod.material           || "",
-            calibre:            resolverCalibre(prod),
-            tintas:             prod.tintas             ?? "—",
-            caras:              prod.caras              ?? "—",
+            nombre: prod.nombre || `Producto #${prod.productoId}`,
+            material: prod.material || "",
+            calibre: resolverCalibre(prod),
+            tintas: prod.tintas ?? "—",
+            caras: prod.caras ?? "—",
             medidasFormateadas: prod.medidasFormateadas || "",
-            medidas:            prod.medidas            || {},
-            bk:                 prod.bk        || null,
-            foil:               prod.foil      || null,
-            laminado:           prod.laminado  || null,
-            uvBr:               prod.uvBr      || null,
-            pigmentos:          prod.pigmentos || null,
-            pantones:           prod.pantones  || null,
-            asa_suaje:          prod.suajeTipo || null,
-            observacion:        prod.observacion || null,
-            por_kilo:           prod.porKilo    || null,
+            medidas: prod.medidas || {},
+            bk: prod.bk || null,
+            foil: prod.foil || null,
+            laminado: prod.laminado || null,
+            uvBr: prod.uvBr || null,
+            pigmentos: prod.pigmentos || null,
+            pantones: prod.pantones || null,
+            asa_suaje: prod.suajeTipo || null,
+            observacion: prod.observacion || null,
+            perforacion: prod.perforacion ?? false,
+            por_kilo: prod.porKilo || null,
             herramental_descripcion: prod.herramental_descripcion ?? null,
-            herramental_precio:      prod.herramental_precio != null ? Number(prod.herramental_precio) : null,
-            herramental_aprobado:    prod.herramental_aprobado ?? null,
+            herramental_precio: prod.herramental_precio != null ? Number(prod.herramental_precio) : null,
+            herramental_aprobado: prod.herramental_aprobado ?? null,
             detalles: prod.cantidades
               .map((cant: number, i: number) => {
                 if (cant <= 0 || prod.precios[i] <= 0) return null;
@@ -182,9 +184,9 @@ export default function Pedidos() {
                 }
 
                 return {
-                  cantidad:      cant,
-                  precio_total:  precioTotal,
-                  kilogramos:    prod.kilogramos?.[i] > 0 ? prod.kilogramos[i] : null,
+                  cantidad: cant,
+                  precio_total: precioTotal,
+                  kilogramos: prod.kilogramos?.[i] > 0 ? prod.kilogramos[i] : null,
                   modo_cantidad: modo,
                 };
               })
@@ -193,30 +195,31 @@ export default function Pedidos() {
         });
 
         await generarPdfPedido({
-          no_pedido:      noPedido,
-          no_cotizacion:  null,
-          fecha:          new Date().toISOString(),
-          cliente:        pedidoCompleto?.cliente  ?? datos.cliente  ?? "",
-          empresa:        pedidoCompleto?.empresa  ?? datos.empresa  ?? "",
-          telefono:       pedidoCompleto?.telefono ?? datos.telefono ?? "",
-          correo:         pedidoCompleto?.correo   ?? datos.correo   ?? "",
-          impresion:      pedidoCompleto?.impresion ?? datos.impresion ?? null,
-          celular:        pedidoCompleto?.celular        ?? null,
-          razon_social:   pedidoCompleto?.razon_social   ?? null,
-          rfc:            pedidoCompleto?.rfc            ?? null,
-          domicilio:      pedidoCompleto?.domicilio      ?? null,
-          numero:         pedidoCompleto?.numero         ?? null,
-          colonia:        pedidoCompleto?.colonia        ?? null,
-          codigo_postal:  pedidoCompleto?.codigo_postal  ?? null,
-          poblacion:      pedidoCompleto?.poblacion      ?? null,
+          no_pedido: noPedido,
+          no_cotizacion: null,
+          fecha: new Date().toISOString(),
+          cliente: pedidoCompleto?.cliente ?? datos.cliente ?? "",
+          empresa: pedidoCompleto?.empresa ?? datos.empresa ?? "",
+          telefono: pedidoCompleto?.telefono ?? datos.telefono ?? "",
+          correo: pedidoCompleto?.correo ?? datos.correo ?? "",
+          impresion: pedidoCompleto?.impresion ?? datos.impresion ?? null,
+          celular: pedidoCompleto?.celular ?? null,
+          razon_social: pedidoCompleto?.razon_social ?? null,
+          rfc: pedidoCompleto?.rfc ?? null,
+          domicilio: pedidoCompleto?.domicilio ?? null,
+          numero: pedidoCompleto?.numero ?? null,
+          colonia: pedidoCompleto?.colonia ?? null,
+          codigo_postal: pedidoCompleto?.codigo_postal ?? null,
+          poblacion: pedidoCompleto?.poblacion ?? null,
           estado_cliente: pedidoCompleto?.estado_cliente ?? null,
-          cliente_id:     pedidoCompleto?.cliente_id     ?? null,
-          subtotal:       Number(venta.subtotal),
-          iva:            Number(venta.iva),
-          total:          Number(venta.total),
-          anticipo:       Number(venta.anticipo),
-          saldo:          Number(venta.saldo),
-          productos:      productosPdf,
+          cliente_id: pedidoCompleto?.cliente_id ?? null,
+          identificar: pedidoCompleto?.identificar ?? null,
+          subtotal: Number(venta.subtotal),
+          iva: Number(venta.iva),
+          total: Number(venta.total),
+          anticipo: Number(venta.anticipo),
+          saldo: Number(venta.saldo),
+          productos: productosPdf,
         });
       } catch (pdfErr) { console.warn("⚠️ PDF:", pdfErr); }
 
@@ -230,30 +233,31 @@ export default function Pedidos() {
     try {
       const venta = await getVentaByPedido(ped.no_pedido);
       await generarPdfPedido({
-        no_pedido:      ped.no_pedido,
-        no_cotizacion:  ped.no_cotizacion ?? null,
-        fecha:          ped.fecha,
-        cliente:        ped.cliente,
-        empresa:        ped.empresa,
-        telefono:       ped.telefono,
-        correo:         ped.correo,
-        impresion:      ped.impresion ?? null,
-        celular:        ped.celular        ?? null,
-        razon_social:   ped.razon_social   ?? null,
-        rfc:            ped.rfc            ?? null,
-        domicilio:      ped.domicilio      ?? null,
-        numero:         ped.numero         ?? null,
-        colonia:        ped.colonia        ?? null,
-        codigo_postal:  ped.codigo_postal  ?? null,
-        poblacion:      ped.poblacion      ?? null,
+        no_pedido: ped.no_pedido,
+        no_cotizacion: ped.no_cotizacion ?? null,
+        fecha: ped.fecha,
+        cliente: ped.cliente,
+        empresa: ped.empresa,
+        telefono: ped.telefono,
+        correo: ped.correo,
+        impresion: ped.impresion ?? null,
+        celular: ped.celular ?? null,
+        razon_social: ped.razon_social ?? null,
+        rfc: ped.rfc ?? null,
+        domicilio: ped.domicilio ?? null,
+        numero: ped.numero ?? null,
+        colonia: ped.colonia ?? null,
+        codigo_postal: ped.codigo_postal ?? null,
+        poblacion: ped.poblacion ?? null,
         estado_cliente: ped.estado_cliente ?? null,
-        cliente_id:     ped.cliente_id     ?? null,
-        subtotal:       Number(venta.subtotal),
-        iva:            Number(venta.iva),
-        total:          Number(venta.total),
-        anticipo:       Number(venta.anticipo),
-        saldo:          Number(venta.saldo),
-        productos:      buildProductosPdf(ped.productos),
+        cliente_id: ped.cliente_id ?? null,
+        identificar: ped.identificar ?? null,
+        subtotal: Number(venta.subtotal),
+        iva: Number(venta.iva),
+        total: Number(venta.total),
+        anticipo: Number(venta.anticipo),
+        saldo: Number(venta.saldo),
+        productos: buildProductosPdf(ped.productos),
       });
     } catch (e) {
       console.error("❌ Error al obtener venta para PDF:", e);
@@ -345,7 +349,7 @@ export default function Pedidos() {
           </button>
           {pags.map((p, i) =>
             p === "..." ? <span key={`e${i}`} className="px-2 text-gray-400 text-sm">…</span>
-            : <button key={p} onClick={() => irAPagina(p as number)}
+              : <button key={p} onClick={() => irAPagina(p as number)}
                 className={`w-8 h-8 rounded-md text-sm font-medium transition ${p === paginaSegura ? "bg-blue-600 text-white shadow" : "text-gray-600 hover:bg-gray-100"}`}>{p}</button>
           )}
           <button onClick={() => irAPagina(paginaSegura + 1)} disabled={paginaSegura === totalPaginas}
@@ -452,7 +456,7 @@ export default function Pedidos() {
                       <td colSpan={8} className="px-8 py-4">
                         <div className="space-y-3">
                           <div className="grid grid-cols-2 gap-3 mb-2">
-                            {ped.correo   && <p className="text-xs text-gray-500">📧 {ped.correo}</p>}
+                            {ped.correo && <p className="text-xs text-gray-500">📧 {ped.correo}</p>}
                             {ped.telefono && <p className="text-xs text-gray-500">📞 {ped.telefono}</p>}
                           </div>
                           {ped.productos.map((p: any, i: number) => (
@@ -461,18 +465,23 @@ export default function Pedidos() {
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2">
                                   <p className="text-sm font-medium text-gray-800 truncate">{p.nombre}</p>
+                                  {p.descripcion && (
+                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800 border border-purple-200">
+                                      {p.descripcion}
+                                    </span>
+                                  )}
                                   {productoTieneKilos(p) && (
                                     <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-emerald-100 text-emerald-700">Incluye kg</span>
                                   )}
                                 </div>
                                 {p.medidasFormateadas && <p className="text-xs text-gray-400 mt-0.5">Medidas: {p.medidasFormateadas}</p>}
                                 <div className="flex flex-wrap gap-x-3 mt-0.5 text-xs text-gray-400">
-                                  {p.calibre  && <span>Calibre: {p.calibre}</span>}
-                                  {p.tintas   && <span>Tintas: {p.tintas}</span>}
-                                  {p.caras    && <span>Caras: {p.caras}</span>}
+                                  {p.calibre && <span>Calibre: {p.calibre}</span>}
+                                  {p.tintas && <span>Tintas: {p.tintas}</span>}
+                                  {p.caras && <span>Caras: {p.caras}</span>}
                                 </div>
-                                {p.pantones   && <p className="text-xs text-purple-600 mt-0.5">🎨 {Array.isArray(p.pantones) ? p.pantones.join(", ") : p.pantones}</p>}
-                                {p.pigmentos  && <p className="text-xs text-orange-600 mt-0.5">🧪 {p.pigmentos}</p>}
+                                {p.pantones && <p className="text-xs text-purple-600 mt-0.5">🎨 {Array.isArray(p.pantones) ? p.pantones.join(", ") : p.pantones}</p>}
+                                {p.pigmentos && <p className="text-xs text-orange-600 mt-0.5">🧪 {p.pigmentos}</p>}
                                 {p.observacion && <p className="text-xs text-gray-500 mt-1 italic">Obs: {p.observacion}</p>}
                               </div>
                               <div className="flex flex-wrap gap-2 flex-shrink-0">

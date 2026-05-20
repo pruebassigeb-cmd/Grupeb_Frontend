@@ -118,6 +118,7 @@ export default function Cotizaciones() {
       pantones:           p.pantones             || null,
       asa_suaje:          p.asa_suaje            || null,
       observacion:        p.observacion          || null,
+      perforacion:        p.perforacion          ??false,
       por_kilo:           p.por_kilo             || null,
       herramental_descripcion: p.herramental_descripcion ?? null,
       herramental_precio:      p.herramental_precio != null ? Number(p.herramental_precio) : null,
@@ -156,6 +157,7 @@ export default function Cotizaciones() {
           pantones:           prod.pantones  || null,
           asa_suaje:          prod.suajeTipo || null,
           observacion:        prod.observacion || null,
+          perforacion:        prod.perforacion ?? false,
           por_kilo:           prod.porKilo    || null,
           herramental_descripcion: prod.herramental_descripcion ?? null,
           herramental_precio:      prod.herramental_precio != null ? Number(prod.herramental_precio) : null,
@@ -203,6 +205,7 @@ export default function Cotizaciones() {
           poblacion:      datos.poblacion      ?? null,
           estado_cliente: datos.estado_cliente ?? null,
           cliente_id:     datos.cliente_id     ?? null,
+          identificar:      datos.identificar    ?? null,
           total: productosPdf.reduce((sum: number, prod: any) =>
             sum + prod.detalles.reduce((s: number, d: any) => s + d.precio_total, 0), 0),
           productos: productosPdf,
@@ -242,6 +245,7 @@ export default function Cotizaciones() {
       poblacion:      cot.poblacion      ?? null,
       estado_cliente: cot.estado_cliente ?? null,
       cliente_id:     cot.cliente_id     ?? null,
+      identificar:      cot.identificar    ?? null,
       total: esPedido
         ? cot.productos.reduce((sum, p) =>
             sum + p.detalles.filter(d => d.aprobado === true).reduce((s, d) => s + d.precio_total, 0), 0)

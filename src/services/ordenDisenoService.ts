@@ -73,3 +73,8 @@ export const marcarNotificacionesLeidas = async (ids?: number[]) => {
   const res = await api.patch("/orden-diseno/notificaciones/leer", { ids });
   return res.data;
 };
+
+export const getObservacionProducto = async (id: number) => {
+  const res = await api.get(`/orden-diseno/${id}/observacion-producto`);
+  return res.data;
+};

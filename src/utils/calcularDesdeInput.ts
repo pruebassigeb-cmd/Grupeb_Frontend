@@ -29,4 +29,7 @@ export const esNumeroEnteroValido = (val: string) => /^\d*$/.test(val);
 export const esDecimalValido      = (val: string) => /^\d*\.?\d{0,4}$/.test(val);
 
 export const sanitizarTexto = (texto: string): string =>
-  texto.replace(/[,|]/g, "").replace(/\s+/g, " ").trim();
+  texto
+    .replace(/[<>]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();

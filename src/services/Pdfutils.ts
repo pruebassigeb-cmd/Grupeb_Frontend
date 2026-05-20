@@ -34,17 +34,18 @@ export interface ProductoPdf {
     fuelleLateral2?: string;
     refuerzo?:       string;
   };
-  bk?:          boolean | string | null;
-  foil?:        boolean | string | null;
-  laminado?:    boolean | string | null;
-  uvBr?:        boolean | string | null;
-  pigmentos?:   string | null;
-  pantones?:    string | string[] | null;
-  asa_suaje?:   boolean | string | null;
-  alto_rel?:    boolean | string | null;
-  observacion?: string | null;
-  por_kilo?:    string | number | null;
-  detalles:     DetallePdf[];
+  bk?:           boolean | string | null;
+  foil?:         boolean | string | null;
+  laminado?:     boolean | string | null;
+  uvBr?:         boolean | string | null;
+  pigmentos?:    string | null;
+  pantones?:     string | string[] | null;
+  asa_suaje?:    boolean | string | null;
+  alto_rel?:     boolean | string | null;
+  observacion?:  string | null;
+  por_kilo?:     string | number | null;
+  perforacion?:  boolean | null;   // ← NUEVO
+  detalles:      DetallePdf[];
   herramental_descripcion?: string | null;
   herramental_precio?:      number | null;
   herramental_aprobado?:    boolean | null;
@@ -138,7 +139,6 @@ export function formatCantidadCelda(det: DetallePdf, porKilo?: string | number |
 export function formatImporte(det: DetallePdf, porKilo?: string | number | null): string {
   const fmtMoneda = (n: number) =>
     `$${n.toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
   return fmtMoneda(Math.round(det.precio_total * 100) / 100);
 }
 
@@ -166,6 +166,7 @@ export interface OpcionesEncabezado {
   poblacion?:      string | null;
   estado_cliente?: string | null;
   cliente_id?:     number | null;
+  identificar?:    string | null;
 }
 
 export async function dibujarEncabezado(opts: OpcionesEncabezado): Promise<number> {
@@ -174,7 +175,7 @@ export async function dibujarEncabezado(opts: OpcionesEncabezado): Promise<numbe
     fecha, empresa, impresion, cliente, telefono, correo,
     celular, razon_social, rfc,
     domicilio, numero, colonia, codigo_postal, poblacion, estado_cliente,
-    cliente_id,
+    cliente_id, identificar,
   } = opts;
 
   const PW = 279.4; const M = 10;
@@ -272,7 +273,7 @@ export async function dibujarEncabezado(opts: OpcionesEncabezado): Promise<numbe
   const col2X = M + third;
   const col3X = M + third * 2;
 
-  // ── Fila 1: Empresa | Impresión | Atención + Cliente # ───────────────────
+  // ── Fila 1: Empresa | Impresión | Atención + Identificador ───────────────
   doc.setFont("helvetica", "bold"); doc.setFontSize(8); doc.setTextColor(...BLACK);
   doc.text("Empresa:",    M + 2,       y + mid(rowH));
   doc.setFont("helvetica", "normal"); doc.setFontSize(fs);
@@ -288,13 +289,17 @@ export async function dibujarEncabezado(opts: OpcionesEncabezado): Promise<numbe
   doc.setFont("helvetica", "normal"); doc.setFontSize(fs);
   doc.text(val(cliente),  col3X + 15,  y + mid(rowH));
 
-  if (cliente_id != null) {
+  // ── Identificador ─────────────────────────────────────────────────────────
+  const etiquetaCliente = identificar?.trim() || null;
+
+  if (etiquetaCliente) {
     const atencionValWidth = doc.getTextWidth(val(cliente));
     const clienteNumX      = col3X + 15 + atencionValWidth + 5;
     doc.setFont("helvetica", "bold"); doc.setFontSize(8); doc.setTextColor(...GRAY_DARK);
-    doc.text("Cliente #:", clienteNumX, y + mid(rowH));
-    const labelW = doc.getTextWidth("Cliente #:");
-    doc.text(String(cliente_id), clienteNumX + labelW + 1, y + mid(rowH));
+    doc.text("Cliente:", clienteNumX, y + mid(rowH));
+    const labelW = doc.getTextWidth("Cliente:");
+    doc.setFont("helvetica", "bold"); doc.setFontSize(8); doc.setTextColor(...BLACK);
+    doc.text(etiquetaCliente, clienteNumX + labelW + 1, y + mid(rowH));
     doc.setTextColor(...BLACK);
   }
 
@@ -468,8 +473,7 @@ export function dibujarCajasPie(
     { label: "I.V.A.",    value: fmtN(totales.iva),           bold: false },
     { label: "Total",     value: fmtN(totales.total),         bold: true  },
     { label: "Anticipo",  value: fmtN(totales.anticipo ?? 0), bold: false },
-    { label: "Saldo",     value: fmtN(totales.saldo ?? 0),    bold: true  }, // ← AGREGAR
-
+    { label: "Saldo",     value: fmtN(totales.saldo ?? 0),    bold: true  },
   ];
 
   const etW   = tvW * 0.42;
@@ -508,14 +512,12 @@ export function dibujarCajasPie(
   const BANCO_H = 15;
   doc.rect(lX, pfY, lW, BANCO_H);
 
-  const y1    = pfY + 5;
+  const y1     = pfY + 5;
   const parteA = "Favor de depositar en Banamex  —  A nombre de  ";
   const parteB = "Grupeb S.A. de C.V.";
   const parteC = "  —  Enviar comprobante de depósito.";
 
-  doc.setFontSize(9);
-  doc.setTextColor(...BLACK);
-
+  doc.setFontSize(9); doc.setTextColor(...BLACK);
   doc.setFont("helvetica", "normal");
   const wA = doc.getTextWidth(parteA);
   const wC = doc.getTextWidth(parteC);
@@ -528,16 +530,13 @@ export function dibujarCajasPie(
   doc.setFont("helvetica", "normal");
   doc.text(parteA, xCursor, y1);
   xCursor += wA;
-
   doc.setFont("helvetica", "bold");
   doc.text(parteB, xCursor, y1);
   xCursor += wB;
-
   doc.setFont("helvetica", "normal");
   doc.text(parteC, xCursor, y1);
 
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(11);
+  doc.setFont("helvetica", "bold"); doc.setFontSize(11);
   doc.text("CTA: 70010708964     CLABE: 002320 700107089643", lX + lW / 2, pfY + 11, { align: "center" });
 
   const F2_Y   = pfY + BANCO_H;
@@ -567,7 +566,7 @@ export function dibujarCajasPie(
     "* En Bolsas impresas, existen cargos adicionales (negativos, diseño, etc.) que deberán cubrirse a contra entrega.",
     "* Flete por cuenta del Cliente.",
     "* Su pedido puede tener una variación de un 20% más o un 20% menos en la cantidad final.",
-    "* Tiempo de entrega: 30-35 días después de autorizado el diseño y anticipo.",
+    "* Tiempo de entrega: 30-35 días hábiles después de autorizado el diseño y anticipo.",
   ];
   doc.setFont("helvetica", "normal"); doc.setFontSize(6.5); doc.setTextColor(...BLACK);
   const maxLy = F2_Y + F2_H - 2;
@@ -593,7 +592,6 @@ export function dibujarCajasPie(
   doc.setTextColor(...BLACK);
 
   const CONTADO_H = 8;
-
   doc.rect(col3X, F2_Y + CON_H, COL3_W, CONTADO_H);
   doc.setFont("helvetica", "normal"); doc.setFontSize(10); doc.setTextColor(...GRAY_DARK);
   doc.text("Contado", col3X + COL3_W / 2, F2_Y + CON_H + CONTADO_H - 2.5, { align: "center" });

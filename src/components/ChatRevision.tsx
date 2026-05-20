@@ -4,6 +4,7 @@ import {
   enviarMensaje,
   aprobarOrdenDiseno,
   getOrdenDisenoById,
+  getObservacionProducto,
 } from "../services/ordenDisenoService";
 import type {
   MensajeDiseno,
@@ -48,7 +49,7 @@ function ArchivosRevision({
   return (
     <div className={`flex flex-wrap gap-2 mt-1 ${esMio ? "justify-end" : "justify-start"}`}>
       {revision.archivos.map((archivo) => {
-        const esPdf    = archivo.mime_type === "application/pdf";
+        const esPdf = archivo.mime_type === "application/pdf";
         const esImagen = archivo.mime_type?.startsWith("image/");
 
         return (
@@ -78,14 +79,12 @@ function ArchivosRevision({
                 </span>
               </div>
             ) : esPdf ? (
-              <div className={`flex items-center gap-2 px-3 py-2 border rounded-xl transition-colors max-w-[200px] ${
-                esMio
-                  ? "bg-blue-500 border-blue-400 hover:bg-blue-400"
-                  : "bg-white border-gray-200 hover:border-blue-300 hover:bg-blue-50"
-              }`}>
-                <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                  esMio ? "bg-blue-400" : "bg-red-100"
+              <div className={`flex items-center gap-2 px-3 py-2 border rounded-xl transition-colors max-w-[200px] ${esMio
+                ? "bg-blue-500 border-blue-400 hover:bg-blue-400"
+                : "bg-white border-gray-200 hover:border-blue-300 hover:bg-blue-50"
                 }`}>
+                <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${esMio ? "bg-blue-400" : "bg-red-100"
+                  }`}>
                   <svg className={`w-4 h-4 ${esMio ? "text-white" : "text-red-600"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
                   </svg>
@@ -97,11 +96,10 @@ function ArchivosRevision({
                 </span>
               </div>
             ) : (
-              <div className={`flex items-center gap-2 px-3 py-2 border rounded-xl transition-colors ${
-                esMio
-                  ? "bg-blue-500 border-blue-400 hover:bg-blue-400"
-                  : "bg-white border-gray-200 hover:border-blue-300 hover:bg-blue-50"
-              }`}>
+              <div className={`flex items-center gap-2 px-3 py-2 border rounded-xl transition-colors ${esMio
+                ? "bg-blue-500 border-blue-400 hover:bg-blue-400"
+                : "bg-white border-gray-200 hover:border-blue-300 hover:bg-blue-50"
+                }`}>
                 <svg className={`w-4 h-4 flex-shrink-0 ${esMio ? "text-white" : "text-gray-400"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
                 </svg>
@@ -120,9 +118,9 @@ function ArchivosRevision({
 }
 
 interface Props {
-  idorden:           number;
-  usuarioId:         number;
-  onClose:           () => void;
+  idorden: number;
+  usuarioId: number;
+  onClose: () => void;
   onDisenoAprobado?: (noProduccion: string | null) => void;
 }
 
@@ -131,25 +129,35 @@ type PanelActivo = "chat" | "historial" | "participantes";
 export default function ChatRevision({ idorden, usuarioId, onClose, onDisenoAprobado }: Props) {
   const { puedeEditarDiseno, puedeOrdenDiseno } = usePermisos({
     puedeEditarDiseno: "Editar Diseño",
-    puedeOrdenDiseno:  "Orden de Diseño",
+    puedeOrdenDiseno: "Orden de Diseño",
   });
 
-  const [orden,        setOrden]        = useState<OrdenDisenoDetalle | null>(null);
-  const [mensajes,     setMensajes]     = useState<MensajeDiseno[]>([]);
-  const [texto,        setTexto]        = useState("");
-  const [loading,      setLoading]      = useState(true);
-  const [enviando,     setEnviando]     = useState(false);
-  const [panel,        setPanel]        = useState<PanelActivo>("chat");
-  const [modalSubir,   setModalSubir]   = useState<"render" | "feedback" | null>(null);
+  const [orden, setOrden] = useState<OrdenDisenoDetalle | null>(null);
+  const [mensajes, setMensajes] = useState<MensajeDiseno[]>([]);
+  const [texto, setTexto] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [enviando, setEnviando] = useState(false);
+  const [panel, setPanel] = useState<PanelActivo>("chat");
+  const [modalSubir, setModalSubir] = useState<"render" | "feedback" | null>(null);
   const [modalAprobar, setModalAprobar] = useState(false);
-  const [aprobando,    setAprobando]    = useState(false);
+  const [aprobando, setAprobando] = useState(false);
 
-  const chatRef        = useRef<HTMLDivElement>(null);
-  const pollingRef     = useRef<ReturnType<typeof setInterval> | null>(null);
-  const ultimoMsgRef   = useRef<string | undefined>(undefined);
-  const aprobadoRef    = useRef<boolean>(false);
+  const chatRef = useRef<HTMLDivElement>(null);
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const ultimoMsgRef = useRef<string | undefined>(undefined);
+  const aprobadoRef = useRef<boolean>(false);
   const revisionMapRef = useRef<Map<number, RevisionDiseno>>(new Map());
   const cargarOrdenRef = useRef<() => Promise<void>>(() => Promise.resolve());
+
+  const [infoProducto, setInfoProducto] = useState<{
+    observacion: string | null;
+    descripcion: string | null;
+    pigmentos: string | null;
+    pantones: string | null;
+    perforacion: boolean;
+    nombre_producto: string | null;
+    medida: string | null;
+  } | null>(null);
 
   const cargarOrden = useCallback(async () => {
     try {
@@ -166,6 +174,10 @@ export default function ChatRevision({ idorden, usuarioId, onClose, onDisenoApro
     } finally {
       setLoading(false);
     }
+    try {
+      const info = await getObservacionProducto(idorden);
+      setInfoProducto(info);
+    } catch { /* silencioso */ }
   }, [idorden]);
 
   useEffect(() => {
@@ -281,7 +293,7 @@ export default function ChatRevision({ idorden, usuarioId, onClose, onDisenoApro
     );
   }
 
-  const aprobado  = orden.estado === "aprobado";
+  const aprobado = orden.estado === "aprobado";
   const versiones = orden.revisiones.filter(r => r.tipo === "render").length;
 
   const revisionMap = new Map<number, RevisionDiseno>(
@@ -292,9 +304,8 @@ export default function ChatRevision({ idorden, usuarioId, onClose, onDisenoApro
     <div className="flex flex-col h-full" style={{ minHeight: 520 }}>
 
       {/* ── Header ── */}
-      <div className={`px-4 py-3 rounded-t-xl border-b ${
-        aprobado ? "bg-green-50 border-green-200" : "bg-blue-50 border-blue-200"
-      }`}>
+      <div className={`px-4 py-3 rounded-t-xl border-b ${aprobado ? "bg-green-50 border-green-200" : "bg-blue-50 border-blue-200"
+        }`}>
         <div className="flex items-center justify-between">
           <div>
             <p className="font-bold text-gray-900 text-sm">
@@ -303,9 +314,8 @@ export default function ChatRevision({ idorden, usuarioId, onClose, onDisenoApro
               {" · "}v{orden.version_actual}
             </p>
           </div>
-          <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-            aprobado ? "bg-green-100 text-green-800" : "bg-blue-100 text-blue-800"
-          }`}>
+          <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${aprobado ? "bg-green-100 text-green-800" : "bg-blue-100 text-blue-800"
+            }`}>
             {aprobado ? "✓ Aprobado" : "En revisión"}
           </span>
         </div>
@@ -316,17 +326,16 @@ export default function ChatRevision({ idorden, usuarioId, onClose, onDisenoApro
             <button
               key={tab}
               onClick={() => setPanel(tab)}
-              className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${
-                panel === tab
-                  ? "bg-white text-blue-700 shadow-sm"
-                  : "text-gray-500 hover:text-gray-700"
-              }`}
+              className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${panel === tab
+                ? "bg-white text-blue-700 shadow-sm"
+                : "text-gray-500 hover:text-gray-700"
+                }`}
             >
               {tab === "chat"
                 ? "💬 Chat"
                 : tab === "historial"
-                ? `📋 Historial (${orden.revisiones.length})`
-                : `👥 Participantes (${orden.participantes.length})`}
+                  ? `📋 Historial (${orden.revisiones.length})`
+                  : `👥 Participantes (${orden.participantes.length})`}
             </button>
           ))}
         </div>
@@ -335,6 +344,26 @@ export default function ChatRevision({ idorden, usuarioId, onClose, onDisenoApro
       {/* ── Panel Chat ── */}
       {panel === "chat" && (
         <>
+          {infoProducto && (infoProducto.observacion || infoProducto.descripcion || infoProducto.pigmentos || infoProducto.perforacion) && (
+            <div className="mx-4 mt-3 mb-1 p-3 bg-amber-50 border border-amber-200 rounded-xl">
+              <p className="text-xs font-semibold text-amber-700 mb-1.5">📋 Info del producto</p>
+              <p className="text-xs text-gray-700">
+                {[
+                  infoProducto.nombre_producto && `${infoProducto.nombre_producto}${infoProducto.medida ? ` ${infoProducto.medida}` : ""}`,
+                  infoProducto.descripcion && `📌 ${infoProducto.descripcion}`,
+                  infoProducto.observacion && `💬 ${infoProducto.observacion}`,
+                ].filter(Boolean).join("  ·  ")}
+              </p>
+              {(infoProducto.pigmentos || infoProducto.perforacion) && (
+                <p className="text-xs text-gray-600 mt-0.5">
+                  {[
+                    infoProducto.pigmentos && `🧪 ${infoProducto.pigmentos}`,
+                    infoProducto.perforacion && "🔵 Con perforación",
+                  ].filter(Boolean).join("  ·  ")}
+                </p>
+              )}
+            </div>
+          )}
           <div
             ref={chatRef}
             className="flex-1 overflow-y-auto px-4 py-3 space-y-2 bg-gray-50"
@@ -345,9 +374,9 @@ export default function ChatRevision({ idorden, usuarioId, onClose, onDisenoApro
                 Aún no hay mensajes. ¡Empieza la conversación!
               </div>
             ) : mensajes.map((msg, idx) => {
-              const esMio      = msg.usuario_id === usuarioId;
-              const esSistema  = msg.tipo === "sistema";
-              const anterior   = idx > 0 ? mensajes[idx - 1] : null;
+              const esMio = msg.usuario_id === usuarioId;
+              const esSistema = msg.tipo === "sistema";
+              const anterior = idx > 0 ? mensajes[idx - 1] : null;
               const mismoFecha = anterior
                 ? fmtFecha(anterior.created_at) === fmtFecha(msg.created_at)
                 : false;
@@ -390,11 +419,10 @@ export default function ChatRevision({ idorden, usuarioId, onClose, onDisenoApro
                             {msg.usuario_nombre} {msg.usuario_apellido}
                           </span>
                         )}
-                        <div className={`px-3 py-2 rounded-2xl text-sm ${
-                          esMio
-                            ? "bg-blue-600 text-white rounded-br-sm"
-                            : "bg-white border border-gray-200 text-gray-800 rounded-bl-sm"
-                        }`}>
+                        <div className={`px-3 py-2 rounded-2xl text-sm ${esMio
+                          ? "bg-blue-600 text-white rounded-br-sm"
+                          : "bg-white border border-gray-200 text-gray-800 rounded-bl-sm"
+                          }`}>
                           {msg.contenido}
                         </div>
                         <span className="text-xs text-gray-400 mt-0.5 px-1">
@@ -413,11 +441,10 @@ export default function ChatRevision({ idorden, usuarioId, onClose, onDisenoApro
                             {revision.subido_por_nombre} {revision.subido_por_apellido}
                           </span>
                         )}
-                        <div className={`px-3 py-2 rounded-2xl text-sm ${
-                          revisionEsMia
-                            ? "bg-blue-600 text-white rounded-br-sm"
-                            : "bg-white border border-gray-200 text-gray-800 rounded-bl-sm"
-                        }`}>
+                        <div className={`px-3 py-2 rounded-2xl text-sm ${revisionEsMia
+                          ? "bg-blue-600 text-white rounded-br-sm"
+                          : "bg-white border border-gray-200 text-gray-800 rounded-bl-sm"
+                          }`}>
                           {revision.observaciones}
                         </div>
                       </div>
@@ -518,6 +545,7 @@ export default function ChatRevision({ idorden, usuarioId, onClose, onDisenoApro
             idorden={idorden}
             onActualizar={cargarOrden}
           />
+
         </div>
       )}
 

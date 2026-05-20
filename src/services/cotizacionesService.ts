@@ -20,6 +20,8 @@ export const crearCotizacion = async (datos: {
     idsuaje?:                 number | null;
     colorAsaId?:              number | null;
     observacion?:             string;
+    descripcion?:             string;
+    perforacion?:             boolean;
     pantones?:                string | null;
     pigmentos?:               string | null;
     modoCantidad?:            "unidad" | "kilo";
@@ -76,6 +78,8 @@ export const crearCotizacion = async (datos: {
       colorAsaId:              prod.colorAsaId      ?? null,
       idMedidaTroquel:         prod.idMedidaTroquel ?? null,
       observacion:             prod.observacion     || null,
+      descripcion:             prod.descripcion     ?? null,
+      perforacion:             prod.perforacion     ?? false,
       pantones:                prod.pantones        ?? null,
       pigmentos:               prod.pigmentos       ?? null,
       porKilo:                 prod.porKilo         ?? null,

@@ -4,94 +4,95 @@ import type { MedidaKey } from "../types/productos-plastico.types";
 import logoUrl from "../assets/logogrupeb.png";
 
 export interface OrdenProduccionData {
-  no_pedido:        string;
-  no_produccion:    string | null;
-  fecha:            string;
+  no_pedido: string;
+  no_produccion: string | null;
+  fecha: string;
   fecha_produccion: string | null;
   fecha_aprobacion_diseno: string | null;
-  observaciones_diseno:    string | null;
-  fecha_entrega:    string | null;
+  observaciones_diseno: string | null;
+  fecha_entrega: string | null;
   prioridad?: boolean;
-  cliente:   string;
-  empresa:   string;
-  telefono:  string;
-  correo:    string;
+  cliente: string;
+  empresa: string;
+  telefono: string;
+  correo: string;
   impresion: string | null;
   nombre_producto: string;
-  categoria:       string;
-  material:        string;
-  calibre:         string;
-  medida:          string;
-  altura:        string;
-  ancho:         string;
-  fuelle_fondo:  string;
+  categoria: string;
+  material: string;
+  calibre: string;
+  medida: string;
+  altura: string;
+  ancho: string;
+  fuelle_fondo: string;
   fuelle_lat_iz: string;
   fuelle_lat_de: string;
-  refuerzo:      string;
-  por_kilo:      string | null;
+  refuerzo: string;
+  por_kilo: string | null;
   medidas: Record<MedidaKey, string>;
-  tintas:      number | null;
-  caras:       number | null;
-  bk:          boolean | null;
-  foil:        boolean | null;
-  alto_rel:    boolean | null;
-  laminado:    boolean | null;
-  uv_br:       boolean | null;
-  pigmentos:   string | null;
-  pantones:    string[] | null;
-  asa_suaje:   string | null;
+  tintas: number | null;
+  caras: number | null;
+  bk: boolean | null;
+  foil: boolean | null;
+  alto_rel: boolean | null;
+  laminado: boolean | null;
+  uv_br: boolean | null;
+  pigmentos: string | null;
+  pantones: string[] | null;
+  asa_suaje: string | null;
   color_asa_nombre?: string | null;
   medida_troquel?: string | null;
   observacion: string | null;
-  cantidad:      number | null;
-  kilogramos:    number | null;
+  perforacion?: boolean;
+  cantidad: number | null;
+  kilogramos: number | null;
   modo_cantidad: string;
   repeticion_extrusion: number | null;
-  repeticion_metro:     number | null;
-  metros:               number | null;
-  ancho_bobina:         number | null;
-  repeticion_kidder:    string | null;
-  repeticion_sicosa:    string | null;
-  kilos:       number | null;
+  repeticion_metro: number | null;
+  metros: number | null;
+  ancho_bobina: number | null;
+  repeticion_kidder: string | null;
+  repeticion_sicosa: string | null;
+  kilos: number | null;
   kilos_merma: number | null;
-  pzas:        number | null;
-  pzas_merma:  number | null;
-  kilos_extruir?:        number | null;
-  metros_extruir?:       number | null;
-  ext_merma?:            number | null;
-  k_para_impresion?:     number | null;
-  metros_extruidos?:     number | null;
-  kilos_imprimir?:       number | null;
-  imp_merma?:            number | null;
-  kilos_impresos?:       number | null;
-  metros_imprimir?:      number | null;
-  metros_impresos?:      number | null;
-  imp_maquina?:          string | null;
-  kilos_bolseados?:      number | null;
-  bol_merma?:            number | null;
-  piezas_bolseadas?:     number | null;
-  kilos_bolseados2?:     number | null;
-  bol_piezas_merma?:     number | null;
+  pzas: number | null;
+  pzas_merma: number | null;
+  kilos_extruir?: number | null;
+  metros_extruir?: number | null;
+  ext_merma?: number | null;
+  k_para_impresion?: number | null;
+  metros_extruidos?: number | null;
+  kilos_imprimir?: number | null;
+  imp_merma?: number | null;
+  kilos_impresos?: number | null;
+  metros_imprimir?: number | null;
+  metros_impresos?: number | null;
+  imp_maquina?: string | null;
+  kilos_bolseados?: number | null;
+  bol_merma?: number | null;
+  piezas_bolseadas?: number | null;
+  kilos_bolseados2?: number | null;
+  bol_piezas_merma?: number | null;
   asa_piezas_recibidas?: number | null;
-  asa_merma?:            number | null;
-  ancho_pelicula?:       string | null;
-  fuelle_r?:             string | null;
-  fuelle_f?:             string | null;
-  bolseo_asa?:           string | null;
-  metros_calculados?:    number | null;
-  bolsas_calculadas?:    number | null;
-  codigo_kliche?:        string | null;
-  ubicacion_kliche?:     string | null;
+  asa_merma?: number | null;
+  ancho_pelicula?: string | null;
+  fuelle_r?: string | null;
+  fuelle_f?: string | null;
+  bolseo_asa?: string | null;
+  metros_calculados?: number | null;
+  bolsas_calculadas?: number | null;
+  codigo_kliche?: string | null;
+  ubicacion_kliche?: string | null;
   // ── Imágenes de diseño — vienen como data URL base64 desde el backend ──
   url_render?: string | null;
   url_master?: string | null;
 }
 
-const BLACK:     [number, number, number] = [0,   0,   0];
-const WHITE:     [number, number, number] = [255, 255, 255];
-const GRAY_DARK: [number, number, number] = [60,  60,  60];
-const GRAY_MED:  [number, number, number] = [140, 140, 140];
-const RED:       [number, number, number] = [200, 0,   0];
+const BLACK: [number, number, number] = [0, 0, 0];
+const WHITE: [number, number, number] = [255, 255, 255];
+const GRAY_DARK: [number, number, number] = [60, 60, 60];
+const GRAY_MED: [number, number, number] = [140, 140, 140];
+const RED: [number, number, number] = [200, 0, 0];
 
 const LABEL_SIZE = 7;
 
@@ -117,13 +118,13 @@ function calcularAnchoPeliculaYBolseo(data: OrdenProduccionData): {
     const total = n(data.ancho) + n(data.fuelle_lat_iz) + n(data.fuelle_lat_de);
     return {
       anchoPelicula: total > 0 ? String(total) : "",
-      bolseo:        has(data.altura) ? String(n(data.altura)) : "",
+      bolseo: has(data.altura) ? String(n(data.altura)) : "",
     };
   } else {
     const total = n(data.altura) + n(data.fuelle_fondo) + n(data.refuerzo);
     return {
       anchoPelicula: total > 0 ? String(total) : "",
-      bolseo:        has(data.ancho) ? String(n(data.ancho)) : "",
+      bolseo: has(data.ancho) ? String(n(data.ancho)) : "",
     };
   }
 }
@@ -139,7 +140,7 @@ function dataUrlToImgData(dataUrl: string): ImgData | null {
   try {
     if (!dataUrl.startsWith("data:")) return null;
 
-    const mime   = dataUrl.split(";")[0].split(":")[1] || "image/png";
+    const mime = dataUrl.split(";")[0].split(":")[1] || "image/png";
     const base64 = dataUrl.split(",")[1];
 
     if (!base64) return null;
@@ -274,15 +275,15 @@ function bloqueOperativo(
   x: number, y: number, w: number, h: number,
 ) {
   const labelH = 6;
-  const bodyH  = h - labelH;
-  const filaH  = bodyH / 2;
-  const colW   = w / 4;
+  const bodyH = h - labelH;
+  const filaH = bodyH / 2;
+  const colW = w / 4;
 
   celdaHeader(doc, titulo, x, y, w, labelH, 9);
   const dataY = y + labelH;
 
-  celdaLabel(doc, f1c1Label, f1c1Val, x,            dataY, colW, filaH, LABEL_SIZE, 11, !!f1c1Val);
-  celdaLabel(doc, f1c2Label, f1c2Val, x + colW,     dataY, colW, filaH, LABEL_SIZE, 11, !!f1c2Val);
+  celdaLabel(doc, f1c1Label, f1c1Val, x, dataY, colW, filaH, LABEL_SIZE, 11, !!f1c1Val);
+  celdaLabel(doc, f1c2Label, f1c2Val, x + colW, dataY, colW, filaH, LABEL_SIZE, 11, !!f1c2Val);
   celdaLabel(doc, f1c3Label, f1c3Val, x + colW * 2, dataY, colW, filaH, LABEL_SIZE, 11, !!f1c3Val);
   celdaLabel(doc, f1c4Label, f1c4Val, x + colW * 3, dataY, colW, filaH, LABEL_SIZE, 11, !!f1c4Val);
 
@@ -298,7 +299,7 @@ function bloqueOperativo(
   doc.text("Observacion", x + colW + 1.5, firmaY + 4.5);
   doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);
 
-  celdaFirma(doc, "Aut. Calidad",    x + colW * 2, firmaY, colW, filaH);
+  celdaFirma(doc, "Aut. Calidad", x + colW * 2, firmaY, colW, filaH);
   celdaFirma(doc, "Firma Encargado", x + colW * 3, firmaY, colW, filaH);
 }
 
@@ -314,20 +315,20 @@ function bloqueBolseo(
   const b = (v?: number | null) => v != null;
 
   const labelH = 6;
-  const bodyH  = h - labelH;
-  const filaH  = bodyH / 2;
-  const colW   = w / 4;
+  const bodyH = h - labelH;
+  const filaH = bodyH / 2;
+  const colW = w / 4;
 
   celdaHeader(doc, "BOLSEO", x, y, w, labelH, 9);
   const dataY = y + labelH;
 
-  celdaLabel(doc, "Kilos Bolseados",  n(kilosBolseados),  x,            dataY, colW, filaH, LABEL_SIZE, 11, b(kilosBolseados));
-  celdaLabel(doc, "Merma",            n(merma),            x + colW,     dataY, colW, filaH, LABEL_SIZE, 11, b(merma));
-  celdaLabel(doc, "Kilos Bolseados",  n(kilosBolseados2), x + colW * 2, dataY, colW, filaH, LABEL_SIZE, 11, b(kilosBolseados2));
+  celdaLabel(doc, "Kilos Bolseados", n(kilosBolseados), x, dataY, colW, filaH, LABEL_SIZE, 11, b(kilosBolseados));
+  celdaLabel(doc, "Merma", n(merma), x + colW, dataY, colW, filaH, LABEL_SIZE, 11, b(merma));
+  celdaLabel(doc, "Kilos Bolseados", n(kilosBolseados2), x + colW * 2, dataY, colW, filaH, LABEL_SIZE, 11, b(kilosBolseados2));
   celdaLabel(doc, "Piezas Bolseadas", n(piezasBolseadas), x + colW * 3, dataY, colW, filaH, LABEL_SIZE, 11, b(piezasBolseadas));
 
   const firmaY = dataY + filaH;
-  const obsW   = colW * 2;
+  const obsW = colW * 2;
 
   doc.setDrawColor(BLACK[0], BLACK[1], BLACK[2]);
   doc.setLineWidth(0.2);
@@ -338,7 +339,7 @@ function bloqueBolseo(
   doc.text("Observacion", x + 1.5, firmaY + 4.5);
   doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);
 
-  celdaFirma(doc, "Aut. Calidad",    x + obsW,        firmaY, colW, filaH);
+  celdaFirma(doc, "Aut. Calidad", x + obsW, firmaY, colW, filaH);
   celdaFirma(doc, "Firma Encargado", x + obsW + colW, firmaY, colW, filaH);
 }
 
@@ -348,10 +349,10 @@ function bloqueOtroProceso(
 ) {
   bloqueOperativo(
     doc, "OTRO PROCESO",
-    "Kilos",          "",
-    "Piezas",         "",
-    "Merma",          "",
-    "Kilos Finales",  "",
+    "Kilos", "",
+    "Piezas", "",
+    "Merma", "",
+    "Kilos Finales", "",
     "Piezas Finales", "",
     x, y, w, h,
   );
@@ -361,10 +362,10 @@ function bloqueBultosAlmacen(
   doc: jsPDF,
   x: number, y: number, w: number, h: number,
 ) {
-  const labelH  = 5;
+  const labelH = 5;
   const bultosW = w / 2;
-  const almW    = w - bultosW;
-  const almX    = x + bultosW;
+  const almW = w - bultosW;
+  const almX = x + bultosW;
 
   celdaHeader(doc, "BULTOS", x, y, bultosW, labelH, 9);
   const bultosDataY = y + labelH;
@@ -377,20 +378,20 @@ function bloqueBultosAlmacen(
   doc.setFontSize(LABEL_SIZE);
   doc.setTextColor(GRAY_DARK[0], GRAY_DARK[1], GRAY_DARK[2]);
   const colW3 = bultosW / 3;
-  doc.text("Bultos",  x + colW3 * 0 + 1.5, bultosDataY + 4.5);
+  doc.text("Bultos", x + colW3 * 0 + 1.5, bultosDataY + 4.5);
   doc.text("Medidas", x + colW3 * 1 + 1.5, bultosDataY + 4.5);
-  doc.text("Peso",    x + colW3 * 2 + 1.5, bultosDataY + 4.5);
+  doc.text("Peso", x + colW3 * 2 + 1.5, bultosDataY + 4.5);
   doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);
 
   celdaHeader(doc, "ALMACEN", almX, y, almW, labelH, 9);
   const almDataY = y + labelH;
   const almDataH = h - labelH;
-  const almRowH  = almDataH / 3;
+  const almRowH = almDataH / 3;
   const almCol1W = almW / 2;
   const almCol2W = almW - almCol1W;
 
-  celdaLabel(doc, "Piezas Recibidas", "", almX,            almDataY,             almCol1W, almRowH, LABEL_SIZE, 11, false);
-  celdaLabel(doc, "Ubicacion",        "", almX + almCol1W, almDataY,             almCol2W, almRowH, LABEL_SIZE, 11, false);
+  celdaLabel(doc, "Piezas Recibidas", "", almX, almDataY, almCol1W, almRowH, LABEL_SIZE, 11, false);
+  celdaLabel(doc, "Ubicacion", "", almX + almCol1W, almDataY, almCol2W, almRowH, LABEL_SIZE, 11, false);
 
   doc.setDrawColor(BLACK[0], BLACK[1], BLACK[2]);
   doc.setLineWidth(0.2);
@@ -401,7 +402,7 @@ function bloqueBultosAlmacen(
   doc.text("Observaciones", almX + 1.5, almDataY + almRowH + 4.5);
   doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);
 
-  celdaFirma(doc, "Firma Calidad", almX,            almDataY + almRowH * 2, almCol1W, almRowH);
+  celdaFirma(doc, "Firma Calidad", almX, almDataY + almRowH * 2, almCol1W, almRowH);
   celdaFirma(doc, "Firma Almacen", almX + almCol1W, almDataY + almRowH * 2, almCol2W, almRowH);
 }
 
@@ -422,12 +423,12 @@ function construirRepeticionStr(data: OrdenProduccionData): string {
 }
 
 export async function generarPdfOrdenProduccion(data: OrdenProduccionData): Promise<void> {
-  const logoBase64    = await cargarLogoBase64(logoUrl);
+  const logoBase64 = await cargarLogoBase64(logoUrl);
   const repeticionStr = construirRepeticionStr(data);
-  const pantStr       = parsePantones(data.pantones);
+  const pantStr = parsePantones(data.pantones);
 
-console.log("🔍 url_render primeros 50 chars:", data.url_render?.substring(0, 50));
-console.log("🔍 url_master primeros 50 chars:", data.url_master?.substring(0, 50));
+  console.log("🔍 url_render primeros 50 chars:", data.url_render?.substring(0, 50));
+  console.log("🔍 url_master primeros 50 chars:", data.url_master?.substring(0, 50));
 
   // ── Las imágenes llegan como data URL base64 desde el backend ──
   const renderImg = data.url_render ? dataUrlToImgData(data.url_render) : null;
@@ -441,12 +442,12 @@ console.log("🔍 url_master primeros 50 chars:", data.url_master?.substring(0, 
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "letter" });
   const PW = 210;
   const PH = 297;
-  const M  = 8;
+  const M = 8;
   const CW = PW - M * 2;
   let y = M;
 
   // ── FILA 1 — Logo | Título | ORDEN No. + FECHA ──
-  const logoW  = 36;
+  const logoW = 36;
   const ordenW = 52;
   const titleW = CW - logoW - ordenW;
   const fila2H = 25;
@@ -501,13 +502,13 @@ console.log("🔍 url_master primeros 50 chars:", data.url_master?.substring(0, 
 
   // ── FILA 2 — Impresión | Fecha Entrega | Prioridad | Pedido ──
   const fila3H = 13;
-  const impW   = CW * 0.36;
-  const entW   = CW * 0.28;
-  const priW   = CW * 0.18;
-  const pedW   = CW - impW - entW - priW;
+  const impW = CW * 0.36;
+  const entW = CW * 0.28;
+  const priW = CW * 0.18;
+  const pedW = CW - impW - entW - priW;
 
-  celdaLabel(doc, "Impresión",     f(data.impresion ?? data.cliente), M,        y, impW, fila3H, LABEL_SIZE, 13);
-  celdaLabel(doc, "Fecha Entrega", formatFecha(data.fecha_entrega),   M + impW, y, entW, fila3H, LABEL_SIZE, 13);
+  celdaLabel(doc, "Impresión", f(data.impresion ?? data.cliente), M, y, impW, fila3H, LABEL_SIZE, 13);
+  celdaLabel(doc, "Fecha Entrega", formatFecha(data.fecha_entrega), M + impW, y, entW, fila3H, LABEL_SIZE, 13);
 
   doc.setDrawColor(BLACK[0], BLACK[1], BLACK[2]);
   doc.setLineWidth(0.2);
@@ -531,23 +532,23 @@ console.log("🔍 url_master primeros 50 chars:", data.url_master?.substring(0, 
   y += fila3H;
 
   // ── FILA 3 — Producto | Cantidad | Medida | Kilos/mts/Bolsas ──
-  const fila4H  = 14;
-  const prodW4  = CW * 0.34;
-  const cant4W  = CW * 0.13;
-  const med4W   = CW * 0.38;
+  const fila4H = 14;
+  const prodW4 = CW * 0.34;
+  const cant4W = CW * 0.13;
+  const med4W = CW * 0.38;
   const kilos4W = CW - prodW4 - cant4W - med4W;
 
   const cantDisplay = data.modo_cantidad === "kilo" && data.kilogramos
     ? `${data.kilogramos} kg`
     : data.cantidad ? data.cantidad.toLocaleString("es-MX") : "";
 
-  celdaLabel(doc, "Producto", f(data.nombre_producto), M,                   y, prodW4, fila4H, LABEL_SIZE, 13);
-  celdaLabel(doc, "Cantidad", cantDisplay,              M + prodW4,          y, cant4W, fila4H, LABEL_SIZE, 15, true);
-  celdaLabel(doc, "Medida",   f(data.medida),           M + prodW4 + cant4W, y, med4W,  fila4H, LABEL_SIZE, 13);
+  celdaLabel(doc, "Producto", f(data.nombre_producto), M, y, prodW4, fila4H, LABEL_SIZE, 13);
+  celdaLabel(doc, "Cantidad", cantDisplay, M + prodW4, y, cant4W, fila4H, LABEL_SIZE, 15, true);
+  celdaLabel(doc, "Medida", f(data.medida), M + prodW4 + cant4W, y, med4W, fila4H, LABEL_SIZE, 13);
 
-  const kilos4X   = M + prodW4 + cant4W + med4W;
+  const kilos4X = M + prodW4 + cant4W + med4W;
   const kilosTotH = fila4H * 2;
-  const secH      = kilosTotH / 3;
+  const secH = kilosTotH / 3;
 
   const kilosVal = data.kilos_merma != null
     ? formatKilos(Number(data.kilos_merma))
@@ -616,22 +617,24 @@ console.log("🔍 url_master primeros 50 chars:", data.url_master?.substring(0, 
   y += fila4H;
 
   // ── FILA 4 — Medidas / Material / Calibre / Pigmento / Caras ──
-  const fila5H   = 14;
+  const fila5H = 14;
   const medidasW = CW - kilos4W;
 
   const cols5 = [
-    { label: "Ancho Pel.", value: anchoPelicula,          w: medidasW * 0.09 },
-    { label: "Altura",     value: f(data.altura),         w: medidasW * 0.08 },
-    { label: "Fuelle R",   value: f(data.refuerzo),       w: medidasW * 0.09 },
-    { label: "Fuelle F",   value: f(data.fuelle_fondo),   w: medidasW * 0.08 },
-    { label: "Ancho",      value: f(data.ancho),          w: medidasW * 0.09 },
-    { label: "Fuelle Lat", value: f(data.fuelle_lat_iz),  w: medidasW * 0.09 },
-    { label: "Fuelle Lat", value: f(data.fuelle_lat_de),  w: medidasW * 0.09 },
-    { label: "Material",   value: f(data.material),       w: medidasW * 0.17 },
-    { label: "Calibre",    value: f(data.calibre),        w: medidasW * 0.08 },
-    { label: "Pigmento",   value: f(data.pigmentos),      w: medidasW * 0.08 },
-    { label: "Caras",      value: f(data.caras),
-      w: medidasW - medidasW * (0.09+0.08+0.09+0.08+0.09+0.09+0.09+0.17+0.08+0.08) },
+    { label: "Ancho Pel.", value: anchoPelicula, w: medidasW * 0.09 },
+    { label: "Altura", value: f(data.altura), w: medidasW * 0.08 },
+    { label: "Fuelle R", value: f(data.refuerzo), w: medidasW * 0.09 },
+    { label: "Fuelle F", value: f(data.fuelle_fondo), w: medidasW * 0.08 },
+    { label: "Ancho", value: f(data.ancho), w: medidasW * 0.09 },
+    { label: "Fuelle Lat", value: f(data.fuelle_lat_iz), w: medidasW * 0.09 },
+    { label: "Fuelle Lat", value: f(data.fuelle_lat_de), w: medidasW * 0.09 },
+    { label: "Material", value: f(data.material), w: medidasW * 0.17 },
+    { label: "Calibre", value: f(data.calibre), w: medidasW * 0.08 },
+    { label: "Pigmento", value: f(data.pigmentos), w: medidasW * 0.08 },
+    {
+      label: "Caras", value: f(data.caras),
+      w: medidasW - medidasW * (0.09 + 0.08 + 0.09 + 0.08 + 0.09 + 0.09 + 0.09 + 0.17 + 0.08 + 0.08)
+    },
   ];
 
   let cx5 = M;
@@ -642,11 +645,11 @@ console.log("🔍 url_master primeros 50 chars:", data.url_master?.substring(0, 
   y += fila5H;
 
   // ── FILA 5 — Repetición | Código Kliche | Ubicación | Pantones ──
-  const fila6H  = 16;
-  const repW6   = CW * 0.35;
-  const codK6W  = CW * 0.075;
-  const ubic6W  = CW * 0.075;
-  const pan6W   = CW - repW6 - codK6W - ubic6W;
+  const fila6H = 16;
+  const repW6 = CW * 0.35;
+  const codK6W = CW * 0.075;
+  const ubic6W = CW * 0.075;
+  const pan6W = CW - repW6 - codK6W - ubic6W;
 
   doc.setDrawColor(BLACK[0], BLACK[1], BLACK[2]);
   doc.setLineWidth(0.2);
@@ -661,19 +664,20 @@ console.log("🔍 url_master primeros 50 chars:", data.url_master?.substring(0, 
     doc.text(repeticionStr, M + 2, y + 8.5, { maxWidth: repW6 - 3 });
   }
 
-  celdaLabel(doc, "Cod. Kliche",  f(data.codigo_kliche),          M + repW6,                   y, codK6W, fila6H, LABEL_SIZE, 12);
-  celdaLabel(doc, "Ubicación",    f(data.ubicacion_kliche ?? ""), M + repW6 + codK6W,           y, ubic6W, fila6H, LABEL_SIZE, 12);
-  celdaLabel(doc, "Pantones",     pantStr !== "—" ? pantStr : "", M + repW6 + codK6W + ubic6W,  y, pan6W,  fila6H, LABEL_SIZE, 12);
+  celdaLabel(doc, "Cod. Kliche", f(data.codigo_kliche), M + repW6, y, codK6W, fila6H, LABEL_SIZE, 12);
+  celdaLabel(doc, "Ubicación", f(data.ubicacion_kliche ?? ""), M + repW6 + codK6W, y, ubic6W, fila6H, LABEL_SIZE, 12);
+  celdaLabel(doc, "Pantones", pantStr !== "—" ? pantStr : "", M + repW6 + codK6W + ubic6W, y, pan6W, fila6H, LABEL_SIZE, 12);
   y += fila6H;
 
   // ── FILA 6 — Asa/Suaje | Bolseo | Observaciones ──
   const fila7H = 14;
-  const asa7W  = CW * 0.22;
-  const bol7W  = CW * 0.12;
-  const obs7W  = CW - asa7W - bol7W;
+  const asa7W = CW * 0.22;
+  const bol7W = CW * 0.12;
+  const perf7W = CW * 0.10;
+  const obs7W = CW - asa7W - bol7W - perf7W;
 
   const esTroquel = (data.asa_suaje || "").toLowerCase().includes("troquel") ||
-                    (data.nombre_producto || "").toLowerCase().includes("troquel");
+    (data.nombre_producto || "").toLowerCase().includes("troquel");
   const esAsaFlex = (data.nombre_producto || "").toLowerCase().includes("asa flexible");
   let asaTexto = f(data.asa_suaje);
   if (esAsaFlex && data.color_asa_nombre) {
@@ -684,18 +688,17 @@ console.log("🔍 url_master primeros 50 chars:", data.url_master?.substring(0, 
 
   celdaLabel(doc, "Asa / Troquel", asaTexto, M, y, asa7W, fila7H, LABEL_SIZE, 13);
   celdaLabel(doc, "Bolseo", bolseoCalculado || f(data.bolseo_asa), M + asa7W, y, bol7W, fila7H, LABEL_SIZE, 13);
+  celdaLabel(doc, "Perf.", data.perforacion ? "SI" : "-", M + asa7W + bol7W, y, perf7W, fila7H, LABEL_SIZE, 13);
 
-  doc.setDrawColor(BLACK[0], BLACK[1], BLACK[2]);
-  doc.setLineWidth(0.2);
-  doc.rect(M + asa7W + bol7W, y, obs7W, fila7H);
+  doc.rect(M + asa7W + bol7W + perf7W, y, obs7W, fila7H);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(LABEL_SIZE);
   doc.setTextColor(GRAY_DARK[0], GRAY_DARK[1], GRAY_DARK[2]);
-  doc.text("Observaciones", M + asa7W + bol7W + 1.5, y + 4.5);
+  doc.text("Observaciones", M + asa7W + bol7W + perf7W + 1.5, y + 4.5);
   if (data.observacion) {
     doc.setFontSize(9.5);
     doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);
-    doc.text(data.observacion, M + asa7W + bol7W + 2, y + 9.5, { maxWidth: obs7W - 3 });
+    doc.text(data.observacion, M + asa7W + bol7W + perf7W + 2, y + 9.5, { maxWidth: obs7W - 3 });
   }
   doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);
   y += fila7H;
@@ -709,9 +712,9 @@ console.log("🔍 url_master primeros 50 chars:", data.url_master?.substring(0, 
   const bloqueY = y;
 
   const espacioTotal = (PH - M - y) * 0.90;
-  const bultosRatio  = 0.22;
-  const bultosH      = espacioTotal * bultosRatio;
-  const bloqueH      = (espacioTotal - bultosH) / 4;
+  const bultosRatio = 0.22;
+  const bultosH = espacioTotal * bultosRatio;
+  const bloqueH = (espacioTotal - bultosH) / 4;
 
   const tituloImpresion = data.imp_maquina
     ? `IMPRESIÓN — ${String(data.imp_maquina).toUpperCase()}`
@@ -719,21 +722,21 @@ console.log("🔍 url_master primeros 50 chars:", data.url_master?.substring(0, 
 
   bloqueOperativo(
     doc, "EXTRUSIÓN",
-    "Kilos Extruidos",    "",
-    "Metros Extruidos",   data.metros_extruidos != null ? String(data.metros_extruidos) : "",
-    "Merma",              data.ext_merma        != null ? String(data.ext_merma)        : "",
+    "Kilos Extruidos", "",
+    "Metros Extruidos", data.metros_extruidos != null ? String(data.metros_extruidos) : "",
+    "Merma", data.ext_merma != null ? String(data.ext_merma) : "",
     "Kilos p/ Impresión", data.k_para_impresion != null ? String(data.k_para_impresion) : "",
-    "Metros p/ Impresión","",
+    "Metros p/ Impresión", "",
     M, y, colIzqW, bloqueH,
   ); y += bloqueH;
 
   bloqueOperativo(
     doc, tituloImpresion,
-    "Kilos Impresos",  data.kilos_imprimir  != null ? String(data.kilos_imprimir)  : "",
+    "Kilos Impresos", data.kilos_imprimir != null ? String(data.kilos_imprimir) : "",
     "Metros Impresos", data.metros_impresos != null ? String(data.metros_impresos) : "",
-    "Merma",           data.imp_merma       != null ? String(data.imp_merma)       : "",
-    "Kilos p/ Bolseo", data.kilos_impresos  != null ? String(data.kilos_impresos)  : "",
-    "Metros p/ Bolseo","",
+    "Merma", data.imp_merma != null ? String(data.imp_merma) : "",
+    "Kilos p/ Bolseo", data.kilos_impresos != null ? String(data.kilos_impresos) : "",
+    "Metros p/ Bolseo", "",
     M, y, colIzqW, bloqueH,
   ); y += bloqueH;
 
@@ -753,8 +756,8 @@ console.log("🔍 url_master primeros 50 chars:", data.url_master?.substring(0, 
 
   // ── COLUMNA DERECHA ──
   const autDisenoH = bloqueH;
-  const renderH    = espacioTotal - autDisenoH;
-  const labelDerH  = 6;
+  const renderH = espacioTotal - autDisenoH;
+  const labelDerH = 6;
 
   // Autorización de diseño
   doc.setDrawColor(BLACK[0], BLACK[1], BLACK[2]);
@@ -769,7 +772,7 @@ console.log("🔍 url_master primeros 50 chars:", data.url_master?.substring(0, 
   doc.setTextColor(GRAY_DARK[0], GRAY_DARK[1], GRAY_DARK[2]);
   doc.text("Fecha aprobación:", colDerX + 3, adBodyY + 7);
   const fechaAprobStr = formatFecha(data.fecha_aprobacion_diseno) || "—";
-  const labelFechaW   = doc.getTextWidth("Fecha aprobación: ");
+  const labelFechaW = doc.getTextWidth("Fecha aprobación: ");
   doc.setFont("helvetica", "bold");
   doc.setFontSize(LABEL_SIZE);
   doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);
@@ -799,10 +802,10 @@ console.log("🔍 url_master primeros 50 chars:", data.url_master?.substring(0, 
 
   if (renderImg) {
     const imgPad = 2;
-    const imgX   = colDerX + imgPad;
-    const imgY   = renderY + labelDerH + imgPad;
-    const imgW   = colDerW - imgPad * 2;
-    const imgH   = renderH - labelDerH - imgPad * 2;
+    const imgX = colDerX + imgPad;
+    const imgY = renderY + labelDerH + imgPad;
+    const imgW = colDerW - imgPad * 2;
+    const imgH = renderH - labelDerH - imgPad * 2;
     try {
       await addImageContain(doc, renderImg, imgX, imgY, imgW, imgH);
     } catch (e) {
@@ -816,7 +819,7 @@ console.log("🔍 url_master primeros 50 chars:", data.url_master?.substring(0, 
   if (masterImg) {
     doc.addPage();
 
-    const mM  = 10;
+    const mM = 10;
     const mCW = PW - mM * 2;
     const mCH = PH - mM * 2;
 
@@ -835,10 +838,10 @@ console.log("🔍 url_master primeros 50 chars:", data.url_master?.substring(0, 
     doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);
 
     const masterPad = 4;
-    const masterX   = mM + masterPad;
-    const masterY   = mM + hdrH + masterPad;
-    const masterW   = mCW - masterPad * 2;
-    const masterH   = mCH - hdrH - masterPad * 2;
+    const masterX = mM + masterPad;
+    const masterY = mM + hdrH + masterPad;
+    const masterW = mCW - masterPad * 2;
+    const masterH = mCH - hdrH - masterPad * 2;
 
     doc.setDrawColor(BLACK[0], BLACK[1], BLACK[2]);
     doc.setLineWidth(0.3);

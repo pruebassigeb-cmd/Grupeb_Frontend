@@ -27,6 +27,7 @@ export interface ProductoActualizar {
   pantones:                string | null;
   pigmentos:               string | null;
   observacion:             string | null;
+  descripcion:             string | null;
   herramental_descripcion: string | null;
   herramental_precio:      number | null;
   detalles:                DetalleActualizar[];

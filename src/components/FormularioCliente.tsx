@@ -73,6 +73,8 @@ export default function FormularioCliente({ onSubmit, onCancel, clienteEditar }:
     telefono:                        clienteEditar?.telefono                        || "",
     atencion:                        clienteEditar?.atencion                        || "",
     razon_social:                    clienteEditar?.razon_social                    || "",
+    rfc_rs:                          clienteEditar?.rfc_rs                          || "",
+    cp_rs:                           clienteEditar?.cp_rs                           || "",
     impresion:                       clienteEditar?.impresion                       || "",
     celular:                         clienteEditar?.celular                         || "",
     regimen_fiscal_idregimen_fiscal: clienteEditar?.regimen_fiscal_idregimen_fiscal || 0,
@@ -106,6 +108,8 @@ export default function FormularioCliente({ onSubmit, onCancel, clienteEditar }:
       ]);
       setRegimenesFiscales(regimenesData);
       setMetodosPago(metodosData);
+      console.log(metodosPago);
+      console.log("METODOS:", metodosData);
       setFormasPago(formasData);
     } catch (error) {
       console.error("Error al cargar catálogos:", error);
@@ -194,6 +198,7 @@ export default function FormularioCliente({ onSubmit, onCancel, clienteEditar }:
       if (datosFinales.telefono)           datosFinales.telefono           = datosFinales.telefono.replace(/\D/g, "");
       if (datosFinales.celular)            datosFinales.celular            = datosFinales.celular.replace(/\D/g, "");
       if (datosFinales.rfc)                datosFinales.rfc                = datosFinales.rfc.trim().toUpperCase();
+      if (datosFinales.rfc_rs)             datosFinales.rfc_rs             = datosFinales.rfc_rs.trim().toUpperCase();
       if (datosFinales.correo_facturacion) datosFinales.correo_facturacion = datosFinales.correo_facturacion.trim().toLowerCase();
       await onSubmit(datosFinales);
     } catch (error: any) {
@@ -268,6 +273,34 @@ export default function FormularioCliente({ onSubmit, onCancel, clienteEditar }:
             </div>
           </div>
 
+          {/* ── RFC y CP de Razón Social ── */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={labelClass}>RFC de Razón Social</label>
+              <input
+                type="text"
+                name="rfc_rs"
+                value={datos.rfc_rs || ""}
+                onChange={(e) => setDatos({ ...datos, rfc_rs: e.target.value.toUpperCase() })}
+                maxLength={13}
+                className={inputClass}
+                placeholder="XAXX010101000"
+              />
+            </div>
+            <div>
+              <label className={labelClass}>CP de Razón Social</label>
+              <input
+                type="text"
+                name="cp_rs"
+                value={datos.cp_rs || ""}
+                onChange={(e) => setDatos({ ...datos, cp_rs: e.target.value.replace(/\D/g, "") })}
+                maxLength={5}
+                className={inputClass}
+                placeholder="44100"
+              />
+            </div>
+          </div>
+
           <div>
             <label className={labelClass}>Impresión / Notas</label>
             <input type="text" name="impresion" value={datos.impresion} onChange={handleInputChange}
@@ -300,7 +333,7 @@ export default function FormularioCliente({ onSubmit, onCancel, clienteEditar }:
           </div>
 
           <div className="grid grid-cols-4 gap-4">
-            {/* ── CP principal inline (sin sub-componente) ── */}
+            {/* ── CP principal inline ── */}
             <div>
               <label className={labelClass}>
                 Código Postal
@@ -515,7 +548,7 @@ export default function FormularioCliente({ onSubmit, onCancel, clienteEditar }:
           </div>
 
           <div className="grid grid-cols-4 gap-4">
-            {/* ── CP envío inline (sin sub-componente) ── */}
+            {/* ── CP envío inline ── */}
             <div>
               <label className={labelClass}>
                 Código Postal

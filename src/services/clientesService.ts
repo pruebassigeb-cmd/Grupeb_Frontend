@@ -22,13 +22,13 @@ export const getClienteById = async (id: number): Promise<Cliente> => {
   return response.data;
 };
 
-export const createCliente = async (data: CreateClienteRequest) => {
-  const response = await api.post("/clientes", data);
+export const createCliente = async (datos: CreateClienteRequest) => {
+  const response = await api.post("/clientes", datos);
   return response.data;
 };
 
-export const updateCliente = async (id: number, data: UpdateClienteRequest) => {
-  const response = await api.put(`/clientes/${id}`, data);
+export const updateCliente = async (id: number, datos: UpdateClienteRequest) => {
+  const response = await api.put(`/clientes/${id}`, datos);
   return response.data;
 };
 

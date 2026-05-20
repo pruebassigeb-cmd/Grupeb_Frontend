@@ -14,12 +14,10 @@ import type { ProductoBusqueda, ProductoPlasticoCreate } from "../types/producto
 import type { Cara, Tinta } from "../types/catalogos-produccion.types";
 import { getSuajes, getColoresAsa, getMedidasTroquel } from "../services/suajesService";
 import type { Suaje, ColorAsa, MedidaTroquel } from "../services/suajesService";
-import { getRegimenesFiscales, getMetodosPago, getFormasPago } from "../services/catalogosService";
-import type { RegimenFiscal, MetodoPago, FormaPago } from "../types/clientes.types";
 import { showAlert } from "./CustomAlert";
-import { useCodigoPostal } from "../hooks/useCodigoPostal";
 import type { Producto, DatosCotizacion, FormularioCotizacionProps, OpcionCP } from "../types/formulario-solicitud.types";
-import { MONEDAS, clienteVacio, ESTADO_INICIAL_PRODUCTO_MEDIDAS } from "../constants/formulario-solicitud.constants";
+import { ESTADO_INICIAL_PRODUCTO_MEDIDAS } from "../constants/formulario-solicitud.constants";
+import FormularioCliente from "./FormularioCliente";
 
 export default function FormularioSolicitud({
   onSubmit,
@@ -29,12 +27,12 @@ export default function FormularioSolicitud({
 }: FormularioCotizacionProps) {
 
   // ── Pasos ────────────────────────────────────────────────────────────────
-  const [paso, setPaso]             = useState(1);
-  const [pasoCliente, setPasoCliente] = useState<1 | 2 | 3>(1);
+  const [paso, setPaso] = useState(1);
 
   // ── Datos de la cotización/pedido ────────────────────────────────────────
   const [datos, setDatos] = useState<DatosCotizacion>({
     cliente: "", telefono: "", correo: "", empresa: "",
+    identificar: null,
     impresion: null, celular: null, razon_social: null, rfc: null,
     domicilio: null, numero: null, colonia: null, codigo_postal: null,
     poblacion: null, estado_cliente: null,
@@ -44,63 +42,57 @@ export default function FormularioSolicitud({
     productos: [], observaciones: "", prioridad: false, sin_iva: false,
   });
 
-  const [datosClienteCompleto, setDatosClienteCompleto] = useState<CreateClienteRequest>(clienteVacio);
   const isMounted = useRef(false);
 
   // ── Catálogos ────────────────────────────────────────────────────────────
-  const [regimenesFiscales, setRegimenesFiscales] = useState<RegimenFiscal[]>([]);
-  const [metodosPago,       setMetodosPago]       = useState<MetodoPago[]>([]);
-  const [formasPago,        setFormasPago]         = useState<FormaPago[]>([]);
-  const [caras,             setCaras]              = useState<Cara[]>([]);
-  const [tintas,            setTintas]             = useState<Tinta[]>([]);
-  const [suajes,            setSuajes]             = useState<Suaje[]>([]);
-  const [coloresAsa,        setColoresAsa]         = useState<ColorAsa[]>([]);
-  const [medidasTroquel,    setMedidasTroquel]     = useState<MedidaTroquel[]>([]);
+  const [caras, setCaras] = useState<Cara[]>([]);
+  const [tintas, setTintas] = useState<Tinta[]>([]);
+  const [suajes, setSuajes] = useState<Suaje[]>([]);
+  const [coloresAsa, setColoresAsa] = useState<ColorAsa[]>([]);
+  const [medidasTroquel, setMedidasTroquel] = useState<MedidaTroquel[]>([]);
 
   // ── Modal clientes ───────────────────────────────────────────────────────
-  const [mostrarModalClientes,  setMostrarModalClientes]  = useState(false);
-  const [busquedaCliente,       setBusquedaCliente]       = useState("");
-  const [clientesCargados,      setClientesCargados]      = useState<ClienteBusqueda[]>([]);
-  const [loadingClientes,       setLoadingClientes]       = useState(false);
-  const [errorClientes,         setErrorClientes]         = useState<string | null>(null);
-  const [creandoCliente,        setCreandoCliente]        = useState(false);
-  const [errorCrearCliente,     setErrorCrearCliente]     = useState<string | null>(null);
+  const [mostrarModalClientes, setMostrarModalClientes] = useState(false);
+  const [busquedaCliente, setBusquedaCliente] = useState("");
+  const [clientesCargados, setClientesCargados] = useState<ClienteBusqueda[]>([]);
+  const [loadingClientes, setLoadingClientes] = useState(false);
+  const [errorClientes, setErrorClientes] = useState<string | null>(null);
 
   // ── Modal productos ──────────────────────────────────────────────────────
-  const [modoProducto,          setModoProducto]          = useState<"registrado" | "nuevo">("registrado");
-  const [productoNuevoListo,    setProductoNuevoListo]    = useState(false);
+  const [modoProducto, setModoProducto] = useState<"registrado" | "nuevo">("registrado");
+  const [productoNuevoListo, setProductoNuevoListo] = useState(false);
   const [mostrarModalProductos, setMostrarModalProductos] = useState(false);
-  const [busquedaProducto,      setBusquedaProducto]      = useState("");
-  const [productosCargados,     setProductosCargados]     = useState<ProductoBusqueda[]>([]);
-  const [loadingProductos,      setLoadingProductos]      = useState(false);
-  const [errorProductos,        setErrorProductos]        = useState<string | null>(null);
-  const [guardandoProducto,     setGuardandoProducto]     = useState(false);
-  const [advertenciaDuplicado,  setAdvertenciaDuplicado]  = useState<string | null>(null);
-  const [verificandoDuplicado,  setVerificandoDuplicado]  = useState(false);
+  const [busquedaProducto, setBusquedaProducto] = useState("");
+  const [productosCargados, setProductosCargados] = useState<ProductoBusqueda[]>([]);
+  const [loadingProductos, setLoadingProductos] = useState(false);
+  const [errorProductos, setErrorProductos] = useState<string | null>(null);
+  const [guardandoProducto, setGuardandoProducto] = useState(false);
+  const [advertenciaDuplicado, setAdvertenciaDuplicado] = useState<string | null>(null);
+  const [verificandoDuplicado, setVerificandoDuplicado] = useState(false);
 
   // ── Dropdowns ────────────────────────────────────────────────────────────
-  const [mostrarDropdownCaras,    setMostrarDropdownCaras]    = useState(false);
-  const [mostrarDropdownTintas,   setMostrarDropdownTintas]   = useState(false);
-  const [mostrarDropdownSuaje,    setMostrarDropdownSuaje]    = useState(false);
+  const [mostrarDropdownCaras, setMostrarDropdownCaras] = useState(false);
+  const [mostrarDropdownTintas, setMostrarDropdownTintas] = useState(false);
+  const [mostrarDropdownSuaje, setMostrarDropdownSuaje] = useState(false);
   const [mostrarDropdownColorAsa, setMostrarDropdownColorAsa] = useState(false);
-  const [mostrarDropdownTroquel,  setMostrarDropdownTroquel]  = useState(false);
+  const [mostrarDropdownTroquel, setMostrarDropdownTroquel] = useState(false);
 
   // ── Precios ──────────────────────────────────────────────────────────────
   const [preciosEditadosManualmente, setPreciosEditadosManualmente] = useState<[boolean, boolean, boolean]>([false, false, false]);
-  const [preciosTexto,               setPreciosTexto]               = useState<[string, string, string]>(["", "", ""]);
+  const [preciosTexto, setPreciosTexto] = useState<[string, string, string]>(["", "", ""]);
 
   // ── Color / Pantones ─────────────────────────────────────────────────────
-  const [modoColor,      setModoColor]      = useState<"pantones" | null>("pantones");
+  const [modoColor, setModoColor] = useState<"pantones" | null>("pantones");
   const [inputsPantones, setInputsPantones] = useState<string[]>(Array(1).fill(""));
 
   // ── Cantidad ─────────────────────────────────────────────────────────────
-  const [modoCantidad,    setModoCantidad]    = useState<"unidad" | "kilo">("unidad");
+  const [modoCantidad, setModoCantidad] = useState<"unidad" | "kilo">("unidad");
   const [cantidadesTexto, setCantidadesTexto] = useState<[string, string, string]>(["", "", ""]);
 
   // ── Herramental ──────────────────────────────────────────────────────────
-  const [herramentalExpandido,    setHerramentalExpandido]    = useState(false);
-  const [herramentalDescripcion,  setHerramentalDescripcion]  = useState("");
-  const [herramentalPrecioTexto,  setHerramentalPrecioTexto]  = useState("");
+  const [herramentalExpandido, setHerramentalExpandido] = useState(false);
+  const [herramentalDescripcion, setHerramentalDescripcion] = useState("");
+  const [herramentalPrecioTexto, setHerramentalPrecioTexto] = useState("");
 
   // ── Edición de producto ya agregado ──────────────────────────────────────
   const [editandoProductoIndex, setEditandoProductoIndex] = useState<number | null>(null);
@@ -113,7 +105,9 @@ export default function FormularioSolicitud({
     medidasFormateadas: "",
     idsuaje: null, suajeTipo: null, colorAsaId: null, colorAsaNombre: null,
     idMedidaTroquel: null, medidaTroquelTexto: null,
-    observacion: "", pantones: null, pigmentos: null,
+    observacion: "", descripcion: null,
+    perforacion: false,
+    pantones: null, pigmentos: null,
     modoCantidad: "unidad", herramental_descripcion: null, herramental_precio: null,
   };
 
@@ -126,16 +120,6 @@ export default function FormularioSolicitud({
     medidasFormateadas: "", nombreCompleto: "",
   });
 
-  // ── CP domicilio cliente ─────────────────────────────────────────────────
-  const { buscarCP: buscarCPCliente, cargandoCP: cargandoCPCliente,
-          errorCP: errorCPCliente, setErrorCP: setErrorCPCliente } = useCodigoPostal();
-  const [opcionesCPCliente, setOpcionesCPCliente] = useState<OpcionCP[]>([]);
-
-  // ── CP dirección de envío ────────────────────────────────────────────────
-  const { buscarCP: buscarCPEnvio, cargandoCP: cargandoCPEnvio,
-          errorCP: errorCPEnvio, setErrorCP: setErrorCPEnvio } = useCodigoPostal();
-  const [opcionesCPEnvio, setOpcionesCPEnvio] = useState<OpcionCP[]>([]);
-
   // ── Cálculo de cantidades en bolsas ──────────────────────────────────────
   const { bolsas: cantidadesEnBolsas } = calcularDesdeInput(
     cantidadesTexto, modoCantidad, productoActual.porKilo
@@ -143,9 +127,9 @@ export default function FormularioSolicitud({
 
   const { resultados, loading: calculandoPrecios, error: errorCalculo } = usePreciosBatch({
     cantidades: cantidadesEnBolsas,
-    porKilo:    productoActual.porKilo,
-    tintasId:   productoActual.tintasId,
-    enabled:    cantidadesEnBolsas.some(c => c > 0) && !!productoActual.porKilo,
+    porKilo: productoActual.porKilo,
+    tintasId: productoActual.tintasId,
+    enabled: cantidadesEnBolsas.some(c => c > 0) && !!productoActual.porKilo,
   });
 
   // ═══════════════════════════════════════════════════════════════════════
@@ -227,17 +211,13 @@ export default function FormularioSolicitud({
 
   const cargarCatalogos = async () => {
     try {
-      const [catalogosData, suajesData, regimenesData, metodosData, formasData, coloresAsaData, medidasTroquelData] = await Promise.all([
+      const [catalogosData, suajesData, coloresAsaData, medidasTroquelData] = await Promise.all([
         getCatalogosProduccion(), getSuajes(),
-        getRegimenesFiscales(), getMetodosPago(), getFormasPago(),
         getColoresAsa(), getMedidasTroquel(),
       ]);
       setCaras(catalogosData.caras);
       setTintas(catalogosData.tintas);
       setSuajes(suajesData);
-      setRegimenesFiscales(regimenesData);
-      setMetodosPago(metodosData);
-      setFormasPago(formasData);
       setColoresAsa(coloresAsaData);
       setMedidasTroquel(medidasTroquelData);
     } catch (error) {
@@ -261,35 +241,19 @@ export default function FormularioSolicitud({
     }
   };
 
-  const crearNuevoClienteCompleto = async () => {
-    setCreandoCliente(true);
-    setErrorCrearCliente(null);
-    try {
-      const datosFinales = { ...datosClienteCompleto };
-      if (datosFinales.empresa)           datosFinales.empresa           = datosFinales.empresa.trim();
-      if (datosFinales.correo)            datosFinales.correo            = datosFinales.correo.trim().toLowerCase();
-      if (datosFinales.telefono)          datosFinales.telefono          = datosFinales.telefono.replace(/\D/g, "");
-      if (datosFinales.celular)           datosFinales.celular           = datosFinales.celular.replace(/\D/g, "");
-      if (datosFinales.rfc)               datosFinales.rfc               = datosFinales.rfc.trim().toUpperCase();
-      if (datosFinales.correo_facturacion) datosFinales.correo_facturacion = datosFinales.correo_facturacion.trim().toLowerCase();
-
-      const response = await createCliente(datosFinales);
-      const clienteId = response?.cliente?.id ?? response?.id;
-
-      setDatos(prev => ({
-        ...prev, clienteId,
-        cliente:   datosFinales.atencion  || datosFinales.empresa || "",
-        telefono:  datosFinales.telefono  || "",
-        correo:    datosFinales.correo    || "",
-        empresa:   datosFinales.empresa   || "",
-        impresion: datosFinales.impresion || null,
-      }));
-      setPaso(2);
-    } catch (error: any) {
-      setErrorCrearCliente(error.response?.data?.error || "Error al crear cliente");
-    } finally {
-      setCreandoCliente(false);
-    }
+  const handleSubmitClienteNuevo = async (datosCliente: CreateClienteRequest) => {
+    const response = await createCliente(datosCliente);
+    const clienteId = response?.cliente?.id ?? response?.id;
+    setDatos(prev => ({
+      ...prev,
+      clienteId,
+      cliente: datosCliente.atencion || datosCliente.empresa || "",
+      telefono: datosCliente.telefono || "",
+      correo: datosCliente.correo || "",
+      empresa: datosCliente.empresa || "",
+      impresion: datosCliente.impresion || null,
+    }));
+    setPaso(2);
   };
 
   const seleccionarCliente = async (cliente: ClienteBusqueda) => {
@@ -299,70 +263,42 @@ export default function FormularioSolicitud({
       const completo = await getClienteById(cliente.idclientes);
       setDatos(prev => ({
         ...prev,
-        clienteId:      completo.idclientes,
-        cliente:        completo.atencion        || "",
-        telefono:       completo.telefono        || "",
-        correo:         completo.correo          || "",
-        empresa:        completo.empresa         || "",
-        impresion:      completo.impresion       ?? null,
-        celular:        completo.celular         ?? null,
-        razon_social:   completo.razon_social    ?? null,
-        rfc:            completo.rfc             ?? null,
-        domicilio:      completo.domicilio       ?? null,
-        numero:         completo.numero          ?? null,
-        colonia:        completo.colonia         ?? null,
-        codigo_postal:  completo.codigo_postal   ?? null,
-        poblacion:      completo.poblacion       ?? null,
-        estado_cliente: completo.estado          ?? null,
-        envio_domicilio:      completo.envio_domicilio      ?? null,
-        envio_numero:         completo.envio_numero         ?? null,
-        envio_colonia:        completo.envio_colonia        ?? null,
-        envio_codigo_postal:  completo.envio_codigo_postal  ?? null,
-        envio_poblacion:      completo.envio_poblacion      ?? null,
-        envio_estado:         completo.envio_estado         ?? null,
-        envio_referencia:     completo.envio_referencia     ?? null,
+        clienteId: completo.idclientes,
+        identificar: completo.identificar ?? null,
+        cliente: completo.atencion || "",
+        telefono: completo.telefono || "",
+        correo: completo.correo || "",
+        empresa: completo.empresa || "",
+        impresion: completo.impresion ?? null,
+        celular: completo.celular ?? null,
+        razon_social: completo.razon_social ?? null,
+        rfc: completo.rfc ?? null,
+        domicilio: completo.domicilio ?? null,
+        numero: completo.numero ?? null,
+        colonia: completo.colonia ?? null,
+        codigo_postal: completo.codigo_postal ?? null,
+        poblacion: completo.poblacion ?? null,
+        estado_cliente: completo.estado ?? null,
+        envio_domicilio: completo.envio_domicilio ?? null,
+        envio_numero: completo.envio_numero ?? null,
+        envio_colonia: completo.envio_colonia ?? null,
+        envio_codigo_postal: completo.envio_codigo_postal ?? null,
+        envio_poblacion: completo.envio_poblacion ?? null,
+        envio_estado: completo.envio_estado ?? null,
+        envio_referencia: completo.envio_referencia ?? null,
       }));
     } catch {
       setDatos(prev => ({
         ...prev,
         clienteId: cliente.idclientes,
-        cliente:   cliente.atencion  || "",
-        telefono:  cliente.telefono  || "",
-        correo:    cliente.correo    || "",
-        empresa:   cliente.empresa   || "",
+        identificar: cliente.identificar ?? null,
+        cliente: cliente.atencion || "",
+        telefono: cliente.telefono || "",
+        correo: cliente.correo || "",
+        empresa: cliente.empresa || "",
         impresion: cliente.impresion ?? null,
       }));
     }
-  };
-
-  // ── CP cliente ────────────────────────────────────────────────────────────
-  const handleCodigoPostalClienteChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const valor = e.target.value.replace(/\D/g, "");
-    setDatosClienteCompleto(prev => ({ ...prev, codigo_postal: valor, colonia: "", poblacion: "", estado: "" }));
-    setOpcionesCPCliente([]);
-    setErrorCPCliente(null);
-    if (valor.length === 5) buscarCPCliente(valor).then(setOpcionesCPCliente);
-  };
-
-  const handleSeleccionCPCliente = (colonia: string) => {
-    const opcion = opcionesCPCliente.find(o => o.colonia === colonia);
-    if (!opcion) return;
-    setDatosClienteCompleto(prev => ({ ...prev, colonia: opcion.colonia, poblacion: opcion.poblacion, estado: opcion.estado }));
-  };
-
-  // ── CP envío ──────────────────────────────────────────────────────────────
-  const handleCodigoPostalEnvioClienteChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const valor = e.target.value.replace(/\D/g, "");
-    setDatosClienteCompleto(prev => ({ ...prev, envio_codigo_postal: valor, envio_colonia: "", envio_poblacion: "", envio_estado: "" } as any));
-    setOpcionesCPEnvio([]);
-    setErrorCPEnvio(null);
-    if (valor.length === 5) buscarCPEnvio(valor).then(setOpcionesCPEnvio);
-  };
-
-  const handleSeleccionCPEnvio = (colonia: string) => {
-    const opcion = opcionesCPEnvio.find(o => o.colonia === colonia);
-    if (!opcion) return;
-    setDatosClienteCompleto(prev => ({ ...prev, envio_colonia: opcion.colonia, envio_poblacion: opcion.poblacion, envio_estado: opcion.estado } as any));
   };
 
   // ═══════════════════════════════════════════════════════════════════════
@@ -383,31 +319,33 @@ export default function FormularioSolicitud({
 
   const seleccionarProducto = (producto: ProductoBusqueda) => {
     const medidasMapeadas: Record<MedidaKey, string> = {
-      altura:         producto.altura.toString(),
-      ancho:          producto.ancho.toString(),
-      fuelleFondo:    producto.fuelle_fondo.toString(),
+      altura: producto.altura.toString(),
+      ancho: producto.ancho.toString(),
+      fuelleFondo: producto.fuelle_fondo.toString(),
       fuelleLateral1: producto.fuelle_lateral_izquierdo.toString(),
       fuelleLateral2: producto.fuelle_lateral_derecho.toString(),
-      refuerzo:       producto.refuerzo.toString(),
+      refuerzo: producto.refuerzo.toString(),
     };
     setProductoActual({
-      productoId:         producto.id,
-      nombre:             `${producto.tipo_producto} ${producto.medida} ${producto.material.toLowerCase()}`,
-      cantidades:         [0, 0, 0],
-      kilogramos:         [0, 0, 0],
-      precios:            [0, 0, 0],
-      calibre:            producto.calibre.toString(),
-      tintas:             tintas[0]?.cantidad || 1,
-      tintasId:           tintas[0]?.id       || 1,
-      caras:              caras.find(c => c.id === 2)?.cantidad || 2,
-      carasId:            2,
-      material:           producto.material,
-      medidas:            medidasMapeadas,
+      productoId: producto.id,
+      nombre: `${producto.tipo_producto} ${producto.medida} ${producto.material.toLowerCase()}`,
+      cantidades: [0, 0, 0],
+      kilogramos: [0, 0, 0],
+      precios: [0, 0, 0],
+      calibre: producto.calibre.toString(),
+      tintas: tintas[0]?.cantidad || 1,
+      tintasId: tintas[0]?.id || 1,
+      caras: caras.find(c => c.id === 2)?.cantidad || 2,
+      carasId: 2,
+      material: producto.material,
+      medidas: medidasMapeadas,
+      perforacion: false,
       medidasFormateadas: producto.medida,
-      porKilo:            producto.por_kilo,
+      porKilo: producto.por_kilo,
       idsuaje: null, suajeTipo: null, colorAsaId: null, colorAsaNombre: null,
       pantones: null, pigmentos: null,
-      modoCantidad:       modoCantidad,
+      descripcion: null,
+      modoCantidad: modoCantidad,
       herramental_descripcion: null, herramental_precio: null,
     });
     setCantidadesTexto(["", "", ""]);
@@ -428,15 +366,15 @@ export default function FormularioSolicitud({
       const porKiloCalculado = calcularPorKilo(datosProductoNuevo, catalogos.materiales);
       const productoData: ProductoPlasticoCreate = {
         tipo_producto_plastico_id: datosProductoNuevo.tipoProductoId,
-        material_plastico_id:      datosProductoNuevo.materialId,
-        calibre_id:                datosProductoNuevo.calibreId,
-        altura:       Number(datosProductoNuevo.medidas.altura)        || 0,
-        ancho:        Number(datosProductoNuevo.medidas.ancho)         || 0,
-        fuelle_fondo: Number(datosProductoNuevo.medidas.fuelleFondo)   || 0,
+        material_plastico_id: datosProductoNuevo.materialId,
+        calibre_id: datosProductoNuevo.calibreId,
+        altura: Number(datosProductoNuevo.medidas.altura) || 0,
+        ancho: Number(datosProductoNuevo.medidas.ancho) || 0,
+        fuelle_fondo: Number(datosProductoNuevo.medidas.fuelleFondo) || 0,
         fuelle_latIz: Number(datosProductoNuevo.medidas.fuelleLateral1) || 0,
         fuelle_latDe: Number(datosProductoNuevo.medidas.fuelleLateral2) || 0,
-        refuerzo:     Number(datosProductoNuevo.medidas.refuerzo)      || 0,
-        medida:   datosProductoNuevo.medidasFormateadas,
+        refuerzo: Number(datosProductoNuevo.medidas.refuerzo) || 0,
+        medida: datosProductoNuevo.medidasFormateadas,
         por_kilo: porKiloCalculado ?? 0,
       };
       const response = await crearOObtenerProducto(productoData);
@@ -461,14 +399,14 @@ export default function FormularioSolicitud({
     try {
       const resultado = await checkProductoDuplicado({
         tipo_producto_plastico_id: datosProductoNuevo.tipoProductoId,
-        material_plastico_id:      datosProductoNuevo.materialId,
-        calibre_id:                datosProductoNuevo.calibreId,
-        altura:       Number(m.altura)        || 0,
-        ancho:        Number(m.ancho)         || 0,
-        fuelle_fondo: Number(m.fuelleFondo)   || 0,
+        material_plastico_id: datosProductoNuevo.materialId,
+        calibre_id: datosProductoNuevo.calibreId,
+        altura: Number(m.altura) || 0,
+        ancho: Number(m.ancho) || 0,
+        fuelle_fondo: Number(m.fuelleFondo) || 0,
         fuelle_latIz: Number(m.fuelleLateral1) || 0,
         fuelle_latDe: Number(m.fuelleLateral2) || 0,
-        refuerzo:     Number(m.refuerzo)      || 0,
+        refuerzo: Number(m.refuerzo) || 0,
       });
       if (resultado.existe) setAdvertenciaDuplicado(resultado.detalle ?? null);
     } catch { /* no bloqueamos */ } finally {
@@ -598,15 +536,15 @@ export default function FormularioSolicitud({
 
   // ── Medidas inline ────────────────────────────────────────────────────────
   const construirMedidasFormateadasLocal = (medidas: Record<MedidaKey, string>) => {
-    const verticales   = FORMATO_MEDIDAS.verticales.map(k => medidas[k]).filter(v => v && Number(v) > 0);
+    const verticales = FORMATO_MEDIDAS.verticales.map(k => medidas[k]).filter(v => v && Number(v) > 0);
     const horizontales = FORMATO_MEDIDAS.horizontales.map(k => medidas[k]).filter(v => v && Number(v) > 0);
     if (!verticales.length && !horizontales.length) return "";
     if (!horizontales.length) return verticales.join("+");
-    if (!verticales.length)   return horizontales.join("+");
+    if (!verticales.length) return horizontales.join("+");
     return `${verticales.join("+")}x${horizontales.join("+")}`;
   };
 
-  const tieneLateral     = Number(datosProductoNuevo.medidas.fuelleLateral1) > 0 || Number(datosProductoNuevo.medidas.fuelleLateral2) > 0;
+  const tieneLateral = Number(datosProductoNuevo.medidas.fuelleLateral1) > 0 || Number(datosProductoNuevo.medidas.fuelleLateral2) > 0;
   const tieneFondoORefuerzo = Number(datosProductoNuevo.medidas.fuelleFondo) > 0 || Number(datosProductoNuevo.medidas.refuerzo) > 0;
 
   const setMedidaInline = (key: MedidaKey, value: string) => {
@@ -647,7 +585,7 @@ export default function FormularioSolicitud({
   const MIN_KG = 30;
 
   const getEquivalente = (index: number): string | null => {
-    const n  = cantidadesTexto[index] === "" ? 0 : Number(cantidadesTexto[index]);
+    const n = cantidadesTexto[index] === "" ? 0 : Number(cantidadesTexto[index]);
     const pk = productoActual.porKilo ? Number(productoActual.porKilo) : 0;
     if (!pk || n <= 0) return null;
     if (modoCantidad === "unidad") return `≈ ${(n / pk).toFixed(2)} kg`;
@@ -655,13 +593,13 @@ export default function FormularioSolicitud({
   };
 
   const getErrorKg = (index: number): string | null => {
-    const n  = cantidadesTexto[index] === "" ? 0 : Number(cantidadesTexto[index]);
+    const n = cantidadesTexto[index] === "" ? 0 : Number(cantidadesTexto[index]);
     if (n <= 0) return null;
     const pk = productoActual.porKilo ? Number(productoActual.porKilo) : 0;
-    let kgs  = 0;
-    if (modoCantidad === "kilo")    kgs = n;
-    else if (pk > 0)               kgs = n / pk;
-    else                           return null;
+    let kgs = 0;
+    if (modoCantidad === "kilo") kgs = n;
+    else if (pk > 0) kgs = n / pk;
+    else return null;
     const kgsR = Math.round(kgs * 10000) / 10000;
     if (kgsR < MIN_KG) {
       const faltan = (MIN_KG - kgsR).toFixed(2);
@@ -672,7 +610,7 @@ export default function FormularioSolicitud({
   };
 
   const indicesCantidad = modo === "pedido" ? [0] : [0, 1, 2];
-  const hayErrorKg      = indicesCantidad.some(i => {
+  const hayErrorKg = indicesCantidad.some(i => {
     const v = cantidadesTexto[i];
     if (v === "" || Number(v) <= 0) return false;
     return getErrorKg(i) !== null;
@@ -688,7 +626,7 @@ export default function FormularioSolicitud({
     if (hayErrorKg) { showAlert("Una o más cantidades no cumplen el mínimo de 30 kg."); return; }
 
     const herramentalPrecioFinal = herramentalPrecioTexto !== "" ? parseFloat(herramentalPrecioTexto) || null : null;
-    const herramentalDescFinal   = herramentalDescripcion.trim() || null;
+    const herramentalDescFinal = herramentalDescripcion.trim() || null;
 
     let productoParaAgregar: Producto = {
       ...productoActual, cantidades: cantsBolsas, kilogramos: catsKgs,
@@ -744,10 +682,10 @@ export default function FormularioSolicitud({
     setEditandoProductoIndex(null);
     setProductoActual({
       ...estadoInicialProducto,
-      tintas:   tintas[0]?.cantidad || 1,
-      tintasId: tintas[0]?.id       || 1,
-      caras:    caras.find(c => c.id === 2)?.cantidad || 2,
-      carasId:  2,
+      tintas: tintas[0]?.cantidad || 1,
+      tintasId: tintas[0]?.id || 1,
+      caras: caras.find(c => c.id === 2)?.cantidad || 2,
+      carasId: 2,
     });
     setDatosProductoNuevo({
       tipoProducto: "", tipoProductoId: 0, material: "", materialId: 0, calibre: "", calibreId: 0,
@@ -788,11 +726,6 @@ export default function FormularioSolicitud({
     }, 0);
 
   // ── Navegación pasos ──────────────────────────────────────────────────────
-  const handleSiguientePasoCliente = () => {
-    if (pasoCliente === 1) { setPasoCliente(2); return; }
-    if (pasoCliente === 2) { setPasoCliente(3); return; }
-    crearNuevoClienteCompleto();
-  };
   const handleAvanzarConClienteExistente = () => { if (datos.clienteId) setPaso(2); };
   const handleAtras = () => { if (paso === 2) setPaso(1); };
   const handleSubmit = (e: React.FormEvent) => {
@@ -803,37 +736,13 @@ export default function FormularioSolicitud({
   // ── Helpers JSX ───────────────────────────────────────────────────────────
   const hayProductoSeleccionado =
     (modoProducto === "registrado" && productoActual.nombre) ||
-    (modoProducto === "nuevo"      && productoNuevoListo);
+    (modoProducto === "nuevo" && productoNuevoListo);
 
   const esBopp = productoActual.material?.toUpperCase().includes("BOPP") ||
-                 productoActual.material?.toUpperCase().includes("CELOFAN") ||
-                 productoActual.material?.toUpperCase().includes("CELOFÁN");
+    productoActual.material?.toUpperCase().includes("CELOFAN") ||
+    productoActual.material?.toUpperCase().includes("CELOFÁN");
 
-  const inputClass      = "w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white placeholder-gray-400";
-  const inputClassError = "w-full px-4 py-2 border border-orange-300 rounded-lg focus:ring-2 focus:ring-orange-400 focus:border-transparent text-gray-900 bg-white placeholder-gray-400";
-
-  const inputCliente = (
-    label: string,
-    name: keyof CreateClienteRequest,
-    placeholder: string,
-    opts?: { type?: string; maxLength?: number; soloNumeros?: boolean }
-  ) => (
-    <div>
-      <label className="block text-sm font-medium text-gray-700 mb-2">{label}</label>
-      <input
-        type={opts?.type || "text"}
-        name={name as string}
-        value={(datosClienteCompleto[name] as string) || ""}
-        onChange={e => {
-          const val = opts?.soloNumeros ? e.target.value.replace(/\D/g, "") : e.target.value;
-          setDatosClienteCompleto(prev => ({ ...prev, [name]: val }));
-        }}
-        maxLength={opts?.maxLength}
-        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white placeholder-gray-400"
-        placeholder={placeholder}
-      />
-    </div>
-  );
+  const inputClass = "w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white placeholder-gray-400";
 
   // ═══════════════════════════════════════════════════════════════════════
   // RENDER
@@ -854,25 +763,38 @@ export default function FormularioSolicitud({
               </div>
               <div className="relative">
                 <input type="text" value={busquedaCliente} onChange={e => setBusquedaCliente(e.target.value)}
-                  placeholder="Buscar por N° cliente, nombre, empresa, impresión, teléfono o correo..."
+                  placeholder="Buscar por N° cliente, identificar, nombre, empresa, teléfono o correo..."
                   className="w-full px-4 py-3 pl-11 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 text-gray-900 bg-white" autoFocus />
                 <svg className="w-5 h-5 text-gray-400 absolute left-3 top-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
               </div>
             </div>
             <div className="overflow-y-auto max-h-96">
               {loadingClientes ? (
-                <div className="p-8 text-center"><div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-purple-500 border-t-transparent"></div><p className="mt-4 text-gray-600">Cargando...</p></div>
+                <div className="p-8 text-center">
+                  <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-purple-500 border-t-transparent"></div>
+                  <p className="mt-4 text-gray-600">Cargando...</p>
+                </div>
               ) : errorClientes ? (
-                <div className="p-8 text-center"><p className="text-gray-700">{errorClientes}</p><button onClick={() => cargarClientes(busquedaCliente)} className="mt-4 px-4 py-2 bg-purple-600 text-white rounded-lg">Reintentar</button></div>
+                <div className="p-8 text-center">
+                  <p className="text-gray-700">{errorClientes}</p>
+                  <button onClick={() => cargarClientes(busquedaCliente)} className="mt-4 px-4 py-2 bg-purple-600 text-white rounded-lg">Reintentar</button>
+                </div>
               ) : clientesCargados.length > 0 ? (
                 <div className="divide-y divide-gray-200">
                   {clientesCargados.map(c => (
                     <div key={c.idclientes} onClick={() => seleccionarCliente(c)} className="p-4 hover:bg-purple-50 cursor-pointer transition-colors">
-                      <h4 className="font-semibold text-gray-900">{c.atencion || "Sin nombre"}</h4>
+                      <div className="flex items-center justify-between gap-2">
+                        <h4 className="font-semibold text-gray-900">{c.atencion || "Sin nombre"}</h4>
+                        {c.identificar && (
+                          <span className="flex-shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-700 tracking-wide">
+                            {c.identificar}
+                          </span>
+                        )}
+                      </div>
                       {c.empresa && <p className="text-sm text-gray-600 mt-1">{c.empresa}</p>}
                       <div className="flex gap-4 mt-2 text-sm text-gray-500">
                         {c.telefono && <span>{c.telefono}</span>}
-                        {c.correo   && <span>{c.correo}</span>}
+                        {c.correo && <span>{c.correo}</span>}
                       </div>
                     </div>
                   ))}
@@ -945,6 +867,7 @@ export default function FormularioSolicitud({
       ══════════════════════════════════════════════════════════════════ */}
       <div className={paso === 1 ? "block" : "hidden"}>
         {datos.clienteId ? (
+          // ── Cliente ya seleccionado ──
           <div className="space-y-4">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-gray-900">Cliente seleccionado</h3>
@@ -955,11 +878,18 @@ export default function FormularioSolicitud({
               </button>
             </div>
             <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-              <p className="font-semibold text-gray-900">{datos.cliente || datos.empresa || "Sin nombre"}</p>
+              <div className="flex items-center justify-between gap-2 mb-1">
+                <p className="font-semibold text-gray-900">{datos.cliente || datos.empresa || "Sin nombre"}</p>
+                {datos.identificar && (
+                  <span className="flex-shrink-0 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-purple-200 text-purple-800 tracking-wide">
+                    {datos.identificar}
+                  </span>
+                )}
+              </div>
               {datos.empresa && datos.cliente && <p className="text-sm text-gray-600 mt-1">{datos.empresa}</p>}
               <div className="flex gap-4 mt-2 text-sm text-gray-500">
                 {datos.telefono && <span>{datos.telefono}</span>}
-                {datos.correo   && <span>{datos.correo}</span>}
+                {datos.correo && <span>{datos.correo}</span>}
               </div>
             </div>
             <div className="flex justify-end gap-3 mt-4">
@@ -968,238 +898,22 @@ export default function FormularioSolicitud({
             </div>
           </div>
         ) : (
+          // ── Cliente nuevo — usa FormularioCliente directamente ──
           <div>
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-lg font-semibold text-gray-900">
-                {pasoCliente === 1 ? "Datos del Cliente" : pasoCliente === 2 ? "Datos de Facturación (SAT)" : "Dirección de Envío"}
-              </h3>
+              <h3 className="text-lg font-semibold text-gray-900">Nuevo Cliente</h3>
               <button type="button" onClick={() => setMostrarModalClientes(true)}
                 className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
                 Cliente Existente
               </button>
             </div>
-
-            {/* Sub-stepper cliente */}
-            <div className="flex items-center justify-center mb-6">
-              <div className="flex items-center">
-                {["A","B","C"].map((letra, i) => (
-                  <div key={letra} className="flex items-center">
-                    <div className={`flex items-center justify-center w-8 h-8 rounded-full text-sm ${
-                      pasoCliente === i + 1 ? "bg-blue-600 text-white"
-                      : pasoCliente > i + 1 ? "bg-green-600 text-white"
-                      : "bg-gray-300 text-gray-500"}`}>
-                      {pasoCliente > i + 1 ? "✓" : letra}
-                    </div>
-                    {i < 2 && <div className={`w-16 h-1 ${pasoCliente > i + 1 ? "bg-blue-600" : "bg-gray-300"}`} />}
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="flex justify-center gap-8 -mt-4 mb-5 text-xs text-gray-400">
-              {["Datos","Facturación","Envío"].map((label, i) => (
-                <span key={label} className={pasoCliente === i + 1 ? "text-blue-600 font-semibold" : ""}>{label}</span>
-              ))}
-            </div>
-
-            {errorCrearCliente && (
-              <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
-                <p className="text-red-700 text-sm">{errorCrearCliente}</p>
-              </div>
-            )}
-
-            {/* ── Paso A: Datos ── */}
-            {pasoCliente === 1 && (
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  {inputCliente("Nombre de Empresa", "empresa", "Empresa Ejemplo S.A.")}
-                  {inputCliente("Correo Electrónico", "correo", "contacto@empresa.com")}
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  {inputCliente("Atención (Nombre contacto)", "atencion", "Juan Pérez")}
-                  {inputCliente("Razón Social", "razon_social", "EMPRESA EJEMPLO SA DE CV")}
-                </div>
-                {inputCliente("Impresión / Notas", "impresion", "CocaCola, Abito...")}
-                <div className="grid grid-cols-2 gap-4">
-                  {inputCliente("Teléfono", "telefono", "3312345678", { soloNumeros: true, maxLength: 15 })}
-                  {inputCliente("Celular",  "celular",  "3398765432", { soloNumeros: true, maxLength: 15 })}
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Domicilio</label>
-                  <div className="grid grid-cols-2 gap-4">
-                    {inputCliente("", "domicilio", "Calle")}
-                    {inputCliente("", "numero",    "Número")}
-                  </div>
-                </div>
-                <div className="grid grid-cols-4 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Código Postal
-                      {cargandoCPCliente && <span className="ml-2 text-xs text-blue-500 animate-pulse">Buscando...</span>}
-                    </label>
-                    <input type="text" value={datosClienteCompleto.codigo_postal || ""} onChange={handleCodigoPostalClienteChange}
-                      maxLength={5} className={errorCPCliente ? inputClassError : inputClass} placeholder="44100" />
-                    {errorCPCliente && <p className="text-xs text-orange-600 mt-1">{errorCPCliente}</p>}
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Colonia</label>
-                    {opcionesCPCliente.length > 0 ? (
-                      <select value={datosClienteCompleto.colonia || ""} onChange={e => handleSeleccionCPCliente(e.target.value)} className={inputClass}>
-                        <option value="">Selecciona colonia...</option>
-                        {opcionesCPCliente.map((o, idx) => <option key={`${o.colonia}-${idx}`} value={o.colonia}>{o.colonia}</option>)}
-                      </select>
-                    ) : (
-                      <input type="text" value={datosClienteCompleto.colonia || ""}
-                        onChange={e => setDatosClienteCompleto(prev => ({ ...prev, colonia: e.target.value }))}
-                        className={inputClass} placeholder="Colonia" />
-                    )}
-                  </div>
-                  {inputCliente("Población / Municipio", "poblacion", "Guadalajara")}
-                  {inputCliente("Estado", "estado", "Jalisco")}
-                </div>
-              </div>
-            )}
-
-            {/* ── Paso B: Facturación ── */}
-            {pasoCliente === 2 && (
-              <div className="space-y-4">
-                <p className="text-sm text-gray-400 -mt-2 mb-4">Todos los campos son opcionales — puedes completarlos después desde el catálogo de clientes.</p>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">RFC</label>
-                    <input type="text" value={datosClienteCompleto.rfc || ""}
-                      onChange={e => setDatosClienteCompleto(prev => ({ ...prev, rfc: e.target.value.toUpperCase() }))}
-                      maxLength={13} className={inputClass} placeholder="XAXX010101000" />
-                  </div>
-                  {inputCliente("Uso de CFDI", "uso_cfdi", "G03")}
-                </div>
-                {inputCliente("Correo de Facturación", "correo_facturacion", "facturacion@empresa.com")}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Moneda</label>
-                  <select value={datosClienteCompleto.moneda || "MXN"} onChange={e => setDatosClienteCompleto(prev => ({ ...prev, moneda: e.target.value }))} className={inputClass}>
-                    <option value="">Seleccionar moneda...</option>
-                    {MONEDAS.map(m => <option key={m.codigo} value={m.codigo}>{m.nombre}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Régimen Fiscal</label>
-                  <select value={datosClienteCompleto.regimen_fiscal_idregimen_fiscal || 0}
-                    onChange={e => setDatosClienteCompleto(prev => ({ ...prev, regimen_fiscal_idregimen_fiscal: parseInt(e.target.value) }))} className={inputClass}>
-                    <option value={0}>Seleccionar régimen fiscal...</option>
-                    {regimenesFiscales.map(r => <option key={r.idregimen_fiscal} value={r.idregimen_fiscal}>({r.codigo}) {r.tipo_regimen}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Método de Pago</label>
-                  <select value={datosClienteCompleto.metodo_pago_idmetodo_pago || 0}
-                    onChange={e => setDatosClienteCompleto(prev => ({ ...prev, metodo_pago_idmetodo_pago: parseInt(e.target.value) }))} className={inputClass}>
-                    <option value={0}>Seleccionar método de pago...</option>
-                    {metodosPago.map(m => <option key={m.idmetodo_pago} value={m.idmetodo_pago}>({m.codigo}) {m.tipo_pago}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Forma de Pago</label>
-                  <select value={datosClienteCompleto.forma_pago_idforma_pago || 0}
-                    onChange={e => setDatosClienteCompleto(prev => ({ ...prev, forma_pago_idforma_pago: parseInt(e.target.value) }))} className={inputClass}>
-                    <option value={0}>Seleccionar forma de pago...</option>
-                    {formasPago.map(f => <option key={f.idforma_pago} value={f.idforma_pago}>({f.codigo}) {f.tipo_forma}</option>)}
-                  </select>
-                </div>
-              </div>
-            )}
-
-            {/* ── Paso C: Envío ── */}
-            {pasoCliente === 3 && (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-sm text-gray-400">Indica la dirección de entrega. Si es la misma que el domicilio registrado, usa el botón de la derecha.</p>
-                  <button type="button"
-                    onClick={() => setDatosClienteCompleto(prev => ({
-                      ...prev,
-                      envio_domicilio:     prev.domicilio     || "",
-                      envio_numero:        prev.numero        || "",
-                      envio_colonia:       prev.colonia       || "",
-                      envio_codigo_postal: prev.codigo_postal || "",
-                      envio_poblacion:     prev.poblacion     || "",
-                      envio_estado:        prev.estado        || "",
-                    }))}
-                    className="flex-shrink-0 flex items-center gap-2 px-3 py-1.5 bg-indigo-50 border border-indigo-300 text-indigo-700 rounded-lg hover:bg-indigo-100 transition text-xs font-medium ml-4">
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                    </svg>
-                    Misma Dirección
-                  </button>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Domicilio de Envío</label>
-                  <div className="grid grid-cols-3 gap-4">
-                    {inputCliente("", "envio_domicilio" as any, "Calle")}
-                    {inputCliente("", "envio_numero"    as any, "Número")}
-                    {inputCliente("", "envio_colonia"   as any, "Colonia")}
-                  </div>
-                </div>
-                <div className="grid grid-cols-4 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Código Postal
-                      {cargandoCPEnvio && <span className="ml-2 text-xs text-blue-500 animate-pulse">Buscando...</span>}
-                    </label>
-                    <div className="relative">
-                      <input type="text" value={(datosClienteCompleto as any).envio_codigo_postal || ""}
-                        onChange={handleCodigoPostalEnvioClienteChange} maxLength={5}
-                        className={errorCPEnvio ? inputClassError : inputClass} placeholder="44100" />
-                      {cargandoCPEnvio && (
-                        <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                          <svg className="w-4 h-4 text-blue-500 animate-spin" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
-                          </svg>
-                        </div>
-                      )}
-                    </div>
-                    {errorCPEnvio && <p className="text-xs text-orange-600 mt-1">{errorCPEnvio}</p>}
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Colonia</label>
-                    {opcionesCPEnvio.length > 1 ? (
-                      <select value={(datosClienteCompleto as any).envio_colonia || ""} onChange={e => handleSeleccionCPEnvio(e.target.value)} className={inputClass}>
-                        <option value="">Selecciona colonia...</option>
-                        {opcionesCPEnvio.map((o, idx) => <option key={`${o.colonia}-${idx}`} value={o.colonia}>{o.colonia}</option>)}
-                      </select>
-                    ) : (
-                      <input type="text" value={(datosClienteCompleto as any).envio_colonia || ""}
-                        onChange={e => setDatosClienteCompleto(prev => ({ ...prev, envio_colonia: e.target.value } as any))}
-                        className={inputClass} placeholder="Colonia" />
-                    )}
-                  </div>
-                  {inputCliente("Municipio / Población", "envio_poblacion" as any, "Guadalajara")}
-                  {inputCliente("Estado", "envio_estado" as any, "Jalisco")}
-                </div>
-                {inputCliente("Referencia (opcional)", "envio_referencia" as any, 'Ej. "Bodega trasera"...')}
-              </div>
-            )}
-
-            <div className="flex justify-end gap-3 mt-6">
-              {pasoCliente === 1 ? (
-                <>
-                  <button type="button" onClick={onCancel} className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">Cancelar</button>
-                  <button type="button" onClick={handleSiguientePasoCliente} className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Siguiente</button>
-                </>
-              ) : pasoCliente === 2 ? (
-                <>
-                  <button type="button" onClick={() => setPasoCliente(1)} className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">Atrás</button>
-                  <button type="button" onClick={handleSiguientePasoCliente} className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Siguiente</button>
-                </>
-              ) : (
-                <>
-                  <button type="button" onClick={() => setPasoCliente(2)} disabled={creandoCliente} className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">Atrás</button>
-                  <button type="button" onClick={handleSiguientePasoCliente} disabled={creandoCliente}
-                    className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 flex items-center gap-2">
-                    {creandoCliente ? <><div className="inline-block animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>Guardando...</> : "Crear Cliente y Continuar"}
-                  </button>
-                </>
-              )}
-            </div>
+            <FormularioCliente
+              onSubmit={handleSubmitClienteNuevo}
+              onCancel={onCancel}
+            />
           </div>
         )}
       </div>
@@ -1275,18 +989,18 @@ export default function FormularioSolicitud({
                     <img src={CONFIG_PRODUCTOS[datosProductoNuevo.tipoProducto].imagen} alt={datosProductoNuevo.tipoProducto}
                       className="max-w-[220px] max-h-[340px] object-contain" />
                     {CONFIG_PRODUCTOS[datosProductoNuevo.tipoProducto].medidas.map(m => {
-                      const esLateral       = m.key === "fuelleLateral1" || m.key === "fuelleLateral2";
-                      const esFondoORefuerzo = m.key === "fuelleFondo"    || m.key === "refuerzo";
-                      const bloqueado       = (esLateral && tieneFondoORefuerzo) || (esFondoORefuerzo && tieneLateral);
+                      const esLateral = m.key === "fuelleLateral1" || m.key === "fuelleLateral2";
+                      const esFondoORefuerzo = m.key === "fuelleFondo" || m.key === "refuerzo";
+                      const bloqueado = (esLateral && tieneFondoORefuerzo) || (esFondoORefuerzo && tieneLateral);
                       return (
                         <div key={m.key} className={`absolute flex items-center gap-1
-                          ${m.position === "top"          ? "top-4 left-1/2 -translate-x-1/2 flex-col"         : ""}
-                          ${m.position === "left"         ? "left-6 top-1/2 -translate-y-1/2 flex-row"         : ""}
-                          ${m.position === "bottom"       ? "bottom-4 left-1/2 -translate-x-1/2 flex-col-reverse" : ""}
-                          ${m.position === "right"        ? "right-6 top-1/2 -translate-y-1/2 flex-row-reverse" : ""}
-                          ${m.position === "right-top"    ? "right-6 top-16 flex-row-reverse"                   : ""}
-                          ${m.position === "left-bottom"  ? "left-6 bottom-16 flex-row"                         : ""}
-                          ${m.position === "top-inside"   ? "top-16 right-6 flex-col"                           : ""}`}>
+                          ${m.position === "top" ? "top-4 left-1/2 -translate-x-1/2 flex-col" : ""}
+                          ${m.position === "left" ? "left-6 top-1/2 -translate-y-1/2 flex-row" : ""}
+                          ${m.position === "bottom" ? "bottom-4 left-1/2 -translate-x-1/2 flex-col-reverse" : ""}
+                          ${m.position === "right" ? "right-6 top-1/2 -translate-y-1/2 flex-row-reverse" : ""}
+                          ${m.position === "right-top" ? "right-6 top-16 flex-row-reverse" : ""}
+                          ${m.position === "left-bottom" ? "left-6 bottom-16 flex-row" : ""}
+                          ${m.position === "top-inside" ? "top-16 right-6 flex-col" : ""}`}>
                           <label className={`text-xs font-medium whitespace-nowrap ${bloqueado ? "text-gray-300" : "text-gray-700"}`}>
                             {m.label}
                             {esLateral && !bloqueado && <span className="ml-1 text-blue-400 text-xs" title="Se sincroniza con el otro fuelle lateral">⇄</span>}
@@ -1699,23 +1413,69 @@ export default function FormularioSolicitud({
                 )}
               </div>
 
+              {/* Descripción del producto */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Descripción{" "}
+                  <span className="text-xs text-gray-400 font-normal">
+                    (opcional — ej: 1er Grado, Talla M, Color Rojo...)
+                  </span>
+                </label>
+                <input
+                  type="text"
+                  value={productoActual.descripcion || ""}
+                  onChange={e => setProductoActual(prev => ({ ...prev, descripcion: e.target.value || null }))}
+                  className={inputClass}
+                  placeholder="Ej: 1er Grado, Talla M, Color Rojo, Variante A..."
+                  maxLength={150}
+                />
+                {productoActual.descripcion && (
+                  <p className="mt-1 text-xs text-blue-600 font-medium">✓ Se mostrará como etiqueta identificadora del producto</p>
+                )}
+              </div>
+
+              {/* Perforación — solo bolsa plana */}
+              {(() => {
+                const nombreTipo = (modoProducto === "nuevo" ? datosProductoNuevo.tipoProducto : productoActual.nombre).toLowerCase();
+                const esBolsaPlana = nombreTipo.includes("bolsa plana");
+                if (!esBolsaPlana) return null;
+                return (
+                  <div className="flex items-center gap-3 py-3 px-4 bg-sky-50 border border-sky-200 rounded-lg">
+                    <input type="checkbox" id="chk-perforacion" checked={productoActual.perforacion ?? false}
+                      onChange={e => setProductoActual(prev => ({ ...prev, perforacion: e.target.checked }))}
+                      className="w-5 h-5 rounded border-sky-400 text-sky-600 focus:ring-sky-400 cursor-pointer" />
+                    <label htmlFor="chk-perforacion" className="flex items-center gap-2 cursor-pointer select-none">
+                      <span className="text-sky-700 font-semibold text-sm">Perforación</span>
+                      <span className="text-sky-500 text-xs">(bolsa con perforación)</span>
+                    </label>
+                    {productoActual.perforacion && (
+                      <span className="ml-auto inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-sky-200 text-sky-800">✓ Con perforación</span>
+                    )}
+                  </div>
+                );
+              })()}
+
               {/* Observaciones */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Observaciones del producto (Opcional)</label>
-                <textarea value={productoActual.observacion || ""} onChange={e => setProductoActual(prev => ({ ...prev, observacion: e.target.value }))} rows={3}
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Observaciones del producto <span className="text-xs text-gray-400 font-normal">(Opcional)</span>
+                </label>
+                <textarea
+                  value={productoActual.observacion || ""}
+                  onChange={e => setProductoActual(prev => ({ ...prev, observacion: e.target.value }))}
+                  rows={3}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white"
-                  placeholder="Ej: Impresión a 2 colores, acabado mate, etc." />
+                  placeholder="Ej: Impresión a 2 colores, acabado mate, etc."
+                />
               </div>
 
               <button type="button" onClick={handleAgregarProducto} disabled={guardandoProducto || hayErrorKg}
                 className={`w-full px-6 py-3 rounded-lg font-semibold flex items-center justify-center gap-2 ${guardandoProducto || hayErrorKg ? "bg-gray-400 cursor-not-allowed text-white" : editandoProductoIndex !== null ? "bg-blue-600 text-white hover:bg-blue-700" : "bg-green-600 text-white hover:bg-green-700"}`}>
                 {guardandoProducto
                   ? <><div className="inline-block animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>Guardando...</>
-                  : hayErrorKg
-                    ? "⚠ Corrige las cantidades (mín. 30 kg)"
-                    : editandoProductoIndex !== null
-                      ? "💾 Guardar cambios del producto"
-                      : "+ Agregar Producto"}
+                  : hayErrorKg ? "⚠ Corrige las cantidades (mín. 30 kg)"
+                  : editandoProductoIndex !== null ? "💾 Guardar cambios del producto"
+                  : "+ Agregar Producto"}
               </button>
             </div>
           )}
@@ -1729,10 +1489,18 @@ export default function FormularioSolicitud({
               {datos.productos.map((prod, index) => (
                 <div key={index} className="flex items-start justify-between bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
                   <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
                       <p className="font-semibold text-gray-900">{prod.nombre}</p>
+                      {prod.descripcion && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800 border border-purple-200">
+                          {prod.descripcion}
+                        </span>
+                      )}
                       {prod.modoCantidad === "kilo" && (
                         <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700 border border-emerald-200">Por kilo</span>
+                      )}
+                      {prod.perforacion && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-sky-100 text-sky-700 border border-sky-200">Perforada</span>
                       )}
                     </div>
                     <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-600">
@@ -1740,11 +1508,11 @@ export default function FormularioSolicitud({
                       <span>Calibre: {prod.calibre}</span>
                       <span>Tintas: {prod.tintas}</span>
                       <span>Caras: {prod.caras}</span>
-                      {prod.suajeTipo      && <span className="text-blue-600 font-medium">Suaje: {prod.suajeTipo}</span>}
+                      {prod.suajeTipo && <span className="text-blue-600 font-medium">Suaje: {prod.suajeTipo}</span>}
                       {prod.colorAsaNombre && <span className="text-teal-600 font-medium capitalize">🎨 Asa: {prod.colorAsaNombre}</span>}
                       {prod.medidaTroquelTexto && <span className="text-violet-600 font-medium">📐 Troquel: {prod.medidaTroquelTexto}</span>}
-                      {prod.pantones      && <span className="text-purple-600 font-medium">🎨 {prod.pantones}</span>}
-                      {prod.pigmentos     && <span className="text-orange-600 font-medium">🧪 {prod.pigmentos}</span>}
+                      {prod.pantones && <span className="text-purple-600 font-medium">🎨 {prod.pantones}</span>}
+                      {prod.pigmentos && <span className="text-orange-600 font-medium">🧪 {prod.pigmentos}</span>}
                     </div>
                     <div className="mt-2 space-y-1">
                       {(modo === "pedido" ? [0] : [0, 1, 2]).map(i => {
@@ -1752,9 +1520,9 @@ export default function FormularioSolicitud({
                         if (!cant || cant <= 0) return null;
                         const pk = Number(prod.porKilo || 1);
                         if (prod.modoCantidad === "kilo") {
-                          const kgs     = prod.kilogramos[i];
+                          const kgs = prod.kilogramos[i];
                           const precioKg = Math.round(prod.precios[i] * pk * 100) / 100;
-                          const importe  = Math.round(kgs * precioKg * 100) / 100;
+                          const importe = Math.round(kgs * precioKg * 100) / 100;
                           return <p key={i} className="text-sm text-gray-700">{kgs} kg ({cant.toLocaleString()} bolsas) × ${precioKg.toFixed(2)}/kg = ${importe.toFixed(2)}</p>;
                         }
                         const importe = Math.round(cant * prod.precios[i] * 100) / 100;
@@ -1778,16 +1546,9 @@ export default function FormularioSolicitud({
                       </div>
                     )}
                   </div>
-                  {/* Botones editar y eliminar */}
                   <div className="ml-4 flex items-center gap-2 flex-shrink-0">
-                    <button type="button" onClick={() => handleEditarProducto(index)}
-                      className="text-blue-500 hover:text-blue-700 text-lg" title="Editar producto">
-                      ✏️
-                    </button>
-                    <button type="button" onClick={() => handleEliminarProducto(index)}
-                      className="text-red-600 hover:text-red-800 font-bold text-xl" title="Eliminar producto">
-                      ✕
-                    </button>
+                    <button type="button" onClick={() => handleEditarProducto(index)} className="text-blue-500 hover:text-blue-700 text-lg" title="Editar producto">✏️</button>
+                    <button type="button" onClick={() => handleEliminarProducto(index)} className="text-red-600 hover:text-red-800 font-bold text-xl" title="Eliminar producto">✕</button>
                   </div>
                 </div>
               ))}
@@ -1801,13 +1562,13 @@ export default function FormularioSolicitud({
           </div>
         )}
 
-        {/* Sin IVA */}
+        {/* Remisión */}
         <div className="flex items-center gap-3 py-3 px-4 bg-emerald-50 border border-emerald-200 rounded-lg mb-4">
           <input type="checkbox" id="chk-sin-iva" checked={datos.sin_iva ?? false}
             onChange={e => setDatos(prev => ({ ...prev, sin_iva: e.target.checked }))}
             className="w-5 h-5 rounded border-emerald-400 text-emerald-600 focus:ring-emerald-400 cursor-pointer" />
           <label htmlFor="chk-sin-iva" className="flex items-center gap-2 cursor-pointer select-none">
-            <span className="text-emerald-700 font-semibold text-sm">Sin IVA</span>
+            <span className="text-emerald-700 font-semibold text-sm">Remisión</span>
             <span className="text-emerald-500 text-xs">(exento de IVA en todo el proceso)</span>
           </label>
         </div>

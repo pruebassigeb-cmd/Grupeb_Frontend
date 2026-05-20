@@ -1,15 +1,15 @@
 import { useState, useEffect, useRef } from "react";
-import type { Archivo, CarpetaFrontend, Estadisticas } from "../services/archivos.service";
-import { subirArchivo, listarArchivos, eliminarArchivo, CARPETAS_LABELS, obtenerEstadisticas } from "../services/archivos.service";
+import type { Archivo, CarpetaFrontend, Estadisticas, SubcarpetaPDF } from "../services/archivos.service";
+import { subirArchivo, listarArchivos, eliminarArchivo, CARPETAS_LABELS, obtenerEstadisticas, SUBCARPETAS_PDF } from "../services/archivos.service";
 import { verificarCodigo } from "../services/backup.service";
 import Dashboard from "../layouts/Sidebar";
 import { showAlert } from './CustomAlert';
 import { showConfirm } from './CustomConfirm';
 import { useAuth } from "../context/AuthContext";
 
-type Vista       = "carpetas" | "archivos";
-type OrdenTipo   = "fecha_desc" | "fecha_asc" | "nombre_asc" | "nombre_desc" | "tamano_asc" | "tamano_desc" | "tipo_asc";
-type AgrupaTipo  = "ninguno" | "semana" | "mes" | "año";
+type Vista      = "carpetas" | "subcarpetas" | "archivos";
+type OrdenTipo  = "fecha_desc" | "fecha_asc" | "nombre_asc" | "nombre_desc" | "tamano_asc" | "tamano_desc" | "tipo_asc";
+type AgrupaTipo = "ninguno" | "semana" | "mes" | "año";
 
 const CARPETAS_OPTIONS: { value: CarpetaFrontend; label: string }[] = [
   { value: "disenos",      label: "Diseños"         },
@@ -18,8 +18,8 @@ const CARPETAS_OPTIONS: { value: CarpetaFrontend; label: string }[] = [
   { value: "backups",      label: "Backups BD"      },
 ];
 
-// Carpetas que requieren código de admin para abrirse
 const CARPETAS_PROTEGIDAS: CarpetaFrontend[] = ["backups"];
+const CARPETAS_CON_SUBCARPETAS: CarpetaFrontend[] = ["pdfs"];
 
 const ORDEN_OPTIONS: { value: OrdenTipo; label: string }[] = [
   { value: "fecha_desc",  label: "Fecha: más reciente" },
@@ -38,9 +38,7 @@ const AGRUPA_OPTIONS: { value: AgrupaTipo; label: string }[] = [
   { value: "año",     label: "Por año"     },
 ];
 
-// ─────────────────────────────────────────────────────────
-// Modal de código para carpetas protegidas
-// ─────────────────────────────────────────────────────────
+// ── Modal código carpeta protegida ──────────────────────────
 interface ModalCodigoProps {
   onConfirmar: (codigo: string) => Promise<void>;
   onCerrar:    () => void;
@@ -77,17 +75,12 @@ function ModalCodigoCarpeta({ onConfirmar, onCerrar }: ModalCodigoProps) {
           </div>
           <div>
             <h2 className="text-sm font-bold text-gray-900">Carpeta protegida</h2>
-            <p className="text-xs text-gray-500 mt-0.5">
-              Ingresa tu código de administrador para acceder a <strong>Backups BD</strong>
-            </p>
+            <p className="text-xs text-gray-500 mt-0.5">Ingresa tu código de administrador para acceder a <strong>Backups BD</strong></p>
           </div>
         </div>
-
         <div className="px-6 py-5 space-y-4">
           <div className="space-y-1.5">
-            <label className="block text-sm font-semibold text-gray-700">
-              Código de administrador
-            </label>
+            <label className="block text-sm font-semibold text-gray-700">Código de administrador</label>
             <div className="relative">
               <input
                 type={mostrar ? "text" : "password"}
@@ -100,11 +93,8 @@ function ModalCodigoCarpeta({ onConfirmar, onCerrar }: ModalCodigoProps) {
                   error ? "border-red-300 focus:ring-red-200" : "border-gray-200 focus:ring-amber-300"
                 }`}
               />
-              <button
-                type="button"
-                onClick={() => setMostrar(v => !v)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-              >
+              <button type="button" onClick={() => setMostrar(v => !v)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
                 {mostrar ? (
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
@@ -130,20 +120,13 @@ function ModalCodigoCarpeta({ onConfirmar, onCerrar }: ModalCodigoProps) {
             )}
           </div>
         </div>
-
         <div className="px-6 pb-5 flex gap-3">
-          <button
-            onClick={onCerrar}
-            disabled={cargando}
-            className="flex-1 py-2.5 border border-gray-300 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-50 disabled:opacity-50 transition-colors"
-          >
+          <button onClick={onCerrar} disabled={cargando}
+            className="flex-1 py-2.5 border border-gray-300 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-50 disabled:opacity-50 transition-colors">
             Cancelar
           </button>
-          <button
-            onClick={handleSubmit}
-            disabled={cargando || !codigo.trim()}
-            className="flex-1 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
-          >
+          <button onClick={handleSubmit} disabled={cargando || !codigo.trim()}
+            className="flex-1 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2">
             {cargando ? (
               <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
@@ -165,9 +148,7 @@ function ModalCodigoCarpeta({ onConfirmar, onCerrar }: ModalCodigoProps) {
   );
 }
 
-// ─────────────────────────────────────────────────────────
-// Helpers de ordenado y agrupado
-// ─────────────────────────────────────────────────────────
+// ── Helpers ──────────────────────────────────────────────────
 const ordenarArchivos = (archivos: Archivo[], orden: OrdenTipo): Archivo[] => {
   return [...archivos].sort((a, b) => {
     switch (orden) {
@@ -200,10 +181,7 @@ const getClaveGrupo = (fecha: string, agrupacion: AgrupaTipo): string => {
   return "Todos";
 };
 
-const agruparArchivos = (
-  archivos: Archivo[],
-  agrupacion: AgrupaTipo
-): { clave: string; items: Archivo[] }[] => {
+const agruparArchivos = (archivos: Archivo[], agrupacion: AgrupaTipo): { clave: string; items: Archivo[] }[] => {
   if (agrupacion === "ninguno") return [{ clave: "", items: archivos }];
   const mapa = new Map<string, Archivo[]>();
   for (const archivo of archivos) {
@@ -214,9 +192,7 @@ const agruparArchivos = (
   return Array.from(mapa.entries()).map(([clave, items]) => ({ clave, items }));
 };
 
-// ─────────────────────────────────────────────────────────
-// Componente principal
-// ─────────────────────────────────────────────────────────
+// ── Componente principal ─────────────────────────────────────
 export default function GestorArchivos() {
   const { user } = useAuth();
 
@@ -239,29 +215,28 @@ export default function GestorArchivos() {
     );
   }
 
-  const [archivos,         setArchivos]         = useState<Archivo[]>([]);
-  const [estadisticas,     setEstadisticas]     = useState<Estadisticas | null>(null);
-  const [subiendo,         setSubiendo]         = useState(false);
-  const [cargando,         setCargando]         = useState(true);
-  const [eliminando,       setEliminando]       = useState(false);
-  const [vista,            setVista]            = useState<Vista>("carpetas");
-  const [carpetaActiva,    setCarpetaActiva]    = useState<CarpetaFrontend | null>(null);
-  const [carpetaSeleccion, setCarpetaSeleccion] = useState<CarpetaFrontend>("disenos");
-  const [modalSubir,       setModalSubir]       = useState(false);
-  const [modalEliminar,    setModalEliminar]    = useState(false);
-  const [confirmTexto,     setConfirmTexto]     = useState("");
-  const [archivosModal,    setArchivosModal]    = useState<File[]>([]);
-  const [seleccionados,    setSeleccionados]    = useState<Set<string>>(new Set());
-  const [modoSeleccion,    setModoSeleccion]    = useState(false);
-  const [orden,            setOrden]            = useState<OrdenTipo>("fecha_desc");
-  const [agrupacion,       setAgrupacion]       = useState<AgrupaTipo>("ninguno");
-  const [busqueda,         setBusqueda]         = useState("");
-  const [mostrarFiltros,   setMostrarFiltros]   = useState(false);
-  const [mostrarAgrupa,    setMostrarAgrupa]    = useState(false);
-  const [gruposColapsados, setGruposColapsados] = useState<Set<string>>(new Set());
-
-  // ── Protección de carpeta backups ──
-  // Guardamos qué carpetas protegidas ya fueron desbloqueadas en esta sesión
+  const [archivos,              setArchivos]              = useState<Archivo[]>([]);
+  const [estadisticas,          setEstadisticas]          = useState<Estadisticas | null>(null);
+  const [subiendo,              setSubiendo]              = useState(false);
+  const [cargando,              setCargando]              = useState(true);
+  const [eliminando,            setEliminando]            = useState(false);
+  const [vista,                 setVista]                 = useState<Vista>("carpetas");
+  const [carpetaActiva,         setCarpetaActiva]         = useState<CarpetaFrontend | null>(null);
+  const [subcarpetaActiva,      setSubcarpetaActiva]      = useState<SubcarpetaPDF | null>(null);
+  const [carpetaSeleccion,      setCarpetaSeleccion]      = useState<CarpetaFrontend>("disenos");
+  const [subcarpetaSeleccion,   setSubcarpetaSeleccion]   = useState<SubcarpetaPDF | null>(null);
+  const [modalSubir,            setModalSubir]            = useState(false);
+  const [modalEliminar,         setModalEliminar]         = useState(false);
+  const [confirmTexto,          setConfirmTexto]          = useState("");
+  const [archivosModal,         setArchivosModal]         = useState<File[]>([]);
+  const [seleccionados,         setSeleccionados]         = useState<Set<string>>(new Set());
+  const [modoSeleccion,         setModoSeleccion]         = useState(false);
+  const [orden,                 setOrden]                 = useState<OrdenTipo>("fecha_desc");
+  const [agrupacion,            setAgrupacion]            = useState<AgrupaTipo>("ninguno");
+  const [busqueda,              setBusqueda]              = useState("");
+  const [mostrarFiltros,        setMostrarFiltros]        = useState(false);
+  const [mostrarAgrupa,         setMostrarAgrupa]         = useState(false);
+  const [gruposColapsados,      setGruposColapsados]      = useState<Set<string>>(new Set());
   const [carpetasDesbloqueadas, setCarpetasDesbloqueadas] = useState<Set<CarpetaFrontend>>(new Set());
   const [modalCodigoCarpeta,    setModalCodigoCarpeta]    = useState<CarpetaFrontend | null>(null);
 
@@ -297,7 +272,7 @@ export default function GestorArchivos() {
     setSeleccionados(new Set());
     setModoSeleccion(false);
     setGruposColapsados(new Set());
-  }, [carpetaActiva, vista]);
+  }, [carpetaActiva, subcarpetaActiva, vista]);
 
   useEffect(() => { setGruposColapsados(new Set()); }, [agrupacion]);
 
@@ -310,7 +285,6 @@ export default function GestorArchivos() {
     });
   };
 
-  // ── Abrir carpeta: si es protegida y no está desbloqueada, pedir código ──
   const abrirCarpeta = (carpeta: CarpetaFrontend) => {
     if (CARPETAS_PROTEGIDAS.includes(carpeta) && !carpetasDesbloqueadas.has(carpeta)) {
       setModalCodigoCarpeta(carpeta);
@@ -321,28 +295,49 @@ export default function GestorArchivos() {
 
   const _abrirCarpetaDirecta = (carpeta: CarpetaFrontend) => {
     setCarpetaActiva(carpeta);
+    setSubcarpetaActiva(null);
+    setBusqueda("");
+    setOrden("fecha_desc");
+    setAgrupacion("ninguno");
+    // Si tiene subcarpetas muestra la vista de subcarpetas, si no va directo a archivos
+    if (CARPETAS_CON_SUBCARPETAS.includes(carpeta)) {
+      setVista("subcarpetas");
+    } else {
+      setVista("archivos");
+    }
+  };
+
+  const abrirSubcarpeta = (subcarpeta: SubcarpetaPDF) => {
+    setSubcarpetaActiva(subcarpeta);
     setVista("archivos");
     setBusqueda("");
     setOrden("fecha_desc");
     setAgrupacion("ninguno");
   };
 
-  const handleVerificarCodigoCarpeta = async (codigo: string) => {
-    if (!modalCodigoCarpeta) return;
-    // Reutilizamos el endpoint de verificación de backups
-    await verificarCodigo(codigo); // lanza error si es incorrecto
-    // Si llegamos aquí el código es correcto
-    setCarpetasDesbloqueadas(prev => new Set(prev).add(modalCodigoCarpeta));
-    setModalCodigoCarpeta(null);
-    _abrirCarpetaDirecta(modalCodigoCarpeta);
-  };
-
   const volverACarpetas = () => {
     setCarpetaActiva(null);
+    setSubcarpetaActiva(null);
     setVista("carpetas");
     setBusqueda("");
     setSeleccionados(new Set());
     setModoSeleccion(false);
+  };
+
+  const volverASubcarpetas = () => {
+    setSubcarpetaActiva(null);
+    setVista("subcarpetas");
+    setBusqueda("");
+    setSeleccionados(new Set());
+    setModoSeleccion(false);
+  };
+
+  const handleVerificarCodigoCarpeta = async (codigo: string) => {
+    if (!modalCodigoCarpeta) return;
+    await verificarCodigo(codigo);
+    setCarpetasDesbloqueadas(prev => new Set(prev).add(modalCodigoCarpeta));
+    setModalCodigoCarpeta(null);
+    _abrirCarpetaDirecta(modalCodigoCarpeta);
   };
 
   const handleSeleccionArchivos = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -356,11 +351,12 @@ export default function GestorArchivos() {
     setSubiendo(true);
     try {
       for (const file of archivosModal) {
-        await subirArchivo(file, carpetaSeleccion);
+        await subirArchivo(file, carpetaSeleccion, subcarpetaSeleccion ?? undefined);
       }
       await cargarArchivos();
       setModalSubir(false);
       setArchivosModal([]);
+      setSubcarpetaSeleccion(null);
     } catch (error) {
       console.error("Error al subir:", error);
       showAlert("Error al subir archivo");
@@ -394,12 +390,8 @@ export default function GestorArchivos() {
   const descargarSeleccionados = () => {
     archivos.filter(a => seleccionados.has(a.id_archivo)).forEach(archivo => {
       const link = document.createElement("a");
-      link.href     = archivo.url;
-      link.target   = "_blank";
-      link.download = archivo.nombre;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      link.href = archivo.url; link.target = "_blank"; link.download = archivo.nombre;
+      document.body.appendChild(link); link.click(); document.body.removeChild(link);
     });
   };
 
@@ -436,32 +428,44 @@ export default function GestorArchivos() {
     }
   };
 
-  const archivosDeCarpeta = archivos.filter(a => a.carpeta === carpetaActiva);
+  // Filtrar archivos según carpeta y subcarpeta activa
+  const archivosDeCarpeta = archivos.filter(a => {
+    if (a.carpeta !== carpetaActiva) return false;
+    if (subcarpetaActiva) return a.subcarpeta === subcarpetaActiva;
+    // Si la carpeta no tiene subcarpetas muestra todos
+    if (!CARPETAS_CON_SUBCARPETAS.includes(carpetaActiva!)) return true;
+    // Si tiene subcarpetas y no hay ninguna activa no muestra nada aquí
+    return false;
+  });
+
   const archivosFiltradosYOrdenados = ordenarArchivos(
     archivosDeCarpeta.filter(a => a.nombre.toLowerCase().includes(busqueda.toLowerCase())),
     orden
   );
   const grupos = agruparArchivos(archivosFiltradosYOrdenados, agrupacion);
+
   const contarPorCarpeta = (carpeta: CarpetaFrontend) => archivos.filter(a => a.carpeta === carpeta).length;
+
+  const contarPorSubcarpeta = (subcarpeta: SubcarpetaPDF) =>
+    archivos.filter(a => a.carpeta === carpetaActiva && a.subcarpeta === subcarpeta).length;
 
   const formatFecha = (fecha: string) =>
     new Date(fecha).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" });
-
   const formatTamano = (kb: number) => kb < 1024 ? `${kb} KB` : `${(kb / 1024).toFixed(1)} MB`;
   const getExtension = (nombre: string) => nombre.split(".").pop()?.toUpperCase() ?? "FILE";
 
-  const ordenActualLabel  = ORDEN_OPTIONS.find(o => o.value === orden)?.label        ?? "Ordenar";
-  const agrupaActualLabel = AGRUPA_OPTIONS.find(o => o.value === agrupacion)?.label  ?? "Agrupar";
+  const ordenActualLabel  = ORDEN_OPTIONS.find(o => o.value === orden)?.label       ?? "Ordenar";
+  const agrupaActualLabel = AGRUPA_OPTIONS.find(o => o.value === agrupacion)?.label ?? "Agrupar";
+  const subcarpetaLabel   = SUBCARPETAS_PDF.find(s => s.value === subcarpetaActiva)?.label ?? "";
+
   const todosSeleccionados =
     archivosFiltradosYOrdenados.length > 0 &&
     seleccionados.size === archivosFiltradosYOrdenados.length;
 
   const renderPreview = (archivo: Archivo) => {
     if (archivo.tipo === "image") {
-      return (
-        <img src={archivo.url} alt={archivo.nombre} className="w-full h-full object-cover"
-          onError={e => { (e.target as HTMLImageElement).style.display = "none"; }}/>
-      );
+      return <img src={archivo.url} alt={archivo.nombre} className="w-full h-full object-cover"
+        onError={e => { (e.target as HTMLImageElement).style.display = "none"; }}/>;
     }
     if (archivo.tipo === "pdf") {
       return (
@@ -498,6 +502,12 @@ export default function GestorArchivos() {
       </svg>
     );
   };
+
+  const renderIconoSubcarpeta = () => (
+    <svg className="w-12 h-12 text-red-300" fill="currentColor" viewBox="0 0 24 24">
+      <path d="M10 4H4c-1.11 0-2 .89-2 2v12c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2h-8l-2-2z"/>
+    </svg>
+  );
 
   const renderGrillaArchivos = (items: Archivo[]) => (
     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
@@ -553,6 +563,49 @@ export default function GestorArchivos() {
     </div>
   );
 
+  // ── Breadcrumb dinámico ──────────────────────────────────────
+  const renderBreadcrumb = () => {
+    if (vista === "carpetas") return null;
+    return (
+      <div className="flex items-center gap-2">
+        <button onClick={volverACarpetas}
+          className="flex items-center gap-1.5 text-gray-400 hover:text-gray-700 transition-colors">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7"/>
+          </svg>
+          <span className="text-sm">Archivos</span>
+        </button>
+        <svg className="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7"/>
+        </svg>
+        {vista === "archivos" && subcarpetaActiva ? (
+          <>
+            <button onClick={volverASubcarpetas}
+              className="text-sm text-gray-400 hover:text-gray-700 transition-colors">
+              {CARPETAS_LABELS[carpetaActiva!]}
+            </button>
+            <svg className="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7"/>
+            </svg>
+          </>
+        ) : null}
+      </div>
+    );
+  };
+
+  const getTituloActual = () => {
+    if (vista === "carpetas") return "Archivos";
+    if (vista === "subcarpetas") return CARPETAS_LABELS[carpetaActiva!];
+    if (subcarpetaActiva) return subcarpetaLabel;
+    return CARPETAS_LABELS[carpetaActiva!];
+  };
+
+  const getSubtituloActual = () => {
+    if (vista === "carpetas") return "Selecciona una carpeta para ver su contenido";
+    if (vista === "subcarpetas") return "Selecciona una subcarpeta";
+    return `${archivosFiltradosYOrdenados.length} de ${archivosDeCarpeta.length} archivo${archivosDeCarpeta.length !== 1 ? "s" : ""}`;
+  };
+
   return (
     <Dashboard>
       <div className="space-y-6">
@@ -560,24 +613,10 @@ export default function GestorArchivos() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            {vista === "archivos" && (
-              <>
-                <button onClick={volverACarpetas}
-                  className="flex items-center gap-1.5 text-gray-400 hover:text-gray-700 transition-colors">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7"/>
-                  </svg>
-                  <span className="text-sm">Archivos</span>
-                </button>
-                <svg className="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7"/>
-                </svg>
-              </>
-            )}
+            {renderBreadcrumb()}
             <div>
               <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
-                {vista === "carpetas" ? "Archivos" : CARPETAS_LABELS[carpetaActiva!]}
-                {/* Candado visible cuando se está en carpeta protegida */}
+                {getTituloActual()}
                 {vista === "archivos" && carpetaActiva && CARPETAS_PROTEGIDAS.includes(carpetaActiva) && (
                   <span className="flex items-center gap-1 px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full text-xs font-semibold">
                     <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -588,11 +627,7 @@ export default function GestorArchivos() {
                   </span>
                 )}
               </h1>
-              <p className="text-sm text-gray-500 mt-0.5">
-                {vista === "carpetas"
-                  ? "Selecciona una carpeta para ver su contenido"
-                  : `${archivosFiltradosYOrdenados.length} de ${archivosDeCarpeta.length} archivo${archivosDeCarpeta.length !== 1 ? "s" : ""}`}
-              </p>
+              <p className="text-sm text-gray-500 mt-0.5">{getSubtituloActual()}</p>
             </div>
           </div>
 
@@ -820,27 +855,30 @@ export default function GestorArchivos() {
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
               {CARPETAS_OPTIONS.map(carpeta => {
-                const total      = contarPorCarpeta(carpeta.value);
-                const protegida  = CARPETAS_PROTEGIDAS.includes(carpeta.value);
+                const total        = contarPorCarpeta(carpeta.value);
+                const protegida    = CARPETAS_PROTEGIDAS.includes(carpeta.value);
                 const desbloqueada = carpetasDesbloqueadas.has(carpeta.value);
+                const conSub       = CARPETAS_CON_SUBCARPETAS.includes(carpeta.value);
                 return (
                   <button key={carpeta.value} onClick={() => abrirCarpeta(carpeta.value)}
                     className="flex flex-col items-center gap-3 p-6 bg-white border border-gray-200 rounded-2xl hover:border-blue-300 hover:shadow-md transition-all group text-center relative">
-                    {/* Candado en esquina superior derecha para carpetas protegidas */}
                     {protegida && (
                       <div className={`absolute top-2.5 right-2.5 w-6 h-6 rounded-full flex items-center justify-center ${
                         desbloqueada ? "bg-green-100" : "bg-amber-100"
                       }`}>
                         <svg className={`w-3.5 h-3.5 ${desbloqueada ? "text-green-600" : "text-amber-600"}`}
                           fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          {desbloqueada ? (
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                              d="M8 11V7a4 4 0 018 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z"/>
-                          ) : (
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                              d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
-                          )}
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                            d={desbloqueada
+                              ? "M8 11V7a4 4 0 018 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z"
+                              : "M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"}
+                          />
                         </svg>
+                      </div>
+                    )}
+                    {conSub && (
+                      <div className="absolute top-2.5 left-2.5 px-1.5 py-0.5 bg-red-50 text-red-500 rounded text-xs font-semibold">
+                        9
                       </div>
                     )}
                     {renderIconoCarpeta(carpeta.value)}
@@ -850,6 +888,7 @@ export default function GestorArchivos() {
                       </p>
                       <p className="text-xs text-gray-400 mt-0.5">
                         {total} archivo{total !== 1 ? "s" : ""}
+                        {conSub ? " · 9 subcarpetas" : ""}
                       </p>
                     </div>
                   </button>
@@ -857,6 +896,29 @@ export default function GestorArchivos() {
               })}
             </div>
           )
+        )}
+
+        {/* Vista subcarpetas — solo para PDFs */}
+        {vista === "subcarpetas" && (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+            {SUBCARPETAS_PDF.map(sub => {
+              const total = contarPorSubcarpeta(sub.value);
+              return (
+                <button key={sub.value} onClick={() => abrirSubcarpeta(sub.value)}
+                  className="flex flex-col items-center gap-3 p-5 bg-white border border-gray-200 rounded-2xl hover:border-red-300 hover:shadow-md transition-all group text-center">
+                  {renderIconoSubcarpeta()}
+                  <div>
+                    <p className="text-sm font-semibold text-gray-800 group-hover:text-red-600 transition-colors">
+                      {sub.label}
+                    </p>
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      {total} archivo{total !== 1 ? "s" : ""}
+                    </p>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
         )}
 
         {/* Vista archivos */}
@@ -885,16 +947,13 @@ export default function GestorArchivos() {
                 const colapsado = gruposColapsados.has(clave);
                 return (
                   <div key={clave} className="space-y-3">
-                    <button onClick={() => toggleGrupo(clave)}
-                      className="flex items-center gap-3 w-full group">
+                    <button onClick={() => toggleGrupo(clave)} className="flex items-center gap-3 w-full group">
                       <div className="flex items-center gap-2 flex-1">
                         <svg className={`w-4 h-4 text-gray-400 transition-transform ${colapsado ? "-rotate-90" : ""}`}
                           fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7"/>
                         </svg>
-                        <span className="text-sm font-semibold text-gray-700 capitalize group-hover:text-blue-700 transition-colors">
-                          {clave}
-                        </span>
+                        <span className="text-sm font-semibold text-gray-700 capitalize group-hover:text-blue-700 transition-colors">{clave}</span>
                         <span className="px-2 py-0.5 bg-gray-100 text-gray-500 rounded-full text-xs font-medium">
                           {items.length} archivo{items.length !== 1 ? "s" : ""}
                         </span>
@@ -928,7 +987,8 @@ export default function GestorArchivos() {
                 {archivosModal.length} archivo{archivosModal.length !== 1 ? "s" : ""} seleccionado{archivosModal.length !== 1 ? "s" : ""}
               </p>
             </div>
-            <div className="space-y-1 max-h-32 overflow-y-auto">
+
+            <div className="space-y-1 max-h-28 overflow-y-auto">
               {archivosModal.map((f, i) => (
                 <div key={i} className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 rounded-lg">
                   <svg className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -940,9 +1000,11 @@ export default function GestorArchivos() {
                 </div>
               ))}
             </div>
+
+            {/* Selector carpeta */}
             <div className="grid grid-cols-2 gap-3">
               {CARPETAS_OPTIONS.map(c => (
-                <button key={c.value} onClick={() => setCarpetaSeleccion(c.value)}
+                <button key={c.value} onClick={() => { setCarpetaSeleccion(c.value); setSubcarpetaSeleccion(null); }}
                   className={`flex items-center gap-3 px-4 py-3 rounded-xl border-2 text-sm font-semibold transition-all ${
                     carpetaSeleccion === c.value
                       ? "border-blue-600 bg-blue-50 text-blue-700"
@@ -955,13 +1017,39 @@ export default function GestorArchivos() {
                 </button>
               ))}
             </div>
+
+            {/* Selector subcarpeta — solo si carpeta es PDFs */}
+            {carpetaSeleccion === "pdfs" && (
+              <div className="space-y-2">
+                <label className="block text-sm font-semibold text-gray-700">Subcarpeta de PDFs</label>
+                <div className="grid grid-cols-1 gap-1.5 max-h-40 overflow-y-auto pr-1">
+                  {SUBCARPETAS_PDF.map(sub => (
+                    <button key={sub.value}
+                      onClick={() => setSubcarpetaSeleccion(sub.value)}
+                      className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm transition-all text-left ${
+                        subcarpetaSeleccion === sub.value
+                          ? "border-red-400 bg-red-50 text-red-700 font-semibold"
+                          : "border-gray-200 text-gray-600 hover:border-gray-300"
+                      }`}>
+                      <svg className="w-4 h-4 flex-shrink-0 text-red-300" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M10 4H4c-1.11 0-2 .89-2 2v12c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2h-8l-2-2z"/>
+                      </svg>
+                      {sub.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="flex gap-3 pt-1">
-              <button onClick={() => { setModalSubir(false); setArchivosModal([]); }} disabled={subiendo}
+              <button onClick={() => { setModalSubir(false); setArchivosModal([]); setSubcarpetaSeleccion(null); }}
+                disabled={subiendo}
                 className="flex-1 py-2.5 border border-gray-300 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-50 disabled:opacity-50">
                 Cancelar
               </button>
-              <button onClick={handleConfirmarSubida} disabled={subiendo}
-                className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
+              <button onClick={handleConfirmarSubida}
+                disabled={subiendo || (carpetaSeleccion === "pdfs" && !subcarpetaSeleccion)}
+                className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
                 {subiendo ? (
                   <>
                     <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
@@ -976,7 +1064,9 @@ export default function GestorArchivos() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                         d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
                     </svg>
-                    Subir a {CARPETAS_OPTIONS.find(c => c.value === carpetaSeleccion)?.label}
+                    Subir a {subcarpetaSeleccion
+                      ? SUBCARPETAS_PDF.find(s => s.value === subcarpetaSeleccion)?.label
+                      : CARPETAS_OPTIONS.find(c => c.value === carpetaSeleccion)?.label}
                   </>
                 )}
               </button>

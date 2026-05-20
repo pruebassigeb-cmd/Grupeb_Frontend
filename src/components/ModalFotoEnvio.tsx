@@ -80,27 +80,36 @@ export default function ModalFotoEnvio(props: Props) {
     if (file) procesarArchivo(file);
   }, []);
 
-  // En paquetería: guía + foto obligatorios. En local: solo foto obligatoria.
-  const puedeGuardar = fotoFile !== null && (esPaqueteria ? numeroGuia.trim().length > 0 : true);
+  // Puede guardar si:
+  // - paquetería: guía obligatoria, foto opcional (con guía alcanza)
+  // - local:      ambos opcionales pero al menos uno debe existir
+  const tieneGuia  = numeroGuia.trim().length > 0;
+  const tieneFoto  = fotoFile !== null;
+  const puedeGuardar = esPaqueteria
+    ? tieneGuia                    // paquetería: guía es suficiente, foto es bonus
+    : tieneGuia || tieneFoto;      // local: al menos uno
 
   const handleGuardar = async () => {
     if (!puedeGuardar) return;
     setPaso("subiendo");
 
     try {
-      // Guardar número de guía si se ingresó (en local puede estar vacío)
-      if (numeroGuia.trim().length > 0) {
+      // Guardar número de guía si se ingresó
+      if (tieneGuia) {
         setProgresoMsg("Guardando número de guía…");
         await updateGuiaEnvio(idenvio, numeroGuia.trim());
       }
 
-      setProgresoMsg("Subiendo foto a Fotos de Envíos…");
-      const archivoRenombrado = new File(
-        [fotoFile!],
-        `envio-${idenvio}-pedido-${noPedido}-${Date.now()}${obtenerExtension(fotoFile!.name)}`,
-        { type: fotoFile!.type }
-      );
-      await subirArchivo(archivoRenombrado, "fotos-envios");
+      // Subir foto solo si se seleccionó una
+      if (tieneFoto) {
+        setProgresoMsg("Subiendo foto a Fotos de Envíos…");
+        const archivoRenombrado = new File(
+          [fotoFile!],
+          `envio-${idenvio}-pedido-${noPedido}-${Date.now()}${obtenerExtension(fotoFile!.name)}`,
+          { type: fotoFile!.type }
+        );
+        await subirArchivo(archivoRenombrado, "fotos-envios");
+      }
 
       setPaso("completado");
     } catch {
@@ -118,7 +127,7 @@ export default function ModalFotoEnvio(props: Props) {
           <div>
             <h2 className="text-base font-bold text-gray-900">
               {paso === "completado"
-                ? "¡Foto registrada!"
+                ? "¡Registro completado!"
                 : esPaqueteria
                   ? "Registrar entrega a paquetería"
                   : "Registrar foto de reparto"}
@@ -164,14 +173,19 @@ export default function ModalFotoEnvio(props: Props) {
                 </svg>
               </div>
               <div className="text-center space-y-1">
-                {numeroGuia && (
+                {tieneGuia && (
                   <p className="text-sm font-semibold text-gray-800">
                     Guía <span className="text-blue-600 font-mono">{numeroGuia}</span> registrada
                   </p>
                 )}
-                <p className="text-xs text-gray-500">
-                  La foto fue guardada en <strong>Fotos de Envíos</strong>
-                </p>
+                {tieneFoto && (
+                  <p className="text-xs text-gray-500">
+                    La foto fue guardada en <strong>Fotos de Envíos</strong>
+                  </p>
+                )}
+                {!tieneFoto && (
+                  <p className="text-xs text-gray-400">Sin foto adjunta</p>
+                )}
               </div>
               {fotoPreview && (
                 <img
@@ -220,7 +234,7 @@ export default function ModalFotoEnvio(props: Props) {
               <div className="space-y-1.5">
                 <label className="block text-sm font-semibold text-gray-700">
                   Foto del envío
-                  <span className="text-red-500 ml-0.5">*</span>
+                  <span className="text-gray-400 font-normal ml-1">(opcional)</span>
                 </label>
 
                 {fotoPreview ? (
@@ -263,32 +277,25 @@ export default function ModalFotoEnvio(props: Props) {
                         : "border-gray-300 bg-gray-50 hover:border-blue-300 hover:bg-blue-50/50"
                     }`}
                   >
-                    {/* Icono cámara rediseñado */}
+                    {/* Icono cámara */}
                     <div className={`relative w-16 h-16 rounded-2xl flex items-center justify-center transition-all shadow-sm ${
                       dragging
                         ? "bg-blue-500 shadow-blue-200"
                         : "bg-gray-800 group-hover:bg-gray-700"
                     }`}>
-                      {/* Cuerpo cámara */}
                       <svg
                         viewBox="0 0 40 32"
                         fill="none"
                         xmlns="http://www.w3.org/2000/svg"
                         className="w-9 h-9"
                       >
-                        {/* Base de la cámara */}
                         <rect x="2" y="8" width="36" height="22" rx="3" fill="white" fillOpacity="0.15" stroke="white" strokeWidth="2"/>
-                        {/* Visor superior */}
                         <path d="M13 8V6C13 5.45 13.45 5 14 5H26C26.55 5 27 5.45 27 6V8" stroke="white" strokeWidth="2" strokeLinecap="round"/>
-                        {/* Lente exterior */}
                         <circle cx="20" cy="19" r="7" stroke="white" strokeWidth="2"/>
-                        {/* Lente interior con reflejo */}
                         <circle cx="20" cy="19" r="4" fill="white" fillOpacity="0.25"/>
                         <circle cx="22.5" cy="16.5" r="1.2" fill="white" fillOpacity="0.7"/>
-                        {/* Flash */}
                         <rect x="6" y="12" width="4" height="3" rx="1" fill="white" fillOpacity="0.6"/>
                       </svg>
-                      {/* Destello decorativo */}
                       <div className={`absolute -top-1 -right-1 w-3 h-3 rounded-full border-2 border-white ${
                         dragging ? "bg-yellow-300" : "bg-teal-400"
                       }`}/>
@@ -303,7 +310,6 @@ export default function ModalFotoEnvio(props: Props) {
                       </p>
                     </div>
 
-                    {/* Chips informativos */}
                     <div className="flex gap-2">
                       <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-gray-600 rounded-full text-xs font-medium shadow-sm pointer-events-none">
                         <svg className="w-3 h-3 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -325,8 +331,6 @@ export default function ModalFotoEnvio(props: Props) {
                   </div>
                 )}
 
-                {/* Input oculto: accept="image/*" sin capture para que iOS/Android
-                    ofrezca menú nativo con cámara + galería */}
                 <input
                   ref={inputFotoRef}
                   type="file"
@@ -352,8 +356,8 @@ export default function ModalFotoEnvio(props: Props) {
                 </svg>
                 <p className="text-xs text-indigo-700 leading-relaxed">
                   {esPaqueteria
-                    ? "La foto se guardará en Fotos de Envíos. Una vez registrada la guía con su foto el proceso quedará finalizado."
-                    : "La foto se guardará en Fotos de Envíos como evidencia del reparto local."
+                    ? "El número de guía es obligatorio. La foto es opcional pero recomendada como evidencia."
+                    : "La foto y el número de guía son opcionales. Registra al menos uno para guardar."
                   }
                 </p>
               </div>
@@ -382,7 +386,7 @@ export default function ModalFotoEnvio(props: Props) {
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
               </svg>
-              Guardar foto
+              Guardar
             </button>
           </div>
         )}

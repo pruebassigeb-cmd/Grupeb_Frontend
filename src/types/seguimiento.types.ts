@@ -34,6 +34,7 @@ export interface PedidoSeguimiento {
   diseno_fecha_estado:   string | null;
   od_fecha_estado:       string | null;
   envio_fecha_estado:    string | null;
+
   nombre_producto:     string;
   medida:              string;
   altura:              string;
@@ -49,6 +50,8 @@ export interface PedidoSeguimiento {
   pigmentos:           string | null;
   pantones:            string | null;
   observacion:         string | null;
+  perforacion:         boolean;
+  descripcion:         string | null; // ← NUEVO: identificador diferenciador del producto
   bk:                  boolean | null;
   foil:                boolean | null;
   asa_suaje:           string | null;

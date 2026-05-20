@@ -20,20 +20,32 @@ import { showConfirm } from './CustomConfirm';
 
 
 interface Props {
-  carrito:         CarritoPedido[];
+  carrito: CarritoPedido[];
   onCarritoChange: () => Promise<void>;
 }
 
+/** Devuelve el texto descriptivo del envío para mostrarlo en la lista */
+const getDescripcionEnvio = (envio: Envio): string => {
+  if (envio.tipo === "recoleccion") return "Recolección en planta";
+  if (envio.tipo === "local")
+    return `${envio.chofer?.nombre ?? "-"} — ${envio.unidad?.nombre ?? "-"}`;
+  return `${envio.paqueteria?.nombre ?? "-"}${envio.numero_guia ? ` · Guía: ${envio.numero_guia}` : ""}`;
+};
+
+/** Devuelve true cuando aplica mostrar la nota de remisión */
+const mostrarNota = (envio: Envio): boolean =>
+  envio.tipo === "local" || envio.tipo === "recoleccion";
+
 export default function TabEnvios({ carrito, onCarritoChange }: Props) {
-  const [pedidos,             setPedidos]             = useState<PedidoDisponible[]>([]);
-  const [loading,             setLoading]             = useState(true);
-  const [pedidoExpandido,     setPedidoExpandido]     = useState<number | null>(null);
-  const [bultos,              setBultos]              = useState<BultoPedido[]>([]);
-  const [enviosPedido,        setEnviosPedido]        = useState<Envio[]>([]);
-  const [loadingBultos,       setLoadingBultos]       = useState(false);
+  const [pedidos, setPedidos] = useState<PedidoDisponible[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [pedidoExpandido, setPedidoExpandido] = useState<number | null>(null);
+  const [bultos, setBultos] = useState<BultoPedido[]>([]);
+  const [enviosPedido, setEnviosPedido] = useState<Envio[]>([]);
+  const [loadingBultos, setLoadingBultos] = useState(false);
   const [bultosSeleccionados, setBultosSeleccionados] = useState<number[]>([]);
-  const [modalCrearEnvio,     setModalCrearEnvio]     = useState<PedidoDisponible | null>(null);
-  const [agregando,           setAgregando]           = useState(false);
+  const [modalCrearEnvio, setModalCrearEnvio] = useState<PedidoDisponible | null>(null);
+  const [agregando, setAgregando] = useState(false);
 
   const bultosEnCarrito = new Set(carrito.flatMap(p => p.bultos.map(b => b.idbulto)));
 
@@ -181,7 +193,7 @@ export default function TabEnvios({ carrito, onCarritoChange }: Props) {
                 target="_blank" rel="noopener noreferrer"
                 className="flex items-center gap-1 px-2 py-0.5 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 whitespace-nowrap">
                 <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+                  <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" />
                 </svg>
                 Maps
               </a>
@@ -215,7 +227,6 @@ export default function TabEnvios({ carrito, onCarritoChange }: Props) {
                               <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${ESTADO_BADGE[envio.estado]}`}>
                                 {ESTADO_LABEL[envio.estado]}
                               </span>
-                              {/* Completo vs Parcialidad */}
                               <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                                 envio.es_parcialidad
                                   ? "bg-orange-100 text-orange-700"
@@ -223,37 +234,30 @@ export default function TabEnvios({ carrito, onCarritoChange }: Props) {
                               }`}>
                                 {envio.es_parcialidad ? "Parcialidad" : "Completo"}
                               </span>
+                              {/* Badge tipo recolección */}
+                              {envio.tipo === "recoleccion" && (
+                                <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700">
+                                  📦 Recolección
+                                </span>
+                              )}
                               <span className="text-gray-700">
-                                {envio.tipo === "local"
-                                  ? `${envio.chofer?.nombre} — ${envio.unidad?.nombre}`
-                                  : `${envio.paqueteria?.nombre}${envio.numero_guia ? ` · Guía: ${envio.numero_guia}` : ""}`
-                                }
+                                {getDescripcionEnvio(envio)}
                               </span>
                               <span className="text-gray-400 text-xs">{envio.total_bultos} bulto(s)</span>
                             </div>
                             <div className="flex items-center gap-2">
-                              {envio.tipo === "local" && (
+                              {mostrarNota(envio) && (
                                 <button onClick={() => handleGenerarNota(envio.idenvio)}
                                   className="text-xs px-2 py-1 bg-green-100 text-green-700 rounded hover:bg-green-200 font-medium">
                                   Nota de remisión
                                 </button>
                               )}
+                              {/* Cancelar SOLO mientras sigue preparando */}
                               {envio.estado === "preparando" && (
-                                <>
-                                  <button onClick={() => handleCambiarEstado(envio.idenvio, "en_camino")}
-                                    className="text-xs px-2 py-1 bg-yellow-100 text-yellow-800 rounded hover:bg-yellow-200">
-                                    En camino
-                                  </button>
-                                  <button onClick={() => handleEliminarEnvio(envio.idenvio)}
-                                    className="text-xs px-2 py-1 bg-red-100 text-red-700 rounded hover:bg-red-200">
-                                    Cancelar
-                                  </button>
-                                </>
-                              )}
-                              {envio.estado === "en_camino" && (
-                                <button onClick={() => handleCambiarEstado(envio.idenvio, "entregado")}
-                                  className="text-xs px-2 py-1 bg-green-100 text-green-800 rounded hover:bg-green-200">
-                                  Entregado
+                                <button
+                                  onClick={() => handleEliminarEnvio(envio.idenvio)}
+                                  className="text-xs px-2 py-1 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors">
+                                  Cancelar
                                 </button>
                               )}
                             </div>
@@ -282,14 +286,14 @@ export default function TabEnvios({ carrito, onCarritoChange }: Props) {
                         <table className="w-full text-xs">
                           <thead className="bg-gray-50">
                             <tr>
-                              {["","Bulto","Producto","Unidades","Kg prod.","Peso bulto","Dimensiones","Estado"].map(h => (
+                              {["", "Bulto", "Producto", "Unidades", "Kg prod.", "Peso bulto", "Dimensiones", "Estado"].map(h => (
                                 <th key={h} className="px-3 py-2 text-left font-semibold text-gray-600">{h}</th>
                               ))}
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-gray-100">
                             {bultos.map(bulto => {
-                              const enCarrito  = bultosEnCarrito.has(bulto.idbulto);
+                              const enCarrito = bultosEnCarrito.has(bulto.idbulto);
                               const disponible = bulto.estado_bulto === "sin_enviar" && !enCarrito;
                               return (
                                 <tr key={bulto.idbulto}
@@ -305,7 +309,14 @@ export default function TabEnvios({ carrito, onCarritoChange }: Props) {
                                   </td>
                                   <td className="px-3 py-2 font-medium text-gray-700">#{numeroBulto(bulto.idbulto)}</td>
                                   <td className="px-3 py-2 text-gray-600">
-                                    {bulto.nombre_producto} {bulto.medida && `(${bulto.medida})`}
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <span>{bulto.nombre_producto} {bulto.medida && `(${bulto.medida})`}</span>
+                                      {(bulto as any).descripcion && (
+                                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-700">
+                                          {(bulto as any).descripcion}
+                                        </span>
+                                      )}
+                                    </div>
                                   </td>
                                   <td className="px-3 py-2 text-center text-gray-700">
                                     {bulto.cantidad_unidades != null ? bulto.cantidad_unidades.toLocaleString("es-MX") : "-"}
@@ -326,8 +337,8 @@ export default function TabEnvios({ carrito, onCarritoChange }: Props) {
                                     {enCarrito
                                       ? <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-700">En carrito</span>
                                       : <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${ESTADO_BULTO_BADGE[bulto.estado_bulto]}`}>
-                                          {ESTADO_BULTO_LABEL[bulto.estado_bulto]}
-                                        </span>
+                                        {ESTADO_BULTO_LABEL[bulto.estado_bulto]}
+                                      </span>
                                     }
                                   </td>
                                 </tr>

@@ -11,10 +11,22 @@ export interface Archivo {
   subido_por: string | null;
   resource_type: string;
   carpeta: string;
+  subcarpeta?: string;
   created_at: string;
 }
 
 export type CarpetaFrontend = "disenos" | "pdfs" | "fotos-envios" | "backups";
+
+export type SubcarpetaPDF =
+  | "cotizaciones"
+  | "pedidos"
+  | "ordenes-produccion"
+  | "estados-cuenta-detallado"
+  | "estados-cuenta-simple"
+  | "historial-pagos"
+  | "etiquetas"
+  | "notas-remision"
+  | "formas-envio";
 
 export const CARPETAS_LABELS: Record<CarpetaFrontend, string> = {
   "disenos":      "Diseños",
@@ -23,13 +35,27 @@ export const CARPETAS_LABELS: Record<CarpetaFrontend, string> = {
   "backups":      "Backups BD",
 };
 
+export const SUBCARPETAS_PDF: { value: SubcarpetaPDF; label: string }[] = [
+  { value: "cotizaciones",             label: "Cotizaciones"                  },
+  { value: "pedidos",                  label: "Pedidos"                       },
+  { value: "ordenes-produccion",       label: "Órdenes de Producción"         },
+  { value: "estados-cuenta-detallado", label: "Estados de Cuenta Detallados"  },
+  { value: "estados-cuenta-simple",    label: "Estados de Cuenta Simple"      },
+  { value: "historial-pagos",          label: "Historial de Pagos"            },
+  { value: "etiquetas",                label: "Etiquetas"                     },
+  { value: "notas-remision",           label: "Notas de Remisión"             },
+  { value: "formas-envio",             label: "Formas de Envío"               },
+];
+
 export const subirArchivo = async (
   file: File,
-  carpeta: CarpetaFrontend
+  carpeta: CarpetaFrontend,
+  subcarpeta?: SubcarpetaPDF
 ): Promise<Archivo> => {
   const formData = new FormData();
   formData.append("archivo", file);
   formData.append("carpeta", carpeta);
+  if (subcarpeta) formData.append("subcarpeta", subcarpeta);
 
   const { data } = await api.post<Archivo>("/archivos/upload", formData, {
     headers: { "Content-Type": "multipart/form-data" },
