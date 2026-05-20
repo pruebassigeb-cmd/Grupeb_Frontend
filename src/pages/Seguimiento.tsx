@@ -21,6 +21,7 @@ import { useAuth } from "../context/AuthContext";
 import { usePermiso } from "../hooks/usePermiso";
 import ModalVerificarOperador from "../components/ModalVerificarOperador";
 import { showAlert } from '../components/CustomAlert';
+import { getImagenesDiseno } from "../services/ordenDisenoService";
 
 
 const ITEMS_POR_PAGINA = 20;
@@ -267,13 +268,33 @@ function BotonEstadoCuentaPdf({ noPedido }: { noPedido: string }) {
 
 function BotonPdfDirecto({ pedido }: { pedido: PedidoSeguimiento }) {
   const [descargando, setDescargando] = useState(false);
+
   const handleDescargar = async () => {
     setDescargando(true);
     try {
       const data = await getOrdenProduccion(pedido.no_pedido);
       const producto: OrdenProduccionProducto | undefined =
         data.productos.find((p: any) => p.no_produccion === pedido.no_produccion);
-      if (!producto) { showAlert("No se encontro la orden."); return; }
+      if (!producto) { showAlert("No se encontró la orden."); return; }
+
+      // ── Cargar imágenes de diseño si existe la OD ──
+      let url_render: string | null = null;
+      let url_master: string | null = null;
+
+      const idorden = (pedido as any).idorden_diseno as number | null;
+      if (idorden) {
+        try {
+          const imagenes = await getImagenesDiseno(idorden);
+          url_render = imagenes.url_render;
+          url_master = imagenes.url_master;
+          console.log("🖼️ render URL:", url_render?.substring(0, 60));
+          console.log("🎨 master URL:", url_master?.substring(0, 60));
+        } catch (e) {
+          console.warn("No se pudieron cargar imágenes de diseño:", e);
+          // No bloqueamos el PDF si falla
+        }
+      }
+
       await generarPdfOrdenProduccion({
         no_pedido: data.no_pedido,
         no_produccion: producto.no_produccion,
@@ -330,8 +351,9 @@ function BotonPdfDirecto({ pedido }: { pedido: PedidoSeguimiento }) {
         pzas_merma: producto.pzas_merma ?? null,
         kilos_extruir: producto.kilos_extruir ?? null,
         metros_extruir: producto.metros_extruir ?? null,
-        url_render: (producto as any).url_render ?? null,
-        url_master: (producto as any).url_master ?? null,
+        // ── Imágenes resueltas ──
+        url_render,
+        url_master,
       });
     } catch { showAlert("No se pudo generar el PDF."); }
     finally { setDescargando(false); }

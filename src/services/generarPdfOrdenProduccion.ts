@@ -136,6 +136,23 @@ type ImgData = {
   dataUrl: string;
 };
 
+// Convierte una URL externa (S3, Cloudinary, etc.) a data URL base64
+async function urlToDataUrl(url: string): Promise<string | null> {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) return null;
+    const blob = await response.blob();
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return null;
+  }
+}
+
 function dataUrlToImgData(dataUrl: string): ImgData | null {
   try {
     if (!dataUrl.startsWith("data:")) return null;
@@ -431,11 +448,27 @@ export async function generarPdfOrdenProduccion(data: OrdenProduccionData): Prom
   console.log("🔍 url_master primeros 50 chars:", data.url_master?.substring(0, 50));
 
   // ── Las imágenes llegan como data URL base64 desde el backend ──
-  const renderImg = data.url_render ? dataUrlToImgData(data.url_render) : null;
-  const masterImg = data.url_master ? dataUrlToImgData(data.url_master) : null;
+  let renderImg: ImgData | null = null;
+let masterImg: ImgData | null = null;
+if (data.url_render) {
+  const dataUrl = data.url_render.startsWith("data:")
+    ? data.url_render
+    : await urlToDataUrl(data.url_render);
+  renderImg = dataUrl ? dataUrlToImgData(dataUrl) : null;
+}
 
-  console.log("🖼️ renderImg:", renderImg ? `OK (${renderImg.format})` : "null");
-  console.log("🎨 masterImg:", masterImg ? `OK (${masterImg.format})` : "null");
+if (data.url_master) {
+  const dataUrl = data.url_master.startsWith("data:")
+    ? data.url_master
+    : await urlToDataUrl(data.url_master);
+  masterImg = dataUrl ? dataUrlToImgData(dataUrl) : null;
+}
+
+console.log("🖼️ renderImg:", renderImg ? `OK (${renderImg.format})` : "null");
+console.log("🎨 masterImg:", masterImg ? `OK (${masterImg.format})` : "null");
+
+  //console.log("🖼️ renderImg:", renderImg ? `OK (${renderImg.format})` : "null");
+  //console.log("🎨 masterImg:", masterImg ? `OK (${masterImg.format})` : "null");
 
   const { anchoPelicula, bolseo: bolseoCalculado } = calcularAnchoPeliculaYBolseo(data);
 

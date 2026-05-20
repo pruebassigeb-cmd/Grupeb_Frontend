@@ -78,6 +78,8 @@ export interface OrdenProduccionRespuesta {
   total_productos: number;
   con_orden:       number;
   productos:       OrdenProduccionProducto[];
+  url_render?: string | null;
+  url_master?: string | null;
 }
 
 export const getOrdenProduccion = async (noPedido: string): Promise<OrdenProduccionRespuesta> => {

@@ -78,3 +78,28 @@ export const getObservacionProducto = async (id: number) => {
   const res = await api.get(`/orden-diseno/${id}/observacion-producto`);
   return res.data;
 };
+export const getImagenesDiseno = async (
+  idorden: number
+): Promise<{ url_render: string | null; url_master: string | null }> => {
+  const orden = await getOrdenDisenoById(idorden);
+
+  const renderRevisiones = orden.revisiones
+    .filter((r) => r.tipo === "render")
+    .sort((a, b) => b.numero_version - a.numero_version);
+
+  const ultimaRevision = renderRevisiones[0] ?? null;
+
+  if (!ultimaRevision || ultimaRevision.archivos.length === 0) {
+    return { url_render: null, url_master: null };
+  }
+
+  // categoria siempre llega null — asignar por posición:
+  // archivos[0] → render cliente, archivos[1] → master graphic
+  const renderArchivo = ultimaRevision.archivos[0] ?? null;
+  const masterArchivo = ultimaRevision.archivos[1] ?? null;
+
+  return {
+    url_render: renderArchivo?.url ?? null,
+    url_master: masterArchivo?.url ?? null,
+  };
+};
