@@ -114,6 +114,7 @@ export default function Pedidos() {
       pantones: p.pantones || null,
       asa_suaje: p.asa_suaje || null,
       observacion: p.observacion || null,
+      descripcion: p.descripcion || null,
       perforacion: p.perforacion ?? false,
       por_kilo: p.por_kilo || null,
       herramental_descripcion: p.herramental_descripcion ?? null,
@@ -166,6 +167,7 @@ export default function Pedidos() {
             pantones: prod.pantones || null,
             asa_suaje: prod.suajeTipo || null,
             observacion: prod.observacion || null,
+            descripcion: prod.descripcion || null,
             perforacion: prod.perforacion ?? false,
             por_kilo: prod.porKilo || null,
             herramental_descripcion: prod.herramental_descripcion ?? null,
@@ -266,31 +268,41 @@ export default function Pedidos() {
   };
 
   const handleEliminar = async (ped: Pedido) => {
-    const origen = ped.no_cotizacion
-      ? `\nOrigen: ${ped.no_cotizacion} (también será eliminada).`
-      : "";
-    const confirmar = await showConfirm(
-      `⚠️ CANCELAR PEDIDO ${ped.no_pedido}\n\n` +
-      `Esta acción eliminará permanentemente:\n` +
-      `• El pedido y todos sus productos\n` +
-      `• Los detalles de cantidad y precio${origen}\n\n` +
-      `Esta operación NO se puede deshacer. ¿Confirmar cancelación?`
+  const confirmar = await showConfirm(
+    `⚠️ ELIMINAR PEDIDO ${ped.no_pedido}\n\n` +
+    `Esta acción eliminará TODO lo relacionado:\n` +
+    `• Pedido\n` +
+    `• Productos\n` +
+    `• Detalles\n` +
+    `• Ventas y pagos\n` +
+    `• Diseño\n` +
+    `• Producción\n` +
+    `• Bultos\n` +
+    `• Envíos\n` +
+    `• Notas de remisión\n` +
+    `• Bitácora de reparto\n\n` +
+    `Esta operación NO se puede deshacer.\n\n` +
+    `¿Confirmas eliminarlo completamente?`
+  );
+
+  if (!confirmar) return;
+
+  try {
+    await eliminarPedido(ped.no_pedido);
+
+    setPedidos(prev =>
+      prev.filter(p => p.no_pedido !== ped.no_pedido)
     );
-    if (!confirmar) return;
-    try {
-      await eliminarPedido(ped.no_pedido);
-      setPedidos(prev => prev.filter(p => p.no_pedido !== ped.no_pedido));
-    } catch (e: any) {
-      const data = e.response?.data;
-      if (data?.motivo === "pagos") {
-        showAlert(`🚫 No se puede cancelar el Pedido ${ped.no_pedido}\n\n${data.detalle}`);
-      } else if (data?.motivo === "diseno") {
-        showAlert(`🚫 No se puede cancelar el Pedido ${ped.no_pedido}\n\n${data.detalle}`);
-      } else {
-        showAlert(data?.error || "Error al cancelar el pedido");
-      }
-    }
-  };
+
+    showAlert(`✅ Pedido ${ped.no_pedido} eliminado completamente`);
+  } catch (e: any) {
+    showAlert(
+      e.response?.data?.detalle ||
+      e.response?.data?.error ||
+      "Error al eliminar el pedido"
+    );
+  }
+};
 
   const formatFecha = (iso: string) => {
     try { return new Date(iso).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" }); }

@@ -71,4 +71,5 @@ export interface PedidoSeguimiento {
   // Orden de Diseño
   idorden_diseno:      number | null;
   od_estado:           "en_revision" | "aprobado" | "rechazado" | null;
+  es_parcialidad:         boolean;
 }

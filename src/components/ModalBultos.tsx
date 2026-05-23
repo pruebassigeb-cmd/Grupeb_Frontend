@@ -1,6 +1,14 @@
 // components/ModalBultos.tsx
 import { useState, useEffect } from "react";
-import { getBultos, agregarBulto, eliminarBulto } from "../services/seguimientoService";
+import {
+  getBultos,
+  agregarBulto,
+  agregarBultosBatch,
+  eliminarBulto,
+  finalizarBultos,
+  getBultosEtiqueta,
+  editarBulto as editarBultoService,
+} from "../services/seguimientoService";
 import type { Bulto } from "../services/seguimientoService";
 import type { PedidoSeguimiento } from "../types/seguimiento.types";
 
@@ -17,6 +25,7 @@ export default function ModalBultos({
   const [guardando,     setGuardando]     = useState(false);
   const [eliminando,    setEliminando]    = useState<number | null>(null);
   const [nuevaCantidad, setNuevaCantidad] = useState("");
+  const [repetir,       setRepetir]       = useState("1");
   const [error,         setError]         = useState<string | null>(null);
 
   useEffect(() => { cargar(); }, []);
@@ -36,20 +45,37 @@ export default function ModalBultos({
   };
 
   const handleAgregar = async () => {
-    const cantidad = parseInt(nuevaCantidad);
+    const cantidad  = parseInt(nuevaCantidad);
+    const veces     = Math.max(1, parseInt(repetir) || 1);
+
     if (!cantidad || cantidad <= 0) {
       setError("Ingresa una cantidad válida mayor a 0.");
       return;
     }
+
     setGuardando(true);
     setError(null);
+
     try {
-      const nuevo = await agregarBulto(pedido.idproduccion!, { cantidad_unidades: cantidad });
-      setBultos(prev => [...prev, nuevo]);
-      setTotalUnidades(prev => prev + nuevo.cantidad_unidades);
+      if (veces === 1) {
+        // Flujo original — un solo bulto
+        const nuevo = await agregarBulto(pedido.idproduccion!, { cantidad_unidades: cantidad });
+        setBultos(prev => [...prev, nuevo]);
+        setTotalUnidades(prev => prev + nuevo.cantidad_unidades);
+      } else {
+        // Batch — N bultos idénticos
+        const resultado = await agregarBultosBatch(pedido.idproduccion!, {
+          cantidad_unidades: cantidad,
+          repeticiones:      veces,
+        });
+        setBultos(prev => [...prev, ...resultado.bultos]);
+        setTotalUnidades(prev => prev + resultado.total_unidades_agregadas);
+      }
+
       setNuevaCantidad("");
+      setRepetir("1");
     } catch (e: any) {
-      setError(e.response?.data?.error || "Error al agregar bulto");
+      setError(e.response?.data?.error || "Error al agregar bulto(s)");
     } finally {
       setGuardando(false);
     }
@@ -68,6 +94,10 @@ export default function ModalBultos({
       setEliminando(null);
     }
   };
+
+  const cantidadNum = parseInt(nuevaCantidad) || 0;
+  const vecesNum    = Math.max(1, parseInt(repetir) || 1);
+  const esBatch     = vecesNum > 1 && cantidadNum > 0;
 
   return (
     <div className="space-y-4 min-w-[420px]">
@@ -95,30 +125,73 @@ export default function ModalBultos({
       {/* Formulario agregar */}
       <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
         <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">
-          Agregar bulto
+          Agregar bulto(s)
         </p>
-        <div className="flex gap-2">
-          <input
-            type="number"
-            min="1"
-            value={nuevaCantidad}
-            onChange={e => setNuevaCantidad(e.target.value)}
-            onKeyDown={e => e.key === "Enter" && handleAgregar()}
-            placeholder="Cantidad de unidades"
-            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
-          />
+
+        <div className="flex gap-2 items-end">
+          {/* Cantidad */}
+          <div className="flex-1">
+            <label className="block text-xs text-gray-400 mb-1">Cantidad de unidades</label>
+            <input
+              type="number"
+              min="1"
+              value={nuevaCantidad}
+              onChange={e => setNuevaCantidad(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && handleAgregar()}
+              placeholder="Ej: 1000"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+            />
+          </div>
+
+          {/* Multiplicador */}
+          <div className="w-24 flex-shrink-0">
+            <label className="block text-xs text-blue-500 font-semibold mb-1">× Repetir</label>
+            <input
+              type="number"
+              min="1"
+              max="50"
+              value={repetir}
+              onChange={e => setRepetir(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && handleAgregar()}
+              placeholder="1"
+              className="w-full px-3 py-2 border border-blue-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 text-center font-semibold"
+            />
+          </div>
+
+          {/* Botón */}
           <button
             onClick={handleAgregar}
             disabled={guardando || !nuevaCantidad}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-lg transition-colors flex items-center gap-1.5"
+            className="flex-shrink-0 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-lg transition-colors flex items-center gap-1.5"
           >
             {guardando
               ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
               : <span>+</span>
             }
-            Agregar
+            {guardando ? "Guardando..." : "Agregar"}
           </button>
         </div>
+
+        {/* Preview del batch */}
+        {esBatch && (
+          <div className="mt-2 flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg">
+            <svg className="w-4 h-4 text-blue-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+            </svg>
+            <p className="text-xs text-blue-700">
+              Se crearán{" "}
+              <span className="font-bold">{vecesNum} bultos</span>{" "}
+              de{" "}
+              <span className="font-bold">{cantidadNum.toLocaleString("es-MX")} pzas</span>{" "}
+              c/u →{" "}
+              <span className="font-bold">
+                {(vecesNum * cantidadNum).toLocaleString("es-MX")} pzas
+              </span>{" "}
+              en total
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Error */}
@@ -173,7 +246,8 @@ export default function ModalBultos({
                         ? <div className="w-3.5 h-3.5 border-2 border-red-400 border-t-transparent rounded-full animate-spin" />
                         : (
                           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                           </svg>
                         )
                       }

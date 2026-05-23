@@ -1,30 +1,31 @@
 import { useState } from "react";
-import { quitarDelCarrito, vaciarCarrito, asignarPaqueteriaCarrito } from "../services/enviosService";
-import type { CarritoPedido, Paqueteria } from "../types/envios.types";
+import {
+  quitarDelCarrito, vaciarCarrito, asignarTipoEnvioPedido,
+} from "../services/enviosService";
+import type { CarritoPedido, Paqueteria, TipoEnvioCarrito } from "../types/envios.types";
 import { showAlert } from './CustomAlert';
 import { showConfirm } from './CustomConfirm';
-
-
 
 interface Props {
   carrito:         CarritoPedido[];
   paqueterias:     Paqueteria[];
   onCarritoChange: () => Promise<void>;
   onProcesar:      () => void;
+  onNotaRemision:  () => void;
   onClose:         () => void;
 }
 
-export default function VistaCarrito({ carrito, paqueterias, onCarritoChange, onProcesar, onClose }: Props) {
+export default function VistaCarrito({
+  carrito, paqueterias, onCarritoChange, onProcesar, onNotaRemision, onClose,
+}: Props) {
   const [vaciando,  setVaciando]  = useState(false);
   const [asignando, setAsignando] = useState<number | null>(null);
 
-  // Estado local de tipo por pedido: null = local, number = idpaqueteria
-  const [tipoPedido, setTipoPedido] = useState<Map<number, "local" | "paqueteria">>(() => {
-    const m = new Map<number, "local" | "paqueteria">();
-    carrito.forEach(p => {
-      const tienePaq = p.bultos.some(b => b.paqueteria_idpaqueteria != null);
-      m.set(p.idsolicitud, tienePaq ? "paqueteria" : "local");
-    });
+  // Estado local tipo_envio por pedido
+  // IMPORTANTE: siempre inicia virgen, sin seleccionar Local/Paquetería/Recolección.
+  const [tipoPedido, setTipoPedido] = useState<Map<number, TipoEnvioCarrito | null>>(() => {
+    const m = new Map<number, TipoEnvioCarrito | null>();
+    carrito.forEach(p => m.set(p.idsolicitud, null));
     return m;
   });
 
@@ -37,13 +38,24 @@ export default function VistaCarrito({ carrito, paqueterias, onCarritoChange, on
     return m;
   });
 
-  const totalBultos = carrito.reduce((sum, p) => sum + p.bultos.length, 0);
+  const totalBultos   = carrito.reduce((sum, p) => sum + p.bultos.length, 0);
+  const totalPedidos  = carrito.length;
+
+  // Validación: todos los pedidos deben tener tipo válido para mostrar "Procesar"
+  const todoValido = carrito.every(p => {
+    const tipo = tipoPedido.get(p.idsolicitud) ?? null;
+    if (!tipo) return false;
+    if (tipo === "paqueteria") return (paqSeleccionada.get(p.idsolicitud) ?? 0) > 0;
+    return true;
+  });
 
   const handleQuitar = async (idbulto: number) => {
     try {
       await quitarDelCarrito(idbulto);
       await onCarritoChange();
-    } catch { showAlert("Error al quitar bulto"); }
+    } catch {
+      showAlert("Error al quitar bulto");
+    }
   };
 
   const handleVaciar = async () => {
@@ -52,32 +64,51 @@ export default function VistaCarrito({ carrito, paqueterias, onCarritoChange, on
     try {
       await vaciarCarrito();
       await onCarritoChange();
-    } catch { showAlert("Error al vaciar carrito"); }
-    finally { setVaciando(false); }
+    } catch {
+      showAlert("Error al vaciar carrito");
+    } finally {
+      setVaciando(false);
+    }
   };
 
-  const handleCambiarTipo = async (pedido: CarritoPedido, tipo: "local" | "paqueteria") => {
+  const handleCambiarTipo = async (pedido: CarritoPedido, tipo: TipoEnvioCarrito) => {
     setTipoPedido(prev => new Map(prev).set(pedido.idsolicitud, tipo));
 
-    // Si cambia a local, limpiar paquetería de todos los bultos
-    if (tipo === "local") {
-      setAsignando(pedido.idsolicitud);
-      try {
-        await Promise.all(pedido.bultos.map(b => asignarPaqueteriaCarrito(b.idcarrito, null)));
-        await onCarritoChange();
-      } catch { showAlert("Error al actualizar"); }
-      finally { setAsignando(null); }
+    // Si elige paquetería, NO pegamos al backend todavía.
+    // Primero debe seleccionar cuál paquetería para evitar 400 por paqueteria_idpaqueteria null.
+    if (tipo === "paqueteria") {
+      setPaqSeleccionada(prev => {
+        const next = new Map(prev);
+        next.delete(pedido.idsolicitud);
+        return next;
+      });
+      return;
+    }
+
+    setAsignando(pedido.idsolicitud);
+    try {
+      await asignarTipoEnvioPedido(pedido.idsolicitud, tipo);
+      await onCarritoChange();
+    } catch (error: any) {
+      showAlert(error.response?.data?.error || "Error al actualizar tipo de envío");
+    } finally {
+      setAsignando(null);
     }
   };
 
   const handleCambiarPaqueteria = async (pedido: CarritoPedido, idpaqueteria: number) => {
+    if (!idpaqueteria) return;
+
     setPaqSeleccionada(prev => new Map(prev).set(pedido.idsolicitud, idpaqueteria));
     setAsignando(pedido.idsolicitud);
     try {
-      await Promise.all(pedido.bultos.map(b => asignarPaqueteriaCarrito(b.idcarrito, idpaqueteria)));
+      await asignarTipoEnvioPedido(pedido.idsolicitud, "paqueteria", idpaqueteria);
       await onCarritoChange();
-    } catch { showAlert("Error al asignar paquetería"); }
-    finally { setAsignando(null); }
+    } catch (error: any) {
+      showAlert(error.response?.data?.error || "Error al asignar paquetería");
+    } finally {
+      setAsignando(null);
+    }
   };
 
   if (carrito.length === 0) {
@@ -89,8 +120,7 @@ export default function VistaCarrito({ carrito, paqueterias, onCarritoChange, on
         </svg>
         <p className="text-sm">El carrito está vacío</p>
         <p className="text-xs mt-1">Agrega bultos desde la tab de Envíos</p>
-        <button onClick={onClose}
-          className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">
+        <button onClick={onClose} className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">
           Ir a Envíos
         </button>
       </div>
@@ -103,7 +133,7 @@ export default function VistaCarrito({ carrito, paqueterias, onCarritoChange, on
       {/* Resumen */}
       <div className="flex items-center justify-between bg-blue-50 rounded-lg px-4 py-3">
         <span className="text-sm text-blue-700 font-medium">
-          {carrito.length} pedido(s) — {totalBultos} bulto(s) en total
+          {totalPedidos} pedido(s) — {totalBultos} bulto(s) en total
         </span>
         <button onClick={handleVaciar} disabled={vaciando}
           className="text-xs text-red-600 hover:text-red-800 font-medium disabled:opacity-50">
@@ -113,10 +143,10 @@ export default function VistaCarrito({ carrito, paqueterias, onCarritoChange, on
 
       {/* Pedidos */}
       {carrito.map(pedido => {
-        const tipo        = tipoPedido.get(pedido.idsolicitud) ?? "local";
-        const paqActual   = paqSeleccionada.get(pedido.idsolicitud) ?? 0;
-        const cargando    = asignando === pedido.idsolicitud;
-        const paqNombre   = paqueterias.find(p => p.idpaqueteria === paqActual)?.nombre;
+        const tipo      = tipoPedido.get(pedido.idsolicitud) ?? null;
+        const paqActual = paqSeleccionada.get(pedido.idsolicitud) ?? 0;
+        const cargando  = asignando === pedido.idsolicitud;
+        const paqNombre = paqueterias.find(p => p.idpaqueteria === paqActual)?.nombre;
 
         return (
           <div key={pedido.idsolicitud} className="bg-white border border-gray-200 rounded-lg overflow-hidden">
@@ -130,35 +160,29 @@ export default function VistaCarrito({ carrito, paqueterias, onCarritoChange, on
               <span className="text-xs text-gray-500 shrink-0">{pedido.bultos.length} bulto(s)</span>
             </div>
 
-            {/* Selector tipo envío — nivel pedido */}
+            {/* Selector tipo envío */}
             <div className="px-4 py-3 border-b border-gray-100">
               <p className="text-xs text-gray-500 font-medium mb-2">Tipo de envío para este pedido:</p>
               <div className="flex gap-2">
-                <button
-                  type="button"
-                  disabled={cargando}
-                  onClick={() => handleCambiarTipo(pedido, "local")}
-                  className={`flex-1 py-2 rounded-lg border-2 text-sm font-medium transition-colors disabled:opacity-50 ${
-                    tipo === "local"
-                      ? "border-blue-600 bg-blue-50 text-blue-700"
-                      : "border-gray-200 text-gray-500 hover:border-gray-300"
-                  }`}>
-                  🚚 Local
-                </button>
-                <button
-                  type="button"
-                  disabled={cargando}
-                  onClick={() => handleCambiarTipo(pedido, "paqueteria")}
-                  className={`flex-1 py-2 rounded-lg border-2 text-sm font-medium transition-colors disabled:opacity-50 ${
-                    tipo === "paqueteria"
-                      ? "border-blue-600 bg-blue-50 text-blue-700"
-                      : "border-gray-200 text-gray-500 hover:border-gray-300"
-                  }`}>
-                  📦 Paquetería
-                </button>
+                {([
+                  { value: "local",       label: "🚚 Local",       activeClass: "border-blue-600 bg-blue-50 text-blue-700" },
+                  { value: "paqueteria",  label: "📦 Paquetería",  activeClass: "border-blue-600 bg-blue-50 text-blue-700" },
+                  { value: "recoleccion", label: "🏭 Recolección", activeClass: "border-purple-600 bg-purple-50 text-purple-700" },
+                ] as { value: TipoEnvioCarrito; label: string; activeClass: string }[]).map(opt => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    disabled={cargando}
+                    onClick={() => handleCambiarTipo(pedido, opt.value)}
+                    className={`flex-1 py-2 rounded-lg border-2 text-sm font-medium transition-colors disabled:opacity-50 ${
+                      tipo === opt.value ? opt.activeClass : "border-gray-200 text-gray-500 hover:border-gray-300"
+                    }`}>
+                    {opt.label}
+                  </button>
+                ))}
               </div>
 
-              {/* Selector paquetería — solo si eligió paquetería */}
+              {/* Selector paquetería */}
               {tipo === "paqueteria" && (
                 <div className="mt-2 flex items-center gap-2">
                   <select
@@ -171,31 +195,31 @@ export default function VistaCarrito({ carrito, paqueterias, onCarritoChange, on
                       <option key={p.idpaqueteria} value={p.idpaqueteria}>{p.nombre}</option>
                     ))}
                   </select>
-                  {cargando && (
-                    <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin shrink-0" />
-                  )}
+                  {cargando && <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin shrink-0" />}
                 </div>
               )}
 
-              {/* Confirmación */}
-              {tipo === "local" && !cargando && (
-                <p className="mt-1.5 text-xs text-gray-400">
-                  Los bultos de este pedido irán en envío local
-                </p>
+              {/* Mensajes de confirmación */}
+              {!cargando && !tipo && (
+                <p className="mt-1.5 text-xs text-gray-400">Selecciona qué se hará con este pedido</p>
               )}
-              {tipo === "paqueteria" && paqNombre && !cargando && (
-                <p className="mt-1.5 text-xs text-indigo-600 font-medium">
-                  ✓ Los bultos de este pedido irán por {paqNombre}
-                </p>
+              {!cargando && tipo === "local" && (
+                <p className="mt-1.5 text-xs text-gray-400">Los bultos de este pedido irán en envío local</p>
               )}
-              {tipo === "paqueteria" && !paqActual && !cargando && (
-                <p className="mt-1.5 text-xs text-amber-600">
-                  ⚠ Selecciona una paquetería
+              {!cargando && tipo === "paqueteria" && paqNombre && (
+                <p className="mt-1.5 text-xs text-indigo-600 font-medium">✓ Los bultos irán por {paqNombre}</p>
+              )}
+              {!cargando && tipo === "paqueteria" && !paqActual && (
+                <p className="mt-1.5 text-xs text-amber-600">⚠ Selecciona una paquetería</p>
+              )}
+              {!cargando && tipo === "recoleccion" && (
+                <p className="mt-1.5 text-xs text-purple-600 font-medium">
+                  🏭 El cliente pasará a recoger en planta
                 </p>
               )}
             </div>
 
-            {/* Lista bultos — solo informativa */}
+            {/* Lista bultos */}
             <div className="divide-y divide-gray-100">
               {pedido.bultos.map((bulto, idx) => (
                 <div key={bulto.idcarrito} className="flex items-center justify-between px-4 py-2.5 text-xs">
@@ -208,32 +232,46 @@ export default function VistaCarrito({ carrito, paqueterias, onCarritoChange, on
                       <p className="text-gray-400">
                         {bulto.cantidad_unidades != null
                           ? `${bulto.cantidad_unidades.toLocaleString("es-MX")} pzas`
-                          : bulto.peso_producto != null
-                            ? `${bulto.peso_producto} kg`
-                            : "-"
+                          : bulto.peso_producto != null ? `${bulto.peso_producto} kg` : "-"
                         }
                         {bulto.alto != null && ` · ${bulto.alto}×${bulto.largo}×${bulto.ancho} cm`}
                       </p>
                     </div>
                   </div>
                   <button onClick={() => handleQuitar(bulto.idbulto)}
-                    className="text-red-400 hover:text-red-600 ml-2 text-base leading-none shrink-0">
-                    ✕
-                  </button>
+                    className="text-red-400 hover:text-red-600 ml-2 text-base leading-none shrink-0">✕</button>
                 </div>
               ))}
             </div>
-
           </div>
         );
       })}
 
-      {/* Botón procesar */}
-      <div className="flex justify-end pt-2 border-t border-gray-100">
-        <button onClick={onProcesar}
-          className="px-6 py-2.5 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 text-sm">
-          Procesar Envío →
-        </button>
+      {/* Botones de acción */}
+      <div className="flex flex-col gap-2 pt-2 border-t border-gray-100">
+
+        {/* Nota de Remisión — visible cuando hay 2+ pedidos en el carrito */}
+        {totalPedidos >= 2 && (
+          <div className="bg-emerald-50 border border-emerald-200 rounded-lg px-4 py-3">
+            <p className="text-xs text-emerald-700 font-medium mb-2">
+              📋 Hay {totalPedidos} pedidos en el carrito — puedes crear una Nota de Remisión conjunta
+            </p>
+            <button
+              onClick={onNotaRemision}
+              className="w-full py-2 bg-emerald-600 text-white rounded-lg font-semibold hover:bg-emerald-700 text-sm transition-colors">
+              Crear Nota de Remisión →
+            </button>
+          </div>
+        )}
+
+        <div className="flex justify-end">
+          <button
+            onClick={onProcesar}
+            disabled={!todoValido}
+            className="px-6 py-2.5 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 text-sm disabled:opacity-50 transition-colors">
+            Procesar Envío →
+          </button>
+        </div>
       </div>
     </div>
   );

@@ -7,36 +7,45 @@ import TabEnvios           from "../components/TabEnvios";
 import TabBitacora         from "../components/TabBitacora";
 import TabUnidades         from "../components/TabUnidades";
 import TabPaqueterias      from "../components/TabPaqueterias";
-import TabHistorialReportes from "../components/TabHistorialReportes"; // ← NUEVO
+import TabHistorialReportes from "../components/TabHistorialReportes";
 import VistaCarrito              from "../components/VistaCarrito";
 import FormularioProcesarCarrito from "../components/FormularioProcesarCarrito";
+import FormularioNotaRemisionMulti from "../components/FormularioNotaRemisionMulti";
 
-// ── NUEVO: "historial" añadido al tipo ──
 type Tab = "envios" | "bitacora" | "unidades" | "paqueterias" | "historial";
 
 const TABS: { key: Tab; label: string }[] = [
-  { key: "envios",      label: "Envíos"             },
+  { key: "envios",      label: "Envíos"              },
   { key: "bitacora",    label: "Bitácora de Reparto" },
   { key: "unidades",    label: "Unidades"            },
   { key: "paqueterias", label: "Paqueterías"         },
-  { key: "historial",   label: "Historial / Reportes" }, // ← NUEVO
+  { key: "historial",   label: "Historial / Reportes" },
 ];
 
 export default function Envios() {
-  const [tabActual,     setTabActual]     = useState<Tab>("envios");
-  const [carrito,       setCarrito]       = useState<CarritoPedido[]>([]);
-  const [paqueterias,   setPaqueterias]   = useState<Paqueteria[]>([]);
-  const [modalCarrito,  setModalCarrito]  = useState(false);
-  const [modalProcesar, setModalProcesar] = useState(false);
+  const [tabActual,          setTabActual]          = useState<Tab>("envios");
+  const [carrito,            setCarrito]            = useState<CarritoPedido[]>([]);
+  const [paqueterias,        setPaqueterias]        = useState<Paqueteria[]>([]);
+  const [modalCarrito,       setModalCarrito]       = useState(false);
+  const [modalProcesar,      setModalProcesar]      = useState(false);
+  const [modalNotaRemision,  setModalNotaRemision]  = useState(false);
 
   const totalBultosCarrito = carrito.reduce((sum, p) => sum + p.bultos.length, 0);
 
   const recargarCarrito = useCallback(async () => {
-    try { setCarrito(await getCarrito()); } catch { /* silencioso */ }
+    try {
+      setCarrito(await getCarrito());
+    } catch {
+      /* silencioso */
+    }
   }, []);
 
   const recargarPaqueterias = useCallback(async () => {
-    try { setPaqueterias(await getPaqueterias()); } catch { /* silencioso */ }
+    try {
+      setPaqueterias(await getPaqueterias());
+    } catch {
+      /* silencioso */
+    }
   }, []);
 
   useEffect(() => {
@@ -86,7 +95,7 @@ export default function Envios() {
       {tabActual === "bitacora"    && <TabBitacora />}
       {tabActual === "unidades"    && <TabUnidades />}
       {tabActual === "paqueterias" && <TabPaqueterias />}
-      {tabActual === "historial"   && <TabHistorialReportes />}  {/* ← NUEVO */}
+      {tabActual === "historial"   && <TabHistorialReportes />}
 
       {/* MODAL CARRITO */}
       {modalCarrito && (
@@ -95,7 +104,17 @@ export default function Envios() {
             carrito={carrito}
             paqueterias={paqueterias}
             onCarritoChange={recargarCarrito}
-            onProcesar={() => { setModalCarrito(false); setModalProcesar(true); }}
+
+            onProcesar={() => {
+              setModalCarrito(false);
+              setModalProcesar(true);
+            }}
+
+            onNotaRemision={() => {
+              setModalCarrito(false);
+              setModalNotaRemision(true);
+            }}
+
             onClose={() => setModalCarrito(false)}
           />
         </Modal>
@@ -111,6 +130,24 @@ export default function Envios() {
               await recargarCarrito();
             }}
             onCancel={() => setModalProcesar(false)}
+          />
+        </Modal>
+      )}
+
+      {/* MODAL NOTA REMISIÓN MULTI */}
+      {modalNotaRemision && (
+        <Modal
+          isOpen={modalNotaRemision}
+          onClose={() => setModalNotaRemision(false)}
+          title="Nota de Remisión conjunta">
+
+          <FormularioNotaRemisionMulti
+            carrito={carrito}
+            onSuccess={async () => {
+              setModalNotaRemision(false);
+              await recargarCarrito();
+            }}
+            onCancel={() => setModalNotaRemision(false)}
           />
         </Modal>
       )}

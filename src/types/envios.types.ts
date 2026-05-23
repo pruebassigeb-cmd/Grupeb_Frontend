@@ -180,12 +180,12 @@ export interface BitacoraRegistro {
   chofer: {
     idusuario: number;
     nombre:    string;
-  };
+  } | null;
   unidad: {
     idunidad: number;
     tipo:     string;
     nombre:   string;
-  };
+  } | null;
 }
 
 export interface UpdateBitacoraRequest {
@@ -216,8 +216,19 @@ export interface EnvioPaqueteria {
 }
 
 // ==========================
-// RECOLECCIÓN
+// RECOLECCIÓN — extendida con datos de quien recoge
 // ==========================
+export interface RecoleccionDatos {
+  nombre_quien_recogio: string;
+  empresa:              string | null;
+  unidad_marca:         string | null;
+  unidad_modelo:        string | null;
+  unidad_placas:        string | null;
+  tiene_foto:           boolean;
+  foto_s3_key:          string | null;
+  fecha_recogido:       string | null;
+}
+
 export interface EnvioRecoleccion {
   idenvio:                number;
   estado:                 "preparando" | "entregado";
@@ -229,11 +240,16 @@ export interface EnvioRecoleccion {
   cliente:                string;
   empresa:                string;
   total_bultos:           number;
+  idbitacora:             number | null;
+  recoleccion_datos:      RecoleccionDatos | null;   // ← NUEVO
 }
 
 // ==========================
 // CARRITO
 // ==========================
+export type TipoEnvioCarrito = "local" | "paqueteria" | "recoleccion";
+export type TipoEnvioCarritoSeleccion = TipoEnvioCarrito | null;
+
 export interface CarritoBulto {
   idcarrito:               number;
   idbulto:                 number;
@@ -247,6 +263,7 @@ export interface CarritoBulto {
   ancho:                   number | null;
   proceso_origen:          "bolseo" | "asa_flexible";
   agregado_por:            string;
+  tipo_envio:              TipoEnvioCarritoSeleccion;  // puede venir null para carrito virgen
   paqueteria_idpaqueteria: number | null;
   paqueteria_nombre:       string | null;
 }
@@ -255,6 +272,7 @@ export interface CarritoPedido {
   idsolicitud: number;
   no_pedido:   string;
   cliente:     string;
+  tipo_envio:  TipoEnvioCarrito | null;
   bultos:      CarritoBulto[];
 }
 
@@ -266,6 +284,7 @@ export interface ProcesarCarritoRequest {
   observaciones?:          string;
   pedidos: {
     idsolicitud: number;
+    tipo_envio:  TipoEnvioCarrito;                     // ← NUEVO
     bultos: {
       idbulto:                 number;
       paqueteria_idpaqueteria: number | null;
@@ -280,35 +299,6 @@ export interface ProductoSat {
   idproducto_sat: number;
   clave:          string;
   descripcion:    string;
-}
-
-// ==========================
-// FORMATO CASTORES
-// ==========================
-export interface FormatoCastoresRemitente {
-  nombre_empresa: string;
-  razon_social:   string;
-  rfc:            string;
-  telefonos:      string;
-  domicilio:      string;
-  colonia:        string;
-  ciudad:         string;
-  estado:         string;
-  codigo_postal:  string;
-  correo:         string;
-}
-
-export interface FormatoCastoresDestinatario {
-  nombre:        string;
-  razon_social:  string;
-  rfc:           string;
-  telefonos:     string;
-  domicilio:     string;
-  colonia:       string;
-  ciudad:        string;
-  estado:        string;
-  codigo_postal: string;
-  correo:        string;
 }
 
 // ==========================
@@ -356,10 +346,59 @@ export interface GuiaPaqueteriaGeneral {
     clave_producto_sat: string;
     clave_unidad_sat:   string;
   }[];
-  tipo_cobro?: "pagado" | "por_cobrar" | "cobrar_al_regreso";
-  asegurado?:  boolean;
-  requiere_factura: boolean;
-  tipo_entrega:     "domicilio" | "ocurre";
+}
+
+// ==========================
+// NOTA DE REMISIÓN MULTI-PEDIDO
+// ==========================
+export interface NotaRemisionMultiData {
+  idnota:       number;
+  no_nota:      string;
+  created_at:   string;
+  es_multi:     true;
+  tipo_entrega: "recoleccion" | "local";
+  chofer: { nombre: string } | null;
+  unidad: { nombre: string } | null;
+  envio: {
+    idenvio:       null;
+    tipo:          string;
+    fecha_envio:   string;
+    no_pedido:     string;   // lista de no_pedidos separada por coma
+    observaciones: null;
+  };
+  cliente: {
+    nombre:    string;
+    rfc:       string;
+    direccion: string;
+  };
+  pedidos: {
+    idsolicitud: number;
+    no_pedido:   string;
+    idenvio:     number;
+  }[];
+  productos: {
+    nombre_producto: string;
+    medida:          string;
+    no_pedido:       string;
+    total_bultos:    number;
+    total_unidades:  number | null;
+    total_kg:        number | null;
+  }[];
+}
+
+
+export interface NotaRemisionBitacoraItem {
+  idnota:       number;
+  no_nota:      string;
+  created_at:   string;
+  es_multi:     boolean;
+  tipo_entrega: "recoleccion" | "local";
+  no_pedido:    string;
+  cliente:      string;
+  total_pedidos: number;
+  total_bultos:  number;
+  chofer: { idusuario: number; nombre: string } | null;
+  unidad: { idunidad: number; nombre: string } | null;
 }
 
 // ── Filtros ──────────────────────────────────────────────────

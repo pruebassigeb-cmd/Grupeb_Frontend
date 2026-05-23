@@ -7,12 +7,14 @@ import type {
   Envio, CreateEnvioRequest,
   BitacoraRegistro, UpdateBitacoraRequest, EnvioPaqueteria, EnvioRecoleccion,
   CarritoPedido, ProcesarCarritoRequest,
+  TipoEnvioCarrito,
   ProductoSat,
   GuiaPaqueteriaGeneral,
   FiltrosHistorialLocal,
   FiltrosHistorialPaqueteria,
   HistorialLocalItem,
   HistorialPaqueteriaItem,
+  NotaRemisionMultiData, NotaRemisionBitacoraItem,
 } from "../types/envios.types";
 
 // ==========================
@@ -22,17 +24,14 @@ export const getUnidades = async (): Promise<Unidad[]> => {
   const res = await api.get<Unidad[]>("/unidades");
   return res.data;
 };
-
 export const createUnidad = async (data: CreateUnidadRequest): Promise<Unidad> => {
   const res = await api.post<{ unidad: Unidad }>("/unidades", data);
   return res.data.unidad;
 };
-
 export const updateUnidad = async (id: number, data: UpdateUnidadRequest): Promise<Unidad> => {
   const res = await api.put<{ unidad: Unidad }>(`/unidades/${id}`, data);
   return res.data.unidad;
 };
-
 export const deleteUnidad = async (id: number): Promise<void> => {
   await api.delete(`/unidades/${id}`);
 };
@@ -44,17 +43,14 @@ export const getPaqueterias = async (): Promise<Paqueteria[]> => {
   const res = await api.get<Paqueteria[]>("/paqueterias");
   return res.data;
 };
-
 export const createPaqueteria = async (data: CreatePaqueteriaRequest): Promise<Paqueteria> => {
   const res = await api.post<{ paqueteria: Paqueteria }>("/paqueterias", data);
   return res.data.paqueteria;
 };
-
 export const updatePaqueteria = async (id: number, data: UpdatePaqueteriaRequest): Promise<Paqueteria> => {
   const res = await api.put<{ paqueteria: Paqueteria }>(`/paqueterias/${id}`, data);
   return res.data.paqueteria;
 };
-
 export const deletePaqueteria = async (id: number): Promise<void> => {
   await api.delete(`/paqueterias/${id}`);
 };
@@ -74,25 +70,20 @@ export const getPedidosDisponibles = async (): Promise<PedidoDisponible[]> => {
   const res = await api.get<PedidoDisponible[]>("/envios/pedidos-disponibles");
   return res.data;
 };
-
 export const getBultosPedido = async (idsolicitud: number): Promise<BultoPedido[]> => {
   const res = await api.get<BultoPedido[]>(`/envios/pedidos/${idsolicitud}/bultos`);
   return res.data;
 };
-
 export const getEnviosPedido = async (idsolicitud: number): Promise<Envio[]> => {
   const res = await api.get<Envio[]>(`/envios/pedidos/${idsolicitud}/envios`);
   return res.data;
 };
-
 export const createEnvio = async (data: CreateEnvioRequest): Promise<void> => {
   await api.post("/envios", data);
 };
-
 export const updateEstadoEnvio = async (id: number, estado: string): Promise<void> => {
   await api.patch(`/envios/${id}/estado`, { estado });
 };
-
 export const deleteEnvio = async (id: number): Promise<void> => {
   await api.delete(`/envios/${id}`);
 };
@@ -104,15 +95,12 @@ export const getBitacora = async (): Promise<BitacoraRegistro[]> => {
   const res = await api.get<BitacoraRegistro[]>("/bitacora");
   return res.data;
 };
-
 export const registrarHoraSalida = async (id: number): Promise<void> => {
   await api.patch(`/bitacora/${id}/hora-salida`);
 };
-
 export const registrarHoraLlegada = async (id: number): Promise<void> => {
   await api.patch(`/bitacora/${id}/hora-llegada`);
 };
-
 export const updateBitacora = async (id: number, data: UpdateBitacoraRequest): Promise<void> => {
   await api.put(`/bitacora/${id}`, data);
 };
@@ -124,7 +112,6 @@ export const getEnviosPaqueteria = async (): Promise<EnvioPaqueteria[]> => {
   const res = await api.get<EnvioPaqueteria[]>("/envios/paqueteria/historial");
   return res.data;
 };
-
 export const updateGuiaEnvio = async (id: number, numero_guia: string): Promise<void> => {
   await api.patch(`/envios/${id}/guia`, { numero_guia });
 };
@@ -133,8 +120,38 @@ export const updateGuiaEnvio = async (id: number, numero_guia: string): Promise<
 // ENVÍOS DE RECOLECCIÓN
 // ==========================
 export const getEnviosRecoleccion = async (): Promise<EnvioRecoleccion[]> => {
-  const res = await api.get<EnvioRecoleccion[]>("/envios/recoleccion");
+  // Ahora viene del nuevo endpoint que devuelve recoleccion_datos
+  const res = await api.get<EnvioRecoleccion[]>("/bitacora/recoleccion");
   return res.data;
+};
+
+// Marcar recolección como entregada con datos y foto opcional
+export const marcarRecolectado = async (
+  idenvio: number,
+  datos: {
+    nombre_quien_recogio: string;
+    empresa?:             string;
+    unidad_marca?:        string;
+    unidad_modelo?:       string;
+    unidad_placas?:       string;
+  }
+): Promise<void> => {
+  // La foto ya NO se manda aquí — se sube por separado a archivos con envio_id
+  const formData = new FormData();
+  formData.append("nombre_quien_recogio", datos.nombre_quien_recogio);
+  if (datos.empresa)       formData.append("empresa",       datos.empresa);
+  if (datos.unidad_marca)  formData.append("unidad_marca",  datos.unidad_marca);
+  if (datos.unidad_modelo) formData.append("unidad_modelo", datos.unidad_modelo);
+  if (datos.unidad_placas) formData.append("unidad_placas", datos.unidad_placas);
+
+  await api.patch(`/bitacora/recoleccion/${idenvio}/marcar-recogido`, formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+};
+
+export const getFotoRecoleccion = async (idenvio: number): Promise<string> => {
+  const res = await api.get<{ url: string }>(`/bitacora/recoleccion/${idenvio}/foto`);
+  return res.data.url;
 };
 
 // ==========================
@@ -170,6 +187,28 @@ export const getOrCreateNotaRemision = async (idenvio: number): Promise<NotaRemi
   return res.data;
 };
 
+// Nota de remisión multi-pedido
+export const crearNotaRemisionMulti = async (data: {
+  envios_ids:          number[];
+  tipo_entrega:        "recoleccion" | "local";
+  chofer_idusuario?:   number;
+  unidad_idunidad?:    number;
+}): Promise<NotaRemisionMultiData> => {
+  const res = await api.post<NotaRemisionMultiData>("/notas-remision/multi", data);
+  return res.data;
+};
+
+export const getNotaRemisionMulti = async (idnota: number): Promise<NotaRemisionMultiData> => {
+  const res = await api.get<NotaRemisionMultiData>(`/notas-remision/multi/${idnota}`);
+  return res.data;
+};
+
+export const getNotasRemisionBitacora = async (): Promise<NotaRemisionBitacoraItem[]> => {
+  const res = await api.get<NotaRemisionBitacoraItem[]>("/notas-remision/bitacora");
+  return res.data;
+};
+
+
 // ==========================
 // CARRITO
 // ==========================
@@ -182,27 +221,44 @@ export const agregarAlCarrito = async (bultos_ids: number[], idsolicitud: number
   await api.post("/carrito/agregar", { bultos_ids, idsolicitud });
 };
 
-export const asignarPaqueteriaCarrito = async (idcarrito: number, paqueteria_idpaqueteria: number | null): Promise<void> => {
+// Asignar tipo de envío a nivel pedido (reemplaza asignarPaqueteriaCarrito a nivel pedido)
+export const asignarTipoEnvioPedido = async (
+  idsolicitud: number,
+  tipo_envio: TipoEnvioCarrito,
+  paqueteria_idpaqueteria?: number
+): Promise<void> => {
+  await api.post("/carrito/tipo-envio", {
+    idsolicitud,
+    tipo_envio,
+    paqueteria_idpaqueteria: paqueteria_idpaqueteria ?? null,
+  });
+};
+
+// Retrocompat — asignar paquetería a un bulto individual (sigue existiendo)
+export const asignarPaqueteriaCarrito = async (
+  idcarrito: number,
+  paqueteria_idpaqueteria: number | null
+): Promise<void> => {
   await api.patch(`/carrito/bulto/${idcarrito}/paqueteria`, { paqueteria_idpaqueteria });
 };
 
 export const quitarDelCarrito = async (idbulto: number): Promise<void> => {
   await api.delete(`/carrito/quitar/${idbulto}`);
 };
-
 export const vaciarCarrito = async (): Promise<void> => {
   await api.delete("/carrito/vaciar");
 };
 
-// ── Tipo del objeto que devuelve el backend por cada envío creado ──
 export interface EnvioCreado {
   idenvio:                 number;
-  tipo:                    "local" | "paqueteria";
+  tipo:                    "local" | "paqueteria" | "recoleccion";
   paqueteria_idpaqueteria: number | null;
   paqueteria_nombre:       string | null;
 }
 
-export const procesarCarrito = async (data: ProcesarCarritoRequest): Promise<{ envios_creados: EnvioCreado[] }> => {
+export const procesarCarrito = async (
+  data: ProcesarCarritoRequest
+): Promise<{ envios_creados: EnvioCreado[] }> => {
   const res = await api.post<{ envios_creados: EnvioCreado[] }>("/carrito/procesar", data);
   return res.data;
 };
@@ -216,21 +272,16 @@ export const getProductosSat = async (): Promise<ProductoSat[]> => {
 };
 
 // ==========================
-// FORMATO CASTORES
+// FORMATOS
 // ==========================
 export const getFormatoCastores = async (idenvio: number): Promise<any> => {
   const res = await api.get(`/formato-castores/${idenvio}`);
   return res.data;
 };
-
-// ==========================
-// GUÍA GENERAL PAQUETERÍA
-// ==========================
 export const getGuiaPaqueteriaGeneral = async (idenvio: number): Promise<GuiaPaqueteriaGeneral> => {
   const res = await api.get<GuiaPaqueteriaGeneral>(`/envios/${idenvio}/guia-general`);
   return res.data;
 };
-
 export const updateClavesSatBultos = async (
   idenvio: number,
   bultos: { idbulto: number; clave_producto_sat: string; clave_unidad_sat: string }[]
@@ -240,18 +291,15 @@ export const updateClavesSatBultos = async (
 
 // ==========================
 // BULTOS POR ORDEN DE PRODUCCIÓN
-// (para ModalEnvioSeguimiento — filtra bultos y envíos de una orden específica)
 // ==========================
 export interface BultoConEnvio extends BultoPedido {
   nombre_producto: string;
   medida:          string;
 }
-
 export interface BultosPorProduccionResponse {
   bultos: BultoConEnvio[];
   envios: Envio[];
 }
-
 export const getBultosPorProduccion = async (
   idsolicitud:  number,
   idproduccion: number,
@@ -262,7 +310,7 @@ export const getBultosPorProduccion = async (
   return res.data;
 };
 
-// ── helpers ──────────────────────────────────────────────────
+// ── helpers ─────────────────────────────────────────────────
 function toQueryString(params: Record<string, any>): string {
   const p = new URLSearchParams();
   Object.entries(params).forEach(([k, v]) => {
@@ -272,18 +320,11 @@ function toQueryString(params: Record<string, any>): string {
   return qs ? `?${qs}` : "";
 }
 
-// ── Historial local ───────────────────────────────────────────
-export const getHistorialLocal = async (
-  filtros: FiltrosHistorialLocal = {}
-): Promise<HistorialLocalItem[]> => {
+export const getHistorialLocal = async (filtros: FiltrosHistorialLocal = {}): Promise<HistorialLocalItem[]> => {
   const res = await api.get<HistorialLocalItem[]>(`/historial/local${toQueryString(filtros)}`);
   return res.data;
 };
-
-// ── Historial paquetería ──────────────────────────────────────
-export const getHistorialPaqueteria = async (
-  filtros: FiltrosHistorialPaqueteria = {}
-): Promise<HistorialPaqueteriaItem[]> => {
+export const getHistorialPaqueteria = async (filtros: FiltrosHistorialPaqueteria = {}): Promise<HistorialPaqueteriaItem[]> => {
   const res = await api.get<HistorialPaqueteriaItem[]>(`/historial/paqueteria${toQueryString(filtros)}`);
   return res.data;
 };

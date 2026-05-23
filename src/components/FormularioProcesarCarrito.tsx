@@ -6,39 +6,39 @@ import {
 import { generarNotasMultiples } from "../utils/generarNotaRemision";
 import type { CarritoPedido, Conductor, Unidad } from "../types/envios.types";
 import { inputClass, labelClass } from "./enviosConstants";
-import ModalFormatoCastores       from "./ModalFormatoCastores";
-import ModalFormatoTresGuerras    from "./ModalFormatoTresGuerras";
+import ModalFormatoCastores from "./ModalFormatoCastores";
+import ModalFormatoTresGuerras from "./ModalFormatoTresGuerras";
 import ModalGuiaPaqueteriaGeneral from "./ModalGuiaPaqueteriaGeneral";
 import { showAlert } from './CustomAlert';
 
 
 interface Props {
-  carrito:   CarritoPedido[];
+  carrito: CarritoPedido[];
   onSuccess: () => Promise<void>;
-  onCancel:  () => void;
+  onCancel: () => void;
 }
 
 // Cada elemento de la cola tiene el idenvio y el tipo de modal a mostrar
 interface ModalPendiente {
   idenvio: number;
-  tipo:    "castores" | "tres_guerras" | "general";
+  tipo: "castores" | "tres_guerras" | "general";
 }
 
 export default function FormularioProcesarCarrito({ carrito, onSuccess, onCancel }: Props) {
-  const [conductores,       setConductores]       = useState<Conductor[]>([]);
-  const [unidades,          setUnidades]          = useState<Unidad[]>([]);
+  const [conductores, setConductores] = useState<Conductor[]>([]);
+  const [unidades, setUnidades] = useState<Unidad[]>([]);
   const [cargandoCatalogos, setCargandoCatalogos] = useState(true);
-  const [loading,           setLoading]           = useState(false);
+  const [loading, setLoading] = useState(false);
 
   // Cola unificada de modales pendientes
   const [modalPendientes, setModalPendientes] = useState<ModalPendiente[]>([]);
 
   const [form, setForm] = useState({
-    usuarios_idusuario:     0,
-    unidades_idunidad:      0,
-    costo_flete:            "",
+    usuarios_idusuario: 0,
+    unidades_idunidad: 0,
+    costo_flete: "",
     fecha_entrega_estimada: "",
-    observaciones:          "",
+    observaciones: "",
   });
 
   const [seleccion, setSeleccion] = useState<Map<number, Set<number>>>(() => {
@@ -64,7 +64,7 @@ export default function FormularioProcesarCarrito({ carrito, onSuccess, onCancel
   const toggleBulto = (idsolicitud: number, idbulto: number) => {
     setSeleccion(prev => {
       const next = new Map(prev);
-      const set  = new Set(next.get(idsolicitud) ?? []);
+      const set = new Set(next.get(idsolicitud) ?? []);
       if (set.has(idbulto)) set.delete(idbulto);
       else set.add(idbulto);
       next.set(idsolicitud, set);
@@ -76,16 +76,14 @@ export default function FormularioProcesarCarrito({ carrito, onSuccess, onCancel
     .reduce((sum, set) => sum + set.size, 0);
 
   const hayBultosLocales = carrito.some(p =>
-    p.bultos.some(b =>
-      b.paqueteria_idpaqueteria === null &&
-      (seleccion.get(p.idsolicitud)?.has(b.idbulto) ?? false)
-    )
+    p.tipo_envio === "local" &&
+    p.bultos.some(b => seleccion.get(p.idsolicitud)?.has(b.idbulto) ?? false)
   );
 
   // ── Determina el tipo de modal según nombre de paquetería ──
   const tipoModal = (nombre: string | null): "castores" | "tres_guerras" | "general" => {
     const n = (nombre ?? "").toLowerCase();
-    if (n.includes("castores"))    return "castores";
+    if (n.includes("castores")) return "castores";
     if (n.includes("tres guerras")) return "tres_guerras";
     return "general";
   };
@@ -103,21 +101,22 @@ export default function FormularioProcesarCarrito({ carrito, onSuccess, onCancel
       const pedidos = carrito
         .map(p => ({
           idsolicitud: p.idsolicitud,
+          tipo_envio: p.tipo_envio,   // ← agregar esta línea
           bultos: p.bultos
             .filter(b => seleccion.get(p.idsolicitud)?.has(b.idbulto))
             .map(b => ({
-              idbulto:                 b.idbulto,
+              idbulto: b.idbulto,
               paqueteria_idpaqueteria: b.paqueteria_idpaqueteria ?? null,
             })),
         }))
         .filter(p => p.bultos.length > 0);
 
       const result = await procesarCarrito({
-        usuarios_idusuario:     form.usuarios_idusuario     || undefined,
-        unidades_idunidad:      form.unidades_idunidad       || undefined,
-        costo_flete:            form.costo_flete            ? Number(form.costo_flete) : undefined,
+        usuarios_idusuario: form.usuarios_idusuario || undefined,
+        unidades_idunidad: form.unidades_idunidad || undefined,
+        costo_flete: form.costo_flete ? Number(form.costo_flete) : undefined,
         fecha_entrega_estimada: form.fecha_entrega_estimada || undefined,
-        observaciones:          form.observaciones          || undefined,
+        observaciones: form.observaciones || undefined,
         pedidos,
       });
 
@@ -137,7 +136,7 @@ export default function FormularioProcesarCarrito({ carrito, onSuccess, onCancel
         .filter(e => e.tipo === "paqueteria")
         .map(e => ({
           idenvio: e.idenvio,
-          tipo:    tipoModal(e.paqueteria_nombre),
+          tipo: tipoModal(e.paqueteria_nombre),
         }));
 
       if (pendientes.length > 0) {
@@ -291,11 +290,10 @@ export default function FormularioProcesarCarrito({ carrito, onSuccess, onCancel
                             : "-"
                         }
                       </span>
-                      <span className={`px-2 py-0.5 rounded-full shrink-0 ${
-                        bulto.paqueteria_idpaqueteria
+                      <span className={`px-2 py-0.5 rounded-full shrink-0 ${bulto.paqueteria_idpaqueteria
                           ? "bg-indigo-100 text-indigo-700"
                           : "bg-gray-100 text-gray-500"
-                      }`}>
+                        }`}>
                         {bulto.paqueteria_nombre ?? "Local"}
                       </span>
                     </div>
@@ -317,10 +315,10 @@ export default function FormularioProcesarCarrito({ carrito, onSuccess, onCancel
         b.paqueteria_idpaqueteria != null &&
         (seleccion.get(p.idsolicitud)?.has(b.idbulto) ?? false)
       )) && (
-        <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-2 text-xs text-amber-700">
-          📋 Se generará el formato correspondiente para cada paquetería al registrar el envío.
-        </div>
-      )}
+          <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-2 text-xs text-amber-700">
+            📋 Se generará el formato correspondiente para cada paquetería al registrar el envío.
+          </div>
+        )}
 
       <div className="flex justify-end gap-3 pt-2 border-t border-gray-100">
         <button onClick={onCancel} disabled={loading}

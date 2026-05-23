@@ -7,9 +7,11 @@ import {
   registrarAvance,
   getBultos,
   agregarBulto,
+  agregarBultosBatch,
   eliminarBulto,
   finalizarBultos,
   getBultosEtiqueta,
+  marcarBultosParcialidad,
   editarBulto as editarBultoService,
 } from "../services/seguimientoService";
 import type {
@@ -17,6 +19,7 @@ import type {
   AvanceParcial,
   Bulto,
   NuevoBultoPayload,
+  NuevoBultoBatchPayload,
 } from "../services/seguimientoService";
 import { generarPdfEtiquetas } from "../services/generarPdfEtiquetas";
 import type { PedidoSeguimiento } from "../types/seguimiento.types";
@@ -26,73 +29,73 @@ import type { PedidoSeguimiento } from "../types/seguimiento.types";
 // ─────────────────────────────────────────────
 const CAMPOS_PROCESO: Record<string, { key: string; label: string; readOnly?: boolean }[]> = {
   extrusion: [
-    { key: "kilos_extruir",    label: "Kilos a extruir",    readOnly: true },
-    { key: "metros_extruir",   label: "Metros a extruir",   readOnly: true },
-    { key: "merma",            label: "Merma (kg)" },
+    { key: "kilos_extruir", label: "Kilos a extruir", readOnly: true },
+    { key: "metros_extruir", label: "Metros a extruir", readOnly: true },
+    { key: "merma", label: "Merma (kg)" },
     { key: "k_para_impresion", label: "Kilos p/ impresion" },
     { key: "metros_extruidos", label: "Metros extruidos" },
   ],
   impresion: [
-    { key: "kilos_imprimir",   label: "Kilos a imprimir",   readOnly: true },
-    { key: "metros_imprimir",  label: "Metros a imprimir",  readOnly: true },
-    { key: "merma",            label: "Merma (kg)" },
-    { key: "kilos_impresos",   label: "Kilos impresos" },
-    { key: "metros_impresos",  label: "Metros impresos" },
+    { key: "kilos_imprimir", label: "Kilos a imprimir", readOnly: true },
+    { key: "metros_imprimir", label: "Metros a imprimir", readOnly: true },
+    { key: "merma", label: "Merma (kg)" },
+    { key: "kilos_impresos", label: "Kilos impresos" },
+    { key: "metros_impresos", label: "Metros impresos" },
   ],
   bolseo: [
-    { key: "kilos_bolsear",    label: "Kilos a bolsear",    readOnly: true },
-    { key: "kilos_merma",      label: "Kilos merma" },
-    { key: "kilos_bolseados",  label: "Kilos bolseados" },
-    { key: "piezas_merma",     label: "Piezas merma" },
+    { key: "kilos_bolsear", label: "Kilos a bolsear", readOnly: true },
+    { key: "kilos_merma", label: "Kilos merma" },
+    { key: "kilos_bolseados", label: "Kilos bolseados" },
+    { key: "piezas_merma", label: "Piezas merma" },
     { key: "piezas_bolseadas", label: "Piezas bolseadas" },
   ],
   asa_flexible: [
     { key: "piezas_recibidas", label: "Pzas recibidas (de bolseo)", readOnly: true },
-    { key: "merma",            label: "Merma (pzas)" },
-    { key: "pzas_finales",     label: "Piezas finales" },
+    { key: "merma", label: "Merma (pzas)" },
+    { key: "pzas_finales", label: "Piezas finales" },
   ],
 };
 
 const AVANCE_UNIDAD: Record<string, { label: string; unidad: string; placeholder: string }> = {
-  extrusion:    { label: "Kilos extruidos hoy",   unidad: "kg",   placeholder: "Ej: 120.5" },
-  impresion:    { label: "Kilos impresos hoy",     unidad: "kg",   placeholder: "Ej: 85.0"  },
-  bolseo:       { label: "Piezas bolseadas hoy",   unidad: "pzas", placeholder: "Ej: 5000"  },
-  asa_flexible: { label: "Piezas terminadas hoy",  unidad: "pzas", placeholder: "Ej: 2000"  },
+  extrusion: { label: "Kilos extruidos hoy", unidad: "kg", placeholder: "Ej: 120.5" },
+  impresion: { label: "Kilos impresos hoy", unidad: "kg", placeholder: "Ej: 85.0" },
+  bolseo: { label: "Piezas bolseadas hoy", unidad: "pzas", placeholder: "Ej: 5000" },
+  asa_flexible: { label: "Piezas terminadas hoy", unidad: "pzas", placeholder: "Ej: 2000" },
 };
 
 // ─────────────────────────────────────────────
 // HELPERS
 // ─────────────────────────────────────────────
 function calcularBobinaVisual(pedido: PedidoSeguimiento) {
-  const alto     = parseFloat(pedido.altura)        || 0;
-  const ancho    = parseFloat(pedido.ancho)         || 0;
-  const fFondo   = parseFloat(pedido.fuelle_fondo)  || 0;
-  const fLatIz   = parseFloat(pedido.fuelle_lat_iz) || 0;
-  const fLatDe   = parseFloat(pedido.fuelle_lat_de) || 0;
-  const refuerzo = parseFloat(pedido.refuerzo)      || 0;
-  const piezas   = pedido.cantidad_orden            || 0;
+  const alto = parseFloat(pedido.altura) || 0;
+  const ancho = parseFloat(pedido.ancho) || 0;
+  const fFondo = parseFloat(pedido.fuelle_fondo) || 0;
+  const fLatIz = parseFloat(pedido.fuelle_lat_iz) || 0;
+  const fLatDe = parseFloat(pedido.fuelle_lat_de) || 0;
+  const refuerzo = parseFloat(pedido.refuerzo) || 0;
+  const piezas = pedido.cantidad_orden || 0;
 
   let anchoBobina: number;
   let repeticion: number;
 
   if (fFondo > 0 || refuerzo > 0) {
     anchoBobina = alto + fFondo + refuerzo;
-    repeticion  = ancho + fLatIz + fLatDe;
+    repeticion = ancho + fLatIz + fLatDe;
   } else {
     anchoBobina = ancho + fLatIz + fLatDe;
-    repeticion  = alto;
+    repeticion = alto;
   }
 
-  const metros       = repeticion > 0 ? piezas * (repeticion / 100) : 0;
+  const metros = repeticion > 0 ? piezas * (repeticion / 100) : 0;
   const repsPorMetro = repeticion > 0 ? Math.round((100 / repeticion) * 100) / 100 : 0;
 
   return {
-    ancho_bobina:   Math.round(anchoBobina * 100) / 100,
+    ancho_bobina: Math.round(anchoBobina * 100) / 100,
     metros_extruir: Math.round(metros * 100) / 100,
-    kilos_extruir:  pedido.kilogramos_orden || 0,
-    repeticion_cm:  repeticion,
+    kilos_extruir: pedido.kilogramos_orden || 0,
+    repeticion_cm: repeticion,
     reps_por_metro: repsPorMetro,
-    orientacion:    (fFondo > 0 || refuerzo > 0) ? "horizontal" : "vertical",
+    orientacion: (fFondo > 0 || refuerzo > 0) ? "horizontal" : "vertical",
   };
 }
 
@@ -112,15 +115,15 @@ function TarjetaProducto({ pedido }: { pedido: PedidoSeguimiento }) {
         {pedido.medida && <span className="font-normal text-gray-500"> · {pedido.medida}</span>}
       </p>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-700">
-        {pedido.material  && <span><span className="text-gray-400">Material </span>{pedido.material}</span>}
-        {pedido.calibre   && <span><span className="text-gray-400">Calibre </span>{pedido.calibre}</span>}
+        {pedido.material && <span><span className="text-gray-400">Material </span>{pedido.material}</span>}
+        {pedido.calibre && <span><span className="text-gray-400">Calibre </span>{pedido.calibre}</span>}
         <span><span className="text-gray-400">Cantidad </span>{cantidad}</span>
         {pedido.tintas != null && <span><span className="text-gray-400">Tintas </span>{pedido.tintas}</span>}
-        {pedido.caras  != null && <span><span className="text-gray-400">Caras </span>{pedido.caras}</span>}
-        {pedido.asa_suaje  && <span><span className="text-gray-400">Asa / Suaje </span>{pedido.asa_suaje}</span>}
-        {pedido.pigmentos  && <span><span className="text-gray-400">Pigmento </span>{pedido.pigmentos}</span>}
-        {pedido.pantones   && <span><span className="text-gray-400">Pantones </span>{pedido.pantones}</span>}
-        {pedido.bk   && <span className="px-1.5 py-0.5 bg-gray-800 text-white rounded text-xs">BK</span>}
+        {pedido.caras != null && <span><span className="text-gray-400">Caras </span>{pedido.caras}</span>}
+        {pedido.asa_suaje && <span><span className="text-gray-400">Asa / Suaje </span>{pedido.asa_suaje}</span>}
+        {pedido.pigmentos && <span><span className="text-gray-400">Pigmento </span>{pedido.pigmentos}</span>}
+        {pedido.pantones && <span><span className="text-gray-400">Pantones </span>{pedido.pantones}</span>}
+        {pedido.bk && <span className="px-1.5 py-0.5 bg-gray-800 text-white rounded text-xs">BK</span>}
         {pedido.foil && <span className="px-1.5 py-0.5 bg-yellow-500 text-white rounded text-xs">FOIL</span>}
       </div>
       {pedido.observacion && (
@@ -136,9 +139,9 @@ function TarjetaProducto({ pedido }: { pedido: PedidoSeguimiento }) {
 // RESUMEN BOLSAS ORDEN
 // ─────────────────────────────────────────────
 function ResumenBolsasOrden({ pedido }: { pedido: PedidoSeguimiento }) {
-  const cantidadBolsas = pedido.cantidad_orden   ?? null;
-  const kilogramos     = pedido.kilogramos_orden ?? null;
-  const esKilo         = pedido.modo_cantidad === "kilo";
+  const cantidadBolsas = pedido.cantidad_orden ?? null;
+  const kilogramos = pedido.kilogramos_orden ?? null;
+  const esKilo = pedido.modo_cantidad === "kilo";
   return (
     <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3">
       <p className="text-xs font-semibold text-indigo-700 uppercase tracking-wide mb-2">
@@ -172,29 +175,28 @@ function ResumenBolsasOrden({ pedido }: { pedido: PedidoSeguimiento }) {
 // SECCIÓN AVANCES PARCIALES
 // ─────────────────────────────────────────────
 interface SeccionAvancesProps {
-  idproduccion:    number;
-  nombreProceso:   string;
-  avances:         AvanceParcial[];
-  totalAvances:    number;
+  idproduccion: number;
+  nombreProceso: string;
+  avances: AvanceParcial[];
+  totalAvances: number;
   onAvanceRegistrado: () => void;
-  metaKg:          number | null;
-  metaPzas:        number | null;
-  modoCantidad:    string;
-  limiteAnterior:  number | null;
+  metaKg: number | null;
+  metaPzas: number | null;
+  modoCantidad: string;
+  limiteAnterior: number | null;
 }
 
 function SeccionAvances({
   idproduccion, nombreProceso, avances, totalAvances, onAvanceRegistrado,
   metaKg, metaPzas, modoCantidad, limiteAnterior,
 }: SeccionAvancesProps) {
-  const [cantidad,          setCantidad]          = useState("");
-  const [observaciones,     setObservaciones]     = useState("");
-  const [guardando,         setGuardando]         = useState(false);
-  const [error,             setError]             = useState<string | null>(null);
-  const [expandido,         setExpandido]         = useState(false);
+  const [cantidad, setCantidad] = useState("");
+  const [observaciones, setObservaciones] = useState("");
+  const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [expandido, setExpandido] = useState(false);
   const [formularioAbierto, setFormularioAbierto] = useState(false);
 
-  // En bolseo/asa_flexible, si el pedido es por kilo el avance también es en kg
   const esProcesoPorKilo = modoCantidad === "kilo" &&
     (nombreProceso === "bolseo" || nombreProceso === "asa_flexible");
 
@@ -205,14 +207,14 @@ function SeccionAvances({
 
   const esKg = config.unidad === "kg";
   const meta = esKg ? metaKg : metaPzas;
-  const pct      = meta != null && meta > 0 ? Math.min((totalAvances / meta) * 100, 100) : null;
+  const pct = meta != null && meta > 0 ? Math.min((totalAvances / meta) * 100, 100) : null;
   const restante = meta != null ? Math.max(meta - totalAvances, 0) : null;
-  const cantNum  = parseFloat(cantidad) || 0;
+  const cantNum = parseFloat(cantidad) || 0;
 
   const restanteDelLimite = limiteAnterior != null ? Math.max(limiteAnterior - totalAvances, 0) : null;
-  const excedeLimite      = limiteAnterior != null && cantNum > 0 && (totalAvances + cantNum) > limiteAnterior;
-  const alcanzaLimite     = limiteAnterior != null && cantNum > 0 && (totalAvances + cantNum) === limiteAnterior;
-  const pctLimite         = limiteAnterior != null && limiteAnterior > 0
+  const excedeLimite = limiteAnterior != null && cantNum > 0 && (totalAvances + cantNum) > limiteAnterior;
+  const alcanzaLimite = limiteAnterior != null && cantNum > 0 && (totalAvances + cantNum) === limiteAnterior;
+  const pctLimite = limiteAnterior != null && limiteAnterior > 0
     ? Math.min((totalAvances / limiteAnterior) * 100, 100) : null;
 
   const handleRegistrar = async () => {
@@ -374,9 +376,7 @@ function SeccionAvances({
                   onChange={e => { setCantidad(e.target.value.replace(/[^0-9.]/g, "")); setError(null); }}
                   onKeyDown={e => e.key === "Enter" && handleRegistrar()}
                   placeholder={config.placeholder}
-                  className={`flex-1 px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 bg-white ${
-                    excedeLimite ? "border-red-400 focus:ring-red-300" : "border-blue-300 focus:ring-blue-400"
-                  }`}
+                  className={`flex-1 px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 bg-white ${excedeLimite ? "border-red-400 focus:ring-red-300" : "border-blue-300 focus:ring-blue-400"}`}
                 />
                 <span className="flex items-center px-3 py-2 bg-blue-100 border border-blue-200 rounded-lg text-xs font-semibold text-blue-700">
                   {config.unidad}
@@ -433,10 +433,10 @@ function SeccionAvances({
 // TARJETA BULTO
 // ─────────────────────────────────────────────
 interface NuevoBultoForm {
-  cantidad_unidades: string; // principal en modo unidad
-  peso_producto:     string; // principal en modo kilo
-  peso:  string;             // peso empaquetado (siempre)
-  alto:  string;
+  cantidad_unidades: string;
+  peso_producto: string;
+  peso: string;
+  alto: string;
   largo: string;
   ancho: string;
 }
@@ -444,16 +444,20 @@ const FORM_VACIO: NuevoBultoForm = {
   cantidad_unidades: "", peso_producto: "", peso: "", alto: "", largo: "", ancho: "",
 };
 
-function TarjetaBulto({ bulto, numero, bultosFinalizados, eliminando, onEliminar, onEditar, modoKilo }: {
+function TarjetaBulto({ bulto, numero, bultosFinalizados, eliminando, onEliminar, onEditar, modoKilo, esParcialidad }: {
   bulto: Bulto; numero: number; bultosFinalizados: boolean; modoKilo: boolean;
+  esParcialidad: boolean;
   eliminando: number | null; onEliminar: (idbulto: number) => void; onEditar: (bulto: Bulto) => void;
 }) {
+  const yaEnviado = esParcialidad && bulto.numero_parcialidad != null;
+
   return (
-    <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-      <div className="flex items-center justify-between px-3 py-2 bg-gray-50 border-b border-gray-100">
+    <div className={`border rounded-lg overflow-hidden transition-all ${yaEnviado ? "opacity-50 bg-gray-100 border-gray-200" : "bg-white border-gray-200"
+      }`}>
+      <div className={`flex items-center justify-between px-3 py-2 border-b border-gray-100 ${yaEnviado ? "bg-gray-200" : "bg-gray-50"
+        }`}>
         <div className="flex items-center gap-2">
           <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-indigo-600 text-white text-xs font-bold">{numero}</span>
-          {/* Dato principal según modo */}
           {modoKilo ? (
             <span className="text-sm font-semibold text-gray-800">
               {bulto.peso_producto != null ? bulto.peso_producto.toLocaleString("es-MX") : "—"}
@@ -470,38 +474,44 @@ function TarjetaBulto({ bulto, numero, bultosFinalizados, eliminando, onEliminar
               <span className="text-xs font-normal text-gray-500 ml-1">pzas</span>
             </span>
           )}
-          <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${
-            bulto.proceso_origen === "asa_flexible" ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700"
-          }`}>
+          <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${bulto.proceso_origen === "asa_flexible" ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700"
+            }`}>
             {bulto.proceso_origen === "asa_flexible" ? "Asa flexible" : "Bolseo"}
           </span>
+          {/* Badge envío parcial si ya fue enviado */}
+          {yaEnviado && (
+            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-gray-700 text-white">
+              ✓ Envío {bulto.numero_parcialidad}
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <span className="text-xs text-gray-400">
             {new Date(bulto.fecha_creacion).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}
           </span>
-          {!bultosFinalizados && (
+          {!bultosFinalizados && !yaEnviado && (
             <button onClick={() => onEliminar(bulto.idbulto)} disabled={eliminando === bulto.idbulto}
               className="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors disabled:opacity-40">
               {eliminando === bulto.idbulto
                 ? <div className="w-3.5 h-3.5 border-2 border-red-400 border-t-transparent rounded-full animate-spin" />
                 : <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                      d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                  </svg>
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
               }
             </button>
           )}
-          <button onClick={() => onEditar(bulto)}
-            className="p-1 text-blue-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors">
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-            </svg>
-          </button>
+          {!yaEnviado && (
+            <button onClick={() => onEditar(bulto)}
+              className="p-1 text-blue-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors">
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+              </svg>
+            </button>
+          )}
         </div>
       </div>
-      {/* Pesos y dimensiones */}
       <div className="px-3 py-2">
         <div className="grid grid-cols-4 gap-1.5">
           {bulto.peso_producto != null && modoKilo && (
@@ -545,9 +555,69 @@ function TarjetaBulto({ bulto, numero, bultosFinalizados, eliminando, onEliminar
   );
 }
 
+// ✅ Nuevo componente fuera de SeccionBultos
+function FilaEnvioParcial({
+  num,
+  bultosGrupo,
+  modoKilo,
+  idproduccion,
+  onError,
+}: {
+  num: number;
+  bultosGrupo: Bulto[];
+  modoKilo: boolean;
+  idproduccion: number;
+  onError: (msg: string) => void;
+}) {
+  const [reimp, setReimp] = useState(false);
+
+  const totalKgGrupo = bultosGrupo.reduce((s, b) => s + (b.peso_producto ?? 0), 0);
+  const totalUnidadesGrupo = bultosGrupo.reduce((s, b) => s + b.cantidad_unidades, 0);
+
+  return (
+    <div className="flex items-center justify-between px-3 py-2.5">
+      <div>
+        <p className="text-sm font-semibold text-gray-800">
+          Envío parcial {num}
+        </p>
+        <p className="text-xs text-gray-500">
+          {bultosGrupo.length} bulto{bultosGrupo.length !== 1 ? "s" : ""}
+          {modoKilo
+            ? ` · ${Math.round(totalKgGrupo * 100) / 100} kg`
+            : ` · ${totalUnidadesGrupo.toLocaleString("es-MX")} pzas`
+          }
+        </p>
+      </div>
+      <button
+        disabled={reimp}
+        onClick={async () => {
+          setReimp(true);
+          try {
+            const etiquetaData = await getBultosEtiqueta(idproduccion, num);
+            await generarPdfEtiquetas(etiquetaData);
+          } catch (e: any) {
+            onError(e.response?.data?.error || "Error al reimprimir");
+          } finally {
+            setReimp(false);
+          }
+        }}
+        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-700 hover:bg-gray-800 disabled:bg-gray-400 disabled:cursor-not-allowed text-white text-xs font-semibold rounded-lg transition-colors"
+      >
+        {reimp
+          ? <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+          : <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+              d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+          </svg>
+        }
+        {reimp ? "..." : "Reimprimir"}
+      </button>
+    </div>
+  );
+}
+
 // ─────────────────────────────────────────────
 // SECCIÓN BULTOS
-// modoKilo: true = pedido por kilogramos, false = por unidades
 // ─────────────────────────────────────────────
 function SeccionBultos({
   pedido, cantidadReal, modoKilo, limiteEnCurso,
@@ -555,25 +625,30 @@ function SeccionBultos({
   pedido: PedidoSeguimiento;
   cantidadReal?: number | null;
   modoKilo: boolean;
-  limiteEnCurso?: number | null; // límite cuando proceso en curso = total_avances acumulado
+  limiteEnCurso?: number | null;
 }) {
-  const [bultos,            setBultos]            = useState<Bulto[]>([]);
-  const [totalUnidades,     setTotalUnidades]     = useState(0);
-  const [totalKg,           setTotalKg]           = useState(0);
+  const [bultos, setBultos] = useState<Bulto[]>([]);
+  const [totalUnidades, setTotalUnidades] = useState(0);
+  const [totalKg, setTotalKg] = useState(0);
   const [bultosFinalizados, setBultosFinalizados] = useState(false);
-  const [cargando,          setCargando]          = useState(true);
-  const [guardando,         setGuardando]         = useState(false);
-  const [finalizando,       setFinalizando]       = useState(false);
-  const [confirmFinalizar,  setConfirmFinalizar]  = useState(false);
-  const [eliminando,        setEliminando]        = useState<number | null>(null);
-  const [form,              setForm]              = useState<NuevoBultoForm>(FORM_VACIO);
-  const [error,             setError]             = useState<string | null>(null);
+  const [cargando, setCargando] = useState(true);
+  const [guardando, setGuardando] = useState(false);
+  const [finalizando, setFinalizando] = useState(false);
+  const [confirmFinalizar, setConfirmFinalizar] = useState(false);
+  const [eliminando, setEliminando] = useState<number | null>(null);
+  const [form, setForm] = useState<NuevoBultoForm>(FORM_VACIO);
+  const [error, setError] = useState<string | null>(null);
   const [generandoEtiquetas, setGenerandoEtiquetas] = useState(false);
-  const [editandoBulto,     setEditandoBulto]     = useState<Bulto | null>(null);
-  const [formEditar,        setFormEditar]        = useState<NuevoBultoForm>(FORM_VACIO);
-  const [guardandoEdicion,  setGuardandoEdicion]  = useState(false);
+  const [editandoBulto, setEditandoBulto] = useState<Bulto | null>(null);
+  const [formEditar, setFormEditar] = useState<NuevoBultoForm>(FORM_VACIO);
+  const [guardandoEdicion, setGuardandoEdicion] = useState(false);
+  const [repetir, setRepetir] = useState("1");
+
+  const esParcialidad = Boolean((pedido as any).es_parcialidad);
 
   useEffect(() => { cargarBultos(); }, []);
+
+
 
   const cargarBultos = async () => {
     try {
@@ -587,12 +662,16 @@ function SeccionBultos({
     finally { setCargando(false); }
   };
 
+  // Bultos separados por estado de parcialidad
+  const bultosNuevos = bultos.filter(b => b.numero_parcialidad == null);
+  const bultosEnviados = bultos.filter(b => b.numero_parcialidad != null);
+
   const abrirEditar = (bulto: Bulto) => {
     setFormEditar({
       cantidad_unidades: bulto.cantidad_unidades > 0 ? String(bulto.cantidad_unidades) : "",
-      peso_producto:     bulto.peso_producto != null ? String(bulto.peso_producto) : "",
-      peso:  bulto.peso  != null ? String(bulto.peso)  : "",
-      alto:  bulto.alto  != null ? String(bulto.alto)  : "",
+      peso_producto: bulto.peso_producto != null ? String(bulto.peso_producto) : "",
+      peso: bulto.peso != null ? String(bulto.peso) : "",
+      alto: bulto.alto != null ? String(bulto.alto) : "",
       largo: bulto.largo != null ? String(bulto.largo) : "",
       ancho: bulto.ancho != null ? String(bulto.ancho) : "",
     });
@@ -605,15 +684,14 @@ function SeccionBultos({
     try {
       const payload: NuevoBultoPayload = {
         cantidad_unidades: formEditar.cantidad_unidades !== "" ? parseInt(formEditar.cantidad_unidades) : null,
-        peso_producto:     formEditar.peso_producto !== ""     ? parseFloat(formEditar.peso_producto)   : null,
-        peso:  formEditar.peso  !== "" ? parseFloat(formEditar.peso)  : null,
-        alto:  formEditar.alto  !== "" ? parseFloat(formEditar.alto)  : null,
+        peso_producto: formEditar.peso_producto !== "" ? parseFloat(formEditar.peso_producto) : null,
+        peso: formEditar.peso !== "" ? parseFloat(formEditar.peso) : null,
+        alto: formEditar.alto !== "" ? parseFloat(formEditar.alto) : null,
         largo: formEditar.largo !== "" ? parseFloat(formEditar.largo) : null,
         ancho: formEditar.ancho !== "" ? parseFloat(formEditar.ancho) : null,
       };
       const actualizado = await editarBultoService(pedido.idproduccion, editandoBulto.idbulto, payload);
       setBultos(prev => prev.map(b => b.idbulto === actualizado.idbulto ? actualizado : b));
-      // Recalcular totales
       const nuevosTotal = bultos.map(b => b.idbulto === actualizado.idbulto ? actualizado : b);
       setTotalUnidades(nuevosTotal.reduce((s, b) => s + b.cantidad_unidades, 0));
       setTotalKg(Math.round(nuevosTotal.reduce((s, b) => s + (b.peso_producto ?? 0), 0) * 100) / 100);
@@ -626,7 +704,6 @@ function SeccionBultos({
   const updateForm = (campo: keyof NuevoBultoForm, valor: string) =>
     setForm(prev => ({ ...prev, [campo]: valor }));
 
-  // Validación según modo
   const validarFormulario = (): string | null => {
     if (modoKilo) {
       if (!form.peso_producto.trim() || parseFloat(form.peso_producto) <= 0)
@@ -638,12 +715,11 @@ function SeccionBultos({
     if (!form.peso.trim() || parseFloat(form.peso) <= 0)
       return "El peso empaquetado es obligatorio.";
     if (!form.alto.trim() || !form.largo.trim() || !form.ancho.trim() ||
-        parseFloat(form.alto) <= 0 || parseFloat(form.largo) <= 0 || parseFloat(form.ancho) <= 0)
+      parseFloat(form.alto) <= 0 || parseFloat(form.largo) <= 0 || parseFloat(form.ancho) <= 0)
       return "Las dimensiones del bulto (alto, largo y ancho) son obligatorias.";
     return null;
   };
 
-  // Campos requeridos según modo
   const camposRequeridos = modoKilo
     ? (["peso_producto", "peso", "alto", "largo", "ancho"] as const)
     : (["cantidad_unidades", "peso", "alto", "largo", "ancho"] as const);
@@ -651,45 +727,62 @@ function SeccionBultos({
   const formularioCompleto = camposRequeridos.every(k => form[k].trim() !== "");
   const camposLlenos = camposRequeridos.filter(k => form[k].trim() !== "").length;
 
-  const pesoProductoNum   = parseFloat(form.peso_producto || "0") || 0;
+  const pesoProductoNum = parseFloat(form.peso_producto || "0") || 0;
   const cantidadIngresada = parseInt(form.cantidad_unidades || "0") || 0;
-  const proyectadoKg      = totalKg + pesoProductoNum;
-  const proyectadoPzas    = totalUnidades + cantidadIngresada;
 
-  // Límite efectivo: terminado → cantidadReal, en curso → limiteEnCurso
-  const limiteEfectivo    = cantidadReal ?? limiteEnCurso ?? null;
-  const totalActual       = modoKilo ? totalKg : totalUnidades;
-  const valorIngresado    = modoKilo ? pesoProductoNum : cantidadIngresada;
-  const proyectadoTotal   = totalActual + valorIngresado;
+  const limiteEfectivo = cantidadReal ?? limiteEnCurso ?? null;
+  const totalActual = modoKilo ? totalKg : totalUnidades;
+  const valorIngresado = modoKilo ? pesoProductoNum : cantidadIngresada;
+
+  const repeticionesNum = Math.max(1, Math.min(50, parseInt(repetir) || 1));
+  const esBatch = repeticionesNum > 1 && valorIngresado > 0;
+  const valorTotalIngresado = valorIngresado * repeticionesNum;
+  const proyectadoTotal = totalActual + valorTotalIngresado;
   const excedeLimiteBulto = limiteEfectivo != null && valorIngresado > 0 && proyectadoTotal > limiteEfectivo;
-  const completaLimite    = limiteEfectivo != null && valorIngresado > 0 && proyectadoTotal >= limiteEfectivo;
-  const disponibleBultos  = limiteEfectivo != null ? Math.max(limiteEfectivo - totalActual, 0) : null;
-  const unidadLimite      = modoKilo ? "kg" : "pzas";
+  const completaLimite = limiteEfectivo != null && valorIngresado > 0 && proyectadoTotal >= limiteEfectivo;
+  const disponibleBultos = limiteEfectivo != null ? Math.max(limiteEfectivo - totalActual, 0) : null;
+  const unidadLimite = modoKilo ? "kg" : "pzas";
 
   const handleAgregar = async () => {
     const mensajeError = validarFormulario();
     if (mensajeError) { setError(mensajeError); return; }
+
+    const repeticionesNum = Math.max(1, Math.min(50, parseInt(repetir) || 1));
     setGuardando(true); setError(null);
+
     try {
       const payload: NuevoBultoPayload = {
         cantidad_unidades: form.cantidad_unidades !== "" ? parseInt(form.cantidad_unidades) : undefined,
-        peso_producto:     form.peso_producto !== ""     ? parseFloat(form.peso_producto)   : undefined,
-        peso:  form.peso  !== "" ? parseFloat(form.peso)  : undefined,
-        alto:  form.alto  !== "" ? parseFloat(form.alto)  : undefined,
+        peso_producto: form.peso_producto !== "" ? parseFloat(form.peso_producto) : undefined,
+        peso: form.peso !== "" ? parseFloat(form.peso) : undefined,
+        alto: form.alto !== "" ? parseFloat(form.alto) : undefined,
         largo: form.largo !== "" ? parseFloat(form.largo) : undefined,
         ancho: form.ancho !== "" ? parseFloat(form.ancho) : undefined,
       };
-      const nuevo = await agregarBulto(pedido.idproduccion!, payload);
-      setBultos(prev => [...prev, nuevo]);
-      setTotalUnidades(prev => prev + nuevo.cantidad_unidades);
-      setTotalKg(prev => Math.round((prev + (nuevo.peso_producto ?? 0)) * 100) / 100);
+
+      if (repeticionesNum === 1) {
+        const nuevo = await agregarBulto(pedido.idproduccion!, payload);
+        setBultos(prev => [...prev, nuevo]);
+        setTotalUnidades(prev => prev + nuevo.cantidad_unidades);
+        setTotalKg(prev => Math.round((prev + (nuevo.peso_producto ?? 0)) * 100) / 100);
+      } else {
+        const payloadBatch: NuevoBultoBatchPayload = { ...payload, repeticiones: repeticionesNum };
+        const resultado = await agregarBultosBatch(pedido.idproduccion!, payloadBatch);
+        setBultos(prev => [...prev, ...resultado.bultos]);
+        setTotalUnidades(prev => prev + resultado.bultos.reduce((s, b) => s + b.cantidad_unidades, 0));
+        setTotalKg(prev =>
+          Math.round((prev + resultado.bultos.reduce((s, b) => s + (b.peso_producto ?? 0), 0)) * 100) / 100
+        );
+      }
+
       setForm(FORM_VACIO);
+      setRepetir("1");
     } catch (e: any) {
       const mensajeBackend = e.response?.data?.error;
       if (mensajeBackend?.includes("último proceso") || mensajeBackend?.includes("completamente terminada")) {
         setError("El proceso aún no está listo para registrar bultos. Asegúrate de que esté en curso con al menos un avance.");
       } else {
-        setError(mensajeBackend || "Error al agregar bulto");
+        setError(mensajeBackend || "Error al agregar bulto(s)");
       }
     } finally { setGuardando(false); }
   };
@@ -723,6 +816,18 @@ function SeccionBultos({
     try {
       const etiquetaData = await getBultosEtiqueta(pedido.idproduccion);
       await generarPdfEtiquetas(etiquetaData);
+
+      // ── Marcar bultos como enviados en este parcial ──────────────
+      if (etiquetaData.es_parcialidad && etiquetaData.numero_envio_parcial) {
+        const idbultos = etiquetaData.bultos.map(b => b.idbulto);
+        await marcarBultosParcialidad(
+          pedido.idproduccion,
+          etiquetaData.numero_envio_parcial,
+          idbultos
+        );
+        // Recargar para reflejar el estado actualizado
+        await cargarBultos();
+      }
     } catch (e: any) {
       setError(e.response?.data?.error || "Error al generar etiquetas");
     } finally { setGenerandoEtiquetas(false); }
@@ -735,6 +840,11 @@ function SeccionBultos({
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-center">
           <p className="text-[10px] text-blue-400 uppercase tracking-wide mb-0.5">Total bultos</p>
           <p className="text-2xl font-bold text-blue-800">{bultos.length}</p>
+          {esParcialidad && bultosNuevos.length < bultos.length && (
+            <p className="text-[10px] text-blue-500 mt-0.5">
+              {bultosNuevos.length} nuevos · {bultosEnviados.length} enviados
+            </p>
+          )}
         </div>
         {modoKilo ? (
           <div className="bg-orange-50 border border-orange-300 rounded-lg p-3 text-center">
@@ -777,6 +887,36 @@ function SeccionBultos({
         </div>
       )}
 
+      {/* Historial de envíos parciales */}
+      {esParcialidad && bultosEnviados.length > 0 && (() => {
+        const grupos = bultosEnviados.reduce((acc, b) => {
+          const n = b.numero_parcialidad!;
+          if (!acc[n]) acc[n] = [];
+          acc[n].push(b);
+          return acc;
+        }, {} as Record<number, Bulto[]>);
+
+        return (
+          <div className="bg-gray-50 border border-gray-200 rounded-lg overflow-hidden">
+            <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide px-3 py-2 bg-gray-100 border-b border-gray-200">
+              📋 Historial de envíos parciales
+            </p>
+            <div className="divide-y divide-gray-100">
+              {Object.entries(grupos).map(([numStr, bultosGrupo]) => (
+                <FilaEnvioParcial
+                  key={numStr}
+                  num={Number(numStr)}
+                  bultosGrupo={bultosGrupo}
+                  modoKilo={modoKilo}
+                  idproduccion={pedido.idproduccion!}
+                  onError={(msg) => setError(msg)}
+                />
+              ))}
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Formulario / estado finalizado */}
       {bultosFinalizados ? (
         <div className="space-y-2">
@@ -786,16 +926,21 @@ function SeccionBultos({
             </svg>
             <p className="text-green-800 text-sm font-medium">Bultos finalizados. No se pueden agregar ni eliminar mas registros.</p>
           </div>
-          <button onClick={handleImprimirEtiquetas} disabled={generandoEtiquetas}
+          <button onClick={handleImprimirEtiquetas} disabled={generandoEtiquetas || bultosNuevos.length === 0}
             className="w-full py-2.5 bg-red-600 hover:bg-red-700 disabled:bg-red-400 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-lg transition-colors flex items-center justify-center gap-2">
             {generandoEtiquetas
               ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
               : <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                    d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
             }
-            {generandoEtiquetas ? "Generando..." : `🏷️ Imprimir Etiquetas PDF (${bultos.length} bulto${bultos.length !== 1 ? "s" : ""})`}
+            {generandoEtiquetas
+              ? "Generando..."
+              : bultosNuevos.length === 0
+                ? "Sin bultos pendientes"
+                : `🏷️ Imprimir Etiquetas PDF (${bultosNuevos.length} bulto${bultosNuevos.length !== 1 ? "s" : ""} pendientes)`
+            }
           </button>
         </div>
       ) : (
@@ -812,109 +957,111 @@ function SeccionBultos({
             </div>
           </div>
 
-          {/* ── Campo principal según modo ─────────────────────────── */}
-          {modoKilo ? (
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">
-                Peso del producto (kg) <span className="text-red-500">*</span>
-                <span className="ml-1.5 text-[10px] text-orange-500 font-semibold uppercase">Principal</span>
-              </label>
-              {disponibleBultos !== null && (
-                <span className="ml-1.5 text-[10px] text-orange-500 font-normal">
-                  (máx. {disponibleBultos.toLocaleString("es-MX")} kg disponibles)
-                </span>
-              )}
-              <div className="flex gap-2 mt-1">
-                <input type="text" inputMode="decimal" value={form.peso_producto}
-                  onChange={e => { updateForm("peso_producto", e.target.value.replace(/[^0-9.]/g, "")); setError(null); }}
-                  onKeyDown={e => e.key === "Enter" && handleAgregar()}
-                  placeholder="Ej: 25.50"
-                  className={`flex-1 px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 bg-white ${
-                    excedeLimiteBulto ? "border-red-400 focus:ring-red-300" : "border-orange-300 focus:ring-orange-400"
-                  }`}
-                />
-                <span className="flex items-center px-3 py-2 bg-orange-100 border border-orange-200 rounded-lg text-xs font-semibold text-orange-700">kg</span>
-              </div>
-              {excedeLimiteBulto && (
-                <div className="mt-1.5 flex items-start gap-1.5 bg-red-50 border border-red-200 rounded px-3 py-2">
-                  <span className="text-red-500 text-sm flex-shrink-0">⚠️</span>
-                  <p className="text-[10px] text-red-600">
-                    <strong>Excede lo producido.</strong> Con {pesoProductoNum.toLocaleString("es-MX")} kg llegarías a{" "}
-                    {proyectadoTotal.toLocaleString("es-MX")} kg, superando el límite de{" "}
-                    {limiteEfectivo?.toLocaleString("es-MX")} kg.
-                  </p>
+          <div className="flex gap-3 items-start">
+            <div className="flex-1 w-3/4">
+              {modoKilo ? (
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                    Peso del producto (kg) <span className="text-red-500">*</span>
+                    <span className="ml-1.5 text-[10px] text-orange-500 font-semibold uppercase">Principal</span>
+                  </label>
+                  {disponibleBultos !== null && (
+                    <span className="ml-1.5 text-[10px] text-orange-500 font-normal">
+                      (máx. {disponibleBultos.toLocaleString("es-MX")} kg disponibles)
+                    </span>
+                  )}
+                  <div className="flex gap-2 mt-1">
+                    <input type="text" inputMode="decimal" value={form.peso_producto}
+                      onChange={e => { updateForm("peso_producto", e.target.value.replace(/[^0-9.]/g, "")); setError(null); }}
+                      onKeyDown={e => e.key === "Enter" && handleAgregar()}
+                      placeholder="Ej: 25.50"
+                      className={`flex-1 px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 bg-white ${excedeLimiteBulto ? "border-red-400 focus:ring-red-300" : "border-orange-300 focus:ring-orange-400"}`}
+                    />
+                    <span className="flex items-center px-3 py-2 bg-orange-100 border border-orange-200 rounded-lg text-xs font-semibold text-orange-700">kg</span>
+                  </div>
+                  <div className="mt-2">
+                    <label className="block text-xs font-medium text-gray-500 mb-1">
+                      Cantidad de unidades <span className="text-gray-400 text-[10px] font-normal">(referencia, opcional)</span>
+                    </label>
+                    <input type="text" inputMode="numeric" value={form.cantidad_unidades}
+                      onChange={e => updateForm("cantidad_unidades", e.target.value.replace(/[^0-9]/g, ""))}
+                      placeholder="Ej: 500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-300 bg-white text-gray-600"
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                    Cantidad de unidades <span className="text-red-500">*</span>
+                    {disponibleBultos !== null && (
+                      <span className="ml-2 text-[10px] text-gray-400 font-normal">
+                        (máx. {disponibleBultos.toLocaleString("es-MX")} {unidadLimite} disponibles)
+                      </span>
+                    )}
+                  </label>
+                  <input type="text" inputMode="numeric" value={form.cantidad_unidades}
+                    onChange={e => { updateForm("cantidad_unidades", e.target.value.replace(/[^0-9]/g, "")); setError(null); }}
+                    onKeyDown={e => e.key === "Enter" && handleAgregar()}
+                    placeholder="Ej: 3000"
+                    className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 bg-white ${excedeLimiteBulto ? "border-red-400 focus:ring-red-300" : "border-gray-300 focus:ring-blue-400"}`}
+                  />
                 </div>
               )}
-              {!excedeLimiteBulto && pesoProductoNum > 0 && (
-                <p className={`text-[10px] mt-1 font-medium ${completaLimite ? "text-green-600" : "text-orange-600"}`}>
-                  {completaLimite
-                    ? `✓ Con este bulto se completan los ${limiteEfectivo?.toLocaleString("es-MX")} kg`
-                    : `Total acumulado: ${proyectadoKg.toLocaleString("es-MX")} kg`
-                  }
-                </p>
-              )}
-              {/* Unidades como referencia opcional */}
-              <div className="mt-2">
-                <label className="block text-xs font-medium text-gray-500 mb-1">
-                  Cantidad de unidades <span className="text-gray-400 text-[10px] font-normal">(referencia, opcional)</span>
-                </label>
-                <input type="text" inputMode="numeric" value={form.cantidad_unidades}
-                  onChange={e => updateForm("cantidad_unidades", e.target.value.replace(/[^0-9]/g, ""))}
-                  placeholder="Ej: 500"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-300 bg-white text-gray-600"
-                />
-              </div>
             </div>
-          ) : (
-            <div>
+
+            <div className="w-1/4">
               <label className="block text-xs font-medium text-gray-600 mb-1">
-                Cantidad de unidades <span className="text-red-500">*</span>
-                {disponibleBultos !== null && (
-                  <span className="ml-2 text-[10px] text-gray-400 font-normal">
-                    (máx. {disponibleBultos.toLocaleString("es-MX")} {unidadLimite} disponibles)
-                  </span>
-                )}
+                Multiplicador
+                <span className="ml-1.5 text-[10px] text-blue-500 font-semibold">× bultos</span>
               </label>
-              <input type="text" inputMode="numeric" value={form.cantidad_unidades}
-                onChange={e => { updateForm("cantidad_unidades", e.target.value.replace(/[^0-9]/g, "")); setError(null); }}
+              <input type="text" min="1" max="50" value={repetir}
+                onChange={e => { setRepetir(e.target.value.replace(/[^0-9]/g, "")); setError(null); }}
                 onKeyDown={e => e.key === "Enter" && handleAgregar()}
-                placeholder="Ej: 3000"
-                className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 bg-white ${
-                  excedeLimiteBulto ? "border-red-400 focus:ring-red-300" : "border-gray-300 focus:ring-blue-400"
-                }`}
+                placeholder="1"
+                className="w-full px-3 py-2 border border-blue-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white text-center font-semibold"
               />
-              {excedeLimiteBulto && (
-                <div className="mt-1.5 flex items-start gap-1.5 bg-red-50 border border-red-200 rounded px-3 py-2">
-                  <span className="text-red-500 text-sm flex-shrink-0">⚠️</span>
-                  <p className="text-[10px] text-red-600">
-                    <strong>Excede lo producido.</strong> Con {cantidadIngresada.toLocaleString("es-MX")} {unidadLimite} llegarías a{" "}
-                    {proyectadoTotal.toLocaleString("es-MX")} {unidadLimite}, superando el límite de{" "}
-                    {limiteEfectivo?.toLocaleString("es-MX")} {unidadLimite}.
-                  </p>
-                </div>
-              )}
-              {!excedeLimiteBulto && cantidadIngresada > 0 && limiteEfectivo != null && (
-                <p className={`text-[10px] mt-1 font-medium ${completaLimite ? "text-green-600" : "text-amber-600"}`}>
-                  {completaLimite
-                    ? `✓ Con este bulto se completa el total de ${limiteEfectivo.toLocaleString("es-MX")} ${unidadLimite}`
-                    : `Quedarán ${Math.max(limiteEfectivo - proyectadoTotal, 0).toLocaleString("es-MX")} ${unidadLimite} sin empacar`
-                  }
-                </p>
-              )}
             </div>
+          </div>
+
+          {esBatch && (
+            <p className="text-[10px] mt-1 text-blue-600 font-medium">
+              Se crearán {repeticionesNum} bultos separados de{" "}
+              {valorIngresado.toLocaleString("es-MX")} {unidadLimite} c/u.
+              Total: {valorTotalIngresado.toLocaleString("es-MX")} {unidadLimite}.
+            </p>
           )}
 
-          {/* ── Peso empaquetado + dimensiones (siempre) ─────────── */}
+          {excedeLimiteBulto && (
+            <div className="mt-1.5 flex items-start gap-1.5 bg-red-50 border border-red-200 rounded px-3 py-2">
+              <span className="text-red-500 text-sm flex-shrink-0">⚠️</span>
+              <p className="text-[10px] text-red-600">
+                <strong>Excede lo producido.</strong> Con {valorIngresado.toLocaleString("es-MX")} {unidadLimite} por bulto{" "}
+                {esBatch && `× ${repeticionesNum} = ${valorTotalIngresado.toLocaleString("es-MX")} ${unidadLimite} `}
+                llegarías a {proyectadoTotal.toLocaleString("es-MX")} {unidadLimite}, superando el límite de{" "}
+                {limiteEfectivo?.toLocaleString("es-MX")} {unidadLimite}.
+              </p>
+            </div>
+          )}
+          {!excedeLimiteBulto && valorIngresado > 0 && (
+            <p className={`text-[10px] mt-1 font-medium ${completaLimite ? "text-green-600" : "text-orange-600"}`}>
+              {completaLimite
+                ? `✓ Con esta operación se completan los ${limiteEfectivo?.toLocaleString("es-MX")} ${unidadLimite}`
+                : `Total acumulado después de la operación: ${proyectadoTotal.toLocaleString("es-MX")} ${unidadLimite}`
+              }
+            </p>
+          )}
+
           <div>
             <p className="text-xs font-medium text-gray-700 mb-2">
               Peso empaquetado y dimensiones <span className="text-red-500">*</span>
             </p>
             <div className="grid grid-cols-4 gap-2">
               {([
-                { key: "peso",  label: "Peso emp. (kg)", color: "orange" },
-                { key: "alto",  label: "Alto (cm)",      color: "teal"   },
-                { key: "largo", label: "Largo (cm)",     color: "teal"   },
-                { key: "ancho", label: "Ancho (cm)",     color: "teal"   },
+                { key: "peso", label: "Peso emp. (kg)", color: "orange" },
+                { key: "alto", label: "Alto (cm)", color: "teal" },
+                { key: "largo", label: "Largo (cm)", color: "teal" },
+                { key: "ancho", label: "Ancho (cm)", color: "teal" },
               ] as const).map(({ key, label, color }) => (
                 <div key={key}>
                   <label className={`block text-[10px] font-medium text-${color}-600 mb-1 uppercase tracking-wide`}>
@@ -923,9 +1070,7 @@ function SeccionBultos({
                   <input type="text" inputMode="decimal" value={form[key]}
                     onChange={e => { updateForm(key, e.target.value.replace(/[^0-9.]/g, "")); setError(null); }}
                     placeholder="0.0"
-                    className={`w-full px-2 py-1.5 border rounded text-sm focus:outline-none focus:ring-2 focus:ring-${color}-300 placeholder-${color}-300 text-${color}-800 ${
-                      form[key].trim() !== "" ? `border-${color}-400 bg-${color}-50` : "border-red-200 bg-red-50"
-                    }`}
+                    className={`w-full px-2 py-1.5 border rounded text-sm focus:outline-none focus:ring-2 focus:ring-${color}-300 placeholder-${color}-300 text-${color}-800 ${form[key].trim() !== "" ? `border-${color}-400 bg-${color}-50` : "border-red-200 bg-red-50"}`}
                   />
                 </div>
               ))}
@@ -938,7 +1083,7 @@ function SeccionBultos({
               ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
               : <span className="text-base leading-none">+</span>
             }
-            Agregar bulto
+            Agregar bulto{esBatch ? `s (${repeticionesNum})` : ""}
           </button>
         </div>
       )}
@@ -953,9 +1098,34 @@ function SeccionBultos({
         <div className="text-center py-6 text-gray-400 text-sm">No hay bultos registrados aun</div>
       ) : (
         <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
-          {bultos.map((b, idx) => (
+          {/* Separador si hay enviados */}
+          {esParcialidad && bultosEnviados.length > 0 && (
+            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide px-1">
+              Enviados anteriormente ({bultosEnviados.length})
+            </p>
+          )}
+          {bultosEnviados.map((b, idx) => (
             <TarjetaBulto key={b.idbulto} bulto={b} numero={idx + 1} modoKilo={modoKilo}
               bultosFinalizados={bultosFinalizados} eliminando={eliminando}
+              esParcialidad={esParcialidad}
+              onEliminar={handleEliminar} onEditar={abrirEditar} />
+          ))}
+          {esParcialidad && bultosNuevos.length > 0 && bultosEnviados.length > 0 && (
+            <p className="text-[10px] font-semibold text-gray-600 uppercase tracking-wide px-1 pt-1">
+              Nuevos — pendientes de enviar ({bultosNuevos.length})
+            </p>
+          )}
+          {bultosNuevos.map((b, idx) => (
+            <TarjetaBulto key={b.idbulto} bulto={b} numero={bultosEnviados.length + idx + 1} modoKilo={modoKilo}
+              bultosFinalizados={bultosFinalizados} eliminando={eliminando}
+              esParcialidad={esParcialidad}
+              onEliminar={handleEliminar} onEditar={abrirEditar} />
+          ))}
+          {/* Si no es parcialidad, mostrar todos normalmente */}
+          {!esParcialidad && bultos.map((b, idx) => (
+            <TarjetaBulto key={b.idbulto} bulto={b} numero={idx + 1} modoKilo={modoKilo}
+              bultosFinalizados={bultosFinalizados} eliminando={eliminando}
+              esParcialidad={false}
               onEliminar={handleEliminar} onEditar={abrirEditar} />
           ))}
         </div>
@@ -964,13 +1134,36 @@ function SeccionBultos({
       {!bultosFinalizados && bultos.length > 0 && (
         <>
           {!confirmFinalizar ? (
-            <button onClick={() => setConfirmFinalizar(true)}
-              className="w-full py-2.5 bg-green-600 hover:bg-green-700 text-white text-sm font-semibold rounded-lg transition-colors flex items-center justify-center gap-2">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              Finalizar bultos
-            </button>
+            <div className="flex flex-col gap-2">
+              {/* Botón etiquetas parciales — SOLO si es parcialidad */}
+              {esParcialidad && (
+                <button onClick={handleImprimirEtiquetas}
+                  disabled={generandoEtiquetas || bultosNuevos.length === 0}
+                  className="w-full py-2.5 bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-lg transition-colors flex items-center justify-center gap-2">
+                  {generandoEtiquetas
+                    ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    : <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                        d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                  }
+                  {generandoEtiquetas
+                    ? "Generando..."
+                    : bultosNuevos.length === 0
+                      ? "Sin bultos pendientes"
+                      : `🏷️ Etiquetas parciales (${bultosNuevos.length} bulto${bultosNuevos.length !== 1 ? "s" : ""} nuevos)`
+                  }
+                </button>
+              )}
+
+              <button onClick={() => setConfirmFinalizar(true)}
+                className="w-full py-2.5 bg-green-600 hover:bg-green-700 text-white text-sm font-semibold rounded-lg transition-colors flex items-center justify-center gap-2">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Finalizar bultos
+              </button>
+            </div>
           ) : (
             <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-3">
               <p className="text-sm font-semibold text-amber-800">⚠️ ¿Confirmas que ya no se agregaran mas bultos?</p>
@@ -1029,10 +1222,10 @@ function SeccionBultos({
               <p className="text-xs font-medium text-gray-700 mb-2">Peso empaquetado y dimensiones</p>
               <div className="grid grid-cols-2 gap-2">
                 {([
-                  { key: "peso",  label: "Peso emp. (kg)", color: "orange" },
-                  { key: "alto",  label: "Alto (cm)",      color: "teal"   },
-                  { key: "largo", label: "Largo (cm)",     color: "teal"   },
-                  { key: "ancho", label: "Ancho (cm)",     color: "teal"   },
+                  { key: "peso", label: "Peso emp. (kg)", color: "orange" },
+                  { key: "alto", label: "Alto (cm)", color: "teal" },
+                  { key: "largo", label: "Largo (cm)", color: "teal" },
+                  { key: "ancho", label: "Ancho (cm)", color: "teal" },
                 ] as const).map(({ key, label, color }) => (
                   <div key={key}>
                     <label className={`block text-[10px] font-medium text-${color}-600 mb-1 uppercase tracking-wide`}>{label}</label>
@@ -1068,25 +1261,25 @@ function SeccionBultos({
 // MODAL PROCESO INDIVIDUAL
 // ─────────────────────────────────────────────
 interface Props {
-  pedido:        PedidoSeguimiento;
+  pedido: PedidoSeguimiento;
   nombreProceso: string;
-  onClose:       () => void;
-  onActualizar:  () => void;
+  onClose: () => void;
+  onActualizar: () => void;
 }
 
 export default function ModalProcesoIndividual({ pedido, nombreProceso, onClose, onActualizar }: Props) {
-  const [datos,               setDatos]               = useState<ProcesosOrdenRespuesta | null>(null);
-  const [cargando,            setCargando]            = useState(true);
-  const [accion,              setAccion]              = useState<"iniciar" | "finalizar" | null>(null);
-  const [formDatos,           setFormDatos]           = useState<Record<string, any>>({});
-  const [guardando,           setGuardando]           = useState(false);
-  const [error,               setError]               = useState<string | null>(null);
+  const [datos, setDatos] = useState<ProcesosOrdenRespuesta | null>(null);
+  const [cargando, setCargando] = useState(true);
+  const [accion, setAccion] = useState<"iniciar" | "finalizar" | null>(null);
+  const [formDatos, setFormDatos] = useState<Record<string, any>>({});
+  const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [maquinaSeleccionada, setMaquinaSeleccionada] = useState<"kidder" | "sicosa" | "">("");
-  const [observaciones,       setObservaciones]       = useState("");
-  const [editando,            setEditando]            = useState(false);
-  const [formEditar,          setFormEditar]          = useState<Record<string, any>>({});
-  const [obsEditar,           setObsEditar]           = useState("");
-  const [guardandoEdit,       setGuardandoEdit]       = useState(false);
+  const [observaciones, setObservaciones] = useState("");
+  const [editando, setEditando] = useState(false);
+  const [formEditar, setFormEditar] = useState<Record<string, any>>({});
+  const [obsEditar, setObsEditar] = useState("");
+  const [guardandoEdit, setGuardandoEdit] = useState(false);
 
   useEffect(() => { cargar(); }, []);
 
@@ -1101,19 +1294,19 @@ export default function ModalProcesoIndividual({ pedido, nombreProceso, onClose,
     finally { setCargando(false); }
   };
 
-  const proc     = datos?.procesos.find((p: any) => p.tabla === nombreProceso || p.nombre_proceso === nombreProceso);
+  const proc = datos?.procesos.find((p: any) => p.tabla === nombreProceso || p.nombre_proceso === nombreProceso);
   const esActual = datos?.proceso_actual === proc?.idproceso_cat || proc?.estado === "en_proceso";
 
-  const procIndex    = datos?.procesos.findIndex((p: any) => p.tabla === nombreProceso || p.nombre_proceso === nombreProceso) ?? -1;
+  const procIndex = datos?.procesos.findIndex((p: any) => p.tabla === nombreProceso || p.nombre_proceso === nombreProceso) ?? -1;
   const procAnterior = procIndex > 0 ? datos?.procesos[procIndex - 1] : null;
   const anteriorTieneAvancesOTerminado =
     procAnterior?.estado === "terminado" ||
     (procAnterior?.avances != null && procAnterior.avances.length > 0);
   const anteriorTerminado = procAnterior == null || procAnterior?.estado === "terminado";
 
-  const modoKilo     = pedido.modo_cantidad === "kilo";
+  const modoKilo = pedido.modo_cantidad === "kilo";
   const bobinaVisual = nombreProceso === "extrusion" ? calcularBobinaVisual(pedido) : null;
-  const campos       = CAMPOS_PROCESO[nombreProceso] ?? [];
+  const campos = CAMPOS_PROCESO[nombreProceso] ?? [];
   const limiteAnterior: number | null = (proc as any)?.limite_avance ?? null;
 
   const repeticionMaquina = maquinaSeleccionada === "kidder"
@@ -1123,10 +1316,10 @@ export default function ModalProcesoIndividual({ pedido, nombreProceso, onClose,
       : null;
 
   const colorEstado = (estado: string) => {
-    if (estado === "terminado")  return "text-green-700 bg-green-50 border-green-300";
+    if (estado === "terminado") return "text-green-700 bg-green-50 border-green-300";
     if (estado === "en_proceso") return "text-yellow-700 bg-yellow-50 border-yellow-300";
-    if (estado === "resagado")   return "text-white bg-black border-black";
-    if (estado === "no_aplica")  return "text-gray-400 bg-gray-100 border-gray-200";
+    if (estado === "resagado") return "text-white bg-black border-black";
+    if (estado === "no_aplica") return "text-gray-400 bg-gray-100 border-gray-200";
     return "text-orange-700 bg-orange-50 border-orange-300";
   };
   const textoEstado = (estado: string) => {
@@ -1146,7 +1339,7 @@ export default function ModalProcesoIndividual({ pedido, nombreProceso, onClose,
     try {
       const datosProceso: Record<string, any> = {};
       if (nombreProceso === "impresion" && maquinaSeleccionada) {
-        datosProceso.maquina    = maquinaSeleccionada;
+        datosProceso.maquina = maquinaSeleccionada;
         datosProceso.repeticion = repeticionMaquina ?? null;
       }
       await iniciarProceso(pedido.idproduccion, datosProceso);
@@ -1172,12 +1365,12 @@ export default function ModalProcesoIndividual({ pedido, nombreProceso, onClose,
   const handleAbrirFinalizar = () => {
     const preFill: Record<string, any> = {};
     if (nombreProceso === "extrusion") {
-      preFill.kilos_extruir  = proc?.registro?.kilos_extruir  ?? pedido.kilos_merma  ?? 0;
+      preFill.kilos_extruir = proc?.registro?.kilos_extruir ?? pedido.kilos_merma ?? 0;
       preFill.metros_extruir = proc?.registro?.metros_extruir ?? pedido.metros_merma ?? 0;
     }
     if (nombreProceso === "impresion") {
       const extProc = datos?.procesos.find((p: any) => p.tabla === "extrusion");
-      preFill.kilos_imprimir  = proc?.registro?.kilos_imprimir  ?? extProc?.registro?.k_para_impresion ?? 0;
+      preFill.kilos_imprimir = proc?.registro?.kilos_imprimir ?? extProc?.registro?.k_para_impresion ?? 0;
       preFill.metros_imprimir = proc?.registro?.metros_imprimir ?? extProc?.registro?.metros_extruidos ?? 0;
     }
     if (nombreProceso === "bolseo") {
@@ -1199,11 +1392,11 @@ export default function ModalProcesoIndividual({ pedido, nombreProceso, onClose,
       });
       if (nombreProceso === "impresion" && proc.registro.maquina) {
         const partes = proc.registro.maquina.split(" | ");
-        preFill.maquina    = partes[0] ?? "";
+        preFill.maquina = partes[0] ?? "";
         preFill.repeticion = partes[1] ?? "";
       }
       if (proc.registro.fecha_inicio) preFill.fecha_inicio = proc.registro.fecha_inicio?.slice(0, 16);
-      if (proc.registro.fecha_fin)    preFill.fecha_fin    = proc.registro.fecha_fin?.slice(0, 16);
+      if (proc.registro.fecha_fin) preFill.fecha_fin = proc.registro.fecha_fin?.slice(0, 16);
     }
     setFormEditar(preFill); setObsEditar(proc?.registro?.observaciones ?? "");
     setEditando(true); setError(null);
@@ -1223,18 +1416,18 @@ export default function ModalProcesoIndividual({ pedido, nombreProceso, onClose,
   };
 
   const tienePendienteSinIniciar = proc?.registro != null && !proc?.registro?.fecha_inicio;
-  const puedeIniciar   = (datos?.proceso_actual === proc?.idproceso_cat && proc?.estado === "pendiente") || tienePendienteSinIniciar;
+  const puedeIniciar = (datos?.proceso_actual === proc?.idproceso_cat && proc?.estado === "pendiente") || tienePendienteSinIniciar;
   const puedeFinalizar = proc?.estado === "en_proceso" && proc?.registro?.fecha_inicio && anteriorTerminado;
-  const puedeAvance    = proc?.estado === "en_proceso" && proc?.registro?.fecha_inicio;
-  const nombreLabel    = nombreProceso.replace("_", " ");
+  const puedeAvance = proc?.estado === "en_proceso" && proc?.registro?.fecha_inicio;
+  const nombreLabel = nombreProceso.replace("_", " ");
 
   const getNombreProcesoAnterior = () => {
-    if (nombreProceso === "impresion")    return "Extrusion";
-    if (nombreProceso === "bolseo")       return "Impresion";
+    if (nombreProceso === "impresion") return "Extrusion";
+    if (nombreProceso === "bolseo") return "Impresion";
     if (nombreProceso === "asa_flexible") return "Bolseo";
     return null;
   };
-  const nombreProcesoAnterior   = getNombreProcesoAnterior();
+  const nombreProcesoAnterior = getNombreProcesoAnterior();
   const observacionesAnteriores = proc?.observaciones_proceso_anterior;
 
   const esUltimoProceso = (() => {
@@ -1242,20 +1435,16 @@ export default function ModalProcesoIndividual({ pedido, nombreProceso, onClose,
     return (tieneAsa && nombreProceso === "asa_flexible") || (!tieneAsa && nombreProceso === "bolseo");
   })();
 
-  // Límite para bultos cuando el proceso está TERMINADO
-  // Modo unidad → piezas; modo kilo → kilos del campo final
   const cantidadRealBultos = esUltimoProceso && proc?.estado === "terminado"
     ? (nombreProceso === "asa_flexible"
-        ? (modoKilo
-            ? (proc?.registro?.kilos_finales    != null ? Number(proc.registro.kilos_finales)    : null)
-            : (proc?.registro?.pzas_finales     != null ? Number(proc.registro.pzas_finales)     : null))
-        : (modoKilo
-            ? (proc?.registro?.kilos_bolseados  != null ? Number(proc.registro.kilos_bolseados)  : null)
-            : (proc?.registro?.piezas_bolseadas != null ? Number(proc.registro.piezas_bolseadas) : null)))
+      ? (modoKilo
+        ? (proc?.registro?.kilos_finales != null ? Number(proc.registro.kilos_finales) : null)
+        : (proc?.registro?.pzas_finales != null ? Number(proc.registro.pzas_finales) : null))
+      : (modoKilo
+        ? (proc?.registro?.kilos_bolseados != null ? Number(proc.registro.kilos_bolseados) : null)
+        : (proc?.registro?.piezas_bolseadas != null ? Number(proc.registro.piezas_bolseadas) : null)))
     : null;
 
-  // Límite para bultos cuando el proceso está EN CURSO
-  // = lo que se ha acumulado en avances hasta ahora
   const limiteEnCursoBultos = esUltimoProceso && proc?.estado === "en_proceso"
     ? (proc?.total_avances ?? null)
     : null;
@@ -1489,11 +1678,10 @@ export default function ModalProcesoIndividual({ pedido, nombreProceso, onClose,
                           }));
                         }}
                         readOnly={campo.readOnly}
-                        className={`w-full px-3 py-1.5 border rounded text-sm focus:outline-none ${
-                          campo.readOnly
-                            ? "bg-blue-100 border-blue-200 text-blue-700 font-semibold cursor-not-allowed"
-                            : "bg-white border-gray-300 focus:ring-2 focus:ring-blue-400"
-                        }`}
+                        className={`w-full px-3 py-1.5 border rounded text-sm focus:outline-none ${campo.readOnly
+                          ? "bg-blue-100 border-blue-200 text-blue-700 font-semibold cursor-not-allowed"
+                          : "bg-white border-gray-300 focus:ring-2 focus:ring-blue-400"
+                          }`}
                         placeholder="0"
                       />
                     </div>
@@ -1628,14 +1816,14 @@ export default function ModalProcesoIndividual({ pedido, nombreProceso, onClose,
                   {(proc?.avances ?? []).length > 0 && (() => {
                     const esProcKilo = pedido.modo_cantidad === "kilo" &&
                       (nombreProceso === "bolseo" || nombreProceso === "asa_flexible");
-                    const configFin  = esProcKilo
+                    const configFin = esProcKilo
                       ? { unidad: "kg" }
                       : (AVANCE_UNIDAD[nombreProceso] ?? { unidad: "unidades" });
-                    const config    = configFin;
-                    const esKg      = config.unidad === "kg";
-                    const meta      = esKg ? (pedido.kilos_merma ?? 0) : (pedido.pzas_merma ?? 0);
+                    const config = configFin;
+                    const esKg = config.unidad === "kg";
+                    const meta = esKg ? (pedido.kilos_merma ?? 0) : (pedido.pzas_merma ?? 0);
                     const acumulado = proc?.total_avances ?? 0;
-                    const restante  = Math.max(meta - acumulado, 0);
+                    const restante = Math.max(meta - acumulado, 0);
                     return (
                       <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 space-y-2">
                         <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide">📋 Avances registrados previamente</p>
@@ -1689,11 +1877,10 @@ export default function ModalProcesoIndividual({ pedido, nombreProceso, onClose,
                           });
                         }}
                         readOnly={campo.readOnly}
-                        className={`w-full px-3 py-1.5 border rounded text-sm focus:outline-none ${
-                          campo.readOnly
-                            ? "bg-blue-50 border-blue-200 text-blue-700 font-semibold cursor-not-allowed"
-                            : "border-gray-300 focus:ring-2 focus:ring-green-400"
-                        }`}
+                        className={`w-full px-3 py-1.5 border rounded text-sm focus:outline-none ${campo.readOnly
+                          ? "bg-blue-50 border-blue-200 text-blue-700 font-semibold cursor-not-allowed"
+                          : "border-gray-300 focus:ring-2 focus:ring-green-400"
+                          }`}
                         placeholder="0"
                       />
                     </div>

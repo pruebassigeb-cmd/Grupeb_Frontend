@@ -65,37 +65,20 @@ export const usePrecioCalculado = ({
         const abortController = new AbortController();
         abortControllerRef.current = abortController;
 
-        console.log("🔍 Calculando precio en backend:", {
-          cantidad,
-          porKilo,
-          tintasId,
-        });
-
         const response = await api.post(
           "/calcular-precio",
-          {
-            cantidad,
-            porKilo: Number(porKilo),
-            tintasId,
-          },
+          { cantidad, porKilo: Number(porKilo), tintasId },
           { signal: abortController.signal }
         );
 
         if (!abortController.signal.aborted) {
           setResultado(response.data);
           setError(null);
-          console.log("✅ Precio calculado:", response.data);
         }
       } catch (err: any) {
-        if (err.name === "CanceledError" || err.code === "ERR_CANCELED") {
-          console.log("⚠️ Petición cancelada (normal en debounce)");
-          return;
-        }
+        if (err.name === "CanceledError" || err.code === "ERR_CANCELED") return;
         console.error("❌ Error al calcular precio:", err);
-        setError(
-          err.response?.data?.error ||
-          "Error al calcular precio. Intenta de nuevo."
-        );
+        setError(err.response?.data?.error || "Error al calcular precio. Intenta de nuevo.");
         setResultado(null);
       } finally {
         setLoading(false);
@@ -139,13 +122,36 @@ export const usePreciosBatch = ({
   const abortControllerRef = useRef<AbortController | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // ── Guardar el valor anterior de cantidades para comparación estable.
+  // JSON.stringify en las dependencias causaba disparos espurios porque cada
+  // render producía una nueva referencia de array aunque los valores fueran iguales.
+  const cantidadesPrevRef = useRef<string>("");
+
   useEffect(() => {
-    if (!enabled || !porKilo || !tintasId) {
+    // Guard inmediato — si no está habilitado, limpiar todo y NO hacer nada más.
+    // Este return debe ser la primera instrucción para que nunca se salte.
+    if (!enabled) {
+      if (abortControllerRef.current) abortControllerRef.current.abort();
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      setResultados([]);
+      setLoading(false);
+      setError(null);
+      cantidadesPrevRef.current = "";
+      return;
+    }
+
+    if (!porKilo || !tintasId) {
       setResultados([]);
       setLoading(false);
       setError(null);
       return;
     }
+
+    const cantidadesStr = JSON.stringify(cantidades);
+
+    // Si los valores reales no cambiaron, no hacer nada aunque React re-ejecute el efecto
+    if (cantidadesStr === cantidadesPrevRef.current) return;
+    cantidadesPrevRef.current = cantidadesStr;
 
     const cantidadesConIndice = cantidades
       .map((c, i) => ({ cantidad: c, indice: i }))
@@ -171,12 +177,6 @@ export const usePreciosBatch = ({
 
         const cantidadesFiltradas = cantidadesConIndice.map((c) => c.cantidad);
 
-        console.log("🔍 Calculando precios batch en backend:", {
-          cantidades: cantidadesFiltradas,
-          porKilo,
-          tintasId,
-        });
-
         const response = await api.post(
           "/calcular-precios-batch",
           {
@@ -200,13 +200,9 @@ export const usePreciosBatch = ({
 
           setResultados(resultadosCompletos);
           setError(null);
-          console.log("✅ Precios batch calculados:", resultadosCompletos);
         }
       } catch (err: any) {
-        if (err.name === "CanceledError" || err.code === "ERR_CANCELED") {
-          console.log("⚠️ Petición cancelada (normal en debounce)");
-          return;
-        }
+        if (err.name === "CanceledError" || err.code === "ERR_CANCELED") return;
         console.error("❌ Error al calcular precios batch:", err);
         setError(err.response?.data?.error || "Error al calcular precios");
         setResultados([]);
@@ -219,7 +215,7 @@ export const usePreciosBatch = ({
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
       if (abortControllerRef.current) abortControllerRef.current.abort();
     };
-  }, [JSON.stringify(cantidades), porKilo, tintasId, enabled]);
+  }, [cantidades, porKilo, tintasId, enabled]);
 
   return {
     resultados,

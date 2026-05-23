@@ -615,22 +615,19 @@ export default function Seguimiento() {
           <BotonPdfPedido pedido={pedido} puedePdf={puedePdfPedido} />
         </td>
 
-        {/* ── IMPRESION + PRODUCTO + MEDIDAS + PIGMENTO ── */}
-        {/* ── IMPRESION + PRODUCTO + MEDIDAS + PIGMENTO ── */}
-<td className={`${px} ${txt} text-gray-900 text-center min-w-[180px]`}>
-  <div className="font-medium">{pedido.impresion || "—"}</div>
-  {pedido.descripcion && (
-    <div className="text-gray-400 text-xs mt-0.5 italic">{pedido.descripcion}</div>
-  )}
-  {pedido.nombre_producto && (
-    <div className="text-blue-600 text-xs mt-0.5 font-medium">{pedido.nombre_producto}</div>
-  )}
-  {pedido.medida && (
-    <div className="text-gray-500 text-xs">{pedido.medida}</div>
-  )}
-  {pedido.pigmentos && (
-    <div className="text-orange-500 text-xs">{pedido.pigmentos}</div>
-  )}
+{/* ── IMPRESION + PRODUCTO + MEDIDAS + PIGMENTO ── */}
+<td className={`${px} ${txt} text-gray-900 text-center min-w-[25px]`}>
+  <div className="font-medium leading-tight text-[12px]">{pedido.impresion || "—"}
+    {pedido.descripcion && (
+      <span className="text-gray-400 text-[11px] italic ml-1">{pedido.descripcion}</span>
+    )}
+  </div>
+  <div className="text-[11px] leading-tight mt-0.5">
+    {pedido.medida && <span className="text-gray-500">{pedido.medida}</span>}
+    {pedido.pigmentos && (
+      <span className="text-orange-500 ml-1">{pedido.pigmentos}</span>
+    )}
+  </div>
 </td>
 
 

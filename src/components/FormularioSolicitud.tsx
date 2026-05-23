@@ -728,9 +728,18 @@ export default function FormularioSolicitud({
   // ── Navegación pasos ──────────────────────────────────────────────────────
   const handleAvanzarConClienteExistente = () => { if (datos.clienteId) setPaso(2); };
   const handleAtras = () => { if (paso === 2) setPaso(1); };
-  const handleSubmit = (e: React.FormEvent) => {
+  // DESPUÉS
+  const [enviando, setEnviando] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (datos.productos.length > 0) onSubmit({ ...datos, tipo: modo });
+    if (datos.productos.length === 0 || enviando) return;
+    setEnviando(true);
+    try {
+      await onSubmit({ ...datos, tipo: modo });
+    } finally {
+      setEnviando(false);
+    }
   };
 
   // ── Helpers JSX ───────────────────────────────────────────────────────────
@@ -743,6 +752,34 @@ export default function FormularioSolicitud({
     productoActual.material?.toUpperCase().includes("CELOFÁN");
 
   const inputClass = "w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white placeholder-gray-400";
+
+  // ── Helper para mostrar badge de densidad ─────────────────────────────────
+  const getDensidadBadge = (material: string) => {
+    const m = material.toLowerCase();
+
+    if (m.includes("alta densidad")) {
+      return {
+        texto: "Alta densidad",
+        className: "bg-emerald-100 text-emerald-700 border border-emerald-300",
+      };
+    }
+
+    if (m.includes("baja densidad")) {
+      return {
+        texto: "Baja densidad",
+        className: "bg-amber-100 text-amber-700 border border-amber-300",
+      };
+    }
+
+    if (m.includes("bopp") || m.includes("celofán") || m.includes("celofan")) {
+      return {
+        texto: "BOPP",
+        className: "bg-gray-200 text-gray-700 border border-gray-300",
+      };
+    }
+
+    return null;
+  };
 
   // ═══════════════════════════════════════════════════════════════════════
   // RENDER
@@ -834,7 +871,20 @@ export default function FormularioSolicitud({
                 <div className="divide-y divide-gray-200">
                   {productosCargados.map(p => (
                     <div key={p.id} onClick={() => seleccionarProducto(p)} className="p-4 hover:bg-blue-50 cursor-pointer transition-colors">
-                      <h4 className="font-semibold text-gray-900">{p.tipo_producto} {p.medida} {p.material.toLowerCase()}</h4>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h4 className="font-semibold text-gray-900">
+                          {p.tipo_producto} {p.medida} {p.material.toLowerCase()}
+                        </h4>
+
+                        {getDensidadBadge(p.material) && (
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-xs font-semibold ${getDensidadBadge(p.material)!.className
+                              }`}
+                          >
+                            {getDensidadBadge(p.material)!.texto}
+                          </span>
+                        )}
+                      </div>
                       <div className="flex flex-wrap gap-x-4 mt-2 text-sm text-gray-600">
                         <span>Calibre: {p.calibre}</span>
                         <span>Medidas: {p.medida}</span>
@@ -1434,11 +1484,16 @@ export default function FormularioSolicitud({
                 )}
               </div>
 
-              {/* Perforación — solo bolsa plana */}
+              {/* Perforación — bolsa plana, bolsa de envío y celofán */}
               {(() => {
                 const nombreTipo = (modoProducto === "nuevo" ? datosProductoNuevo.tipoProducto : productoActual.nombre).toLowerCase();
-                const esBolsaPlana = nombreTipo.includes("bolsa plana");
-                if (!esBolsaPlana) return null;
+                const puedePerforar =
+                  nombreTipo.includes("bolsa plana") ||
+                  nombreTipo.includes("bolsa envio") ||
+                  nombreTipo.includes("bolsa envío") ||
+                  nombreTipo.includes("celofan") ||
+                  nombreTipo.includes("celofán");
+                if (!puedePerforar) return null;
                 return (
                   <div className="flex items-center gap-3 py-3 px-4 bg-sky-50 border border-sky-200 rounded-lg">
                     <input type="checkbox" id="chk-perforacion" checked={productoActual.perforacion ?? false}
@@ -1446,7 +1501,7 @@ export default function FormularioSolicitud({
                       className="w-5 h-5 rounded border-sky-400 text-sky-600 focus:ring-sky-400 cursor-pointer" />
                     <label htmlFor="chk-perforacion" className="flex items-center gap-2 cursor-pointer select-none">
                       <span className="text-sky-700 font-semibold text-sm">Perforación</span>
-                      <span className="text-sky-500 text-xs">(bolsa con perforación)</span>
+                      <span className="text-sky-500 text-xs">(con perforación)</span>
                     </label>
                     {productoActual.perforacion && (
                       <span className="ml-auto inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-sky-200 text-sky-800">✓ Con perforación</span>
@@ -1474,8 +1529,8 @@ export default function FormularioSolicitud({
                 {guardandoProducto
                   ? <><div className="inline-block animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>Guardando...</>
                   : hayErrorKg ? "⚠ Corrige las cantidades (mín. 30 kg)"
-                  : editandoProductoIndex !== null ? "💾 Guardar cambios del producto"
-                  : "+ Agregar Producto"}
+                    : editandoProductoIndex !== null ? "💾 Guardar cambios del producto"
+                      : "+ Agregar Producto"}
               </button>
             </div>
           )}
@@ -1595,8 +1650,23 @@ export default function FormularioSolicitud({
             </button>
           )}
           {datos.productos.length > 0 && (
-            <button type="button" onClick={handleSubmit} className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-semibold">
-              {modo === "pedido" ? "Crear Pedido" : "Crear Cotización"}
+            <button
+              type="button"
+              onClick={handleSubmit}
+              disabled={enviando}
+              className={`px-6 py-2 rounded-lg font-semibold transition flex items-center gap-2 ${enviando
+                  ? "bg-gray-400 text-white cursor-not-allowed"
+                  : "bg-green-600 hover:bg-green-700 text-white"
+                }`}
+            >
+              {enviando ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  Guardando...
+                </>
+              ) : (
+                modo === "pedido" ? "Crear Pedido" : "Crear Cotización"
+              )}
             </button>
           )}
         </div>

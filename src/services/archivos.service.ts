@@ -12,6 +12,7 @@ export interface Archivo {
   resource_type: string;
   carpeta: string;
   subcarpeta?: string;
+  envio_id?: number | null;
   created_at: string;
 }
 
@@ -47,20 +48,29 @@ export const SUBCARPETAS_PDF: { value: SubcarpetaPDF; label: string }[] = [
   { value: "formas-envio",             label: "Formas de Envío"               },
 ];
 
+// Subir archivo — ahora acepta envio_id opcional
 export const subirArchivo = async (
   file: File,
   carpeta: CarpetaFrontend,
-  subcarpeta?: SubcarpetaPDF
+  subcarpeta?: SubcarpetaPDF,
+  envio_id?: number,
 ): Promise<Archivo> => {
   const formData = new FormData();
   formData.append("archivo", file);
   formData.append("carpeta", carpeta);
-  if (subcarpeta) formData.append("subcarpeta", subcarpeta);
+  if (subcarpeta)          formData.append("subcarpeta", subcarpeta);
+  if (envio_id != null)    formData.append("envio_id",   String(envio_id));
 
   const { data } = await api.post<Archivo>("/archivos/upload", formData, {
     headers: { "Content-Type": "multipart/form-data" },
   });
 
+  return data;
+};
+
+// Obtener fotos de un envío específico
+export const getFotosEnvio = async (idenvio: number): Promise<Archivo[]> => {
+  const { data } = await api.get<Archivo[]>(`/archivos/envio/${idenvio}`);
   return data;
 };
 

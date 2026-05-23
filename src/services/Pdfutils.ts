@@ -20,35 +20,35 @@ export interface DetallePdf {
 }
 
 export interface ProductoPdf {
-  nombre:              string;
-  tintas:              number | string;
-  caras:               number | string;
-  calibre?:            string;
-  material?:           string;
-  medidasFormateadas?: string;
-  medidas?: {
-    altura?:         string;
-    ancho?:          string;
-    fuelleFondo?:    string;
-    fuelleLateral1?: string;
-    fuelleLateral2?: string;
-    refuerzo?:       string;
-  };
-  bk?:           boolean | string | null;
-  foil?:         boolean | string | null;
-  laminado?:     boolean | string | null;
-  uvBr?:         boolean | string | null;
-  pigmentos?:    string | null;
-  pantones?:     string | string[] | null;
-  asa_suaje?:    boolean | string | null;
-  alto_rel?:     boolean | string | null;
-  observacion?:  string | null;
-  por_kilo?:     string | number | null;
-  perforacion?:  boolean | null;   // ← NUEVO
-  detalles:      DetallePdf[];
+  nombre:                  string;
+  material:                string;
+  calibre:                 string;
+  medidasFormateadas:      string;
+  medidas:                 Record<string, string>;
+  tintas?:                 number | string | null;
+  caras?:                  number | string | null;
+  bk?:                     boolean | null;
+  foil?:                   boolean | null;
+  asa_suaje?:              string | null;
+  alto_rel?:               boolean | null;
+  laminado?:               boolean | null;
+  uvBr?:                   boolean | null;
+  pantones?:               string | string[] | null;
+  pigmentos?:              string | null;
+  observacion?:            string | null;
+  descripcion?:            string | null;   // ← AGREGAR
+  perforacion?:            boolean;
+  por_kilo?:               string | null;
   herramental_descripcion?: string | null;
-  herramental_precio?:      number | null;
-  herramental_aprobado?:    boolean | null;
+  herramental_precio?:     number | null;
+  herramental_aprobado?:   boolean | null;  // ← AGREGAR si no está
+  detalles: {
+    cantidad:        number;
+    precio_total:    number;
+    precio_unitario?: number | null;        // ← AGREGAR
+    kilogramos?:     number | null;
+    modo_cantidad:   "unidad" | "kilo";
+  }[];
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

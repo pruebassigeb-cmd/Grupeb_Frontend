@@ -4,11 +4,14 @@ import type { EtiquetaData } from "./seguimientoService";
 import logoUrl from "../assets/grupeblanco.png";
 
 // ── Paleta B/N ───────────────────────────────────────────────
-const BLACK:      [number, number, number] = [0,   0,   0  ];
-const WHITE:      [number, number, number] = [255, 255, 255];
-const GRAY_DARK:  [number, number, number] = [80,  80,  80 ];
-const GRAY_MED:   [number, number, number] = [136, 136, 136];
+const BLACK: [number, number, number] = [0, 0, 0];
+const WHITE: [number, number, number] = [255, 255, 255];
+const GRAY_DARK: [number, number, number] = [80, 80, 80];
+const GRAY_MED: [number, number, number] = [136, 136, 136];
 const GRAY_LIGHT: [number, number, number] = [240, 240, 240];
+// Color para badge de parcialidad — gris oscuro distinguible
+const PARCIAL_BG: [number, number, number] = [40, 40, 40];
+const PARCIAL_TX: [number, number, number] = [255, 255, 255];
 
 const f = (v: any) =>
   v === null || v === undefined || String(v).trim() === "" ? "—" : String(v).trim();
@@ -21,7 +24,7 @@ function dibujarEtiqueta(
 ) {
   const ML = 4;
   const MT = 4;
-  const W  = 92;
+  const W = 92;
 
   let y = MT;
 
@@ -73,7 +76,7 @@ function dibujarEtiqueta(
 
   // ── Layout: izquierda 50% | derecha 50% ──
   const COL_GAP = 2;
-  const COL_W   = (W - COL_GAP) / 2;   // ~45 mm cada columna
+  const COL_W = (W - COL_GAP) / 2;
   const colIzqX = ML;
   const colDerX = ML + COL_W + COL_GAP;
   const colIzqW = COL_W - 2;
@@ -114,13 +117,13 @@ function dibujarEtiqueta(
   const direccion = [data.calle, data.numero ? `#${data.numero}` : null]
     .filter(Boolean).join(" ");
   const coloniaCP = [
-    data.colonia       ? `Col. ${data.colonia}`       : null,
+    data.colonia ? `Col. ${data.colonia}` : null,
     data.codigo_postal ? `C.P. ${data.codigo_postal}` : null,
   ].filter(Boolean).join("  ·  ");
-  const pobEdo   = [data.poblacion, data.estado].filter(Boolean).join(", ");
+  const pobEdo = [data.poblacion, data.estado].filter(Boolean).join(", ");
   const contacto = [
     data.telefono ? `Tel: ${data.telefono}` : null,
-    data.celular  ? `Cel: ${data.celular}`  : null,
+    data.celular ? `Cel: ${data.celular}` : null,
   ].filter(Boolean).join("  ·  ");
 
   doc.setFont("helvetica", "normal");
@@ -139,7 +142,6 @@ function dibujarEtiqueta(
   doc.setLineWidth(0.2);
   doc.line(colDerX - 1, y, colDerX - 1, yColBottom);
 
-  // Avanzar y al máximo de las dos columnas
   y = yColBottom + 2;
 
   // ══════════════════════════════════════════
@@ -158,26 +160,23 @@ function dibujarEtiqueta(
   doc.setTextColor(...BLACK);
   y += 7;
 
-  // Labels fila superior
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7);
   doc.setTextColor(...GRAY_MED);
-  doc.text("PEDIDO",   ML + 3,  y + 5);
-  doc.text("ORDEN",    ML + 34, y + 5);
+  doc.text("PEDIDO", ML + 3, y + 5);
+  doc.text("ORDEN", ML + 34, y + 5);
   doc.text("PRODUCTO", ML + 62, y + 5);
 
-  // Valores pedido y orden
   doc.setFont("helvetica", "bold");
   doc.setFontSize(10);
   doc.setTextColor(...BLACK);
-  doc.text(`${f(data.no_pedido)}`, ML + 3,  y + 13);
-  doc.text(f(data.no_produccion),  ML + 34, y + 13);
+  doc.text(`${f(data.no_pedido)}`, ML + 3, y + 13);
+  doc.text(f(data.no_produccion), ML + 34, y + 13);
 
-  // Peso y dimensiones — debajo de PEDIDO y ORDEN, en chiquito
-  const bulto  = data.bultos[bultoIndex];
+  const bulto = data.bultos[bultoIndex];
   const campos = [
-    { label: "Peso",  valor: bulto.peso,  unidad: "kg" },
-    { label: "Alto",  valor: bulto.alto,  unidad: "cm" },
+    { label: "Peso", valor: bulto.peso, unidad: "kg" },
+    { label: "Alto", valor: bulto.alto, unidad: "cm" },
     { label: "Largo", valor: bulto.largo, unidad: "cm" },
     { label: "Ancho", valor: bulto.ancho, unidad: "cm" },
   ].filter(c => c.valor != null);
@@ -198,7 +197,6 @@ function dibujarEtiqueta(
     });
   }
 
-  // Producto (columna derecha)
   doc.setFont("helvetica", "normal");
   doc.setFontSize(9);
   doc.setTextColor(...BLACK);
@@ -221,50 +219,76 @@ function dibujarEtiqueta(
   y += 30;
 
   // ══════════════════════════════════════════
-  // 4. BULTO
-  // ══════════════════════════════════════════
-  doc.setDrawColor(...GRAY_MED);
-  doc.setLineWidth(0.3);
-  doc.line(ML, y, ML + W, y);
-  y += 5;
+// 4. BULTO
+// ══════════════════════════════════════════
+doc.setDrawColor(...GRAY_MED);
+doc.setLineWidth(0.3);
+doc.line(ML, y, ML + W, y);
+y += 2;
 
-  const bultoNum    = bultoIndex + 1;
-  const totalBultos = data.total_bultos;
+const bultoNum = bultoIndex + 1;
+const totalBultos = data.total_bultos;
 
-  doc.setDrawColor(...BLACK);
-  doc.setLineWidth(0.5);
-  doc.setFillColor(...GRAY_LIGHT);
-  doc.rect(ML + 3, y, 26, 18, "FD");
+// ── Badge ENVÍO PARCIAL ──
+if (data.es_parcialidad) {
+  const numParcial = data.numero_envio_parcial ?? 1;
+  const badgeLabel = `ENVÍO PARCIAL ${numParcial}`;
+  const badgeW = 52;
+  const badgeH = 7;
+  const badgeX = ML + 3;
+  const badgeY = y;              // ← sin el -3, parte desde y limpio
 
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(6);
-  doc.setTextColor(...GRAY_DARK);
-  doc.text("BULTO", ML + 3 + 13, y + 5, { align: "center" });
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(14);
-  doc.setTextColor(...BLACK);
-  doc.text(String(bultoNum), ML + 3 + 13, y + 13, { align: "center" });
-
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(6);
-  doc.setTextColor(...GRAY_DARK);
-  doc.text(`de ${totalBultos}`, ML + 3 + 13, y + 17, { align: "center" });
-
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(7);
-  doc.setTextColor(...GRAY_MED);
-  doc.text("UNIDADES EN ESTE BULTO", ML + 33, y + 6);
+  doc.setFillColor(...PARCIAL_BG);
+  doc.roundedRect(badgeX, badgeY, badgeW, badgeH, 1.5, 1.5, "F");
 
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(16);
-  doc.setTextColor(...BLACK);
-  doc.text(
-    bulto.cantidad_unidades.toLocaleString("es-MX"),
-    ML + 33, y + 16
-  );
+  doc.setFontSize(6.5);
+  doc.setTextColor(...PARCIAL_TX);
+  doc.text(badgeLabel, badgeX + badgeW / 2, badgeY + 5, { align: "center" });
 
-  y += 22;
+  doc.setTextColor(...BLACK);
+  y += badgeH + 3;               // ← espacio tras el badge
+}
+
+// ── Recuadro con número de bulto ──
+doc.setDrawColor(...BLACK);
+doc.setLineWidth(0.5);
+doc.setFillColor(...GRAY_LIGHT);
+doc.rect(ML + 3, y, 26, 18, "FD");   // ← ya no resta 3, parte desde y actual
+
+doc.setFont("helvetica", "normal");
+doc.setFontSize(6);
+doc.setTextColor(...GRAY_DARK);
+doc.text("BULTO", ML + 3 + 13, y + 5, { align: "center" });   // +5 en vez de +2
+
+doc.setFont("helvetica", "bold");
+doc.setFontSize(14);
+doc.setTextColor(...BLACK);
+doc.text(String(bultoNum), ML + 3 + 13, y + 13, { align: "center" });
+
+doc.setFont("helvetica", "normal");
+doc.setFontSize(6);
+doc.setTextColor(...GRAY_DARK);
+doc.text(`de ${totalBultos}`, ML + 3 + 13, y + 17, { align: "center" });
+
+// ── Unidades en este bulto ──
+const esKiloBulto = data.modo_cantidad === "kilo" && bulto.peso_producto != null;
+const labelUnidades = esKiloBulto ? "KG EN ESTE BULTO" : "UNIDADES EN ESTE BULTO";
+const valorUnidades = esKiloBulto
+  ? `${bulto.peso_producto!.toLocaleString("es-MX")} kg`
+  : bulto.cantidad_unidades.toLocaleString("es-MX");
+
+doc.setFont("helvetica", "normal");
+doc.setFontSize(7);
+doc.setTextColor(...GRAY_MED);
+doc.text(labelUnidades, ML + 33, y + 6);
+
+doc.setFont("helvetica", "bold");
+doc.setFontSize(16);
+doc.setTextColor(...BLACK);
+doc.text(valorUnidades, ML + 33, y + 16);
+
+y += 22;
 
   // ══════════════════════════════════════════
   // 5. PIE
@@ -272,10 +296,13 @@ function dibujarEtiqueta(
   doc.setFont("helvetica", "normal");
   doc.setFontSize(6.5);
   doc.setTextColor(...GRAY_MED);
-  doc.text(
-    `${f(data.no_produccion)}  ·  ${f(data.no_pedido)}  ·  Etiqueta ${bultoNum} de ${totalBultos}`,
-    ML + W / 2, y + 5, { align: "center" }
-  );
+
+  // Pie con info de parcialidad si aplica
+  const pieTexto = data.es_parcialidad
+    ? `${f(data.no_produccion)}  ·  ${f(data.no_pedido)}  ·  Envío parcial ${data.numero_envio_parcial ?? 1}  ·  Bulto ${bultoNum} de ${totalBultos}`
+    : `${f(data.no_produccion)}  ·  ${f(data.no_pedido)}  ·  Etiqueta ${bultoNum} de ${totalBultos}`;
+
+  doc.text(pieTexto, ML + W / 2, y + 5, { align: "center", maxWidth: W - 4 });
 
   // ══════════════════════════════════════════
   // BORDE EXTERIOR
@@ -309,5 +336,6 @@ export async function generarPdfEtiquetas(data: EtiquetaData): Promise<void> {
 
   (doc.internal as any).scaleFactor = 1;
 
-  doc.save(`Etiquetas_${data.no_produccion ?? `PED-${data.no_pedido}`}.pdf`);
+  const sufijo = data.es_parcialidad ? `_parcial${data.numero_envio_parcial ?? 1}` : "";
+  doc.save(`Etiquetas_${data.no_produccion ?? data.no_pedido}${sufijo}.pdf`);
 }

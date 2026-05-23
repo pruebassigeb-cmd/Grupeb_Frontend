@@ -81,7 +81,6 @@ export async function generarPdfCotizacion(cotizacion: CotizacionPdf): Promise<v
     "Material", "Calibre", "Foil", "Asa/Suaje", "Alto Rel",
     "Laminado", "UV/BR", "Pantones", "Pigmento", "Perf.",
   ];
-  // Cant 1/2/3 → índices 15, 16, 17
   const headAll = [
     ...headFixed,
     ...Array.from({ length: numCantCols }, (_, i) => `Cant ${i + 1}`),
@@ -92,8 +91,11 @@ export async function generarPdfCotizacion(cotizacion: CotizacionPdf): Promise<v
   const bodyRows: any[][] = [];
 
   cotizacion.productos.forEach(prod => {
+    const nombreBase  = tipoProducto(prod.nombre);
+    const descripcion = (prod as any).descripcion?.trim() || null;
+
     const row: any[] = [
-      tipoProducto(prod.nombre),
+      nombreBase,
       getMedida(prod),
       boolLabel(prod.bk),
       val(prod.tintas),
@@ -107,7 +109,7 @@ export async function generarPdfCotizacion(cotizacion: CotizacionPdf): Promise<v
       boolLabel(prod.uvBr),
       parsePantones(prod.pantones),
       prod.pigmentos ? String(prod.pigmentos).trim() || "—" : "—",
-      prod.perforacion ? "SI" : "—",   // ← índice 14
+      prod.perforacion ? "SI" : "—",
     ];
     for (let i = 0; i < numCantCols; i++) {
       const det = prod.detalles[i];
@@ -123,24 +125,28 @@ export async function generarPdfCotizacion(cotizacion: CotizacionPdf): Promise<v
       ? `Obs: ${modoLabel}  —  ${prod.observacion.trim()}`
       : `Obs: ${modoLabel}`;
 
-    const hasHerr =
-      prod.herramental_precio != null &&
-      prod.herramental_precio > 0;
+    const hasHerr = prod.herramental_precio != null && prod.herramental_precio > 0;
 
+    // Igual que en pedido: obs y herramental van en la misma fila (comboRow)
     const comboRow = new Array(headAll.length).fill("");
     comboRow[0] = obsTexto;
+
+    if (hasHerr) {
+      const nombreHerr = prod.herramental_descripcion?.trim() || "Herramental / molde";
+      comboRow[1] = `Herramental: ${nombreHerr}  —  Cargo único por fabricación del molde/troquel.`;
+      comboRow[headAll.length - 1] = `$${Number(prod.herramental_precio).toLocaleString("es-MX", {
+        minimumFractionDigits: 2, maximumFractionDigits: 2,
+      })}`;
+    }
 
     bodyRows.push(row);
     bodyRows.push(comboRow);
 
-    if (hasHerr) {
-      const nombreHerr = prod.herramental_descripcion?.trim() || "Herramental / molde";
-      const herrRow = new Array(headAll.length).fill("");
-      herrRow[0] = `HERR:${nombreHerr}`;
-      herrRow[headAll.length - 1] = `$${Number(prod.herramental_precio).toLocaleString("es-MX", {
-        minimumFractionDigits: 2, maximumFractionDigits: 2,
-      })}`;
-      bodyRows.push(herrRow);
+    // ── Fila descripción propia ───────────────────────────────────────────────
+    if (descripcion) {
+      const descRow = new Array(headAll.length).fill("");
+      descRow[0] = `DESC:${descripcion}`;
+      bodyRows.push(descRow);
     }
   });
 
@@ -149,11 +155,11 @@ export async function generarPdfCotizacion(cotizacion: CotizacionPdf): Promise<v
   const colW: Record<number, number> = {
     0: 20, 1: 17, 2: 8,  3: 10, 4: 10,
     5: 17, 6: 12, 7: 10, 8: 15, 9: 12,
-    10: 14, 11: 12, 12: 25, 13: 16, 14: 9,  // ← 14 = Perf.
+    10: 14, 11: 12, 12: 25, 13: 16, 14: 9,
   };
   const fixedTotal = Object.values(colW).reduce((a, b) => a + b, 0);
   const cantW = Math.max((availW - fixedTotal) / numCantCols, 16);
-  for (let i = 0; i < numCantCols; i++) colW[15 + i] = cantW;   // Cant → 15,16,17
+  for (let i = 0; i < numCantCols; i++) colW[15 + i] = cantW;
 
   const totalColW = Object.values(colW).reduce((a, b) => a + b, 0);
   if (totalColW > availW) {
@@ -176,7 +182,7 @@ export async function generarPdfCotizacion(cotizacion: CotizacionPdf): Promise<v
     11: { cellWidth: colW[11], halign: "center", fontSize: 7 },
     12: { cellWidth: colW[12], halign: "left",   fontSize: 7 },
     13: { cellWidth: colW[13], halign: "center", fontSize: 7 },
-    14: { cellWidth: colW[14], halign: "center", fontSize: 7 },  // Perf.
+    14: { cellWidth: colW[14], halign: "center", fontSize: 7 },
     ...(numCantCols >= 1 ? { 15: { cellWidth: colW[15], halign: "center" as const, fontSize: 8, fontStyle: "bold" as const } } : {}),
     ...(numCantCols >= 2 ? { 16: { cellWidth: colW[16], halign: "center" as const, fontSize: 8, fontStyle: "bold" as const } } : {}),
     ...(numCantCols >= 3 ? { 17: { cellWidth: colW[17], halign: "center" as const, fontSize: 8, fontStyle: "bold" as const } } : {}),
@@ -188,7 +194,10 @@ export async function generarPdfCotizacion(cotizacion: CotizacionPdf): Promise<v
     head: [headAll],
     body: bodyRows,
     theme: "grid",
-    headStyles: { fillColor: GRAY_DARK, textColor: WHITE, fontStyle: "bold", fontSize: 7, cellPadding: 1.2, halign: "center", valign: "middle" },
+    headStyles: {
+      fillColor: GRAY_DARK, textColor: WHITE, fontStyle: "bold",
+      fontSize: 7, cellPadding: 1.2, halign: "center", valign: "middle",
+    },
     bodyStyles: { fontSize: 7, textColor: BLACK, cellPadding: 1.2, valign: "middle", minCellHeight: 7 },
     alternateRowStyles: { fillColor: GRAY_ROW },
     columnStyles,
@@ -200,35 +209,42 @@ export async function generarPdfCotizacion(cotizacion: CotizacionPdf): Promise<v
       if (data.section === "body") {
         const raw  = data.row.raw as any[];
         const raw0 = String(raw?.[0] ?? "");
+        const raw1 = String(raw?.[1] ?? "");
         const ci   = data.column.index;
         const lastCol = headAll.length - 1;
 
-        // ── Fila observaciones ────────────────────────────────────────────
-        if (raw0.startsWith("Obs:")) {
+        // ── Fila descripción propia ──────────────────────────────────────────
+        if (raw0.startsWith("DESC:")) {
           if (ci === 0) {
             data.cell.colSpan            = headAll.length;
+            data.cell.styles.fillColor   = [235, 242, 255] as [number, number, number];
+            data.cell.styles.fontStyle   = "bold";
+            data.cell.styles.fontSize    = 7.5;
+            data.cell.styles.textColor   = [40, 80, 180] as [number, number, number];
+            data.cell.styles.halign      = "left";
+            data.cell.styles.cellPadding = 1.2;
+            data.cell.text               = [`Desc: ${raw0.slice(5)}`];
+          } else {
+            data.cell.styles.fillColor   = [235, 242, 255] as [number, number, number];
+            data.cell.text               = [];
+          }
+          return;
+        }
+
+        // ── Fila observaciones (+ herramental embebido igual que en pedido) ────
+        if (raw0.startsWith("Obs:")) {
+          const hasHerr = raw1.startsWith("Herramental:");
+
+          if (ci === 0) {
+            data.cell.colSpan            = hasHerr ? MID_COL : headAll.length;
             data.cell.styles.fillColor   = GRAY_LIGHT;
             data.cell.styles.fontStyle   = "italic";
             data.cell.styles.fontSize    = 6.5;
             data.cell.styles.textColor   = [80, 80, 80] as [number, number, number];
             data.cell.styles.halign      = "left";
             data.cell.styles.cellPadding = 0.8;
-          } else {
-            data.cell.styles.fillColor = GRAY_LIGHT;
-            data.cell.text = [];
-          }
-          return;
-        }
 
-        // ── Fila herramental ──────────────────────────────────────────────
-        if (raw0.startsWith("HERR:")) {
-          const descripcion = raw0.slice(5);
-
-          if (ci === 0) {
-            data.cell.colSpan            = MID_COL;
-            data.cell.styles.fillColor   = [250, 244, 230] as [number, number, number];
-            data.cell.text               = [];
-          } else if (ci === MID_COL) {
+          } else if (hasHerr && ci === MID_COL) {
             data.cell.colSpan            = lastCol - MID_COL;
             data.cell.styles.fillColor   = [250, 244, 230] as [number, number, number];
             data.cell.styles.fontStyle   = "italic";
@@ -237,21 +253,30 @@ export async function generarPdfCotizacion(cotizacion: CotizacionPdf): Promise<v
             data.cell.styles.halign      = "left";
             data.cell.styles.overflow    = "linebreak";
             data.cell.styles.cellPadding = 0.8;
-            data.cell.text               = [`Herramental: ${descripcion}  —  Costo único de fabricación del molde o troquel necesario para producir este artículo.`];
-          } else if (ci === lastCol) {
+            data.cell.text               = [raw1];
+
+          } else if (hasHerr && ci === lastCol) {
             data.cell.styles.fillColor   = [250, 244, 230] as [number, number, number];
             data.cell.styles.fontStyle   = "bold";
             data.cell.styles.fontSize    = 7;
             data.cell.styles.textColor   = [130, 70, 0] as [number, number, number];
             data.cell.styles.halign      = "center";
+
           } else {
-            data.cell.styles.fillColor   = [250, 244, 230] as [number, number, number];
-            data.cell.text               = [];
+            data.cell.styles.fillColor   =
+              ci < MID_COL
+                ? GRAY_LIGHT
+                : [250, 244, 230] as [number, number, number];
+            data.cell.text = [];
           }
           return;
         }
+
+
       }
     },
+
+
   });
 
   const finalY = (doc as any).lastAutoTable?.finalY ?? 0;

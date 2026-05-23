@@ -84,7 +84,6 @@ export async function generarPdfPedido(pedido: PedidoPdf): Promise<void> {
     "Material", "Calibre", "Foil", "Asa/Suaje", "Alto Rel",
     "Laminado", "UV/BR", "Pantones", "Pigmento", "Perf.",
     "Cantidad / Precio", "Importe",
-    // índices: 0-13 fijos, 14=Perf., 15=Cant/Precio, 16=Importe
   ];
 
   const HEAD_FONT_SIZE_DEFAULT = 8;
@@ -97,8 +96,11 @@ export async function generarPdfPedido(pedido: PedidoPdf): Promise<void> {
   pedido.productos.forEach(prod => {
     const det = prod.detalles.find(d => d.cantidad > 0);
 
+    const nombreBase  = tipoProducto(prod.nombre);
+    const descripcion = (prod as any).descripcion?.trim() || null;
+
     bodyRows.push([
-      tipoProducto(prod.nombre),
+      nombreBase,
       getMedida(prod),
       boolLabel(prod.bk),
       val(prod.tintas),
@@ -112,7 +114,7 @@ export async function generarPdfPedido(pedido: PedidoPdf): Promise<void> {
       boolLabel(prod.uvBr),
       parsePantones(prod.pantones),
       prod.pigmentos ? String(prod.pigmentos).trim() || "—" : "—",
-      prod.perforacion ? "SI" : "—",   // ← índice 14
+      prod.perforacion ? "SI" : "—",
       det ? formatCantidadCelda(det, prod.por_kilo) : "—",
       det ? formatImporte(det, prod.por_kilo) : "—",
     ]);
@@ -126,18 +128,25 @@ export async function generarPdfPedido(pedido: PedidoPdf): Promise<void> {
     const hasHerr =
       prod.herramental_precio != null &&
       prod.herramental_precio > 0 &&
-      (prod.herramental_aprobado === true || prod.herramental_aprobado == null);
+      ((prod as any).herramental_aprobado === true || (prod as any).herramental_aprobado == null);
 
     const comboRow = new Array(headAll.length).fill("");
     comboRow[0] = obsTexto;
 
     if (hasHerr) {
       const nombreHerr = prod.herramental_descripcion?.trim() || "Herramental / molde";
-      comboRow[1] = `Herramental: ${nombreHerr}  —  Costo de fabricación del molde o troquel aprobado para este artículo. Cargo único, no incluido en el precio por pieza.`;
+      comboRow[1] = `Herramental: ${nombreHerr}  —  Cargo único por fabricación del molde/troquel.`;
       comboRow[headAll.length - 1] = `$${Number(prod.herramental_precio).toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     }
 
     bodyRows.push(comboRow);
+
+    // ── Fila descripción — fila propia con fondo azul suave ──────────────────
+    if (descripcion) {
+      const descRow = new Array(headAll.length).fill("");
+      descRow[0] = `DESC:${descripcion}`;
+      bodyRows.push(descRow);
+    }
   });
 
   const availW = PW - M * 2;
@@ -145,12 +154,12 @@ export async function generarPdfPedido(pedido: PedidoPdf): Promise<void> {
   const colW: Record<number, number> = {
     0: 30, 1: 17, 2: 8,  3: 10, 4: 10,
     5: 17, 6: 12, 7: 10, 8: 15, 9: 12,
-    10: 14, 11: 12, 12: 25, 13: 16, 14: 9,  // ← 14 = Perf.
+    10: 14, 11: 12, 12: 25, 13: 16, 14: 9,
   };
   const fixedTotal  = Object.values(colW).reduce((a, b) => a + b, 0);
   const remaining   = Math.max(availW - fixedTotal, 30);
-  colW[15] = Math.round(remaining * 0.60);  // Cantidad/Precio
-  colW[16] = Math.round(remaining * 0.65);  // Importe
+  colW[15] = Math.round(remaining * 0.60);
+  colW[16] = Math.round(remaining * 0.65);
 
   const totalColW = Object.values(colW).reduce((a, b) => a + b, 0);
   if (totalColW > availW) {
@@ -173,9 +182,9 @@ export async function generarPdfPedido(pedido: PedidoPdf): Promise<void> {
     11: { cellWidth: colW[11], halign: "center", fontSize: 9 },
     12: { cellWidth: colW[12], halign: "left",   fontSize: 9 },
     13: { cellWidth: colW[13], halign: "center", fontSize: 9 },
-    14: { cellWidth: colW[14], halign: "center", fontSize: 9 },  // Perf.
-    15: { cellWidth: colW[15], halign: "center", fontSize: 9 },  // Cant/Precio
-    16: { cellWidth: colW[16], halign: "center", fontSize: 9, fontStyle: "bold" },  // Importe
+    14: { cellWidth: colW[14], halign: "center", fontSize: 9 },
+    15: { cellWidth: colW[15], halign: "center", fontSize: 9 },
+    16: { cellWidth: colW[16], halign: "center", fontSize: 9, fontStyle: "bold" },
   };
 
   const MID_COL = Math.floor(headAll.length / 2);
@@ -186,7 +195,10 @@ export async function generarPdfPedido(pedido: PedidoPdf): Promise<void> {
     head: [headAll],
     body: bodyRows,
     theme: "grid",
-    headStyles: { fillColor: GRAY_DARK, textColor: WHITE, fontStyle: "bold", fontSize: HEAD_FONT_SIZE_DEFAULT, cellPadding: 1.2, halign: "center", valign: "middle" },
+    headStyles: {
+      fillColor: GRAY_DARK, textColor: WHITE, fontStyle: "bold",
+      fontSize: HEAD_FONT_SIZE_DEFAULT, cellPadding: 1.2, halign: "center", valign: "middle",
+    },
     bodyStyles: { fontSize: 10, textColor: BLACK, cellPadding: 1.2, valign: "middle", minCellHeight: 7 },
     alternateRowStyles: { fillColor: GRAY_ROW },
     columnStyles,
@@ -196,22 +208,39 @@ export async function generarPdfPedido(pedido: PedidoPdf): Promise<void> {
           data.cell.styles.fillColor = GRAY_MED;
         }
         const customSize = headFontSizeMap[data.column.index];
-        if (customSize !== undefined) {
-          data.cell.styles.fontSize = customSize;
-        }
+        if (customSize !== undefined) data.cell.styles.fontSize = customSize;
       }
 
       if (data.section === "body") {
         const raw  = data.row.raw as any[];
         const raw0 = String(raw?.[0] ?? "");
         const raw1 = String(raw?.[1] ?? "");
-        const isCombo = raw0.startsWith("Obs:");
+        const ci   = data.column.index;
+        const lastCol = headAll.length - 1;
 
+        // ── Fila descripción propia ──────────────────────────────────────────
+        if (raw0.startsWith("DESC:")) {
+          if (ci === 0) {
+            data.cell.colSpan            = headAll.length;
+            data.cell.styles.fillColor   = [235, 242, 255] as [number, number, number]; // azul suave
+            data.cell.styles.fontStyle   = "bold";
+            data.cell.styles.fontSize    = 8;
+            data.cell.styles.textColor   = [40, 80, 180] as [number, number, number];
+            data.cell.styles.halign      = "left";
+            data.cell.styles.cellPadding = 1.2;
+            data.cell.text               = [`Desc: ${raw0.slice(5)}`];
+          } else {
+            data.cell.styles.fillColor   = [235, 242, 255] as [number, number, number];
+            data.cell.text               = [];
+          }
+          return;
+        }
+
+        // ── Fila observaciones ────────────────────────────────────────────────
+        const isCombo = raw0.startsWith("Obs:");
         if (!isCombo) return;
 
         const hasHerr = raw1.startsWith("Herramental:");
-        const ci      = data.column.index;
-        const lastCol = headAll.length - 1;
 
         if (ci === 0) {
           data.cell.colSpan            = hasHerr ? MID_COL : headAll.length;
@@ -249,6 +278,8 @@ export async function generarPdfPedido(pedido: PedidoPdf): Promise<void> {
         }
       }
     },
+
+
   });
 
   const finalY = (doc as any).lastAutoTable?.finalY ?? 0;

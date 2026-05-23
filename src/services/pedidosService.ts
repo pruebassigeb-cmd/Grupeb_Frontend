@@ -6,17 +6,21 @@ export const getPedidos = async () => {
 };
 
 export const eliminarPedido = async (noPedido: string) => {
-  const response = await api.delete(`/pedidos/${noPedido}`);
-  return response.data;
+  const { data } = await api.delete(`/pedidos/${noPedido}/completo`);
+  return data;
 };
 
-// ── Tipos para actualizar ─────────────────────────────────────────────────────
+
+
+// ── Tipos ─────────────────────────────────────────────────────────────────────
+
 export interface DetalleActualizar {
-  iddetalle:    number | null;
-  cantidad:     number;
-  precio_total: number;
-  kilogramos:   number | null;
-  modo_cantidad: "unidad" | "kilo";
+  iddetalle:       number | null;
+  cantidad:        number;
+  precio_total:    number;
+  precio_unitario: number | null;  // precio por bolsa; se guarda para no perderlo al editar
+  kilogramos:      number | null;
+  modo_cantidad:   "unidad" | "kilo";
 }
 
 export interface ProductoActualizar {
@@ -28,8 +32,13 @@ export interface ProductoActualizar {
   pigmentos:               string | null;
   observacion:             string | null;
   descripcion:             string | null;
+  perforacion:             boolean;
   herramental_descripcion: string | null;
   herramental_precio:      number | null;
+  herramental_aprobado:    boolean | null;  // preserved on update, used on insert
+  idsuaje:                 number | null;
+  id_color:                number | null;
+  id_medidatro:            number | null;
   detalles:                DetalleActualizar[];
 }
 
