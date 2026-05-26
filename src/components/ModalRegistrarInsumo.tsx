@@ -56,9 +56,7 @@ export default function ModalRegistrarInsumo({
       setVerificando(true);
       try {
         const resultados = await buscarInsumos(form.tipo_insumo_id, form.nombre.trim());
-        const exacto = resultados.find(
-          r => r.nombre.toLowerCase() === form.nombre.trim().toLowerCase()
-        );
+        const exacto = resultados.find((r: ProductoProveedor) => r.nombre.toLowerCase() === form.nombre.trim().toLowerCase());
         setDuplicado(
           exacto
             ? `Ya existe "${exacto.nombre}"${exacto.proveedor_nombre ? ` — ${exacto.proveedor_nombre}` : ""}`

@@ -119,7 +119,7 @@ export default function ProductosProveedor({ proveedor, onVolver }: Props) {
         } catch (error: any) {
             if (error?.response?.status === 409) {
                 const existente = error.response.data.existente;
-                setTipos(prev =>
+                setTipos((prev: TipoInsumo[]) =>
                     prev.find(t => t.idtipo_insumo === existente.idtipo_insumo)
                         ? prev
                         : [...prev, existente]
@@ -144,69 +144,69 @@ export default function ProductosProveedor({ proveedor, onVolver }: Props) {
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
-  e.preventDefault();
-  if (!form.tipo_insumo_id) { showAlert("Selecciona el tipo de insumo", "warning"); return; }
-  if (!form.nombre?.trim()) { showAlert("El nombre es requerido", "warning"); return; }
+        e.preventDefault();
+        if (!form.tipo_insumo_id) { showAlert("Selecciona el tipo de insumo", "warning"); return; }
+        if (!form.nombre?.trim()) { showAlert("El nombre es requerido", "warning"); return; }
 
-  // ID que se usará para crear el insumo — puede cambiar si es tipo "Otro"
-  let tipoIdFinal = form.tipo_insumo_id;
+        // ID que se usará para crear el insumo — puede cambiar si es tipo "Otro"
+        let tipoIdFinal = form.tipo_insumo_id;
 
-  if (esTipoOtro && nuevoTipoNombre.trim()) {
-    setGuardandoTipo(true);
-    try {
-      const nuevoTipo = await crearTipoInsumo(nuevoTipoNombre.trim());
-      setTipos(prev => [...prev, nuevoTipo]);
-      tipoIdFinal = nuevoTipo.idtipo_insumo; // ← variable local, no estado
-      setNuevoTipoNombre("");
-    } catch (error: any) {
-      if (error?.response?.status === 409) {
-        tipoIdFinal = error.response.data.existente.idtipo_insumo;
-        setNuevoTipoNombre("");
-      } else {
-        showAlert(error?.response?.data?.error || "Error al crear tipo", "error");
-        setGuardandoTipo(false);
-        return;
-      }
-    } finally {
-      setGuardandoTipo(false);
-    }
-  } else if (esTipoOtro && !nuevoTipoNombre.trim()) {
-    showAlert("Escribe el nombre del nuevo tipo", "warning");
-    return;
-  }
+        if (esTipoOtro && nuevoTipoNombre.trim()) {
+            setGuardandoTipo(true);
+            try {
+                const nuevoTipo = await crearTipoInsumo(nuevoTipoNombre.trim());
+                setTipos(prev => [...prev, nuevoTipo]);
+                tipoIdFinal = nuevoTipo.idtipo_insumo; // ← variable local, no estado
+                setNuevoTipoNombre("");
+            } catch (error: any) {
+                if (error?.response?.status === 409) {
+                    tipoIdFinal = error.response.data.existente.idtipo_insumo;
+                    setNuevoTipoNombre("");
+                } else {
+                    showAlert(error?.response?.data?.error || "Error al crear tipo", "error");
+                    setGuardandoTipo(false);
+                    return;
+                }
+            } finally {
+                setGuardandoTipo(false);
+            }
+        } else if (esTipoOtro && !nuevoTipoNombre.trim()) {
+            showAlert("Escribe el nombre del nuevo tipo", "warning");
+            return;
+        }
 
-  setGuardando(true);
-  try {
-    const dto: CreateProductoDto = {
-      tipo_insumo_id: tipoIdFinal, // ← usa la variable local
-      nombre:         form.nombre.trim(),
-      codigo:         form.codigo?.trim()  || null,
-      precio:         form.precio,
-      notas:          form.notas?.trim()   || null,
+        setGuardando(true);
+        try {
+            const dto: CreateProductoDto = {
+                tipo_insumo_id: tipoIdFinal, // ← usa la variable local
+                nombre: form.nombre.trim(),
+                codigo: form.codigo?.trim() || null,
+                precio: form.precio,
+                notas: form.notas?.trim() || null,
+            };
+
+            if (editando) {
+                const actualizado = await actualizarProductoProveedor(
+                    proveedor.idproveedor,
+                    editando.idproveedor_producto,
+                    dto
+                );
+                setProductos(prev =>
+                    prev.map(p => p.idproveedor_producto === editando.idproveedor_producto ? actualizado : p)
+                );
+                showAlert(`Insumo "${dto.nombre}" actualizado`, "success");
+            } else {
+                const nuevo = await crearProductoProveedor(proveedor.idproveedor, dto);
+                setProductos(prev => [...prev, nuevo]);
+                showAlert(`Insumo "${dto.nombre}" agregado`, "success");
+            }
+            cerrarForm();
+        } catch (error: any) {
+            showAlert(error?.response?.data?.error || "Error al guardar", "error");
+        } finally {
+            setGuardando(false);
+        }
     };
-
-    if (editando) {
-      const actualizado = await actualizarProductoProveedor(
-        proveedor.idproveedor,
-        editando.idproveedor_producto,
-        dto
-      );
-      setProductos(prev =>
-        prev.map(p => p.idproveedor_producto === editando.idproveedor_producto ? actualizado : p)
-      );
-      showAlert(`Insumo "${dto.nombre}" actualizado`, "success");
-    } else {
-      const nuevo = await crearProductoProveedor(proveedor.idproveedor, dto);
-      setProductos(prev => [...prev, nuevo]);
-      showAlert(`Insumo "${dto.nombre}" agregado`, "success");
-    }
-    cerrarForm();
-  } catch (error: any) {
-    showAlert(error?.response?.data?.error || "Error al guardar", "error");
-  } finally {
-    setGuardando(false);
-  }
-};
 
     const handleEliminar = async (p: ProductoProveedor) => {
         const ok = await showConfirm(`¿Desactivar el insumo "${p.nombre}"?`);
