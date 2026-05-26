@@ -4,7 +4,7 @@ import {
   getOrCreateNotaRemision, type EnvioCreado,
 } from "../services/enviosService";
 import { generarNotasMultiples } from "../utils/generarNotaRemision";
-import type { CarritoPedido, Conductor, Unidad } from "../types/envios.types";
+import type { CarritoPedido, Conductor, TipoEnvioCarrito, Unidad } from "../types/envios.types";
 import { inputClass, labelClass } from "./enviosConstants";
 import ModalFormatoCastores from "./ModalFormatoCastores";
 import ModalFormatoTresGuerras from "./ModalFormatoTresGuerras";
@@ -101,8 +101,7 @@ export default function FormularioProcesarCarrito({ carrito, onSuccess, onCancel
       const pedidos = carrito
         .map(p => ({
           idsolicitud: p.idsolicitud,
-          tipo_envio: p.tipo_envio,   // ← agregar esta línea
-          bultos: p.bultos
+          tipo_envio: p.tipo_envio ?? "local" as TipoEnvioCarrito, bultos: p.bultos
             .filter(b => seleccion.get(p.idsolicitud)?.has(b.idbulto))
             .map(b => ({
               idbulto: b.idbulto,
@@ -291,8 +290,8 @@ export default function FormularioProcesarCarrito({ carrito, onSuccess, onCancel
                         }
                       </span>
                       <span className={`px-2 py-0.5 rounded-full shrink-0 ${bulto.paqueteria_idpaqueteria
-                          ? "bg-indigo-100 text-indigo-700"
-                          : "bg-gray-100 text-gray-500"
+                        ? "bg-indigo-100 text-indigo-700"
+                        : "bg-gray-100 text-gray-500"
                         }`}>
                         {bulto.paqueteria_nombre ?? "Local"}
                       </span>

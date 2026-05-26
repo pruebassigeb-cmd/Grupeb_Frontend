@@ -14,6 +14,7 @@ export interface DetalleCotizacion {
 // MEDIDAS INDIVIDUALES DEL PRODUCTO
 // ============================================================
 export interface MedidasProducto {
+  [key: string]: string;  // ← agrega esta línea
   altura:         string;
   ancho:          string;
   fuelleFondo:    string;
