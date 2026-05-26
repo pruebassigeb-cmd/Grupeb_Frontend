@@ -10,7 +10,7 @@ import {
     type TipoInsumo,
     type CreateProductoDto,
     crearTipoInsumo
-} from "../services/proveedoresservice";
+} from "../services/proveedoresService";
 import { showAlert } from "./CustomAlert";
 import { showConfirm } from "./CustomConfirm";
 

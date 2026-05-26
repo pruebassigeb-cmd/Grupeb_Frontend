@@ -7,7 +7,7 @@ import {
   type TipoInsumo,
   type ProductoProveedor,
   type Proveedor,
-} from "../services/proveedoresservice";
+} from "../services/proveedoresService";
 import { showAlert } from "./CustomAlert";
 
 interface Props {

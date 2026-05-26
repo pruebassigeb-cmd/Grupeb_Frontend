@@ -3,7 +3,7 @@ import {
   getProveedores,
   eliminarProveedor,
   type Proveedor,
-} from "../services/proveedoresservice";
+} from "../services/proveedoresService";
 import { showAlert } from "./CustomAlert";
 import { showConfirm } from "./CustomConfirm";
 

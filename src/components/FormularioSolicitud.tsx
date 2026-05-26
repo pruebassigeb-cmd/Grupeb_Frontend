@@ -18,8 +18,8 @@ import { showAlert } from "./CustomAlert";
 import type { Producto, DatosCotizacion, FormularioCotizacionProps, OpcionCP } from "../types/formulario-solicitud.types";
 import { ESTADO_INICIAL_PRODUCTO_MEDIDAS } from "../constants/formulario-solicitud.constants";
 import FormularioCliente from "./FormularioCliente";
-import { buscarInsumos, getTiposInsumo  } from "../services/proveedoresservice";
-import type { ProductoProveedor } from "../services/proveedoresservice";
+import { buscarInsumos, getTiposInsumo  } from "../services/proveedoresService";
+import type { ProductoProveedor } from "../services/proveedoresService";
 import ModalRegistrarInsumo from "./ModalRegistrarInsumo";
 
 export default function FormularioSolicitud({

@@ -2,7 +2,7 @@ import { useState } from "react";
 import ListaProveedores  from "../components/ListaPorveedores";
 import FormularioProveedor from "../components/FormularioProveedor";
 import ProductosProveedor  from "../components/ProductosProveedor";
-import type { Proveedor } from "../services/proveedoresservice";
+import type { Proveedor } from "../services/proveedoresService";
 
 type Vista = "lista" | "formulario" | "productos";
 

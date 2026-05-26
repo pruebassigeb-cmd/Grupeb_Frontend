@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import type { Proveedor, CreateProveedorDto } from "../services/proveedoresservice";
-import { crearProveedor, actualizarProveedor } from "../services/proveedoresservice";
+import type { Proveedor, CreateProveedorDto } from "../services/proveedoresService";
+import { crearProveedor, actualizarProveedor } from "../services/proveedoresService";
 import { showAlert } from "./CustomAlert";
 
 interface Props {
