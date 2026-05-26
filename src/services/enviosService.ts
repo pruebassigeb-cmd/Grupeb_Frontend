@@ -15,6 +15,7 @@ import type {
   HistorialLocalItem,
   HistorialPaqueteriaItem,
   NotaRemisionMultiData, NotaRemisionBitacoraItem,
+  ClienteRemision, PedidoRemision, HistorialEntregasPedido,
 } from "../types/envios.types";
 
 // ==========================
@@ -120,12 +121,10 @@ export const updateGuiaEnvio = async (id: number, numero_guia: string): Promise<
 // ENVÍOS DE RECOLECCIÓN
 // ==========================
 export const getEnviosRecoleccion = async (): Promise<EnvioRecoleccion[]> => {
-  // Ahora viene del nuevo endpoint que devuelve recoleccion_datos
   const res = await api.get<EnvioRecoleccion[]>("/bitacora/recoleccion");
   return res.data;
 };
 
-// Marcar recolección como entregada con datos y foto opcional
 export const marcarRecolectado = async (
   idenvio: number,
   datos: {
@@ -136,7 +135,6 @@ export const marcarRecolectado = async (
     unidad_placas?:       string;
   }
 ): Promise<void> => {
-  // La foto ya NO se manda aquí — se sube por separado a archivos con envio_id
   const formData = new FormData();
   formData.append("nombre_quien_recogio", datos.nombre_quien_recogio);
   if (datos.empresa)       formData.append("empresa",       datos.empresa);
@@ -187,7 +185,6 @@ export const getOrCreateNotaRemision = async (idenvio: number): Promise<NotaRemi
   return res.data;
 };
 
-// Nota de remisión multi-pedido
 export const crearNotaRemisionMulti = async (data: {
   envios_ids:          number[];
   tipo_entrega:        "recoleccion" | "local";
@@ -208,6 +205,31 @@ export const getNotasRemisionBitacora = async (): Promise<NotaRemisionBitacoraIt
   return res.data;
 };
 
+export const marcarRecolectadoNotaRemision = async (
+  idnota: number,
+  datos: {
+    nombre_quien_recogio: string;
+    empresa?:             string;
+    unidad_marca?:        string;
+    unidad_modelo?:       string;
+    unidad_placas?:       string;
+  }
+): Promise<void> => {
+  await api.patch(`/notas-remision/${idnota}/marcar-recogido`, datos);
+};
+
+export const marcarEntregadoLocalNota = async (
+  idnota: number,
+  datos: {
+    hora_salida?:       string;
+    hora_llegada?:      string;
+    observacion?:       string;
+    observacion_extra?: string;
+    firma?:             string;
+  }
+): Promise<void> => {
+  await api.patch(`/notas-remision/${idnota}/marcar-entregado-local`, datos);
+};
 
 // ==========================
 // CARRITO
@@ -221,7 +243,6 @@ export const agregarAlCarrito = async (bultos_ids: number[], idsolicitud: number
   await api.post("/carrito/agregar", { bultos_ids, idsolicitud });
 };
 
-// Asignar tipo de envío a nivel pedido (reemplaza asignarPaqueteriaCarrito a nivel pedido)
 export const asignarTipoEnvioPedido = async (
   idsolicitud: number,
   tipo_envio: TipoEnvioCarrito,
@@ -234,7 +255,6 @@ export const asignarTipoEnvioPedido = async (
   });
 };
 
-// Retrocompat — asignar paquetería a un bulto individual (sigue existiendo)
 export const asignarPaqueteriaCarrito = async (
   idcarrito: number,
   paqueteria_idpaqueteria: number | null
@@ -326,5 +346,23 @@ export const getHistorialLocal = async (filtros: FiltrosHistorialLocal = {}): Pr
 };
 export const getHistorialPaqueteria = async (filtros: FiltrosHistorialPaqueteria = {}): Promise<HistorialPaqueteriaItem[]> => {
   const res = await api.get<HistorialPaqueteriaItem[]>(`/historial/paqueteria${toQueryString(filtros)}`);
+  return res.data;
+};
+
+// ==========================
+// REMISIONES
+// ==========================
+export const getClientesRemisiones = async (): Promise<ClienteRemision[]> => {
+  const res = await api.get<ClienteRemision[]>("/historial/remisiones/clientes");
+  return res.data;
+};
+
+export const getPedidosClienteRemisiones = async (idclientes: number): Promise<PedidoRemision[]> => {
+  const res = await api.get<PedidoRemision[]>(`/historial/remisiones/pedidos/${idclientes}`);
+  return res.data;
+};
+
+export const getHistorialEntregas = async (idsolicitudes: number[]): Promise<HistorialEntregasPedido[]> => {
+  const res = await api.post<HistorialEntregasPedido[]>("/historial/remisiones/entregas", { idsolicitudes });
   return res.data;
 };

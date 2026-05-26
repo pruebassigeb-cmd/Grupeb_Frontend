@@ -123,6 +123,13 @@ export default function Dashboard({ children }: DashboardProps) {
       accesoTotal: true,
       subItems: [],
     },
+
+    {
+      name: "Gestor proveedores",
+      path: "/proveedores",
+      accesoTotal: true,
+      subItems: [],
+    },
   ];
 
   const menuFiltrado = menuItems.filter((item) => {

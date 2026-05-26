@@ -17,17 +17,18 @@ import SinAcceso from "./pages/SinAcceso";
 import EditarPedido from "./components/EditarPedido.tsx";
 import Envios from "./pages/Envios";
 import GestorArchivos from "./components/GestorArchivos";
-import GestorBackups from "./components/GestorBackups.tsx"; 
+import GestorBackups from "./components/GestorBackups.tsx";
+import ProveedoresPage from "./pages/ProveedoresPage";
 
 const PERMISOS = {
-  usuarios:     "Crear/Editar/Eliminar Usuarios",
-  clientes:     "Crear/Editar/Eliminar Clientes",
-  plastico:     "Dar de alta productos",
-  cotizar:      "Crear/Editar/Aprobar/Rechazar Cotizaciones",
-  pedido:       "Crear/Editar/Eliminar Pedidos",
-  diseno:       "Editar Diseño",
-  anticipo:     "Editar Anticipo y Liquidacion",
-  precios:      "Modificar Catalogo de precios",
+  usuarios: "Crear/Editar/Eliminar Usuarios",
+  clientes: "Crear/Editar/Eliminar Clientes",
+  plastico: "Dar de alta productos",
+  cotizar: "Crear/Editar/Aprobar/Rechazar Cotizaciones",
+  pedido: "Crear/Editar/Eliminar Pedidos",
+  diseno: "Editar Diseño",
+  anticipo: "Editar Anticipo y Liquidacion",
+  precios: "Modificar Catalogo de precios",
   estadoCuenta: "Editar Anticipo y Liquidacion",
 } as const;
 
@@ -134,6 +135,12 @@ function App() {
             <ProtectedRoute><GestorBackups /></ProtectedRoute>
           } />
 
+          {/* Proveedores */}
+          <Route path="/proveedores" element={
+            <ProtectedRoute permiso="Gestionar Proveedores">
+              <ProveedoresPage />
+            </ProtectedRoute>
+          } />
           {/* Catch-all */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

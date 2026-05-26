@@ -48,18 +48,22 @@ export const SUBCARPETAS_PDF: { value: SubcarpetaPDF; label: string }[] = [
   { value: "formas-envio",             label: "Formas de Envío"               },
 ];
 
-// Subir archivo — ahora acepta envio_id opcional
+
+
+// Subir archivo — acepta envio_id y nota_id opcionales
 export const subirArchivo = async (
   file: File,
   carpeta: CarpetaFrontend,
   subcarpeta?: SubcarpetaPDF,
   envio_id?: number,
+  nota_id?: number,           // ← NUEVO
 ): Promise<Archivo> => {
   const formData = new FormData();
   formData.append("archivo", file);
   formData.append("carpeta", carpeta);
   if (subcarpeta)          formData.append("subcarpeta", subcarpeta);
   if (envio_id != null)    formData.append("envio_id",   String(envio_id));
+  if (nota_id  != null)    formData.append("nota_id",    String(nota_id));  // ← NUEVO
 
   const { data } = await api.post<Archivo>("/archivos/upload", formData, {
     headers: { "Content-Type": "multipart/form-data" },
@@ -73,6 +77,13 @@ export const getFotosEnvio = async (idenvio: number): Promise<Archivo[]> => {
   const { data } = await api.get<Archivo[]>(`/archivos/envio/${idenvio}`);
   return data;
 };
+
+// Obtener fotos de una nota de remisión  ← NUEVO
+export const getFotosNota = async (idnota: number): Promise<Archivo[]> => {
+  const { data } = await api.get<Archivo[]>(`/archivos/nota/${idnota}`);
+  return data;
+};
+
 
 export const listarArchivos = async (): Promise<Archivo[]> => {
   const { data } = await api.get<Archivo[]>("/archivos");

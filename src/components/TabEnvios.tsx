@@ -18,7 +18,6 @@ import { showAlert } from './CustomAlert';
 import { showConfirm } from './CustomConfirm';
 
 
-
 interface Props {
   carrito: CarritoPedido[];
   onCarritoChange: () => Promise<void>;

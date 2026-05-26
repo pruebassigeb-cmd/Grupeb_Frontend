@@ -21,10 +21,14 @@ export default function FormularioNotaRemisionMulti({ carrito, onSuccess, onCanc
   const [cargando,       setCargando]       = useState(true);
   const [procesando,     setProcesando]     = useState(false);
 
-  // Tipo de entrega para la nota multi
   const [tipoEntrega, setTipoEntrega] = useState<"recoleccion" | "local" | null>(null);
   const [choferSeleccionado, setChoferSeleccionado] = useState(0);
   const [unidadSeleccionada, setUnidadSeleccionada] = useState(0);
+
+  // Campos extra para envío local
+  const [costoFlete,           setCostoFlete]           = useState("");
+  const [fechaEntregaEstimada, setFechaEntregaEstimada] = useState("");
+  const [observaciones,        setObservaciones]        = useState("");
 
   useEffect(() => {
     const cargarCatalogos = async () => {
@@ -54,9 +58,6 @@ export default function FormularioNotaRemisionMulti({ carrito, onSuccess, onCanc
 
     setProcesando(true);
     try {
-      // 1. Primero procesar el carrito para crear los envíos
-      //    Todos los pedidos van como recoleccion en el envío base
-      //    (la nota de remisión define si es local o recolección)
       const pedidosPayload = carrito.map(p => ({
         idsolicitud: p.idsolicitud,
         tipo_envio:  "recoleccion" as TipoEnvioCarrito,
@@ -67,16 +68,17 @@ export default function FormularioNotaRemisionMulti({ carrito, onSuccess, onCanc
       }));
 
       const resultCarrito = await procesarCarrito({
-        // Si es local, pasar chofer/unidad para la bitácora
-        usuarios_idusuario: tipoEntrega === "local" ? choferSeleccionado || undefined : undefined,
-        unidades_idunidad:  tipoEntrega === "local" ? unidadSeleccionada || undefined  : undefined,
+        usuarios_idusuario:      tipoEntrega === "local" ? choferSeleccionado || undefined : undefined,
+        unidades_idunidad:       tipoEntrega === "local" ? unidadSeleccionada || undefined : undefined,
+        costo_flete:             tipoEntrega === "local" && costoFlete ? Number(costoFlete) : undefined,
+        fecha_entrega_estimada:  tipoEntrega === "local" && fechaEntregaEstimada ? fechaEntregaEstimada : undefined,
+        observaciones:           tipoEntrega === "local" && observaciones ? observaciones : undefined,
         pedidos: pedidosPayload,
       });
 
       const enviosCreados: EnvioCreado[] = resultCarrito.envios_creados;
       const enviosIds = enviosCreados.map(e => e.idenvio);
 
-      // 2. Crear la nota de remisión multi vinculando todos los envíos
       const notaMulti = await crearNotaRemisionMulti({
         envios_ids:        enviosIds,
         tipo_entrega:      tipoEntrega,
@@ -84,9 +86,7 @@ export default function FormularioNotaRemisionMulti({ carrito, onSuccess, onCanc
         unidad_idunidad:   tipoEntrega === "local" ? unidadSeleccionada || undefined : undefined,
       });
 
-      // 3. Generar el PDF
       await generarNotaRemisionMulti(notaMulti);
-
       await onSuccess();
     } catch (error: any) {
       showAlert(error.response?.data?.error || "Error al crear nota de remisión");
@@ -149,14 +149,14 @@ export default function FormularioNotaRemisionMulti({ carrito, onSuccess, onCanc
         </div>
       </div>
 
-      {/* Chofer y unidad — solo si es local */}
+      {/* Campos solo si es local */}
       {tipoEntrega === "local" && (
         <div className="space-y-3 bg-blue-50 border border-blue-200 rounded-lg p-4">
           <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Datos del reparto</p>
+
           <div>
             <label className={labelClass}>Chofer *</label>
-            <select
-              value={choferSeleccionado}
+            <select value={choferSeleccionado}
               onChange={e => setChoferSeleccionado(Number(e.target.value))}
               className={inputClass}>
               <option value={0}>Seleccionar chofer...</option>
@@ -167,10 +167,10 @@ export default function FormularioNotaRemisionMulti({ carrito, onSuccess, onCanc
               ))}
             </select>
           </div>
+
           <div>
             <label className={labelClass}>Unidad *</label>
-            <select
-              value={unidadSeleccionada}
+            <select value={unidadSeleccionada}
               onChange={e => setUnidadSeleccionada(Number(e.target.value))}
               className={inputClass}>
               <option value={0}>Seleccionar unidad...</option>
@@ -180,6 +180,28 @@ export default function FormularioNotaRemisionMulti({ carrito, onSuccess, onCanc
                 </option>
               ))}
             </select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={labelClass}>Costo de Flete (opcional)</label>
+              <input type="text" inputMode="decimal" value={costoFlete}
+                onChange={e => setCostoFlete(e.target.value.replace(/[^0-9.]/g, ""))}
+                className={inputClass} placeholder="0.00" />
+            </div>
+            <div>
+              <label className={labelClass}>Fecha Estimada de Entrega</label>
+              <input type="date" value={fechaEntregaEstimada}
+                onChange={e => setFechaEntregaEstimada(e.target.value)}
+                className={inputClass} />
+            </div>
+          </div>
+
+          <div>
+            <label className={labelClass}>Observaciones (opcional)</label>
+            <input type="text" value={observaciones}
+              onChange={e => setObservaciones(e.target.value)}
+              className={inputClass} placeholder="Notas adicionales..." />
           </div>
         </div>
       )}
@@ -204,14 +226,11 @@ export default function FormularioNotaRemisionMulti({ carrito, onSuccess, onCanc
 
       {/* Botones */}
       <div className="flex justify-end gap-3 pt-2 border-t border-gray-100">
-        <button
-          onClick={onCancel}
-          disabled={procesando}
+        <button onClick={onCancel} disabled={procesando}
           className="px-5 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50">
           Cancelar
         </button>
-        <button
-          onClick={handleSubmit}
+        <button onClick={handleSubmit}
           disabled={procesando || !tipoEntrega}
           className="px-5 py-2 bg-emerald-600 text-white rounded-lg font-semibold hover:bg-emerald-700 disabled:opacity-50">
           {procesando ? "Generando..." : "📋 Crear Nota de Remisión"}

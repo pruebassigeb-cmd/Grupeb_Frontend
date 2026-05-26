@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import api from "../services/api";
 
 interface ResultadoCalculo {
@@ -49,13 +49,8 @@ export const usePrecioCalculado = ({
       return;
     }
 
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-    }
+    if (abortControllerRef.current) abortControllerRef.current.abort();
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
 
     setLoading(true);
     setError(null);
@@ -122,21 +117,21 @@ export const usePreciosBatch = ({
   const abortControllerRef = useRef<AbortController | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // ── Guardar el valor anterior de cantidades para comparación estable.
-  // JSON.stringify en las dependencias causaba disparos espurios porque cada
-  // render producía una nueva referencia de array aunque los valores fueran iguales.
-  const cantidadesPrevRef = useRef<string>("");
+  // ── Estabilizar el array de cantidades comparando valores individuales
+  // para evitar que una nueva referencia de array dispare el effect en cada render
+  const cantidadesEstables = useMemo(
+    () => cantidades,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [cantidades[0], cantidades[1], cantidades[2]]
+  );
 
   useEffect(() => {
-    // Guard inmediato — si no está habilitado, limpiar todo y NO hacer nada más.
-    // Este return debe ser la primera instrucción para que nunca se salte.
     if (!enabled) {
       if (abortControllerRef.current) abortControllerRef.current.abort();
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
       setResultados([]);
       setLoading(false);
       setError(null);
-      cantidadesPrevRef.current = "";
       return;
     }
 
@@ -147,13 +142,7 @@ export const usePreciosBatch = ({
       return;
     }
 
-    const cantidadesStr = JSON.stringify(cantidades);
-
-    // Si los valores reales no cambiaron, no hacer nada aunque React re-ejecute el efecto
-    if (cantidadesStr === cantidadesPrevRef.current) return;
-    cantidadesPrevRef.current = cantidadesStr;
-
-    const cantidadesConIndice = cantidades
+    const cantidadesConIndice = cantidadesEstables
       .map((c, i) => ({ cantidad: c, indice: i }))
       .filter(({ cantidad }) => cantidad > 0);
 
@@ -189,7 +178,7 @@ export const usePreciosBatch = ({
 
         if (!abortController.signal.aborted) {
           const resultadosCompletos: (ResultadoCalculo | null)[] = Array(
-            cantidades.length
+            cantidadesEstables.length
           ).fill(null);
 
           const resultadosBackend: ResultadoCalculo[] = response.data.resultados;
@@ -215,7 +204,7 @@ export const usePreciosBatch = ({
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
       if (abortControllerRef.current) abortControllerRef.current.abort();
     };
-  }, [cantidades, porKilo, tintasId, enabled]);
+  }, [cantidadesEstables, porKilo, tintasId, enabled]);
 
   return {
     resultados,

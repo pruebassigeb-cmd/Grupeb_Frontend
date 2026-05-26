@@ -216,7 +216,7 @@ export interface EnvioPaqueteria {
 }
 
 // ==========================
-// RECOLECCIÓN — extendida con datos de quien recoge
+// RECOLECCIÓN
 // ==========================
 export interface RecoleccionDatos {
   nombre_quien_recogio: string;
@@ -241,7 +241,7 @@ export interface EnvioRecoleccion {
   empresa:                string;
   total_bultos:           number;
   idbitacora:             number | null;
-  recoleccion_datos:      RecoleccionDatos | null;   // ← NUEVO
+  recoleccion_datos:      RecoleccionDatos | null;
 }
 
 // ==========================
@@ -263,7 +263,7 @@ export interface CarritoBulto {
   ancho:                   number | null;
   proceso_origen:          "bolseo" | "asa_flexible";
   agregado_por:            string;
-  tipo_envio:              TipoEnvioCarritoSeleccion;  // puede venir null para carrito virgen
+  tipo_envio:              TipoEnvioCarritoSeleccion;
   paqueteria_idpaqueteria: number | null;
   paqueteria_nombre:       string | null;
 }
@@ -284,7 +284,7 @@ export interface ProcesarCarritoRequest {
   observaciones?:          string;
   pedidos: {
     idsolicitud: number;
-    tipo_envio:  TipoEnvioCarrito;                     // ← NUEVO
+    tipo_envio:  TipoEnvioCarrito;
     bultos: {
       idbulto:                 number;
       paqueteria_idpaqueteria: number | null;
@@ -363,7 +363,7 @@ export interface NotaRemisionMultiData {
     idenvio:       null;
     tipo:          string;
     fecha_envio:   string;
-    no_pedido:     string;   // lista de no_pedidos separada por coma
+    no_pedido:     string;
     observaciones: null;
   };
   cliente: {
@@ -386,23 +386,43 @@ export interface NotaRemisionMultiData {
   }[];
 }
 
+export interface NotaRemisionRecoleccionDatos {
+  nombre_quien_recogio: string;
+  empresa:              string | null;
+  unidad_marca:         string | null;
+  unidad_modelo:        string | null;
+  unidad_placas:        string | null;
+  fecha:                string | null;
+}
+
+export interface NotaRemisionLocalDatos {
+  hora_salida:       string | null;
+  hora_llegada:      string | null;
+  observacion:       string | null;
+  observacion_extra: string | null;
+  firma:             string | null;
+}
 
 export interface NotaRemisionBitacoraItem {
-  idnota:       number;
-  no_nota:      string;
-  created_at:   string;
-  es_multi:     boolean;
-  tipo_entrega: "recoleccion" | "local";
-  no_pedido:    string;
-  cliente:      string;
-  total_pedidos: number;
-  total_bultos:  number;
+  idnota:            number;
+  no_nota:           string;
+  created_at:        string;
+  es_multi:          boolean;
+  tipo_entrega:      "recoleccion" | "local";
+  estado:            "pendiente" | "entregado";
+  no_pedido:         string;
+  cliente:           string;
+  total_pedidos:     number;
+  total_bultos:      number;
+  recoleccion_datos: NotaRemisionRecoleccionDatos | null;
+  local_datos:       NotaRemisionLocalDatos | null;
   chofer: { idusuario: number; nombre: string } | null;
   unidad: { idunidad: number; nombre: string } | null;
 }
 
-// ── Filtros ──────────────────────────────────────────────────
-
+// ==========================
+// FILTROS
+// ==========================
 export interface FiltrosHistorialLocal {
   fecha_inicio?: string;
   fecha_fin?:    string;
@@ -422,8 +442,9 @@ export interface FiltrosHistorialPaqueteria {
   estado?:       "preparando" | "en_camino" | "entregado";
 }
 
-// ── Registros ────────────────────────────────────────────────
-
+// ==========================
+// REGISTROS HISTORIAL
+// ==========================
 export interface HistorialLocalItem {
   idbitacora:        number;
   fecha:             string;
@@ -465,4 +486,59 @@ export interface HistorialPaqueteriaItem {
     idpaqueteria: number;
     nombre:       string;
   };
+}
+
+// ==========================
+// REMISIONES
+// ==========================
+export interface ClienteRemision {
+  idclientes:    number;
+  nombre:        string;
+  empresa:       string;
+  total_pedidos: number;
+}
+
+export interface ProductoPedidoRemision {
+  idsolicitud_producto:    number;
+  nombre_producto:         string;
+  medida:                  string;
+  modo_cantidad:           "unidad" | "kilo";
+  cantidad_total:          number | null;
+  kg_total:                number | null;
+  cantidad_entregada:      number;
+  total_bultos_producidos: number;
+  bultos_entregados:       number;
+}
+
+export interface PedidoRemision {
+  idsolicitud: number;
+  no_pedido:   string;
+  fecha:       string;
+  productos:   ProductoPedidoRemision[];
+}
+
+export interface EntregaRemision {
+  idenvio:            number;
+  tipo:               string;
+  estado:             string;
+  es_parcialidad:     boolean;
+  fecha_envio:        string;
+  numero_guia:        string | null;
+  observaciones:      string | null;
+  total_bultos:       number;
+  cantidad_entregada: number;
+  modo_cantidad:      "unidad" | "kilo";
+  productos:          string;
+  medidas:            string;
+  nota_no:            string | null;
+  nota_id:            number | null;
+  es_multi:           boolean;
+}
+
+export interface HistorialEntregasPedido {
+  idsolicitud:     number;
+  entregas:        EntregaRemision[];
+  total_entregas:  number;
+  total_entregado: number;
+  total_bultos:    number;
 }
