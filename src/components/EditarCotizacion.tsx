@@ -47,30 +47,37 @@ function resolverCalibre(p: any): string {
 function buildProductosPdf(productos: ProductoCotizacion[]) {
   return productos.map(p => ({
     nombre:             p.nombre,
-    material:           p.material            || "",
+    material:           p.material || "",
     calibre:            resolverCalibre(p),
     tintas:             p.tintas,
     caras:              p.caras,
-    medidasFormateadas: p.medidasFormateadas   || "",
-    medidas:            p.medidas             || {},
-    bk:                 p.bk                  || null,
-    foil:               p.foil                || null,
-    laminado:           p.laminado            || null,
-    uvBr:               p.uv_br               || null,
-    pigmentos:          p.pigmentos           || null,
-    pantones:           p.pantones            || null,
-    asa_suaje:          p.asa_suaje           || null,
-    observacion:        p.observacion         || null,
-    por_kilo:           p.por_kilo            || null,
+    medidasFormateadas: p.medidasFormateadas || "",
+    medidas:            p.medidas || {},
+    bk:                 p.bk || null,
+    foil:               p.foil || null,
+    laminado:           p.laminado || null,
+    uvBr:               p.uv_br || null,
+    pigmentos:          p.pigmentos || null,
+    pantones:           p.pantones || null,
+    asa_suaje:          p.asa_suaje || null,
+    observacion:        p.observacion || null,
+    por_kilo:           p.por_kilo || null,
+
+    // ✅ ESTOS FALTABAN
+    descripcion:        (p as any).descripcion ?? null,
+    perforacion:        (p as any).perforacion ?? false,
+
+    // ✅ Herramental
     herramental_descripcion: p.herramental_descripcion ?? null,
-    herramental_precio:      p.herramental_precio      ?? null,
-    herramental_aprobado:    p.herramental_aprobado    ?? null,
+    herramental_precio:      p.herramental_precio != null ? Number(p.herramental_precio) : null,
+    herramental_aprobado:    p.herramental_aprobado ?? null,
+
     detalles: (p.detalles || [])
       .filter((d: any) => d.aprobado === true)
       .map((d: any) => ({
         cantidad:      d.cantidad,
         precio_total:  d.precio_total,
-        kilogramos:    d.kilogramos   ?? null,
+        kilogramos:    d.kilogramos ?? null,
         modo_cantidad: d.modo_cantidad || "unidad",
       })),
   }));

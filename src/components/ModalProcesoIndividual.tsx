@@ -1115,11 +1115,18 @@ function SeccionBultos({
               Nuevos — pendientes de enviar ({bultosNuevos.length})
             </p>
           )}
-          {bultosNuevos.map((b, idx) => (
-            <TarjetaBulto key={b.idbulto} bulto={b} numero={bultosEnviados.length + idx + 1} modoKilo={modoKilo}
-              bultosFinalizados={bultosFinalizados} eliminando={eliminando}
+          {esParcialidad && bultosNuevos.map((b, idx) => (
+            <TarjetaBulto
+              key={b.idbulto}
+              bulto={b}
+              numero={bultosEnviados.length + idx + 1}
+              modoKilo={modoKilo}
+              bultosFinalizados={bultosFinalizados}
+              eliminando={eliminando}
               esParcialidad={esParcialidad}
-              onEliminar={handleEliminar} onEditar={abrirEditar} />
+              onEliminar={handleEliminar}
+              onEditar={abrirEditar}
+            />
           ))}
           {/* Si no es parcialidad, mostrar todos normalmente */}
           {!esParcialidad && bultos.map((b, idx) => (

@@ -512,6 +512,7 @@ export interface ProductoPedidoRemision {
   cantidad_entregada: number;
   total_bultos_producidos: number;
   bultos_entregados: number;
+  descripcion: string | null;
 }
 
 export interface PedidoRemision {

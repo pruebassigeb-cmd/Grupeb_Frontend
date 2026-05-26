@@ -168,7 +168,7 @@ const dibujarNota = (
     doc.text(linea, leyX + 1.5, y + 4 + i * 3.3);
   });
 
-  doc.setFillColor(10, 10, 10);
+  doc.setFillColor(200, 200, 200);
   doc.rect(recX, y, recW, 5, "F");
   doc.setTextColor(0, 0, 0);
   doc.setFontSize(6.5);

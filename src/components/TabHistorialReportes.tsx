@@ -62,7 +62,7 @@ function TarjetaTotales({ totalPedidos, totalBultos, totalFlete, mostrarFlete }:
 function SeccionLocal({ unidades, conductores }: { unidades: Unidad[]; conductores: Conductor[] }) {
   const hoy = new Date().toISOString().slice(0, 10);
   const [filtros, setFiltros] = useState<FiltrosHistorialLocal>({ fecha_inicio: hoy, fecha_fin: hoy });
-  const [datos,   setDatos]   = useState<HistorialLocalItem[]>([]);
+  const [datos, setDatos] = useState<HistorialLocalItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [buscado, setBuscado] = useState(false);
 
@@ -74,7 +74,7 @@ function SeccionLocal({ unidades, conductores }: { unidades: Unidad[]; conductor
   }, [filtros]);
 
   const totalPedidos = new Set(datos.map(d => d.no_pedido)).size;
-  const totalBultos  = datos.reduce((s, d) => s + d.total_bultos, 0);
+  const totalBultos = datos.reduce((s, d) => s + d.total_bultos, 0);
 
   const handlePDF = async () => {
     if (!datos.length) { showAlert("No hay datos para exportar"); return; }
@@ -132,7 +132,7 @@ function SeccionLocal({ unidades, conductores }: { unidades: Unidad[]; conductor
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 border-b border-gray-200">
-                  <tr>{["Fecha","N° Pedido","Cliente","Unidad","Chofer","Bultos","Salida","Llegada","Obs.","Firma","Tipo","Estado"].map(h => (
+                  <tr>{["Fecha", "N° Pedido", "Cliente", "Unidad", "Chofer", "Bultos", "Salida", "Llegada", "Obs.", "Firma", "Tipo", "Estado"].map(h => (
                     <th key={h} className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">{h}</th>
                   ))}</tr>
                 </thead>
@@ -179,7 +179,7 @@ function SeccionLocal({ unidades, conductores }: { unidades: Unidad[]; conductor
 function SeccionPaqueteria({ paqueterias }: { paqueterias: Paqueteria[] }) {
   const hoy = new Date().toISOString().slice(0, 10);
   const [filtros, setFiltros] = useState<FiltrosHistorialPaqueteria>({ fecha_inicio: hoy, fecha_fin: hoy });
-  const [datos,   setDatos]   = useState<HistorialPaqueteriaItem[]>([]);
+  const [datos, setDatos] = useState<HistorialPaqueteriaItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [buscado, setBuscado] = useState(false);
 
@@ -191,8 +191,8 @@ function SeccionPaqueteria({ paqueterias }: { paqueterias: Paqueteria[] }) {
   }, [filtros]);
 
   const totalPedidos = new Set(datos.map(d => d.no_pedido)).size;
-  const totalBultos  = datos.reduce((s, d) => s + d.total_bultos, 0);
-  const totalFlete   = datos.reduce((s, d) => s + (d.costo_flete ?? 0), 0);
+  const totalBultos = datos.reduce((s, d) => s + d.total_bultos, 0);
+  const totalFlete = datos.reduce((s, d) => s + (d.costo_flete ?? 0), 0);
 
   const handlePDF = async () => {
     if (!datos.length) { showAlert("No hay datos para exportar"); return; }
@@ -254,7 +254,7 @@ function SeccionPaqueteria({ paqueterias }: { paqueterias: Paqueteria[] }) {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 border-b border-gray-200">
-                  <tr>{["Fecha","N° Pedido","Cliente","Paquetería","N° Guía","Bultos","Tipo","Flete","Estado"].map(h => (
+                  <tr>{["Fecha", "N° Pedido", "Cliente", "Paquetería", "N° Guía", "Bultos", "Tipo", "Flete", "Estado"].map(h => (
                     <th key={h} className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">{h}</th>
                   ))}</tr>
                 </thead>
@@ -298,16 +298,16 @@ function SeccionPaqueteria({ paqueterias }: { paqueterias: Paqueteria[] }) {
 
 // ── Sección REMISIONES ───────────────────────────────────────
 function SeccionRemisiones() {
-  const [clientes,          setClientes]          = useState<ClienteRemision[]>([]);
-  const [loadingClientes,   setLoadingClientes]   = useState(true);
-  const [clienteExpandido,  setClienteExpandido]  = useState<number | null>(null);
-  const [pedidosCliente,    setPedidosCliente]    = useState<PedidoRemision[]>([]);
-  const [loadingPedidos,    setLoadingPedidos]    = useState(false);
+  const [clientes, setClientes] = useState<ClienteRemision[]>([]);
+  const [loadingClientes, setLoadingClientes] = useState(true);
+  const [clienteExpandido, setClienteExpandido] = useState<number | null>(null);
+  const [pedidosCliente, setPedidosCliente] = useState<PedidoRemision[]>([]);
+  const [loadingPedidos, setLoadingPedidos] = useState(false);
   const [pedidosSeleccionados, setPedidosSeleccionados] = useState<number[]>([]);
-  const [historial,         setHistorial]         = useState<HistorialEntregasPedido[]>([]);
-  const [loadingHistorial,  setLoadingHistorial]  = useState(false);
-  const [vistaHistorial,    setVistaHistorial]    = useState(false);
-  const [clienteActivo,     setClienteActivo]     = useState<ClienteRemision | null>(null);
+  const [historial, setHistorial] = useState<HistorialEntregasPedido[]>([]);
+  const [loadingHistorial, setLoadingHistorial] = useState(false);
+  const [vistaHistorial, setVistaHistorial] = useState(false);
+  const [clienteActivo, setClienteActivo] = useState<ClienteRemision | null>(null);
 
   useEffect(() => {
     getClientesRemisiones()
@@ -374,8 +374,8 @@ function SeccionRemisiones() {
   const handlePDF = async () => {
     if (!historial.length || !clienteActivo) return;
     await generarReporteRemisiones({
-      cliente:              clienteActivo.nombre,
-      pedidos:              pedidosCliente,
+      cliente: clienteActivo.nombre,
+      pedidos: pedidosCliente,
       historial,
       pedidosSeleccionados,
     });
@@ -415,7 +415,7 @@ function SeccionRemisiones() {
         </div>
 
         {pedidosSeleccionados.map(idsolicitud => {
-          const pedido   = pedidosMap.get(idsolicitud);
+          const pedido = pedidosMap.get(idsolicitud);
           const hEntregas = historialMap.get(idsolicitud);
           if (!pedido || !hEntregas) return null;
 
@@ -444,8 +444,13 @@ function SeccionRemisiones() {
                     const unidad = p.modo_cantidad === "kilo" ? "kg" : "pzs";
                     return (
                       <div key={p.idsolicitud_producto} className="bg-gray-50 rounded-lg p-3 text-xs">
-                        <p className="font-semibold text-gray-800 truncate">{p.nombre_producto} {p.medida && `(${p.medida})`}</p>
-                        <div className="mt-2 flex items-center gap-2">
+  <p className="font-semibold text-gray-800 truncate">
+    {p.nombre_producto} {p.medida && `(${p.medida})`}
+    {p.descripcion && (
+      <span className="ml-1 font-bold text-blue-700">— {p.descripcion}</span>
+    )}
+  </p>
+  <div className="mt-2 flex items-center gap-2">
                           <div className="flex-1 bg-gray-200 rounded-full h-1.5">
                             <div className="bg-blue-600 h-1.5 rounded-full" style={{ width: `${Math.min(pct, 100)}%` }} />
                           </div>
@@ -465,7 +470,7 @@ function SeccionRemisiones() {
                 <table className="w-full text-xs">
                   <thead className="bg-gray-50 border-b border-gray-200">
                     <tr>
-                      {["#","Fecha","Nota / Remisión","Tipo","Producto(s)","Bultos","Cantidad","Guía / Obs.","Estado"].map(h => (
+                      {["#", "Fecha", "Nota / Remisión", "Tipo", "Producto(s)", "Bultos", "Cantidad", "Guía / Obs.", "Estado"].map(h => (
                         <th key={h} className="px-3 py-2 text-left font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">{h}</th>
                       ))}
                     </tr>
@@ -484,11 +489,10 @@ function SeccionRemisiones() {
                           {e.es_multi && <span className="ml-1 text-xs text-blue-500">(multi)</span>}
                         </td>
                         <td className="px-3 py-2 whitespace-nowrap">
-                          <span className={`px-2 py-0.5 rounded-full font-medium ${
-                            e.tipo === "local" ? "bg-blue-100 text-blue-700"
-                            : e.tipo === "recoleccion" ? "bg-purple-100 text-purple-700"
-                            : "bg-indigo-100 text-indigo-700"
-                          }`}>
+                          <span className={`px-2 py-0.5 rounded-full font-medium ${e.tipo === "local" ? "bg-blue-100 text-blue-700"
+                              : e.tipo === "recoleccion" ? "bg-purple-100 text-purple-700"
+                                : "bg-indigo-100 text-indigo-700"
+                            }`}>
                             {e.tipo === "local" ? "Local" : e.tipo === "recoleccion" ? "Recolección" : "Paquetería"}
                           </span>
                         </td>
@@ -499,11 +503,10 @@ function SeccionRemisiones() {
                         </td>
                         <td className="px-3 py-2 text-gray-500 max-w-[120px] truncate">{e.numero_guia || e.observaciones || "—"}</td>
                         <td className="px-3 py-2 whitespace-nowrap">
-                          <span className={`px-2 py-0.5 rounded-full font-medium ${
-                            e.estado === "entregado" ? "bg-green-100 text-green-700"
-                            : e.estado === "en_camino" ? "bg-yellow-100 text-yellow-700"
-                            : "bg-gray-100 text-gray-600"
-                          }`}>
+                          <span className={`px-2 py-0.5 rounded-full font-medium ${e.estado === "entregado" ? "bg-green-100 text-green-700"
+                              : e.estado === "en_camino" ? "bg-yellow-100 text-yellow-700"
+                                : "bg-gray-100 text-gray-600"
+                            }`}>
                             {e.estado === "entregado" ? "Entregado" : e.estado === "en_camino" ? "En camino" : "Preparando"}
                           </span>
                         </td>
@@ -599,13 +602,11 @@ function SeccionRemisiones() {
                     return (
                       <div key={pedido.idsolicitud}
                         onClick={() => togglePedido(pedido.idsolicitud)}
-                        className={`rounded-lg border-2 p-3 cursor-pointer transition-colors ${
-                          seleccionado ? "border-emerald-500 bg-emerald-50" : "border-gray-200 hover:border-gray-300"
-                        }`}>
-                        <div className="flex items-center gap-3">
-                          <div className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 ${
-                            seleccionado ? "bg-emerald-500 border-emerald-500" : "border-gray-300"
+                        className={`rounded-lg border-2 p-3 cursor-pointer transition-colors ${seleccionado ? "border-emerald-500 bg-emerald-50" : "border-gray-200 hover:border-gray-300"
                           }`}>
+                        <div className="flex items-center gap-3">
+                          <div className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 ${seleccionado ? "bg-emerald-500 border-emerald-500" : "border-gray-300"
+                            }`}>
                             {seleccionado && <svg className="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>}
                           </div>
                           <div className="flex-1 min-w-0">
@@ -618,11 +619,15 @@ function SeccionRemisiones() {
                                 const total = p.modo_cantidad === "kilo" ? (p.kg_total ?? 0) : (p.cantidad_total ?? 0);
                                 const pct = total > 0 ? Math.round((p.cantidad_entregada / total) * 100) : 0;
                                 return (
-                                  <span key={p.idsolicitud_producto}
-                                    className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
-                                    {p.nombre_producto} {p.medida && `(${p.medida})`} — {pct}% entregado
-                                  </span>
-                                );
+  <span key={p.idsolicitud_producto}
+    className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full inline-flex items-center gap-1 flex-wrap">
+    {p.nombre_producto} {p.medida && `(${p.medida})`}
+    {p.descripcion && (
+      <span className="font-semibold text-blue-700">— {p.descripcion}</span>
+    )}
+    <span className="text-gray-500">— {pct}% entregado</span>
+  </span>
+);
                               })}
                             </div>
                           </div>
@@ -642,11 +647,11 @@ function SeccionRemisiones() {
 
 // ── Componente principal ─────────────────────────────────────
 export default function TabHistorialReportes() {
-  const [seccion,     setSeccion]     = useState<"local" | "paqueteria" | "remisiones">("local");
-  const [unidades,    setUnidades]    = useState<Unidad[]>([]);
+  const [seccion, setSeccion] = useState<"local" | "paqueteria" | "remisiones">("local");
+  const [unidades, setUnidades] = useState<Unidad[]>([]);
   const [conductores, setConductores] = useState<Conductor[]>([]);
   const [paqueterias, setPaqueterias] = useState<Paqueteria[]>([]);
-  const [loadingCat,  setLoadingCat]  = useState(true);
+  const [loadingCat, setLoadingCat] = useState(true);
 
   useEffect(() => {
     Promise.all([getUnidades(), getConductores(), getPaqueterias()])
@@ -674,22 +679,21 @@ export default function TabHistorialReportes() {
 
       <div className="flex gap-2 mb-5 flex-wrap">
         {([
-          { key: "local",       label: "🚚 Reparto Local"  },
-          { key: "paqueteria",  label: "📦 Paquetería"     },
-          { key: "remisiones",  label: "📋 Remisiones"     },
+          { key: "local", label: "🚚 Reparto Local" },
+          { key: "paqueteria", label: "📦 Paquetería" },
+          { key: "remisiones", label: "📋 Remisiones" },
         ] as { key: typeof seccion; label: string }[]).map(s => (
           <button key={s.key} onClick={() => setSeccion(s.key)}
-            className={`px-5 py-2 rounded-lg text-sm font-medium transition-colors ${
-              seccion === s.key
+            className={`px-5 py-2 rounded-lg text-sm font-medium transition-colors ${seccion === s.key
                 ? s.key === "remisiones" ? "bg-emerald-600 text-white shadow-sm" : "bg-blue-600 text-white shadow-sm"
                 : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-            }`}>
+              }`}>
             {s.label}
           </button>
         ))}
       </div>
 
-      {seccion === "local"      && <SeccionLocal unidades={unidades} conductores={conductores} />}
+      {seccion === "local" && <SeccionLocal unidades={unidades} conductores={conductores} />}
       {seccion === "paqueteria" && <SeccionPaqueteria paqueterias={paqueterias} />}
       {seccion === "remisiones" && <SeccionRemisiones />}
     </div>
