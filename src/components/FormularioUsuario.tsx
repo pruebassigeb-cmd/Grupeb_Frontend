@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { getRoles, getPrivilegiosByRol } from "../services/rolesservice";
+import { getRoles, getPrivilegiosByRol } from "../services/rolesService";
 import { getPrivilegios } from "../services/privilegiosService";
 import type { Rol } from "../types/rol.types";
 import type { Privilegio } from "../types/privilegio.types";

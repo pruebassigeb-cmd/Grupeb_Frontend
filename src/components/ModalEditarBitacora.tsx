@@ -17,7 +17,7 @@ export default function ModalEditarBitacora({ registro, onClose, onGuardar, guar
       <div className="space-y-4">
         <div className="bg-gray-50 rounded-lg p-3 text-sm">
           <p className="font-medium">{registro.no_pedido} - {registro.cliente}</p>
-          <p className="text-gray-500 text-xs">{registro.chofer.nombre} - {registro.unidad.nombre}</p>
+          <p className="text-gray-500 text-xs">{registro.chofer?.nombre} - {registro.unidad?.nombre}</p>
         </div>
 
         <div>
