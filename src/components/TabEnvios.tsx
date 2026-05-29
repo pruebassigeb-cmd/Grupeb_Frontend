@@ -17,13 +17,11 @@ import type { PedidoDisponible, BultoPedido, Envio, CarritoPedido } from "../typ
 import { showAlert } from './CustomAlert';
 import { showConfirm } from './CustomConfirm';
 
-
 interface Props {
   carrito: CarritoPedido[];
   onCarritoChange: () => Promise<void>;
 }
 
-/** Devuelve el texto descriptivo del envío para mostrarlo en la lista */
 const getDescripcionEnvio = (envio: Envio): string => {
   if (envio.tipo === "recoleccion") return "Recolección en planta";
   if (envio.tipo === "local")
@@ -31,7 +29,6 @@ const getDescripcionEnvio = (envio: Envio): string => {
   return `${envio.paqueteria?.nombre ?? "-"}${envio.numero_guia ? ` · Guía: ${envio.numero_guia}` : ""}`;
 };
 
-/** Devuelve true cuando aplica mostrar la nota de remisión */
 const mostrarNota = (envio: Envio): boolean =>
   envio.tipo === "local" || envio.tipo === "recoleccion";
 
@@ -45,8 +42,20 @@ export default function TabEnvios({ carrito, onCarritoChange }: Props) {
   const [bultosSeleccionados, setBultosSeleccionados] = useState<number[]>([]);
   const [modalCrearEnvio, setModalCrearEnvio] = useState<PedidoDisponible | null>(null);
   const [agregando, setAgregando] = useState(false);
+  const [busqueda, setBusqueda] = useState("");
 
   const bultosEnCarrito = new Set(carrito.flatMap(p => p.bultos.map(b => b.idbulto)));
+
+  const pedidosFiltrados = pedidos.filter(p => {
+    if (!busqueda.trim()) return true;
+    const t = busqueda.toLowerCase();
+    return (
+      p.no_pedido.toLowerCase().includes(t) ||
+      p.empresa.toLowerCase().includes(t) ||
+      p.impresion.toLowerCase().includes(t) ||
+      p.razon_social.toLowerCase().includes(t)
+    );
+  });
 
   useEffect(() => { cargar(); }, []);
 
@@ -97,6 +106,17 @@ export default function TabEnvios({ carrito, onCarritoChange }: Props) {
     );
   };
 
+  const seleccionarGrupo = (grupo: BultoPedido[]) => {
+    const disponibles = grupo
+      .filter(b => b.estado_bulto === "sin_enviar" && !bultosEnCarrito.has(b.idbulto))
+      .map(b => b.idbulto);
+    const todosSeleccionados = disponibles.every(id => bultosSeleccionados.includes(id));
+    setBultosSeleccionados(prev => {
+      if (todosSeleccionados) return prev.filter(id => !disponibles.includes(id));
+      return [...new Set([...prev, ...disponibles])];
+    });
+  };
+
   const handleAgregarAlCarrito = async (pedido: PedidoDisponible) => {
     if (bultosSeleccionados.length === 0) return;
     setAgregando(true);
@@ -143,16 +163,50 @@ export default function TabEnvios({ carrito, onCarritoChange }: Props) {
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-between items-center">
-        <p className="text-sm text-gray-500">{pedidos.length} pedido(s) disponible(s) para envío</p>
-        <button onClick={cargar} className="text-sm text-blue-600 hover:text-blue-800">Actualizar</button>
+      <div className="flex flex-col gap-3">
+        <div className="flex justify-between items-center">
+          <p className="text-sm text-gray-500">{pedidos.length} pedido(s) disponible(s) para envío</p>
+          <button onClick={cargar} className="text-sm text-blue-600 hover:text-blue-800">Actualizar</button>
+        </div>
+
+        {/* Buscador */}
+        <div className="relative">
+          <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          <input
+            type="text"
+            value={busqueda}
+            onChange={e => setBusqueda(e.target.value)}
+            placeholder="Buscar por N° pedido, empresa o cliente..."
+            className="w-full pl-9 pr-9 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+          />
+          {busqueda && (
+            <button onClick={() => setBusqueda("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
+        </div>
+        {busqueda.trim() && (
+          <p className="text-xs text-gray-500">
+            {pedidosFiltrados.length === 0
+              ? `Sin resultados para "${busqueda}"`
+              : `${pedidosFiltrados.length} pedido(s) encontrado(s)`}
+          </p>
+        )}
       </div>
 
       {pedidos.length === 0 ? (
         <div className="bg-white rounded-lg shadow p-12 text-center text-gray-500">
           No hay pedidos disponibles para envío en este momento.
         </div>
-      ) : pedidos.map(pedido => (
+      ) : pedidosFiltrados.length === 0 ? (
+        <div className="bg-white rounded-lg shadow p-12 text-center text-gray-500">
+          No se encontraron pedidos con "<span className="font-medium">{busqueda}</span>"
+        </div>
+      ) : pedidosFiltrados.map(pedido => (
         <div key={pedido.idsolicitud} className="bg-white rounded-lg shadow overflow-hidden">
 
           {/* CABECERA */}
@@ -223,8 +277,8 @@ export default function TabEnvios({ carrito, onCarritoChange }: Props) {
                           <div key={envio.idenvio}
                             className="flex items-center justify-between bg-gray-50 rounded-lg px-4 py-3 text-sm gap-3 flex-wrap">
                             <div className="flex items-center gap-3 flex-wrap">
-                              <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${ESTADO_BADGE[envio.estado]}`}>
-                                {ESTADO_LABEL[envio.estado]}
+                              <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${ESTADO_BADGE[envio.estado] ?? "bg-gray-100 text-gray-600"}`}>
+                                {ESTADO_LABEL[envio.estado] ?? envio.estado}
                               </span>
                               <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                                 envio.es_parcialidad
@@ -233,7 +287,6 @@ export default function TabEnvios({ carrito, onCarritoChange }: Props) {
                               }`}>
                                 {envio.es_parcialidad ? "Parcialidad" : "Completo"}
                               </span>
-                              {/* Badge tipo recolección */}
                               {envio.tipo === "recoleccion" && (
                                 <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700">
                                   📦 Recolección
@@ -251,8 +304,7 @@ export default function TabEnvios({ carrito, onCarritoChange }: Props) {
                                   Nota de remisión
                                 </button>
                               )}
-                              {/* Cancelar SOLO mientras sigue preparando */}
-                              {envio.estado === "preparando" && (
+                              {envio.estado === "pendiente" && (
                                 <button
                                   onClick={() => handleEliminarEnvio(envio.idenvio)}
                                   className="text-xs px-2 py-1 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors">
@@ -291,56 +343,105 @@ export default function TabEnvios({ carrito, onCarritoChange }: Props) {
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-gray-100">
-                            {bultos.map(bulto => {
-                              const enCarrito = bultosEnCarrito.has(bulto.idbulto);
-                              const disponible = bulto.estado_bulto === "sin_enviar" && !enCarrito;
+                            {Object.entries(
+                              bultos.reduce((acc, bulto) => {
+                                const key = `${bulto.nombre_producto}|${bulto.medida || ""}|${(bulto as any).descripcion || ""}`;
+                                if (!acc[key]) acc[key] = [];
+                                acc[key].push(bulto);
+                                return acc;
+                              }, {} as Record<string, BultoPedido[]>)
+                            ).map(([grupoKey, grupoBultos]) => {
+                              const primerBulto = grupoBultos[0];
+                              const disponiblesGrupo = grupoBultos.filter(
+                                b => b.estado_bulto === "sin_enviar" && !bultosEnCarrito.has(b.idbulto)
+                              );
+                              const todosSeleccionadosGrupo = disponiblesGrupo.length > 0 &&
+                                disponiblesGrupo.every(b => bultosSeleccionados.includes(b.idbulto));
+
                               return (
-                                <tr key={bulto.idbulto}
-                                  className={disponible ? "hover:bg-blue-50 cursor-pointer" : "opacity-60"}
-                                  onClick={() => disponible && toggleBulto(bulto.idbulto)}>
-                                  <td className="px-3 py-2">
-                                    {disponible && (
-                                      <input type="checkbox" readOnly
-                                        checked={bultosSeleccionados.includes(bulto.idbulto)}
-                                        className="w-4 h-4 text-blue-600 rounded" />
-                                    )}
-                                    {enCarrito && <span title="En carrito" className="text-orange-400">🛒</span>}
-                                  </td>
-                                  <td className="px-3 py-2 font-medium text-gray-700">#{numeroBulto(bulto.idbulto)}</td>
-                                  <td className="px-3 py-2 text-gray-600">
-                                    <div className="flex items-center gap-1.5 flex-wrap">
-                                      <span>{bulto.nombre_producto} {bulto.medida && `(${bulto.medida})`}</span>
-                                      {(bulto as any).descripcion && (
-                                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-700">
-                                          {(bulto as any).descripcion}
-                                        </span>
-                                      )}
-                                    </div>
-                                  </td>
-                                  <td className="px-3 py-2 text-center text-gray-700">
-                                    {bulto.cantidad_unidades != null ? bulto.cantidad_unidades.toLocaleString("es-MX") : "-"}
-                                  </td>
-                                  <td className="px-3 py-2 text-center text-gray-700">
-                                    {bulto.peso_producto != null ? `${bulto.peso_producto} kg` : "-"}
-                                  </td>
-                                  <td className="px-3 py-2 text-center text-gray-700">
-                                    {bulto.peso != null ? `${bulto.peso} kg` : "-"}
-                                  </td>
-                                  <td className="px-3 py-2 text-center text-gray-500">
-                                    {[bulto.alto, bulto.largo, bulto.ancho].every(v => v != null)
-                                      ? `${bulto.alto}×${bulto.largo}×${bulto.ancho} cm`
-                                      : "-"
-                                    }
-                                  </td>
-                                  <td className="px-3 py-2 text-center">
-                                    {enCarrito
-                                      ? <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-700">En carrito</span>
-                                      : <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${ESTADO_BULTO_BADGE[bulto.estado_bulto]}`}>
-                                        {ESTADO_BULTO_LABEL[bulto.estado_bulto]}
-                                      </span>
-                                    }
-                                  </td>
-                                </tr>
+                                <>
+                                  <tr className="bg-gradient-to-r from-indigo-50 to-purple-50">
+                                    <td colSpan={8} className="px-4 py-3">
+                                      <div className="flex items-center justify-between gap-3 flex-wrap">
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                          <span className="text-sm font-semibold text-gray-800">
+                                            📦 {primerBulto.nombre_producto}
+                                            {primerBulto.medida && ` (${primerBulto.medida})`}
+                                          </span>
+                                          {(primerBulto as any).descripcion && (
+                                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700">
+                                              {(primerBulto as any).descripcion}
+                                            </span>
+                                          )}
+                                          <span className="text-xs text-gray-500 ml-2">
+                                            {grupoBultos.length} bulto(s)
+                                          </span>
+                                        </div>
+                                        <button
+                                          onClick={e => { e.stopPropagation(); seleccionarGrupo(grupoBultos); }}
+                                          className="text-xs px-2 py-1 rounded-lg bg-white border border-indigo-200 text-indigo-700 hover:bg-indigo-50 transition-colors">
+                                          {todosSeleccionadosGrupo ? "Deseleccionar grupo" : "Seleccionar grupo"}
+                                        </button>
+                                      </div>
+                                    </td>
+                                  </tr>
+
+                                  {grupoBultos.map(bulto => {
+                                    const enCarrito = bultosEnCarrito.has(bulto.idbulto);
+                                    const disponible = bulto.estado_bulto === "sin_enviar" && !enCarrito;
+
+                                    return (
+                                      <tr
+                                        key={bulto.idbulto}
+                                        className={disponible ? "hover:bg-blue-50 cursor-pointer" : "opacity-60"}
+                                        onClick={() => disponible && toggleBulto(bulto.idbulto)}
+                                      >
+                                        <td className="px-3 py-2">
+                                          {disponible && (
+                                            <input type="checkbox" readOnly
+                                              checked={bultosSeleccionados.includes(bulto.idbulto)}
+                                              className="w-4 h-4 text-blue-600 rounded" />
+                                          )}
+                                          {enCarrito && <span title="En carrito" className="text-orange-400">🛒</span>}
+                                        </td>
+                                        <td className="px-3 py-2 font-medium text-gray-700">#{numeroBulto(bulto.idbulto)}</td>
+                                        <td className="px-3 py-2 text-gray-600">
+                                          <div className="flex items-center gap-1.5 flex-wrap">
+                                            <span>{bulto.nombre_producto}{bulto.medida && ` (${bulto.medida})`}</span>
+                                            {(bulto as any).descripcion && (
+                                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-700">
+                                                {(bulto as any).descripcion}
+                                              </span>
+                                            )}
+                                          </div>
+                                        </td>
+                                        <td className="px-3 py-2 text-center text-gray-700">
+                                          {bulto.cantidad_unidades != null ? bulto.cantidad_unidades.toLocaleString("es-MX") : "-"}
+                                        </td>
+                                        <td className="px-3 py-2 text-center text-gray-700">
+                                          {bulto.peso_producto != null ? `${bulto.peso_producto} kg` : "-"}
+                                        </td>
+                                        <td className="px-3 py-2 text-center text-gray-700">
+                                          {bulto.peso != null ? `${bulto.peso} kg` : "-"}
+                                        </td>
+                                        <td className="px-3 py-2 text-center text-gray-500">
+                                          {[bulto.alto, bulto.largo, bulto.ancho].every(v => v != null)
+                                            ? `${bulto.alto}×${bulto.largo}×${bulto.ancho} cm`
+                                            : "-"}
+                                        </td>
+                                        <td className="px-3 py-2 text-center">
+                                          {enCarrito ? (
+                                            <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-700">En carrito</span>
+                                          ) : (
+                                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${ESTADO_BULTO_BADGE[bulto.estado_bulto]}`}>
+                                              {ESTADO_BULTO_LABEL[bulto.estado_bulto]}
+                                            </span>
+                                          )}
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </>
                               );
                             })}
                           </tbody>

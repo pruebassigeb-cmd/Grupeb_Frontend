@@ -50,9 +50,12 @@ const CAMPOS_PROCESO: Record<string, { key: string; label: string; readOnly?: bo
     { key: "piezas_bolseadas", label: "Piezas bolseadas" },
   ],
   asa_flexible: [
-    { key: "piezas_recibidas", label: "Pzas recibidas (de bolseo)", readOnly: true },
+    { key: "piezas_recibidas", label: "Pzas recibidas", readOnly: true },
+    { key: "kilos_recibidos", label: "Kilos recibidos", readOnly: true },
     { key: "merma", label: "Merma (pzas)" },
+    { key: "kilos_merma", label: "Merma (kg)" },
     { key: "pzas_finales", label: "Piezas finales" },
+    { key: "kilos_finales", label: "Kilos finales" },
   ],
 };
 
@@ -196,6 +199,9 @@ function SeccionAvances({
   const [error, setError] = useState<string | null>(null);
   const [expandido, setExpandido] = useState(false);
   const [formularioAbierto, setFormularioAbierto] = useState(false);
+  const [esAvanceFinal, setEsAvanceFinal] = useState(false);
+  const [ajusteFinal, setAjusteFinal] = useState("");
+  const [datosFinales, setDatosFinales] = useState<Record<string, string>>({});
 
   const esProcesoPorKilo = modoCantidad === "kilo" &&
     (nombreProceso === "bolseo" || nombreProceso === "asa_flexible");
@@ -217,21 +223,126 @@ function SeccionAvances({
   const pctLimite = limiteAnterior != null && limiteAnterior > 0
     ? Math.min((totalAvances / limiteAnterior) * 100, 100) : null;
 
+  const ajusteNum = parseFloat(ajusteFinal) || 0;
+  const totalAutomatico = Number(totalAvances ?? 0) + cantNum;
+  const totalFinalPreview = totalAutomatico + ajusteNum;
+
+  const campoPrincipalFinal = (() => {
+    if (nombreProceso === "extrusion") {
+      return { key: "k_para_impresion", label: "Kilos para impresión", unidad: "kg" };
+    }
+    if (nombreProceso === "impresion") {
+      return { key: "kilos_impresos", label: "Kilos impresos", unidad: "kg" };
+    }
+    if (nombreProceso === "bolseo") {
+      return modoCantidad === "kilo"
+        ? { key: "kilos_bolseados", label: "Kilos bolseados", unidad: "kg" }
+        : { key: "piezas_bolseadas", label: "Piezas bolseadas", unidad: "pzas" };
+    }
+    if (nombreProceso === "asa_flexible") {
+      return modoCantidad === "kilo"
+        ? { key: "kilos_finales", label: "Kilos finales", unidad: "kg" }
+        : { key: "pzas_finales", label: "Piezas finales", unidad: "pzas" };
+    }
+    return null;
+  })();
+
+  const camposFinalesAdicionales = (() => {
+    if (nombreProceso === "extrusion") {
+      return [
+        { key: "merma", label: "Merma", unidad: "kg" },
+        { key: "metros_extruidos", label: "Metros extruidos", unidad: "m" },
+      ];
+    }
+    if (nombreProceso === "impresion") {
+      return [
+        { key: "merma", label: "Merma", unidad: "kg" },
+        { key: "metros_impresos", label: "Metros impresos", unidad: "m" },
+      ];
+    }
+    if (nombreProceso === "bolseo") {
+      return modoCantidad === "kilo"
+        ? [
+          { key: "kilos_merma", label: "Kilos merma", unidad: "kg" },
+          { key: "piezas_bolseadas", label: "Piezas bolseadas (referencia)", unidad: "pzas" },
+          { key: "piezas_merma", label: "Piezas merma (referencia)", unidad: "pzas" },
+        ]
+        : [
+          { key: "piezas_merma", label: "Piezas merma", unidad: "pzas" },
+          { key: "kilos_bolseados", label: "Kilos bolseados (referencia)", unidad: "kg" },
+          { key: "kilos_merma", label: "Kilos merma (referencia)", unidad: "kg" },
+        ];
+    }
+    if (nombreProceso === "asa_flexible") {
+      return modoCantidad === "kilo"
+        ? [
+          { key: "kilos_merma", label: "Kilos merma", unidad: "kg" },
+          { key: "pzas_finales", label: "Piezas finales (referencia)", unidad: "pzas" },
+          { key: "merma", label: "Merma piezas (referencia)", unidad: "pzas" },
+        ]
+        : [
+          { key: "merma", label: "Merma", unidad: "pzas" },
+          { key: "kilos_finales", label: "Kilos finales (referencia)", unidad: "kg" },
+          { key: "kilos_merma", label: "Kilos merma (referencia)", unidad: "kg" },
+        ];
+    }
+    return [];
+  })();
+
   const handleRegistrar = async () => {
     const cant = parseFloat(cantidad);
-    if (!cant || cant <= 0) { setError("Ingresa una cantidad válida mayor a 0."); return; }
-    setGuardando(true); setError(null);
+    const ajuste = parseFloat(ajusteFinal) || 0;
+
+    if (!cant || cant <= 0) {
+      setError("Ingresa una cantidad válida mayor a 0.");
+      return;
+    }
+
+    const totalFinal = Number(totalAvances ?? 0) + cant + ajuste;
+
+    setGuardando(true);
+    setError(null);
+
     try {
       await registrarAvance(idproduccion, {
         cantidad: cant,
         observaciones: observaciones.trim() || undefined,
         tabla_proceso: nombreProceso,
       });
-      setCantidad(""); setObservaciones("");
+
+      if (esAvanceFinal) {
+        if (!campoPrincipalFinal) {
+          throw new Error("No se pudo identificar el campo final del proceso.");
+        }
+
+        const payloadFinalizar: Record<string, any> = {
+          tabla_proceso: nombreProceso,
+          observaciones: observaciones.trim() || null,
+          [campoPrincipalFinal.key]: totalFinal,
+        };
+
+        for (const campo of camposFinalesAdicionales) {
+          const valor = datosFinales[campo.key];
+          if (valor !== undefined && valor !== "") {
+            payloadFinalizar[campo.key] = Number(valor);
+          }
+        }
+
+        await finalizarProceso(idproduccion, payloadFinalizar);
+      }
+
+      setCantidad("");
+      setObservaciones("");
+      setAjusteFinal("");
+      setDatosFinales({});
+      setEsAvanceFinal(false);
+
       onAvanceRegistrado();
     } catch (e: any) {
-      setError(e.response?.data?.error || "Error al registrar avance");
-    } finally { setGuardando(false); }
+      setError(e.response?.data?.error || e.message || "Error al registrar avance");
+    } finally {
+      setGuardando(false);
+    }
   };
 
   return (
@@ -416,11 +527,154 @@ function SeccionAvances({
                 className="w-full px-3 py-2 border border-blue-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white resize-none"
               />
             </div>
+            <div className="space-y-2">
+              <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={esAvanceFinal}
+                  onChange={(e) => {
+                    setEsAvanceFinal(e.target.checked);
+                    setError(null);
+                  }}
+                  className="w-4 h-4"
+                />
+                Este avance finaliza el proceso
+              </label>
+
+              {esAvanceFinal && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-3 space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-semibold text-green-700 uppercase tracking-wide">
+                        ✅ Datos finales del proceso
+                      </p>
+                      <p className="text-[11px] text-green-700 mt-0.5">
+                        El campo principal se calcula automático con los avances y puedes sumarle un ajuste manual.
+                      </p>
+                    </div>
+                    {limiteAnterior != null && totalFinalPreview > limiteAnterior && (
+                      <span className="text-[10px] font-semibold text-red-600 bg-red-50 border border-red-200 rounded-full px-2 py-1 whitespace-nowrap">
+                        Sobreproducción
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-4 gap-2 text-center">
+                    <div className="bg-white rounded border px-2 py-2">
+                      <p className="text-[10px] text-gray-400 uppercase">Acumulado</p>
+                      <p className="text-sm font-bold">
+                        {totalAvances.toLocaleString("es-MX")} {config.unidad}
+                      </p>
+                    </div>
+
+                    <div className="bg-white rounded border px-2 py-2">
+                      <p className="text-[10px] text-gray-400 uppercase">Avance actual</p>
+                      <p className="text-sm font-bold">
+                        {cantNum.toLocaleString("es-MX")} {config.unidad}
+                      </p>
+                    </div>
+
+                    <div className="bg-white rounded border px-2 py-2">
+                      <p className="text-[10px] text-gray-400 uppercase">Ajuste</p>
+                      <p className="text-sm font-bold">
+                        {ajusteNum.toLocaleString("es-MX")} {config.unidad}
+                      </p>
+                    </div>
+
+                    <div className="bg-white rounded border border-green-300 px-2 py-2">
+                      <p className="text-[10px] text-green-500 uppercase">Total final</p>
+                      <p className="text-sm font-bold text-green-700">
+                        {totalFinalPreview.toLocaleString("es-MX")} {config.unidad}
+                      </p>
+                    </div>
+                  </div>
+
+                  {campoPrincipalFinal && (
+                    <div className="bg-white border border-green-200 rounded-lg p-3">
+                      <label className="block text-xs font-medium text-gray-600 mb-1">
+                        {campoPrincipalFinal.label} automático
+                      </label>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={totalFinalPreview.toLocaleString("es-MX")}
+                          readOnly
+                          className="flex-1 px-3 py-2 border border-green-300 rounded-lg text-sm bg-green-50 text-green-800 font-semibold"
+                        />
+                        <span className="flex items-center px-3 py-2 bg-green-100 border border-green-200 rounded-lg text-xs font-semibold text-green-700">
+                          {campoPrincipalFinal.unidad}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                      Ajuste manual / extra a sumar
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={ajusteFinal}
+                        onChange={(e) => {
+                          setAjusteFinal(e.target.value.replace(/[^0-9.]/g, ""));
+                          setError(null);
+                        }}
+                        placeholder={`Ej: 10 ${config.unidad}`}
+                        className="flex-1 px-3 py-2 border border-green-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-400 bg-white"
+                      />
+                      <span className="flex items-center px-3 py-2 bg-green-100 border border-green-200 rounded-lg text-xs font-semibold text-green-700">
+                        {config.unidad}
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-gray-500 mt-1">
+                      Úsalo solo si necesitas sumar producción extra o ajustar el total final.
+                    </p>
+                  </div>
+
+                  {camposFinalesAdicionales.length > 0 && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {camposFinalesAdicionales.map((campo) => (
+                        <div key={campo.key}>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">
+                            {campo.label}
+                          </label>
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              value={datosFinales[campo.key] ?? ""}
+                              onChange={(e) => {
+                                setDatosFinales(prev => ({
+                                  ...prev,
+                                  [campo.key]: e.target.value.replace(/[^0-9.]/g, ""),
+                                }));
+                                setError(null);
+                              }}
+                              placeholder="0"
+                              className="flex-1 px-3 py-2 border border-green-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-400 bg-white"
+                            />
+                            <span className="flex items-center px-3 py-2 bg-green-100 border border-green-200 rounded-lg text-xs font-semibold text-green-700">
+                              {campo.unidad}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
             {error && <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">{error}</p>}
-            <button onClick={handleRegistrar} disabled={guardando || !cantidad || excedeLimite}
+            <button onClick={handleRegistrar} disabled={guardando || !cantidad}
               className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-lg transition-colors flex items-center justify-center gap-2">
               {guardando ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <span>📋</span>}
-              {guardando ? "Registrando..." : "Registrar avance del día"}
+              {guardando
+                ? "Registrando..."
+                : esAvanceFinal
+                  ? "Registrar avance y finalizar proceso"
+                  : "Registrar avance del día"}
             </button>
           </div>
         )}
@@ -815,7 +1069,9 @@ function SeccionBultos({
     setGenerandoEtiquetas(true); setError(null);
     try {
       const etiquetaData = await getBultosEtiqueta(pedido.idproduccion);
-      await generarPdfEtiquetas(etiquetaData);
+      console.log("descripcion en etiquetaData:", etiquetaData.descripcion); // ← agregar esto
+      await generarPdfEtiquetas(etiquetaData); 
+
 
       // ── Marcar bultos como enviados en este parcial ──────────────
       if (etiquetaData.es_parcialidad && etiquetaData.numero_envio_parcial) {
@@ -1386,7 +1642,24 @@ export default function ModalProcesoIndividual({ pedido, nombreProceso, onClose,
     }
     if (nombreProceso === "asa_flexible") {
       const bolProc = datos?.procesos.find((p: any) => p.tabla === "bolseo");
-      preFill.piezas_recibidas = proc?.registro?.piezas_recibidas ?? bolProc?.registro?.piezas_bolseadas ?? 0;
+      const totalAvances = proc?.total_avances ?? 0;
+      const modoKilo = pedido.modo_cantidad === "kilo";
+
+      preFill.piezas_recibidas =
+        proc?.registro?.piezas_recibidas ??
+        bolProc?.registro?.piezas_bolseadas ??
+        0;
+
+      preFill.kilos_recibidos =
+        proc?.registro?.kilos_recibidos ??
+        bolProc?.registro?.kilos_bolseados ??
+        0;
+
+      if (modoKilo) {
+        preFill.kilos_finales = totalAvances;
+      } else {
+        preFill.pzas_finales = totalAvances;
+      }
     }
     setFormDatos(preFill); setAccion("finalizar");
   };
@@ -1605,6 +1878,7 @@ export default function ModalProcesoIndividual({ pedido, nombreProceso, onClose,
 
           {puedeAvance && (
             <SeccionAvances
+
               idproduccion={pedido.idproduccion!}
               nombreProceso={nombreProceso}
               avances={proc.avances ?? []}
@@ -1744,6 +2018,7 @@ export default function ModalProcesoIndividual({ pedido, nombreProceso, onClose,
                     <p className="text-xs font-semibold text-indigo-700 uppercase tracking-wide mb-3">📦 Registro de bultos</p>
                   </div>
                   <SeccionBultos pedido={pedido} cantidadReal={cantidadRealBultos} modoKilo={modoKilo} limiteEnCurso={null} />
+
                 </>
               )}
             </>

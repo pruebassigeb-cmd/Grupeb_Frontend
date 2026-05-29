@@ -28,6 +28,7 @@ export default function FormularioNotaRemisionMulti({ carrito, onSuccess, onCanc
   // Campos extra para envío local
   const [costoFlete,           setCostoFlete]           = useState("");
   const [fechaEntregaEstimada, setFechaEntregaEstimada] = useState("");
+  // Observaciones de la nota (aplica para cualquier tipo de entrega)
   const [observaciones,        setObservaciones]        = useState("");
 
   useEffect(() => {
@@ -60,7 +61,7 @@ export default function FormularioNotaRemisionMulti({ carrito, onSuccess, onCanc
     try {
       const pedidosPayload = carrito.map(p => ({
         idsolicitud: p.idsolicitud,
-        tipo_envio:  "recoleccion" as TipoEnvioCarrito,
+        tipo_envio: tipoEntrega as TipoEnvioCarrito,
         bultos: p.bultos.map(b => ({
           idbulto:                 b.idbulto,
           paqueteria_idpaqueteria: null,
@@ -72,23 +73,24 @@ export default function FormularioNotaRemisionMulti({ carrito, onSuccess, onCanc
         unidades_idunidad:       tipoEntrega === "local" ? unidadSeleccionada || undefined : undefined,
         costo_flete:             tipoEntrega === "local" && costoFlete ? Number(costoFlete) : undefined,
         fecha_entrega_estimada:  tipoEntrega === "local" && fechaEntregaEstimada ? fechaEntregaEstimada : undefined,
-        observaciones:           tipoEntrega === "local" && observaciones ? observaciones : undefined,
+        // NOTA: las observaciones son para la nota, no para el envío
         pedidos: pedidosPayload,
       });
 
-      const enviosCreados: EnvioCreado[] = resultCarrito.envios_creados;
-      const enviosIds = enviosCreados.map(e => e.idenvio);
+      const enviosIds = resultCarrito.envios_creados.map(e => e.idenvio);
 
       const notaMulti = await crearNotaRemisionMulti({
         envios_ids:        enviosIds,
         tipo_entrega:      tipoEntrega,
         chofer_idusuario:  tipoEntrega === "local" ? choferSeleccionado || undefined : undefined,
         unidad_idunidad:   tipoEntrega === "local" ? unidadSeleccionada || undefined : undefined,
+        observaciones:     observaciones.trim() || undefined,
       });
 
       await generarNotaRemisionMulti(notaMulti);
       await onSuccess();
     } catch (error: any) {
+      console.error("❌ Error nota remision:", error.response?.data || error.message);
       showAlert(error.response?.data?.error || "Error al crear nota de remisión");
     } finally {
       setProcesando(false);
@@ -196,13 +198,21 @@ export default function FormularioNotaRemisionMulti({ carrito, onSuccess, onCanc
                 className={inputClass} />
             </div>
           </div>
+        </div>
+      )}
 
-          <div>
-            <label className={labelClass}>Observaciones (opcional)</label>
-            <input type="text" value={observaciones}
-              onChange={e => setObservaciones(e.target.value)}
-              className={inputClass} placeholder="Notas adicionales..." />
-          </div>
+      {/* Observaciones — aplica para CUALQUIER tipo de entrega */}
+      {tipoEntrega && (
+        <div>
+          <label className={labelClass}>Observaciones de la nota (opcional)</label>
+          <textarea
+            value={observaciones}
+            onChange={e => setObservaciones(e.target.value)}
+            rows={3}
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white placeholder-gray-400 resize-none"
+            placeholder="Ej: Favor de revisar embalaje, producto frágil, instrucciones especiales..."
+          />
+          <p className="text-xs text-gray-400 mt-1">Se imprimirá en la parte inferior de la nota de remisión.</p>
         </div>
       )}
 

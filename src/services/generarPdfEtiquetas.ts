@@ -9,7 +9,6 @@ const WHITE: [number, number, number] = [255, 255, 255];
 const GRAY_DARK: [number, number, number] = [80, 80, 80];
 const GRAY_MED: [number, number, number] = [136, 136, 136];
 const GRAY_LIGHT: [number, number, number] = [240, 240, 240];
-// Color para badge de parcialidad — gris oscuro distinguible
 const PARCIAL_BG: [number, number, number] = [40, 40, 40];
 const PARCIAL_TX: [number, number, number] = [255, 255, 255];
 
@@ -24,39 +23,42 @@ function dibujarEtiqueta(
 ) {
   const ML = 4;
   const MT = 4;
-  const W = 92;
+  const W  = 92;
 
   let y = MT;
 
   // ══════════════════════════════════════════
-  // 1. HEADER EMPRESA
+  // 1. HEADER EMPRESA  (más alto para texto legible)
   // ══════════════════════════════════════════
-  const HEADER_H = 28;
+  const HEADER_H = 32;                       // ← era 28, ahora 32
   doc.setFillColor(...BLACK);
   doc.rect(ML, y, W, HEADER_H, "F");
 
   if (logoBase64) {
-    try { doc.addImage(logoBase64, "PNG", ML + 2, y + 3, 22, 22); }
+    try { doc.addImage(logoBase64, "PNG", ML + 2, y + 4, 22, 22); }
     catch { /* sin logo */ }
   }
 
   const txtX = logoBase64 ? ML + 27 : ML + 3;
+  const maxW  = W - (txtX - ML) - 3;
 
+  // Nombre empresa — grande y visible
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(12);
+  doc.setFontSize(13);
   doc.setTextColor(...WHITE);
   doc.text("GRUPEB SA DE CV", txtX, y + 10);
 
+  // RFC + dirección — 7.5pt en lugar de 6.5pt, con más interlineado
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(6.5);
-  doc.setTextColor(200, 200, 200);
+  doc.setFontSize(7.5);                      // ← era 6.5
+  doc.setTextColor(210, 210, 210);
   doc.text(
     "RFC: GRU110205D55  ·  Rogelio Ledesma #102, Col. Cruz Vieja,",
-    txtX, y + 17, { maxWidth: W - (txtX - ML) - 2 }
+    txtX, y + 18, { maxWidth: maxW }
   );
   doc.text(
     "Tlajomulco de Zúñiga, Jal.  CP. 45644   Tel: (33) 31801460",
-    txtX, y + 23, { maxWidth: W - (txtX - ML) - 2 }
+    txtX, y + 26, { maxWidth: maxW }         // ← era y+23
   );
 
   doc.setTextColor(...BLACK);
@@ -74,9 +76,8 @@ function dibujarEtiqueta(
   doc.setTextColor(...BLACK);
   y += 7;
 
-  // ── Layout: izquierda 50% | derecha 50% ──
   const COL_GAP = 2;
-  const COL_W = (W - COL_GAP) / 2;
+  const COL_W   = (W - COL_GAP) / 2;
   const colIzqX = ML;
   const colDerX = ML + COL_W + COL_GAP;
   const colIzqW = COL_W - 2;
@@ -86,7 +87,7 @@ function dibujarEtiqueta(
     ? data.cliente_impresion
     : data.cliente;
 
-  // ── Columna IZQUIERDA: Nombre + Atención ──
+  // Columna izquierda — Nombre + Atención
   let yIzq = y + 5;
 
   doc.setFont("helvetica", "bold");
@@ -111,19 +112,18 @@ function dibujarEtiqueta(
     yIzq += atencionLines.length * 5;
   }
 
-  // ── Columna DERECHA: Dirección + Contacto ──
+  // Columna derecha — Dirección + Contacto
   let yDer = y + 5;
 
-  const direccion = [data.calle, data.numero ? `#${data.numero}` : null]
-    .filter(Boolean).join(" ");
-  const coloniaCP = [
-    data.colonia ? `Col. ${data.colonia}` : null,
+  const direccion  = [data.calle, data.numero ? `#${data.numero}` : null].filter(Boolean).join(" ");
+  const coloniaCP  = [
+    data.colonia    ? `Col. ${data.colonia}`          : null,
     data.codigo_postal ? `C.P. ${data.codigo_postal}` : null,
   ].filter(Boolean).join("  ·  ");
-  const pobEdo = [data.poblacion, data.estado].filter(Boolean).join(", ");
+  const pobEdo  = [data.poblacion, data.estado].filter(Boolean).join(", ");
   const contacto = [
     data.telefono ? `Tel: ${data.telefono}` : null,
-    data.celular ? `Cel: ${data.celular}` : null,
+    data.celular  ? `Cel: ${data.celular}`  : null,
   ].filter(Boolean).join("  ·  ");
 
   doc.setFont("helvetica", "normal");
@@ -136,7 +136,6 @@ function dibujarEtiqueta(
     yDer += wrapped.length * 5;
   });
 
-  // ── Línea divisoria vertical entre columnas ──
   const yColBottom = Math.max(yIzq, yDer) + 2;
   doc.setDrawColor(...GRAY_MED);
   doc.setLineWidth(0.2);
@@ -151,32 +150,66 @@ function dibujarEtiqueta(
   doc.setLineWidth(0.3);
   doc.line(ML, y, ML + W, y);
 
+  // ── Encabezado gris con "PEDIDO / PRODUCTO" + badge descripción ──
+  const HEADER_PP_H = 8;
   doc.setFillColor(...GRAY_LIGHT);
-  doc.rect(ML, y, W, 7, "F");
+  doc.rect(ML, y, W, HEADER_PP_H, "F");
+
   doc.setFont("helvetica", "bold");
   doc.setFontSize(7);
   doc.setTextColor(...GRAY_DARK);
-  doc.text("PEDIDO / PRODUCTO", ML + 3, y + 5);
-  doc.setTextColor(...BLACK);
-  y += 7;
+  doc.text("PEDIDO / PRODUCTO", ML + 3, y + 5.5);
 
+  // Badge descripción — a la derecha del encabezado gris
+  // Recorta si el texto es muy largo para que no se salga
+  const descripcionRaw = (data as any).descripcion as string | null | undefined;
+  const descripcion    = descripcionRaw?.trim() || null;
+
+  if (descripcion) {
+    const MAX_DESC_W = 45;                    // máx mm disponibles a la derecha
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7);
+
+    // Truncar si no cabe
+    let descTexto = descripcion;
+    while (doc.getTextWidth(descTexto) > MAX_DESC_W && descTexto.length > 3) {
+      descTexto = descTexto.slice(0, -1);
+    }
+    if (descTexto !== descripcion) descTexto = descTexto.slice(0, -1) + "…";
+
+    // Alinear a la derecha del encabezado, centrado verticalmente
+    const textW = doc.getTextWidth(descTexto);
+    const textX = ML + W - textW - 3;
+    const textY = y + 5.5;                    // misma línea base que "PEDIDO / PRODUCTO"
+
+    doc.setTextColor(...GRAY_DARK);
+    doc.text(descTexto, textX, textY);
+  }
+
+  doc.setTextColor(...BLACK);
+  y += HEADER_PP_H;
+
+  // Sub-etiquetas de columnas
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7);
   doc.setTextColor(...GRAY_MED);
-  doc.text("PEDIDO", ML + 3, y + 5);
-  doc.text("ORDEN", ML + 34, y + 5);
+  doc.text("PEDIDO",   ML + 3,  y + 5);
+  doc.text("ORDEN",    ML + 34, y + 5);
   doc.text("PRODUCTO", ML + 62, y + 5);
 
+  // Valores principales
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(10);
+  doc.setFontSize(11);
   doc.setTextColor(...BLACK);
-  doc.text(`${f(data.no_pedido)}`, ML + 3, y + 13);
+  doc.text(f(data.no_pedido),     ML + 3,  y + 13);
   doc.text(f(data.no_produccion), ML + 34, y + 13);
 
-  const bulto = data.bultos[bultoIndex];
+  // Dimensiones del bulto
+  const bulto  = data.bultos[bultoIndex];
   const campos = [
-    { label: "Peso", valor: bulto.peso, unidad: "kg" },
-    { label: "Alto", valor: bulto.alto, unidad: "cm" },
+    { label: "Peso",  valor: bulto.peso,  unidad: "kg" },
+    { label: "Alto",  valor: bulto.alto,  unidad: "cm" },
     { label: "Largo", valor: bulto.largo, unidad: "cm" },
     { label: "Ancho", valor: bulto.ancho, unidad: "cm" },
   ].filter(c => c.valor != null);
@@ -190,20 +223,24 @@ function dibujarEtiqueta(
       doc.setTextColor(...GRAY_MED);
       doc.text(`${c.label}:`, cx, y + 20);
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(7);
+      doc.setFontSize(7.5);
       doc.setTextColor(...BLACK);
       doc.text(`${c.valor} ${c.unidad}`, cx, y + 26);
       doc.setFont("helvetica", "normal");
     });
   }
 
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(9);
+  // Nombre producto (columna derecha)
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(10);
   doc.setTextColor(...BLACK);
   const prodLines = doc.splitTextToSize(f(data.nombre_producto), W - 65);
   doc.text(prodLines, ML + 62, y + 13);
 
-  const cantDisplay = data.modo_cantidad === "kilo" && data.kilogramos
+  // Detalle: medida · material · cantidad
+  // Prioridad: kg si modo_cantidad === "kilo", pzs si no
+  const esKilo    = data.modo_cantidad === "kilo";
+  const cantDisplay = esKilo && data.kilogramos
     ? `${data.kilogramos.toLocaleString("es-MX")} kg`
     : data.cantidad_total
       ? `${data.cantidad_total.toLocaleString("es-MX")} pzs`
@@ -219,76 +256,87 @@ function dibujarEtiqueta(
   y += 30;
 
   // ══════════════════════════════════════════
-// 4. BULTO
-// ══════════════════════════════════════════
-doc.setDrawColor(...GRAY_MED);
-doc.setLineWidth(0.3);
-doc.line(ML, y, ML + W, y);
-y += 2;
+  // 4. BULTO
+  // ══════════════════════════════════════════
+  doc.setDrawColor(...GRAY_MED);
+  doc.setLineWidth(0.3);
+  doc.line(ML, y, ML + W, y);
+  y += 2;
 
-const bultoNum = bultoIndex + 1;
-const totalBultos = data.total_bultos;
+  const bultoNum   = bultoIndex + 1;
+  const totalBultos = data.total_bultos;
 
-// ── Badge ENVÍO PARCIAL ──
-if (data.es_parcialidad) {
-  const numParcial = data.numero_envio_parcial ?? 1;
-  const badgeLabel = `ENVÍO PARCIAL ${numParcial}`;
-  const badgeW = 52;
-  const badgeH = 7;
-  const badgeX = ML + 3;
-  const badgeY = y;              // ← sin el -3, parte desde y limpio
+  // Badge ENVÍO PARCIAL
+  if (data.es_parcialidad) {
+    const numParcial  = data.numero_envio_parcial ?? 1;
+    const badgeLabel  = `ENVÍO PARCIAL ${numParcial}`;
+    const badgeW      = 52;
+    const badgeH      = 7;
+    const badgeX      = ML + 3;
+    const badgeY      = y;
 
-  doc.setFillColor(...PARCIAL_BG);
-  doc.roundedRect(badgeX, badgeY, badgeW, badgeH, 1.5, 1.5, "F");
+    doc.setFillColor(...PARCIAL_BG);
+    doc.roundedRect(badgeX, badgeY, badgeW, badgeH, 1.5, 1.5, "F");
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(6.5);
+    doc.setTextColor(...PARCIAL_TX);
+    doc.text(badgeLabel, badgeX + badgeW / 2, badgeY + 5, { align: "center" });
+
+    doc.setTextColor(...BLACK);
+    y += badgeH + 3;
+  }
+
+  // Recuadro número de bulto
+  doc.setDrawColor(...BLACK);
+  doc.setLineWidth(0.5);
+  doc.setFillColor(...GRAY_LIGHT);
+  doc.rect(ML + 3, y, 26, 18, "FD");
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(6);
+  doc.setTextColor(...GRAY_DARK);
+  doc.text("BULTO", ML + 3 + 13, y + 5, { align: "center" });
 
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(6.5);
-  doc.setTextColor(...PARCIAL_TX);
-  doc.text(badgeLabel, badgeX + badgeW / 2, badgeY + 5, { align: "center" });
-
+  doc.setFontSize(14);
   doc.setTextColor(...BLACK);
-  y += badgeH + 3;               // ← espacio tras el badge
-}
+  doc.text(String(bultoNum), ML + 3 + 13, y + 13, { align: "center" });
 
-// ── Recuadro con número de bulto ──
-doc.setDrawColor(...BLACK);
-doc.setLineWidth(0.5);
-doc.setFillColor(...GRAY_LIGHT);
-doc.rect(ML + 3, y, 26, 18, "FD");   // ← ya no resta 3, parte desde y actual
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(6);
+  doc.setTextColor(...GRAY_DARK);
+  doc.text(`de ${totalBultos}`, ML + 3 + 13, y + 17, { align: "center" });
 
-doc.setFont("helvetica", "normal");
-doc.setFontSize(6);
-doc.setTextColor(...GRAY_DARK);
-doc.text("BULTO", ML + 3 + 13, y + 5, { align: "center" });   // +5 en vez de +2
+  // Unidades / KG en este bulto
+  const esKiloBulto    = data.modo_cantidad === "kilo" && bulto.peso_producto != null;
+  const labelUnidades  = esKiloBulto ? "KG EN ESTE BULTO" : "UNIDADES EN ESTE BULTO";
+  const valorUnidades  = esKiloBulto
+    ? `${bulto.peso_producto!.toLocaleString("es-MX")} kg`
+    : bulto.cantidad_unidades.toLocaleString("es-MX");
 
-doc.setFont("helvetica", "bold");
-doc.setFontSize(14);
-doc.setTextColor(...BLACK);
-doc.text(String(bultoNum), ML + 3 + 13, y + 13, { align: "center" });
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(7.5);
+  doc.setTextColor(...GRAY_MED);
+  doc.text(labelUnidades, ML + 33, y + 6);
 
-doc.setFont("helvetica", "normal");
-doc.setFontSize(6);
-doc.setTextColor(...GRAY_DARK);
-doc.text(`de ${totalBultos}`, ML + 3 + 13, y + 17, { align: "center" });
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(18);
+  doc.setTextColor(...BLACK);
+  doc.text(valorUnidades, ML + 33, y + 17);
 
-// ── Unidades en este bulto ──
-const esKiloBulto = data.modo_cantidad === "kilo" && bulto.peso_producto != null;
-const labelUnidades = esKiloBulto ? "KG EN ESTE BULTO" : "UNIDADES EN ESTE BULTO";
-const valorUnidades = esKiloBulto
-  ? `${bulto.peso_producto!.toLocaleString("es-MX")} kg`
-  : bulto.cantidad_unidades.toLocaleString("es-MX");
+  // Referencia en pzas si el modo es kilo
+  if (esKiloBulto && bulto.cantidad_unidades > 0) {
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(6.5);
+    doc.setTextColor(...GRAY_MED);
+    doc.text(
+      `(${bulto.cantidad_unidades.toLocaleString("es-MX")} pzs ref.)`,
+      ML + 33, y + 22
+    );
+  }
 
-doc.setFont("helvetica", "normal");
-doc.setFontSize(7);
-doc.setTextColor(...GRAY_MED);
-doc.text(labelUnidades, ML + 33, y + 6);
-
-doc.setFont("helvetica", "bold");
-doc.setFontSize(16);
-doc.setTextColor(...BLACK);
-doc.text(valorUnidades, ML + 33, y + 16);
-
-y += 22;
+  y += 24;
 
   // ══════════════════════════════════════════
   // 5. PIE
@@ -297,7 +345,6 @@ y += 22;
   doc.setFontSize(6.5);
   doc.setTextColor(...GRAY_MED);
 
-  // Pie con info de parcialidad si aplica
   const pieTexto = data.es_parcialidad
     ? `${f(data.no_produccion)}  ·  ${f(data.no_pedido)}  ·  Envío parcial ${data.numero_envio_parcial ?? 1}  ·  Bulto ${bultoNum} de ${totalBultos}`
     : `${f(data.no_produccion)}  ·  ${f(data.no_pedido)}  ·  Etiqueta ${bultoNum} de ${totalBultos}`;
@@ -319,10 +366,10 @@ export async function generarPdfEtiquetas(data: EtiquetaData): Promise<void> {
 
   const doc = new jsPDF({
     orientation: "portrait",
-    unit: "mm",
-    format: [100, 150],
+    unit:         "mm",
+    format:       [100, 150],
     putOnlyUsedFonts: true,
-    floatPrecision: 16,
+    floatPrecision:   16,
   });
 
   data.bultos.forEach((_, idx) => {
@@ -330,10 +377,7 @@ export async function generarPdfEtiquetas(data: EtiquetaData): Promise<void> {
     dibujarEtiqueta(doc, data, idx, logoBase64);
   });
 
-  doc.setProperties({
-    title: `Etiquetas_${data.no_produccion}`,
-  });
-
+  doc.setProperties({ title: `Etiquetas_${data.no_produccion}` });
   (doc.internal as any).scaleFactor = 1;
 
   const sufijo = data.es_parcialidad ? `_parcial${data.numero_envio_parcial ?? 1}` : "";

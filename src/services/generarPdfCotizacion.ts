@@ -91,11 +91,11 @@ export async function generarPdfCotizacion(cotizacion: CotizacionPdf): Promise<v
   const bodyRows: any[][] = [];
 
   cotizacion.productos.forEach(prod => {
-    const nombreBase  = tipoProducto(prod.nombre);
+    const nombreBase = tipoProducto(prod.nombre);
     const descripcion = (prod as any).descripcion?.trim() || null;
 
     const row: any[] = [
-      nombreBase,
+      nombreBase, 
       getMedida(prod),
       boolLabel(prod.bk),
       val(prod.tintas),
@@ -116,9 +116,9 @@ export async function generarPdfCotizacion(cotizacion: CotizacionPdf): Promise<v
       row.push(det && det.cantidad > 0 ? formatCantidadCelda(det, prod.por_kilo) : "—");
     }
 
-    const tieneKilo   = prod.detalles.some(d => d.modo_cantidad === "kilo");
+    const tieneKilo = prod.detalles.some(d => d.modo_cantidad === "kilo");
     const tieneUnidad = prod.detalles.some(d => d.modo_cantidad !== "kilo");
-    const modoLabel   = tieneKilo && tieneUnidad ? "Por kilo y por unidad"
+    const modoLabel = tieneKilo && tieneUnidad ? "Por kilo y por unidad"
       : tieneKilo ? "Cotizado por kilo"
         : "Cotizado por unidad";
     const obsTexto = prod.observacion?.trim()
@@ -153,7 +153,7 @@ export async function generarPdfCotizacion(cotizacion: CotizacionPdf): Promise<v
   const availW = PW - M * 2;
 
   const colW: Record<number, number> = {
-    0: 20, 1: 17, 2: 8,  3: 10, 4: 10,
+    0: 20, 1: 17, 2: 8, 3: 10, 4: 10,
     5: 17, 6: 12, 7: 10, 8: 15, 9: 12,
     10: 14, 11: 12, 12: 25, 13: 16, 14: 9,
   };
@@ -168,19 +168,19 @@ export async function generarPdfCotizacion(cotizacion: CotizacionPdf): Promise<v
   }
 
   const columnStyles: Parameters<typeof autoTable>[1]["columnStyles"] = {
-    0:  { cellWidth: colW[0],  halign: "left",   fontSize: 7 },
-    1:  { cellWidth: colW[1],  halign: "center", fontSize: 7 },
-    2:  { cellWidth: colW[2],  halign: "center", fontSize: 7 },
-    3:  { cellWidth: colW[3],  halign: "center", fontSize: 7 },
-    4:  { cellWidth: colW[4],  halign: "center", fontSize: 7 },
-    5:  { cellWidth: colW[5],  halign: "center", fontSize: 7 },
-    6:  { cellWidth: colW[6],  halign: "center", fontSize: 7 },
-    7:  { cellWidth: colW[7],  halign: "center", fontSize: 7 },
-    8:  { cellWidth: colW[8],  halign: "center", fontSize: 7 },
-    9:  { cellWidth: colW[9],  halign: "center", fontSize: 7 },
+    0: { cellWidth: colW[0], halign: "left", fontSize: 7, overflow: "linebreak" },
+    1: { cellWidth: colW[1], halign: "center", fontSize: 7 },
+    2: { cellWidth: colW[2], halign: "center", fontSize: 7 },
+    3: { cellWidth: colW[3], halign: "center", fontSize: 7 },
+    4: { cellWidth: colW[4], halign: "center", fontSize: 7 },
+    5: { cellWidth: colW[5], halign: "center", fontSize: 7 },
+    6: { cellWidth: colW[6], halign: "center", fontSize: 7 },
+    7: { cellWidth: colW[7], halign: "center", fontSize: 7 },
+    8: { cellWidth: colW[8], halign: "center", fontSize: 7 },
+    9: { cellWidth: colW[9], halign: "center", fontSize: 7 },
     10: { cellWidth: colW[10], halign: "center", fontSize: 7 },
     11: { cellWidth: colW[11], halign: "center", fontSize: 7 },
-    12: { cellWidth: colW[12], halign: "left",   fontSize: 7 },
+    12: { cellWidth: colW[12], halign: "left", fontSize: 7 },
     13: { cellWidth: colW[13], halign: "center", fontSize: 7 },
     14: { cellWidth: colW[14], halign: "center", fontSize: 7 },
     ...(numCantCols >= 1 ? { 15: { cellWidth: colW[15], halign: "center" as const, fontSize: 8, fontStyle: "bold" as const } } : {}),
@@ -206,64 +206,65 @@ export async function generarPdfCotizacion(cotizacion: CotizacionPdf): Promise<v
         data.cell.styles.fillColor = GRAY_MED;
       }
 
+
       if (data.section === "body") {
-        const raw  = data.row.raw as any[];
+        const raw = data.row.raw as any[];
         const raw0 = String(raw?.[0] ?? "");
         const raw1 = String(raw?.[1] ?? "");
-        const ci   = data.column.index;
+        const ci = data.column.index;
         const lastCol = headAll.length - 1;
 
         // ── Fila descripción propia ──────────────────────────────────────────
-        if (raw0.startsWith("DESC:")) {
-          if (ci === 0) {
-            data.cell.colSpan            = headAll.length;
-            data.cell.styles.fillColor   = [235, 242, 255] as [number, number, number];
-            data.cell.styles.fontStyle   = "bold";
-            data.cell.styles.fontSize    = 7.5;
-            data.cell.styles.textColor   = [40, 80, 180] as [number, number, number];
-            data.cell.styles.halign      = "left";
-            data.cell.styles.cellPadding = 1.2;
-            data.cell.text               = [`Desc: ${raw0.slice(5)}`];
-          } else {
-            data.cell.styles.fillColor   = [235, 242, 255] as [number, number, number];
-            data.cell.text               = [];
-          }
-          return;
-        }
+         if (raw0.startsWith("DESC:")) {
+           if (ci === 0) {
+             data.cell.colSpan = headAll.length;
+             data.cell.styles.fillColor = [235, 242, 255] as [number, number, number];
+             data.cell.styles.fontStyle = "bold";
+             data.cell.styles.fontSize = 7.5;
+             data.cell.styles.textColor = [40, 80, 180] as [number, number, number];
+             data.cell.styles.halign = "left";
+             data.cell.styles.cellPadding = 1.2;
+             data.cell.text = [`Desc: ${raw0.slice(5)}`];
+           } else {
+             data.cell.styles.fillColor = [235, 242, 255] as [number, number, number];
+             data.cell.text = [];
+           }
+           return;
+         }
 
         // ── Fila observaciones (+ herramental embebido igual que en pedido) ────
         if (raw0.startsWith("Obs:")) {
           const hasHerr = raw1.startsWith("Herramental:");
 
           if (ci === 0) {
-            data.cell.colSpan            = hasHerr ? MID_COL : headAll.length;
-            data.cell.styles.fillColor   = GRAY_LIGHT;
-            data.cell.styles.fontStyle   = "italic";
-            data.cell.styles.fontSize    = 6.5;
-            data.cell.styles.textColor   = [80, 80, 80] as [number, number, number];
-            data.cell.styles.halign      = "left";
+            data.cell.colSpan = hasHerr ? MID_COL : headAll.length;
+            data.cell.styles.fillColor = GRAY_LIGHT;
+            data.cell.styles.fontStyle = "italic";
+            data.cell.styles.fontSize = 6.5;
+            data.cell.styles.textColor = [80, 80, 80] as [number, number, number];
+            data.cell.styles.halign = "left";
             data.cell.styles.cellPadding = 0.8;
 
           } else if (hasHerr && ci === MID_COL) {
-            data.cell.colSpan            = lastCol - MID_COL;
-            data.cell.styles.fillColor   = [250, 244, 230] as [number, number, number];
-            data.cell.styles.fontStyle   = "italic";
-            data.cell.styles.fontSize    = 6.5;
-            data.cell.styles.textColor   = [130, 70, 0] as [number, number, number];
-            data.cell.styles.halign      = "left";
-            data.cell.styles.overflow    = "linebreak";
+            data.cell.colSpan = lastCol - MID_COL;
+            data.cell.styles.fillColor = [250, 244, 230] as [number, number, number];
+            data.cell.styles.fontStyle = "italic";
+            data.cell.styles.fontSize = 6.5;
+            data.cell.styles.textColor = [130, 70, 0] as [number, number, number];
+            data.cell.styles.halign = "left";
+            data.cell.styles.overflow = "linebreak";
             data.cell.styles.cellPadding = 0.8;
-            data.cell.text               = [raw1];
+            data.cell.text = [raw1];
 
           } else if (hasHerr && ci === lastCol) {
-            data.cell.styles.fillColor   = [250, 244, 230] as [number, number, number];
-            data.cell.styles.fontStyle   = "bold";
-            data.cell.styles.fontSize    = 7;
-            data.cell.styles.textColor   = [130, 70, 0] as [number, number, number];
-            data.cell.styles.halign      = "center";
+            data.cell.styles.fillColor = [250, 244, 230] as [number, number, number];
+            data.cell.styles.fontStyle = "bold";
+            data.cell.styles.fontSize = 7;
+            data.cell.styles.textColor = [130, 70, 0] as [number, number, number];
+            data.cell.styles.halign = "center";
 
           } else {
-            data.cell.styles.fillColor   =
+            data.cell.styles.fillColor =
               ci < MID_COL
                 ? GRAY_LIGHT
                 : [250, 244, 230] as [number, number, number];
@@ -275,8 +276,6 @@ export async function generarPdfCotizacion(cotizacion: CotizacionPdf): Promise<v
 
       }
     },
-
-
   });
 
   const finalY = (doc as any).lastAutoTable?.finalY ?? 0;

@@ -1,4 +1,4 @@
-import api from "./api"; // ajusta al path de tu instancia de axios
+import api from "./api";
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -7,30 +7,52 @@ export interface TipoInsumo {
   nombre: string;
 }
 
+export interface RegimenFiscal {
+  idregimen_fiscal: number;
+  tipo_regimen:     string;
+  codigo:           string;
+}
+
+export interface ProductoSat {
+  idproducto_sat: number;
+  clave:          number;
+  pdft:           string;
+}
+
 export interface Proveedor {
-  idproveedor: number;
-  nombre: string;
-  contacto: string | null;
-  telefono: string | null;
-  correo: string | null;
-  direccion: string | null;
-  notas: string | null;
-  activo: boolean;
-  created_at: string;
+  idproveedor:    number;
+  nombre:         string;
+  contacto:       string | null;
+  telefono:       string | null;
+  correo:         string | null;
+  direccion:      string | null;
+  notas:          string | null;
+  activo:         boolean;
+  created_at:     string;
   total_productos?: number;
+  rfc_proveedor?: string | null;
+  regimen_fiscal_idregimen_fiscal?: number | null;
+  regimen_fiscal_codigo?:           string | null;
+  regimen_fiscal_nombre?:           string | null;
 }
 
 export interface ProductoProveedor {
-  idproveedor_producto: number;
-  nombre: string;
-  codigo: string | null;
-  precio: number | null;
-  notas: string | null;
-  activo: boolean;
-  idtipo_insumo: number;
-  tipo_insumo_nombre: string;
-  proveedor_nombre?: string;
-  idproveedor?: number;
+  idproveedor_producto:       number;
+  nombre:                     string;
+  codigo:                     string | null;
+  precio:                     number | null;
+  notas:                      string | null;
+  activo:                     boolean;
+  idtipo_insumo:              number;
+  tipo_insumo_nombre:         string;
+  proveedor_nombre?:          string;
+  idproveedor?:               number;
+  clave_producto?:            string | null;
+  minimo_compra?:             number | null;
+  unidad?:                    string | null;
+  producto_sat_idproducto_sat?: number | null;
+  producto_sat_clave?:         number | null;
+  producto_sat_nombre?:        string | null;
 }
 
 export interface ProveedorDetalle extends Proveedor {
@@ -38,26 +60,64 @@ export interface ProveedorDetalle extends Proveedor {
 }
 
 export interface CreateProveedorDto {
-  nombre: string;
-  contacto?: string | null;
-  telefono?: string | null;
-  correo?: string | null;
-  direccion?: string | null;
-  notas?: string | null;
+  nombre:                          string;
+  contacto?:                       string | null;
+  telefono?:                       string | null;
+  correo?:                         string | null;
+  direccion?:                      string | null;
+  notas?:                          string | null;
+  rfc_proveedor?:                  string | null;
+  regimen_fiscal_idregimen_fiscal?: number | null;
 }
 
 export interface CreateProductoDto {
-  tipo_insumo_id: number;
-  nombre: string;
-  codigo?: string | null;
-  precio?: number | null;
-  notas?: string | null;
+  tipo_insumo_id:              number;
+  nombre:                      string;
+  codigo?:                     string | null;
+  precio?:                     number | null;
+  notas?:                      string | null;
+  clave_producto?:             string | null;
+  minimo_compra?:              number | null;
+  unidad?:                     "kilos" | "pzas" | "litros" | null;
+  producto_sat_idproducto_sat?: number | null;
 }
 
-// ── Tipos de insumo ───────────────────────────────────────────────────────────
+// ── Domicilio ─────────────────────────────────────────────────────────────────
+export interface DomicilioProveedor {
+  idproveedor_domicilio?: number;
+  codigo_postal?:         string | null;
+  colonia?:               string | null;
+  domicilio?:             string | null;
+  municipio?:             string | null;
+  estado?:                string | null;
+}
+
+// ── Facturación ───────────────────────────────────────────────────────────────
+export interface FacturacionProveedor {
+  idproveedor_facturacion?: number;
+  banco?:                   string | null;
+  cuenta?:                  string | null;
+  clabe?:                   string | null;
+  convenio?:                string | null;
+  nombre_cuenta?:           string | null;
+  condicion_compra?:        string | null;
+  activo?:                  boolean;
+}
+
+// ── Catálogos ─────────────────────────────────────────────────────────────────
 
 export const getTiposInsumo = async (): Promise<TipoInsumo[]> => {
-const { data } = await api.get("/proveedores/tipos-insumo");
+  const { data } = await api.get("/proveedores/tipos-insumo");
+  return data;
+};
+
+export const getRegimenesFiscales = async (): Promise<RegimenFiscal[]> => {
+  const { data } = await api.get("/proveedores/regimenes-fiscales");
+  return data;
+};
+
+export const getProductosSat = async (q?: string): Promise<ProductoSat[]> => {
+  const { data } = await api.get("/proveedores/productos-sat", { params: { q } });
   return data;
 };
 
@@ -116,22 +176,22 @@ export const eliminarProductoProveedor = async (
   await api.delete(`/proveedores/${proveedorId}/productos/${productoId}`);
 };
 
-// ── Búsqueda global de insumos (desplegable en cotización) ────────────────────
+// ── Búsqueda global de insumos ────────────────────────────────────────────────
 
 export const buscarInsumos = async (
   tipoId: number,
   q?: string
 ): Promise<ProductoProveedor[]> => {
-const { data } = await api.get("/proveedores/insumos", { params: { tipo: tipoId, q } });
+  const { data } = await api.get("/proveedores/insumos", { params: { tipo: tipoId, q } });
   return data;
 };
 
-// ── Registrar insumo rápido desde cotización ──────────────────────────────────
+// ── Registrar insumo rápido ───────────────────────────────────────────────────
 
 export interface RegistrarInsumoRapidoDto {
-  tipo_insumo_id:        number;
-  nombre:                string;
-  codigo?:               string | null;
+  tipo_insumo_id:         number;
+  nombre:                 string;
+  codigo?:                string | null;
   proveedor_idproveedor?: number | null;
 }
 
@@ -145,4 +205,55 @@ export const registrarInsumoRapido = async (
 export const crearTipoInsumo = async (nombre: string): Promise<TipoInsumo> => {
   const { data } = await api.post("/proveedores/tipos-insumo", { nombre });
   return data.tipo;
+};
+
+// ── Domicilio ─────────────────────────────────────────────────────────────────
+
+export const getDomicilioProveedor = async (id: number): Promise<DomicilioProveedor | null> => {
+  const { data } = await api.get(`/proveedores/${id}/domicilio`);
+  return data;
+};
+
+export const upsertDomicilioProveedor = async (
+  id: number, dto: DomicilioProveedor
+): Promise<DomicilioProveedor> => {
+  const { data } = await api.put(`/proveedores/${id}/domicilio`, dto);
+  return data.domicilio;
+};
+
+// ── Facturación ───────────────────────────────────────────────────────────────
+
+export const getFacturacionProveedor = async (id: number): Promise<FacturacionProveedor[]> => {
+  const { data } = await api.get(`/proveedores/${id}/facturacion`);
+  return data;
+};
+
+export const crearFacturacionProveedor = async (
+  id: number, dto: FacturacionProveedor
+): Promise<FacturacionProveedor> => {
+  const { data } = await api.post(`/proveedores/${id}/facturacion`, dto);
+  return data.facturacion;
+};
+
+export const actualizarFacturacionProveedor = async (
+  id: number, idFact: number, dto: Partial<FacturacionProveedor>
+): Promise<FacturacionProveedor> => {
+  const { data } = await api.put(`/proveedores/${id}/facturacion/${idFact}`, dto);
+  return data.facturacion;
+};
+
+export const eliminarFacturacionProveedor = async (
+  id: number, idFact: number
+): Promise<void> => {
+  await api.delete(`/proveedores/${id}/facturacion/${idFact}`);
+};
+
+export const guardarProveedorCompleto = async (
+  id: number,
+  general: Partial<CreateProveedorDto>,
+  domicilio: DomicilioProveedor,
+  facturacion: FacturacionProveedor[]
+): Promise<Proveedor> => {
+  const { data } = await api.put(`/proveedores/${id}/completo`, { general, domicilio, facturacion });
+  return data.proveedor;
 };

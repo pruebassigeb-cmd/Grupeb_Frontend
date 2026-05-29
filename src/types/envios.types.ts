@@ -129,7 +129,7 @@ export interface BultoPedido {
 export interface Envio {
   idenvio: number;
   tipo: "local" | "paqueteria" | "recoleccion";
-  estado: "preparando" | "en_camino" | "entregado";
+  estado: "pendiente" | "preparando" | "en_camino" | "entregado";
   es_parcialidad: boolean;
   numero_guia: string | null;
   costo_flete: number | null;
@@ -198,7 +198,7 @@ export interface UpdateBitacoraRequest {
 
 export interface EnvioPaqueteria {
   idenvio: number;
-  estado: "preparando" | "en_camino" | "entregado";
+  estado: "pendiente" | "preparando" | "en_camino" | "entregado";
   es_parcialidad: boolean;
   numero_guia: string | null;
   costo_flete: number | null;
@@ -231,7 +231,7 @@ export interface RecoleccionDatos {
 
 export interface EnvioRecoleccion {
   idenvio: number;
-  estado: "preparando" | "entregado";
+  estado: "pendiente" | "preparando" | "entregado";
   es_parcialidad: boolean;
   fecha_envio: string;
   fecha_entrega_estimada: string | null;
@@ -254,6 +254,7 @@ export interface CarritoBulto {
   idcarrito: number;
   idbulto: number;
   nombre_producto: string;
+  descripcion: string | null;
   medida: string;
   cantidad_unidades: number | null;
   peso_producto: number | null;
@@ -361,6 +362,7 @@ export interface NotaRemisionMultiData {
   created_at: string;
   es_multi: true;
   tipo_entrega: "recoleccion" | "local";
+  observaciones: string | null;
   chofer: { nombre: string } | null;
   unidad: { nombre: string } | null;
   envio: {
@@ -414,6 +416,7 @@ export interface NotaRemisionBitacoraItem {
   es_multi: boolean;
   tipo_entrega: "recoleccion" | "local";
   estado: "pendiente" | "entregado";
+  observaciones: string | null;
   no_pedido: string;
   cliente: string;
   total_pedidos: number;
@@ -443,7 +446,7 @@ export interface FiltrosHistorialPaqueteria {
   numero_guia?: string;
   no_pedido?: string;
   cliente?: string;
-  estado?: "preparando" | "en_camino" | "entregado";
+  estado?: "pendiente" | "preparando" | "en_camino" | "entregado";
 }
 
 // ==========================
@@ -458,7 +461,7 @@ export interface HistorialLocalItem {
   observacion_extra: string | null;
   firma: string | null;
   idenvio: number;
-  estado: "preparando" | "en_camino" | "entregado";
+  estado: "pendiente" | "preparando" | "en_camino" | "entregado";
   es_parcialidad: boolean;
   no_pedido: string;
   cliente: string;
@@ -476,7 +479,7 @@ export interface HistorialLocalItem {
 
 export interface HistorialPaqueteriaItem {
   idenvio: number;
-  estado: "preparando" | "en_camino" | "entregado";
+  estado: "pendiente" | "preparando" | "en_camino" | "entregado";
   es_parcialidad: boolean;
   numero_guia: string | null;
   costo_flete: number | null;
@@ -522,6 +525,15 @@ export interface PedidoRemision {
   productos: ProductoPedidoRemision[];
 }
 
+export interface ProductoDetalleEntrega {
+  nombre_producto: string;
+  medida:          string;
+  descripcion:     string | null;
+  total_bultos:    number;
+  cantidad:        number;
+  modo_cantidad:   "unidad" | "kilo";
+}
+
 export interface EntregaRemision {
   idenvio: number;
   tipo: string;
@@ -530,6 +542,7 @@ export interface EntregaRemision {
   fecha_envio: string;
   numero_guia: string | null;
   observaciones: string | null;
+  nota_observaciones: string | null;
   total_bultos: number;
   cantidad_entregada: number;
   modo_cantidad: "unidad" | "kilo";
@@ -538,6 +551,8 @@ export interface EntregaRemision {
   nota_no: string | null;
   nota_id: number | null;
   es_multi: boolean;
+  nota_observaciones: string | null;
+  productos_detalle: ProductoDetalleEntrega[];
 }
 
 export interface HistorialEntregasPedido {

@@ -5,14 +5,17 @@ import {
     crearProductoProveedor,
     actualizarProductoProveedor,
     eliminarProductoProveedor,
+    getProductosSat,
     type Proveedor,
     type ProductoProveedor,
     type TipoInsumo,
     type CreateProductoDto,
+    type ProductoSat,
     crearTipoInsumo
 } from "../services/proveedoresService";
 import { showAlert } from "./CustomAlert";
 import { showConfirm } from "./CustomConfirm";
+import Dashboard from "../layouts/Sidebar";
 
 interface Props {
     proveedor: Proveedor;
@@ -25,11 +28,16 @@ const FORM_VACIO: CreateProductoDto = {
     codigo: "",
     precio: null,
     notas: "",
+    clave_producto: "",
+    minimo_compra: null,
+    unidad: null,
+    producto_sat_idproducto_sat: null,
 };
 
 export default function ProductosProveedor({ proveedor, onVolver }: Props) {
     const [productos, setProductos] = useState<ProductoProveedor[]>([]);
     const [tipos, setTipos] = useState<TipoInsumo[]>([]);
+    const [productosSat, setProductosSat] = useState<ProductoSat[]>([]);
     const [loading, setLoading] = useState(true);
     const [filtroTipo, setFiltroTipo] = useState<number | null>(null);
     const [nuevoTipoNombre, setNuevoTipoNombre] = useState("");
@@ -40,10 +48,15 @@ export default function ProductosProveedor({ proveedor, onVolver }: Props) {
     const [guardando, setGuardando] = useState(false);
     const [eliminando, setEliminando] = useState<number | null>(null);
     const [precioTexto, setPrecioTexto] = useState("");
+
     const idTipoOtro = tipos.find(t => t.nombre === "Otro")?.idtipo_insumo;
     const esTipoOtro = form.tipo_insumo_id === idTipoOtro;
 
     useEffect(() => { cargar(); }, [proveedor.idproveedor]);
+
+    useEffect(() => {
+        getProductosSat().then(setProductosSat).catch(() => {});
+    }, []);
 
     const cargar = async () => {
         setLoading(true);
@@ -82,11 +95,15 @@ export default function ProductosProveedor({ proveedor, onVolver }: Props) {
     const abrirEditar = (p: ProductoProveedor) => {
         setEditando(p);
         setForm({
-            tipo_insumo_id: p.idtipo_insumo,
-            nombre: p.nombre,
-            codigo: p.codigo ?? "",
-            precio: p.precio,
-            notas: p.notas ?? "",
+            tipo_insumo_id:              p.idtipo_insumo,
+            nombre:                      p.nombre,
+            codigo:                      p.codigo ?? "",
+            precio:                      p.precio,
+            notas:                       p.notas ?? "",
+            clave_producto:              p.clave_producto ?? "",
+            minimo_compra:               p.minimo_compra,
+            unidad:                      p.unidad as "kilos" | "pzas" | "litros" | null,
+            producto_sat_idproducto_sat: p.producto_sat_idproducto_sat ?? null,
         });
         setPrecioTexto(p.precio != null ? String(p.precio) : "");
         setMostrarForm(true);
@@ -104,11 +121,7 @@ export default function ProductosProveedor({ proveedor, onVolver }: Props) {
         setForm(prev => ({ ...prev, [field]: value }));
 
     const handleCrearNuevoTipo = async () => {
-        console.log("🔥 handleCrearNuevoTipo ejecutado, nombre:", nuevoTipoNombre);
-        if (!nuevoTipoNombre.trim()) {
-            showAlert("Escribe el nombre del nuevo tipo", "warning");
-            return;
-        }
+        if (!nuevoTipoNombre.trim()) { showAlert("Escribe el nombre del nuevo tipo", "warning"); return; }
         setGuardandoTipo(true);
         try {
             const nuevo = await crearTipoInsumo(nuevoTipoNombre.trim());
@@ -121,8 +134,7 @@ export default function ProductosProveedor({ proveedor, onVolver }: Props) {
                 const existente = error.response.data.existente;
                 setTipos((prev: TipoInsumo[]) =>
                     prev.find(t => t.idtipo_insumo === existente.idtipo_insumo)
-                        ? prev
-                        : [...prev, existente]
+                        ? prev : [...prev, existente]
                 );
                 set("tipo_insumo_id", existente.idtipo_insumo);
                 setNuevoTipoNombre("");
@@ -134,7 +146,6 @@ export default function ProductosProveedor({ proveedor, onVolver }: Props) {
             setGuardandoTipo(false);
         }
     };
-
 
     const handlePrecioChange = (v: string) => {
         if (!/^\d*\.?\d{0,4}$/.test(v)) return;
@@ -148,7 +159,6 @@ export default function ProductosProveedor({ proveedor, onVolver }: Props) {
         if (!form.tipo_insumo_id) { showAlert("Selecciona el tipo de insumo", "warning"); return; }
         if (!form.nombre?.trim()) { showAlert("El nombre es requerido", "warning"); return; }
 
-        // ID que se usará para crear el insumo — puede cambiar si es tipo "Otro"
         let tipoIdFinal = form.tipo_insumo_id;
 
         if (esTipoOtro && nuevoTipoNombre.trim()) {
@@ -156,7 +166,7 @@ export default function ProductosProveedor({ proveedor, onVolver }: Props) {
             try {
                 const nuevoTipo = await crearTipoInsumo(nuevoTipoNombre.trim());
                 setTipos(prev => [...prev, nuevoTipo]);
-                tipoIdFinal = nuevoTipo.idtipo_insumo; // ← variable local, no estado
+                tipoIdFinal = nuevoTipo.idtipo_insumo;
                 setNuevoTipoNombre("");
             } catch (error: any) {
                 if (error?.response?.status === 409) {
@@ -178,18 +188,20 @@ export default function ProductosProveedor({ proveedor, onVolver }: Props) {
         setGuardando(true);
         try {
             const dto: CreateProductoDto = {
-                tipo_insumo_id: tipoIdFinal, // ← usa la variable local
-                nombre: form.nombre.trim(),
-                codigo: form.codigo?.trim() || null,
-                precio: form.precio,
-                notas: form.notas?.trim() || null,
+                tipo_insumo_id:              tipoIdFinal,
+                nombre:                      form.nombre.trim(),
+                codigo:                      form.codigo?.trim()         || null,
+                precio:                      form.precio,
+                notas:                       form.notas?.trim()          || null,
+                clave_producto:              form.clave_producto?.trim() || null,
+                minimo_compra:               form.minimo_compra,
+                unidad:                      form.unidad,
+                producto_sat_idproducto_sat: form.producto_sat_idproducto_sat,
             };
 
             if (editando) {
                 const actualizado = await actualizarProductoProveedor(
-                    proveedor.idproveedor,
-                    editando.idproveedor_producto,
-                    dto
+                    proveedor.idproveedor, editando.idproveedor_producto, dto
                 );
                 setProductos(prev =>
                     prev.map(p => p.idproveedor_producto === editando.idproveedor_producto ? actualizado : p)
@@ -226,11 +238,11 @@ export default function ProductosProveedor({ proveedor, onVolver }: Props) {
     const inputClass = "w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm placeholder-gray-400";
 
     const tipoBadgeClass: Record<string, string> = {
-        "Tinta / Pantón": "bg-purple-100 text-purple-700 border-purple-200",
-        "Pigmento": "bg-orange-100 text-orange-700 border-orange-200",
+        "Pantón":            "bg-purple-100 text-purple-700 border-purple-200",
+        "Pigmento":          "bg-orange-100 text-orange-700 border-orange-200",
         "Material plástico": "bg-blue-100   text-blue-700   border-blue-200",
-        "Suaje": "bg-teal-100   text-teal-700   border-teal-200",
-        "Otro": "bg-gray-100   text-gray-600   border-gray-200",
+        "Suaje":             "bg-teal-100   text-teal-700   border-teal-200",
+        "Otro":              "bg-gray-100   text-gray-600   border-gray-200",
     };
     const getBadgeClass = (tipo: string) =>
         tipoBadgeClass[tipo] ?? "bg-gray-100 text-gray-600 border-gray-200";
@@ -273,38 +285,33 @@ export default function ProductosProveedor({ proveedor, onVolver }: Props) {
                         </button>
                     </div>
 
-                    {/* ── Sección tipo nuevo — FUERA del form ── */}
+                    {/* Tipo nuevo — fuera del form */}
                     {esTipoOtro && (
-                        <div className="mt-2">
+                        <div className="mb-3">
                             <label className="block text-xs font-medium text-gray-700 mb-1">
                                 Nombre del nuevo tipo <span className="text-red-500">*</span>
                             </label>
-                            <input
-                                type="text"
-                                value={nuevoTipoNombre}
+                            <input type="text" value={nuevoTipoNombre}
                                 onChange={e => setNuevoTipoNombre(e.target.value)}
                                 placeholder="Ej: Barniz, Laminado, Adhesivo..."
-                                className={inputClass}
-                                maxLength={100}
-                            />
+                                className={inputClass} maxLength={100} />
                             <p className="text-xs text-blue-500 mt-1">
                                 El tipo se creará automáticamente al guardar el insumo.
                             </p>
                         </div>
                     )}
 
-                    {/* ── El form solo contiene los campos del insumo ── */}
                     <form onSubmit={handleSubmit} className="space-y-3">
+
+                        {/* Tipo + Código */}
                         <div className="grid grid-cols-2 gap-3">
                             <div>
                                 <label className="block text-xs font-medium text-gray-700 mb-1">
                                     Tipo de insumo <span className="text-red-500">*</span>
                                 </label>
-                                <select
-                                    value={form.tipo_insumo_id}
+                                <select value={form.tipo_insumo_id}
                                     onChange={e => set("tipo_insumo_id", Number(e.target.value))}
-                                    className={inputClass}
-                                >
+                                    className={inputClass}>
                                     <option value={0} disabled>Seleccionar...</option>
                                     {tipos.map(t => (
                                         <option key={t.idtipo_insumo} value={t.idtipo_insumo}>{t.nombre}</option>
@@ -320,6 +327,8 @@ export default function ProductosProveedor({ proveedor, onVolver }: Props) {
                                     placeholder="PMS-485, R-200..." className={inputClass} maxLength={80} />
                             </div>
                         </div>
+
+                        {/* Nombre */}
                         <div>
                             <label className="block text-xs font-medium text-gray-700 mb-1">
                                 Nombre / Color <span className="text-red-500">*</span>
@@ -329,6 +338,8 @@ export default function ProductosProveedor({ proveedor, onVolver }: Props) {
                                 placeholder="Ej: Rojo intenso, Azul marino..."
                                 className={inputClass} maxLength={150} />
                         </div>
+
+                        {/* Precio + Notas */}
                         <div className="grid grid-cols-2 gap-3">
                             <div>
                                 <label className="block text-xs font-medium text-gray-700 mb-1">
@@ -350,6 +361,54 @@ export default function ProductosProveedor({ proveedor, onVolver }: Props) {
                                     placeholder="Observaciones..." className={inputClass} />
                             </div>
                         </div>
+
+                        {/* Clave SAT + Unidad + Mínimo */}
+                        <div className="grid grid-cols-3 gap-3">
+                            <div>
+                                <label className="block text-xs font-medium text-gray-700 mb-1">
+                                    Clave producto SAT <span className="text-xs text-gray-400 font-normal">(opcional)</span>
+                                </label>
+                                <select
+                                    value={form.producto_sat_idproducto_sat ?? ""}
+                                    onChange={e => set("producto_sat_idproducto_sat", e.target.value ? Number(e.target.value) : null)}
+                                    className={inputClass}
+                                >
+                                    <option value="">Sin especificar</option>
+                                    {productosSat.map(s => (
+                                        <option key={s.idproducto_sat} value={s.idproducto_sat}>
+                                            {s.clave} — {s.pdft}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium text-gray-700 mb-1">
+                                    Unidad <span className="text-xs text-gray-400 font-normal">(opcional)</span>
+                                </label>
+                                <select value={form.unidad ?? ""}
+                                    onChange={e => set("unidad", e.target.value || null)}
+                                    className={inputClass}>
+                                    <option value="">Sin especificar</option>
+                                    <option value="kilos">Kilos</option>
+                                    <option value="pzas">Piezas</option>
+                                    <option value="litros">Litros</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium text-gray-700 mb-1">
+                                    Mínimo de compra <span className="text-xs text-gray-400 font-normal">(opcional)</span>
+                                </label>
+                                <input type="text" inputMode="decimal"
+                                    value={form.minimo_compra != null ? String(form.minimo_compra) : ""}
+                                    onChange={e => {
+                                        const v = e.target.value;
+                                        if (!/^\d*\.?\d{0,2}$/.test(v)) return;
+                                        set("minimo_compra", v === "" ? null : parseFloat(v));
+                                    }}
+                                    placeholder="0.00" className={inputClass} />
+                            </div>
+                        </div>
+
                         <div className="flex justify-end gap-2 pt-1">
                             <button type="button" onClick={cerrarForm}
                                 className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg text-sm hover:bg-gray-50 transition-colors">
@@ -359,8 +418,7 @@ export default function ProductosProveedor({ proveedor, onVolver }: Props) {
                                 className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 disabled:bg-blue-400 transition-colors">
                                 {guardando
                                     ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Guardando...</>
-                                    : editando ? "Guardar cambios" : "Agregar insumo"
-                                }
+                                    : editando ? "Guardar cambios" : "Agregar insumo"}
                             </button>
                         </div>
                     </form>
@@ -412,7 +470,9 @@ export default function ProductosProveedor({ proveedor, onVolver }: Props) {
                                     <thead className="bg-gray-50 border-b border-gray-100">
                                         <tr>
                                             <th className="text-left px-4 py-2.5 font-semibold text-gray-600">Nombre / Color</th>
+                                            <th className="text-left px-4 py-2.5 font-semibold text-gray-600">Clave SAT</th>
                                             <th className="text-left px-4 py-2.5 font-semibold text-gray-600">Código</th>
+                                            <th className="text-left px-4 py-2.5 font-semibold text-gray-600">Unidad / Mín.</th>
                                             <th className="text-left px-4 py-2.5 font-semibold text-gray-600">Precio</th>
                                             <th className="text-left px-4 py-2.5 font-semibold text-gray-600">Notas</th>
                                             <th className="text-right px-4 py-2.5 font-semibold text-gray-600">Acciones</th>
@@ -423,8 +483,27 @@ export default function ProductosProveedor({ proveedor, onVolver }: Props) {
                                             <tr key={p.idproveedor_producto} className="hover:bg-gray-50 transition-colors">
                                                 <td className="px-4 py-3 font-medium text-gray-900">{p.nombre}</td>
                                                 <td className="px-4 py-3">
+                                                    {p.producto_sat_idproducto_sat ? (
+                                                        <div>
+                                                            <code className="px-2 py-0.5 bg-blue-50 rounded text-xs font-mono text-blue-700">
+                                                                {p.producto_sat_clave}
+                                                            </code>
+                                                            <p className="text-xs text-gray-400 mt-0.5 max-w-[120px] truncate">
+                                                                {p.producto_sat_nombre}
+                                                            </p>
+                                                        </div>
+                                                    ) : (
+                                                        <span className="text-gray-300">—</span>
+                                                    )}
+                                                </td>
+                                                <td className="px-4 py-3">
                                                     {p.codigo
                                                         ? <code className="px-2 py-0.5 bg-gray-100 rounded text-xs font-mono text-gray-700">{p.codigo}</code>
+                                                        : <span className="text-gray-300">—</span>}
+                                                </td>
+                                                <td className="px-4 py-3 text-gray-500 text-xs">
+                                                    {p.unidad
+                                                        ? <span className="capitalize">{p.unidad}{p.minimo_compra != null ? ` · mín ${p.minimo_compra}` : ""}</span>
                                                         : <span className="text-gray-300">—</span>}
                                                 </td>
                                                 <td className="px-4 py-3 text-gray-600">

@@ -14,7 +14,6 @@ import { showAlert } from '../components/CustomAlert';
 import { showConfirm } from '../components/CustomConfirm';
 
 
-
 const ITEMS_POR_PAGINA = 7;
 
 export default function Pedidos() {

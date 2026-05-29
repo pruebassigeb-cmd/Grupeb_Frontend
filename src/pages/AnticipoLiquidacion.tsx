@@ -74,6 +74,7 @@ async function descargarPdfOrden(noPedido: string, noProduccion: string): Promis
     impresion:               data.impresion,
     prioridad:               data.prioridad ?? false,
     nombre_producto:         producto.nombre_producto,
+    descripcion:             producto.descripcion ?? null,
     categoria:               producto.categoria,
     material:                producto.material,
     calibre:                 producto.calibre,

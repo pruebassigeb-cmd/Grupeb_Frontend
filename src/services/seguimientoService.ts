@@ -19,6 +19,7 @@ export interface OrdenProduccionProducto {
   observaciones_diseno: string | null;
   tiene_orden: boolean;
   nombre_producto: string;
+  descripcion: string | null;
   categoria: string;
   material: string;
   calibre: string;
@@ -299,6 +300,7 @@ export interface EtiquetaData {
   poblacion: string;
   estado: string;
   nombre_producto: string;
+  descripcion: string | null;   // ← NUEVO: identificador diferenciador del producto
   medida: string;
   material: string;
   cantidad_total: number | null;

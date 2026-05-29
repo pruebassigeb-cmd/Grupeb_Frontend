@@ -18,6 +18,7 @@ export interface OrdenProduccionData {
   correo: string;
   impresion: string | null;
   nombre_producto: string;
+  descripcion: string | null;
   categoria: string;
   material: string;
   calibre: string;
@@ -575,8 +576,30 @@ console.log("🎨 masterImg:", masterImg ? `OK (${masterImg.format})` : "null");
     ? `${data.kilogramos} kg`
     : data.cantidad ? data.cantidad.toLocaleString("es-MX") : "";
 
-  celdaLabel(doc, "Producto", f(data.nombre_producto), M, y, prodW4, fila4H, LABEL_SIZE, 13);
-  celdaLabel(doc, "Cantidad", cantDisplay, M + prodW4, y, cant4W, fila4H, LABEL_SIZE, 15, true);
+// Por esto:
+doc.setDrawColor(BLACK[0], BLACK[1], BLACK[2]);
+doc.setLineWidth(0.2);
+doc.rect(M, y, prodW4, fila4H);
+doc.setFont("helvetica", "normal");
+doc.setFontSize(LABEL_SIZE);
+doc.setTextColor(GRAY_DARK[0], GRAY_DARK[1], GRAY_DARK[2]);
+doc.text("Producto", M + 1.5, y + 4.5);
+doc.setFont("helvetica", "normal");
+doc.setFontSize(13);
+doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);
+const productoNombre = f(data.nombre_producto);
+const productoDesc = f(data.descripcion ?? "");
+if (productoDesc) {
+  // Nombre centrado un poco más arriba, descripción debajo en gris pequeño
+  doc.text(productoNombre, M + prodW4 / 2, y + fila4H - 6, { align: "center" });
+  doc.setFont("helvetica", "italic");
+  doc.setFontSize(8);
+  doc.setTextColor(GRAY_MED[0], GRAY_MED[1], GRAY_MED[2]);
+  doc.text(productoDesc, M + prodW4 / 2, y + fila4H - 1.5, { align: "center" });
+} else {
+  doc.text(productoNombre, M + prodW4 / 2, y + fila4H - 3, { align: "center" });
+}
+doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);  celdaLabel(doc, "Cantidad", cantDisplay, M + prodW4, y, cant4W, fila4H, LABEL_SIZE, 15, true);
   celdaLabel(doc, "Medida", f(data.medida), M + prodW4 + cant4W, y, med4W, fila4H, LABEL_SIZE, 13);
 
   const kilos4X = M + prodW4 + cant4W + med4W;
@@ -881,15 +904,37 @@ console.log("🎨 masterImg:", masterImg ? `OK (${masterImg.format})` : "null");
     doc.rect(masterX, masterY, masterW, masterH);
 
     try {
-      await addImageContain(doc, masterImg, masterX, masterY, masterW, masterH);
-    } catch (e) {
-      console.error("❌ addImage master error:", e);
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(10);
-      doc.setTextColor(GRAY_MED[0], GRAY_MED[1], GRAY_MED[2]);
-      doc.text("No se pudo cargar la imagen del Master Graphic", masterX + masterW / 2, masterY + masterH / 2, { align: "center" });
-      doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);
+  const masterSize = await getImageSize(masterImg);
+  const isLandscape = masterSize.width > masterSize.height;
+
+  if (isLandscape) {
+    // Rotar 90° para que quede "parada" en la hoja portrait
+    const canvas = document.createElement("canvas");
+    canvas.width = masterSize.height;
+    canvas.height = masterSize.width;
+    const ctx = canvas.getContext("2d")!;
+    const img = new Image();
+    await new Promise<void>((resolve, reject) => {
+      img.onload = () => resolve();
+      img.onerror = reject;
+      img.src = masterImg!.dataUrl;
+    });
+    ctx.translate(canvas.width / 2, canvas.height / 2);
+    ctx.rotate(Math.PI / 2);
+    ctx.drawImage(img, -masterSize.width / 2, -masterSize.height / 2);
+
+    const rotatedDataUrl = canvas.toDataURL("image/png");
+    const rotatedImg = dataUrlToImgData(rotatedDataUrl);
+    if (rotatedImg) {
+      await addImageContain(doc, rotatedImg, masterX, masterY, masterW, masterH);
     }
+  } else {
+    await addImageContain(doc, masterImg, masterX, masterY, masterW, masterH);
+  }
+} catch (e) {
+  console.error("❌ addImage master error:", e);
+  // ... tu manejo de error existente
+}
   }
 
   doc.save(`OrdenProduccion_${data.no_produccion ?? data.no_pedido}.pdf`);

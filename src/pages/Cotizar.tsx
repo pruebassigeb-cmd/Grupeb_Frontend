@@ -158,7 +158,7 @@ export default function Cotizaciones() {
           pantones:           prod.pantones  || null,
           asa_suaje:          prod.suajeTipo || null,
           observacion:        prod.observacion || null,
-          desceripcion:        prod.descripcion || null,
+          descripcion:        prod.descripcion || null,
           perforacion:        prod.perforacion ?? false,
           por_kilo:           prod.porKilo    || null,
           herramental_descripcion: prod.herramental_descripcion ?? null,

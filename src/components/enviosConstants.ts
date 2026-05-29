@@ -32,14 +32,17 @@ export const ESTADO_BULTO_LABEL: Record<string, string> = {
   entregado:  "Entregado",
 };
 
+// Estados de ENVÍO — preparando es alias temporal hasta migración BD
 export const ESTADO_BADGE: Record<string, string> = {
+  pendiente:  "bg-blue-100 text-blue-700",
   preparando: "bg-blue-100 text-blue-700",
   en_camino:  "bg-yellow-100 text-yellow-800",
   entregado:  "bg-green-100 text-green-800",
 };
 
 export const ESTADO_LABEL: Record<string, string> = {
-  preparando: "Preparando",
+  pendiente:  "Pendiente",
+  preparando: "Pendiente",
   en_camino:  "En camino",
   entregado:  "Entregado",
 };

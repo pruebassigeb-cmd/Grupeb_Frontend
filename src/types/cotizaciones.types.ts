@@ -68,6 +68,8 @@ export interface ProductoCotizacion {
 
   detalles: DetalleCotizacion[];
   subtotal: number;
+
+
 }
 
 // ============================================================

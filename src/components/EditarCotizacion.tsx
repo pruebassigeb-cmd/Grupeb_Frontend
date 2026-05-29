@@ -46,38 +46,40 @@ function resolverCalibre(p: any): string {
 
 function buildProductosPdf(productos: ProductoCotizacion[]) {
   return productos.map(p => ({
-    nombre:             p.nombre,
-    material:           p.material || "",
-    calibre:            resolverCalibre(p),
-    tintas:             p.tintas,
-    caras:              p.caras,
+    nombre: p.nombre,
+    material: p.material || "",
+    calibre: resolverCalibre(p),
+    tintas: p.tintas,
+    caras: p.caras,
     medidasFormateadas: p.medidasFormateadas || "",
-    medidas:            p.medidas || {},
-    bk:                 p.bk || null,
-    foil:               p.foil || null,
-    laminado:           p.laminado || null,
-    uvBr:               p.uv_br || null,
-    pigmentos:          p.pigmentos || null,
-    pantones:           p.pantones || null,
-    asa_suaje:          p.asa_suaje || null,
-    observacion:        p.observacion || null,
-    por_kilo:           p.por_kilo || null,
+    medidas: p.medidas || {},
 
-    // ✅ ESTOS FALTABAN
-    descripcion:        (p as any).descripcion ?? null,
-    perforacion:        (p as any).perforacion ?? false,
+    bk: p.bk ?? null,
+    foil: p.foil ?? null,
+    alto_rel: p.alto_rel ?? null,
+    laminado: p.laminado ?? null,
+    uvBr: p.uv_br ?? null,
 
-    // ✅ Herramental
+    pigmentos: p.pigmentos ?? null,
+    pantones: p.pantones ?? null,
+    asa_suaje: p.asa_suaje ?? null,
+    observacion: p.observacion ?? null,
+    por_kilo: p.por_kilo ?? null,
+
+    descripcion: p.descripcion ?? null,
+    perforacion: p.perforacion ?? false,
+
     herramental_descripcion: p.herramental_descripcion ?? null,
-    herramental_precio:      p.herramental_precio != null ? Number(p.herramental_precio) : null,
-    herramental_aprobado:    p.herramental_aprobado ?? null,
+    herramental_precio:
+      p.herramental_precio != null ? Number(p.herramental_precio) : null,
+    herramental_aprobado: p.herramental_aprobado ?? null,
 
     detalles: (p.detalles || [])
-      .filter((d: any) => d.aprobado === true)
-      .map((d: any) => ({
-        cantidad:      d.cantidad,
-        precio_total:  d.precio_total,
-        kilogramos:    d.kilogramos ?? null,
+      .filter((d) => d.aprobado === true)
+      .map((d) => ({
+        cantidad: d.cantidad,
+        precio_total: d.precio_total,
+        kilogramos: d.kilogramos ?? null,
         modo_cantidad: d.modo_cantidad || "unidad",
       })),
   }));
@@ -210,38 +212,58 @@ export default function EditarCotizacion({
   };
 
   const descargarPdfPedido = async (noPedido: string) => {
-    try {
-      const venta = await getVentaByPedido(noPedido);
-      await generarPdfPedido({
-        no_pedido:      noPedido,
-        no_cotizacion:  cotizacion.no_cotizacion,
-        fecha:          new Date().toISOString(),
-        cliente:        cotizacion.cliente  || "",
-        empresa:        cotizacion.empresa  || "",
-        telefono:       cotizacion.telefono || "",
-        correo:         cotizacion.correo   || "",
-        impresion:      cotizacion.impresion     ?? null,
-        celular:        cotizacion.celular        ?? null,
-        razon_social:   cotizacion.razon_social   ?? null,
-        rfc:            cotizacion.rfc            ?? null,
-        domicilio:      cotizacion.domicilio      ?? null,
-        numero:         cotizacion.numero         ?? null,
-        colonia:        cotizacion.colonia        ?? null,
-        codigo_postal:  cotizacion.codigo_postal  ?? null,
-        poblacion:      cotizacion.poblacion      ?? null,
-        estado_cliente: cotizacion.estado_cliente ?? null,
-        cliente_id:     cotizacion.cliente_id     ?? null,
-        subtotal:       Number(venta.subtotal),
-        iva:           Number(venta.iva),
-        total:         Number(venta.total),
-        anticipo:      Number(venta.anticipo),
-        saldo:         Number(venta.saldo),
-        productos:     buildProductosPdf(productos),
-      });
-    } catch (pdfErr) {
-      console.warn("⚠️ No se pudo generar el PDF de pedido automáticamente:", pdfErr);
-    }
-  };
+  try {
+    const venta = await getVentaByPedido(noPedido);
+
+    await generarPdfPedido({
+      no_pedido: noPedido,
+      no_cotizacion: cotizacion.no_cotizacion,
+      fecha: new Date().toISOString(),
+
+      cliente: cotizacion.cliente || "",
+      empresa: cotizacion.empresa || "",
+      telefono: cotizacion.telefono || "",
+      correo: cotizacion.correo || "",
+      impresion: cotizacion.impresion ?? null,
+      celular: cotizacion.celular ?? null,
+      razon_social: cotizacion.razon_social ?? null,
+      rfc: cotizacion.rfc ?? null,
+      domicilio: cotizacion.domicilio ?? null,
+      numero: cotizacion.numero ?? null,
+      colonia: cotizacion.colonia ?? null,
+      codigo_postal: cotizacion.codigo_postal ?? null,
+      poblacion: cotizacion.poblacion ?? null,
+      estado_cliente: cotizacion.estado_cliente ?? null,
+      cliente_id: cotizacion.cliente_id ?? null,
+      identificar: cotizacion.identificar ?? null,
+
+      subtotal: Number(venta.subtotal),
+      iva: Number(venta.iva),
+      total: Number(venta.total),
+      anticipo: Number(venta.anticipo),
+      saldo: Number(venta.saldo),
+
+      productos: buildProductosPdf(
+        productos.map((p) => ({
+          ...p,
+          descripcion: p.descripcion ?? null,
+          perforacion: p.perforacion ?? false,
+          alto_rel: p.alto_rel ?? null,
+          herramental_descripcion: p.herramental_descripcion ?? null,
+          herramental_precio:
+            p.herramental_precio != null ? Number(p.herramental_precio) : null,
+          herramental_aprobado: p.herramental_aprobado ?? null,
+          detalles: p.detalles.map((d) => ({
+            ...d,
+            aprobado: d.aprobado === true,
+          })),
+        }))
+      ),
+    });
+  } catch (pdfErr) {
+    console.warn("⚠️ No se pudo generar el PDF de pedido automáticamente:", pdfErr);
+  }
+};
 
   const handleCambiarEstado = async (estadoId: number) => {
     if (estadoId === ESTADO_ID.RECHAZADO) {

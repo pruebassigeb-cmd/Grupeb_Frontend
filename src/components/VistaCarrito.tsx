@@ -7,18 +7,18 @@ import { showAlert } from './CustomAlert';
 import { showConfirm } from './CustomConfirm';
 
 interface Props {
-  carrito:         CarritoPedido[];
-  paqueterias:     Paqueteria[];
+  carrito: CarritoPedido[];
+  paqueterias: Paqueteria[];
   onCarritoChange: () => Promise<void>;
-  onProcesar:      () => void;
-  onNotaRemision:  () => void;
-  onClose:         () => void;
+  onProcesar: () => void;
+  onNotaRemision: () => void;
+  onClose: () => void;
 }
 
 export default function VistaCarrito({
   carrito, paqueterias, onCarritoChange, onProcesar, onNotaRemision, onClose,
 }: Props) {
-  const [vaciando,  setVaciando]  = useState(false);
+  const [vaciando, setVaciando] = useState(false);
   const [asignando, setAsignando] = useState<number | null>(null);
 
   // Estado local tipo_envio por pedido
@@ -38,8 +38,8 @@ export default function VistaCarrito({
     return m;
   });
 
-  const totalBultos   = carrito.reduce((sum, p) => sum + p.bultos.length, 0);
-  const totalPedidos  = carrito.length;
+  const totalBultos = carrito.reduce((sum, p) => sum + p.bultos.length, 0);
+  const totalPedidos = carrito.length;
 
   // Validación: todos los pedidos deben tener tipo válido para mostrar "Procesar"
   const todoValido = carrito.every(p => {
@@ -143,9 +143,9 @@ export default function VistaCarrito({
 
       {/* Pedidos */}
       {carrito.map(pedido => {
-        const tipo      = tipoPedido.get(pedido.idsolicitud) ?? null;
+        const tipo = tipoPedido.get(pedido.idsolicitud) ?? null;
         const paqActual = paqSeleccionada.get(pedido.idsolicitud) ?? 0;
-        const cargando  = asignando === pedido.idsolicitud;
+        const cargando = asignando === pedido.idsolicitud;
         const paqNombre = paqueterias.find(p => p.idpaqueteria === paqActual)?.nombre;
 
         return (
@@ -165,8 +165,8 @@ export default function VistaCarrito({
               <p className="text-xs text-gray-500 font-medium mb-2">Tipo de envío para este pedido:</p>
               <div className="flex gap-2">
                 {([
-                  { value: "local",       label: "🚚 Local",       activeClass: "border-blue-600 bg-blue-50 text-blue-700" },
-                  { value: "paqueteria",  label: "📦 Paquetería",  activeClass: "border-blue-600 bg-blue-50 text-blue-700" },
+                  { value: "local", label: "🚚 Local", activeClass: "border-blue-600 bg-blue-50 text-blue-700" },
+                  { value: "paqueteria", label: "📦 Paquetería", activeClass: "border-blue-600 bg-blue-50 text-blue-700" },
                   { value: "recoleccion", label: "🏭 Recolección", activeClass: "border-purple-600 bg-purple-50 text-purple-700" },
                 ] as { value: TipoEnvioCarrito; label: string; activeClass: string }[]).map(opt => (
                   <button
@@ -174,9 +174,8 @@ export default function VistaCarrito({
                     type="button"
                     disabled={cargando}
                     onClick={() => handleCambiarTipo(pedido, opt.value)}
-                    className={`flex-1 py-2 rounded-lg border-2 text-sm font-medium transition-colors disabled:opacity-50 ${
-                      tipo === opt.value ? opt.activeClass : "border-gray-200 text-gray-500 hover:border-gray-300"
-                    }`}>
+                    className={`flex-1 py-2 rounded-lg border-2 text-sm font-medium transition-colors disabled:opacity-50 ${tipo === opt.value ? opt.activeClass : "border-gray-200 text-gray-500 hover:border-gray-300"
+                      }`}>
                     {opt.label}
                   </button>
                 ))}
@@ -226,9 +225,32 @@ export default function VistaCarrito({
                   <div className="flex items-center gap-3">
                     <span className="text-gray-400 font-medium">#{idx + 1}</span>
                     <div>
-                      <p className="text-gray-700 font-medium">
-                        {bulto.nombre_producto} {bulto.medida && `(${bulto.medida})`}
-                      </p>
+                      <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="text-gray-700 font-medium">
+                            {bulto.nombre_producto}{" "}
+                            {bulto.medida && `(${bulto.medida})`}
+                          </p>
+
+                          {bulto.descripcion && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-purple-100 text-purple-700">
+                              {bulto.descripcion}
+                            </span>
+                          )}
+                        </div>
+
+                        <p className="text-gray-400">
+                          {bulto.cantidad_unidades != null
+                            ? `${bulto.cantidad_unidades.toLocaleString("es-MX")} pzas`
+                            : bulto.peso_producto != null
+                              ? `${bulto.peso_producto} kg`
+                              : "-"
+                          }
+
+                          {bulto.alto != null &&
+                            ` · ${bulto.alto}×${bulto.largo}×${bulto.ancho} cm`}
+                        </p>
+                      </div>
                       <p className="text-gray-400">
                         {bulto.cantidad_unidades != null
                           ? `${bulto.cantidad_unidades.toLocaleString("es-MX")} pzas`

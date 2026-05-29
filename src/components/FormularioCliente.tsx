@@ -189,25 +189,31 @@ export default function FormularioCliente({ onSubmit, onCancel, clienteEditar }:
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    try {
-      const datosFinales = { ...datos };
-      if (datosFinales.empresa)            datosFinales.empresa            = datosFinales.empresa.trim();
-      if (datosFinales.correo)             datosFinales.correo             = datosFinales.correo.trim().toLowerCase();
-      if (datosFinales.telefono)           datosFinales.telefono           = datosFinales.telefono.replace(/\D/g, "");
-      if (datosFinales.celular)            datosFinales.celular            = datosFinales.celular.replace(/\D/g, "");
-      if (datosFinales.rfc)                datosFinales.rfc                = datosFinales.rfc.trim().toUpperCase();
-      if (datosFinales.rfc_rs)             datosFinales.rfc_rs             = datosFinales.rfc_rs.trim().toUpperCase();
-      if (datosFinales.correo_facturacion) datosFinales.correo_facturacion = datosFinales.correo_facturacion.trim().toLowerCase();
-      await onSubmit(datosFinales);
-    } catch (error: any) {
-      console.error("Error al guardar cliente:", error);
-      if (error.response?.data?.error) showAlert(`Error: ${error.response.data.error}`);
-    } finally {
-      setLoading(false);
-    }
-  };
+  e.preventDefault();
+  setLoading(true);
+  try {
+    const datosFinales = { ...datos };
+    if (datosFinales.empresa)            datosFinales.empresa            = datosFinales.empresa.trim();
+    if (datosFinales.correo)             datosFinales.correo             = datosFinales.correo.trim().toLowerCase();
+    if (datosFinales.telefono)           datosFinales.telefono           = datosFinales.telefono.replace(/\D/g, "");
+    if (datosFinales.celular)            datosFinales.celular            = datosFinales.celular.replace(/\D/g, "");
+    if (datosFinales.rfc)                datosFinales.rfc                = datosFinales.rfc.trim().toUpperCase();
+    if (datosFinales.rfc_rs)             datosFinales.rfc_rs             = datosFinales.rfc_rs.trim().toUpperCase();
+    if (datosFinales.correo_facturacion) datosFinales.correo_facturacion = datosFinales.correo_facturacion.trim().toLowerCase();
+
+    // ← NUEVO: convertir 0 a null para los IDs de catálogo
+    if (!datosFinales.regimen_fiscal_idregimen_fiscal) datosFinales.regimen_fiscal_idregimen_fiscal = null as any;
+    if (!datosFinales.metodo_pago_idmetodo_pago)       datosFinales.metodo_pago_idmetodo_pago       = null as any;
+    if (!datosFinales.forma_pago_idforma_pago)         datosFinales.forma_pago_idforma_pago         = null as any;
+
+    await onSubmit(datosFinales);
+  } catch (error: any) {
+    console.error("Error al guardar cliente:", error);
+    if (error.response?.data?.error) showAlert(`Error: ${error.response.data.error}`);
+  } finally {
+    setLoading(false);
+  }
+};
 
   const inputClass      = "w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white placeholder-gray-400";
   const inputClassError = "w-full px-4 py-2 border border-orange-300 rounded-lg focus:ring-2 focus:ring-orange-400 focus:border-transparent text-gray-900 bg-white placeholder-gray-400";

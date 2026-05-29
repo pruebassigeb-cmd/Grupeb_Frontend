@@ -22,9 +22,8 @@ import { usePermiso } from "../hooks/usePermiso";
 import ModalVerificarOperador from "../components/ModalVerificarOperador";
 import { showAlert } from '../components/CustomAlert';
 import { getImagenesDiseno } from "../services/ordenDisenoService";
+ 
 
-
-const ITEMS_POR_PAGINA = 20;
 
 const diasDesde = (fecha: string | null): number | null => {
   if (!fecha) return null;
@@ -309,6 +308,7 @@ function BotonPdfDirecto({ pedido }: { pedido: PedidoSeguimiento }) {
         impresion: data.impresion,
         prioridad: data.prioridad ?? false,
         nombre_producto: producto.nombre_producto,
+        descripcion: (pedido as any).descripcion ?? null,
         categoria: producto.categoria,
         material: producto.material,
         calibre: producto.calibre,
@@ -387,55 +387,7 @@ function RenderOrdenProduccion({ pedido }: { pedido: PedidoSeguimiento }) {
   return <BotonPdfDirecto pedido={pedido} />;
 }
 
-function Paginador({
-  total, paginaActual, totalPaginas, inicio, irAPagina,
-}: {
-  total: number; paginaActual: number; totalPaginas: number; inicio: number; irAPagina: (p: number) => void;
-}) {
-  const pags: (number | "...")[] = [];
-  if (totalPaginas <= 7) {
-    for (let i = 1; i <= totalPaginas; i++) pags.push(i);
-  } else {
-    pags.push(1);
-    if (paginaActual > 3) pags.push("...");
-    for (let i = Math.max(2, paginaActual - 1); i <= Math.min(totalPaginas - 1, paginaActual + 1); i++) pags.push(i);
-    if (paginaActual < totalPaginas - 2) pags.push("...");
-    pags.push(totalPaginas);
-  }
-  return (
-    <div className="flex items-center justify-between px-4 py-3 bg-white border-t border-gray-200">
-      <p className="text-sm text-gray-500">
-        Mostrando{" "}
-        <span className="font-medium text-gray-700">{inicio + 1}</span>
-        {" – "}
-        <span className="font-medium text-gray-700">{Math.min(inicio + ITEMS_POR_PAGINA, total)}</span>
-        {" de "}
-        <span className="font-medium text-gray-700">{total}</span> órdenes
-      </p>
-      <div className="flex items-center gap-1">
-        <button onClick={() => irAPagina(paginaActual - 1)} disabled={paginaActual === 1}
-          className="p-1.5 rounded-md text-gray-500 hover:bg-gray-100 disabled:opacity-30 transition-colors">
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-          </svg>
-        </button>
-        {pags.map((p, i) =>
-          p === "..."
-            ? <span key={`e${i}`} className="px-2 text-gray-400 text-sm">…</span>
-            : <button key={p} onClick={() => irAPagina(p as number)}
-              className={`w-8 h-8 rounded-md text-sm font-medium transition-colors ${p === paginaActual ? "bg-blue-600 text-white shadow" : "text-gray-600 hover:bg-gray-100"
-                }`}>{p}</button>
-        )}
-        <button onClick={() => irAPagina(paginaActual + 1)} disabled={paginaActual === totalPaginas}
-          className="p-1.5 rounded-md text-gray-500 hover:bg-gray-100 disabled:opacity-30 transition-colors">
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-          </svg>
-        </button>
-      </div>
-    </div>
-  );
-}
+
 
 const COLUMNAS = [
   "Fecha", "N° Pedido", "Impresion + Info", "Tipo",
@@ -473,7 +425,6 @@ export default function Seguimiento() {
   const [filtroTipo, setFiltroTipo] = useState("todos");
   const [busqueda, setBusqueda] = useState("");
   const [pantallaCompleta, setPantallaCompleta] = useState(false);
-  const [paginaActual, setPaginaActual] = useState(1);
 
   const [modalProceso, setModalProceso] = useState<{ pedido: PedidoSeguimiento; nombreProceso: string } | null>(null);
   const [modalAnticipo, setModalAnticipo] = useState<{ venta: Venta; metodos: MetodoPago[] } | null>(null);
@@ -506,9 +457,6 @@ export default function Seguimiento() {
     document.addEventListener("visibilitychange", onVisible);
     return () => document.removeEventListener("visibilitychange", onVisible);
   }, []);
-
-  useEffect(() => { setPaginaActual(1); }, [filtroTipo, busqueda]);
-
   const cargar = async () => {
     try {
       setCargando(true); setError(null);
@@ -543,34 +491,33 @@ export default function Seguimiento() {
   };
 
   const pedidosFiltrados = pedidos
-  .filter(p => {
-    const pasaTipo = filtroTipo === "todos"
-      || norm(p.tipo_producto ?? "").includes(norm(filtroTipo));
-    if (!pasaTipo) return false;
-    if (!busqueda.trim()) return true;
-    const q = norm(busqueda);
-    return (
-      norm(p.no_pedido).includes(q) ||
-      norm(p.no_produccion ?? "").includes(q) ||
-      norm(p.impresion ?? "").includes(q)
-    );
-  })
-  // ← AGREGAR: deduplica por no_pedido + no_produccion
-  .filter((p, idx, arr) =>
-  arr.findIndex(x =>
-    x.no_pedido === p.no_pedido &&
-    (x.no_produccion ?? "") === (p.no_produccion ?? "") &&
-    (x.nombre_producto ?? "") === (p.nombre_producto ?? "") &&
-    (x.medida ?? "") === (p.medida ?? "") &&
-    (x.descripcion ?? "") === (p.descripcion ?? "")
-  ) === idx
-);
+    .filter(p => {
+      const pasaTipo = filtroTipo === "todos"
+        || norm(p.tipo_producto ?? "").includes(norm(filtroTipo));
+      if (!pasaTipo) return false;
+      if (!busqueda.trim()) return true;
+      const q = norm(busqueda);
+      return (
+        norm(p.no_pedido).includes(q) ||
+        norm(p.no_produccion ?? "").includes(q) ||
+        norm(p.impresion ?? "").includes(q)
+      );
+    })
+    // ← AGREGAR: deduplica por no_pedido + no_produccion
+    .filter((p, idx, arr) =>
+      arr.findIndex(x =>
+        x.no_pedido === p.no_pedido &&
+        (x.no_produccion ?? "") === (p.no_produccion ?? "") &&
+        (x.nombre_producto ?? "") === (p.nombre_producto ?? "") &&
+        (x.medida ?? "") === (p.medida ?? "") &&
+        (x.descripcion ?? "") === (p.descripcion ?? "")
+      ) === idx
+    )
+    .reverse();
 
-  const totalPaginas = Math.max(1, Math.ceil(pedidosFiltrados.length / ITEMS_POR_PAGINA));
-  const paginaSegura = Math.min(paginaActual, totalPaginas);
-  const inicio = (paginaSegura - 1) * ITEMS_POR_PAGINA;
-  const pedidosPagina = pedidosFiltrados.slice(inicio, inicio + ITEMS_POR_PAGINA);
-  const irAPagina = (p: number) => setPaginaActual(Math.max(1, Math.min(p, totalPaginas)));
+  // REEMPLAZA por:
+  const inicio = 0;
+  const pedidosPagina = pedidosFiltrados;
 
   const renderFila = (pedido: PedidoSeguimiento, grande = false, idx = 0) => {
     const px = grande ? "px-4 py-3" : "px-3 py-2";
@@ -615,20 +562,20 @@ export default function Seguimiento() {
           <BotonPdfPedido pedido={pedido} puedePdf={puedePdfPedido} />
         </td>
 
-{/* ── IMPRESION + PRODUCTO + MEDIDAS + PIGMENTO ── */}
-<td className={`${px} ${txt} text-gray-900 text-center min-w-[25px]`}>
-  <div className="font-medium leading-tight text-[12px]">{pedido.impresion || "—"}
-    {pedido.descripcion && (
-      <span className="text-gray-400 text-[11px] italic ml-1">{pedido.descripcion}</span>
-    )}
-  </div>
-  <div className="text-[11px] leading-tight mt-0.5">
-    {pedido.medida && <span className="text-gray-500">{pedido.medida}</span>}
-    {pedido.pigmentos && (
-      <span className="text-orange-500 ml-1">{pedido.pigmentos}</span>
-    )}
-  </div>
-</td>
+        {/* ── IMPRESION + PRODUCTO + MEDIDAS + PIGMENTO ── */}
+        <td className={`${px} ${txt} text-gray-900 text-center min-w-[25px]`}>
+          <div className="font-medium leading-tight text-[12px]">{pedido.impresion || "—"}
+            {pedido.descripcion && (
+              <span className="text-gray-400 text-[11px] italic ml-1">{pedido.descripcion}</span>
+            )}
+          </div>
+          <div className="text-[11px] leading-tight mt-0.5">
+            {pedido.medida && <span className="text-gray-500">{pedido.medida}</span>}
+            {pedido.pigmentos && (
+              <span className="text-orange-500 ml-1">{pedido.pigmentos}</span>
+            )}
+          </div>
+        </td>
 
 
         {/* TIPO ← FALTABA ESTE */}
@@ -972,7 +919,7 @@ export default function Seguimiento() {
           </table>
         </div>
 
-        {pedidosFiltrados.length === 0 ? (
+        {pedidosFiltrados.length === 0 && (
           <div className="p-8 text-center">
             <p className="text-lg font-medium text-gray-900">Sin resultados</p>
             <p className="text-sm text-gray-500 mt-1">
@@ -989,14 +936,6 @@ export default function Seguimiento() {
               </button>
             )}
           </div>
-        ) : (
-          <Paginador
-            total={pedidosFiltrados.length}
-            paginaActual={paginaSegura}
-            totalPaginas={totalPaginas}
-            inicio={inicio}
-            irAPagina={irAPagina}
-          />
         )}
       </div>
 

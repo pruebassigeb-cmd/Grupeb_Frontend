@@ -156,9 +156,10 @@ export const getFotoRecoleccion = async (idenvio: number): Promise<string> => {
 // NOTAS DE REMISIÓN
 // ==========================
 export interface NotaRemisionData {
-  idnota:     number;
-  no_nota:    string;
-  created_at: string;
+  idnota:        number;
+  no_nota:       string;
+  created_at:    string;
+  observaciones: string | null;
   envio: {
     idenvio:       number;
     tipo:          string;
@@ -190,6 +191,7 @@ export const crearNotaRemisionMulti = async (data: {
   tipo_entrega:        "recoleccion" | "local";
   chofer_idusuario?:   number;
   unidad_idunidad?:    number;
+  observaciones?:      string;
 }): Promise<NotaRemisionMultiData> => {
   const res = await api.post<NotaRemisionMultiData>("/notas-remision/multi", data);
   return res.data;
@@ -218,10 +220,15 @@ export const marcarRecolectadoNotaRemision = async (
   await api.patch(`/notas-remision/${idnota}/marcar-recogido`, datos);
 };
 
+// Registra solo la SALIDA — cambia envíos a en_camino, NO marca nota como entregada
+export const marcarSalidaLocalNota = async (idnota: number): Promise<void> => {
+  await api.patch(`/notas-remision/${idnota}/marcar-salida-local`);
+};
+
+// Registra la LLEGADA + firma/obs — marca nota como entregada
 export const marcarEntregadoLocalNota = async (
   idnota: number,
   datos: {
-    hora_salida?:       string;
     hora_llegada?:      string;
     observacion?:       string;
     observacion_extra?: string;

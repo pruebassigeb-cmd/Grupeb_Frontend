@@ -93,7 +93,7 @@ export default function Dashboard({ children }: DashboardProps) {
       subItems: [],
     },
     {
-      name: "Envíos",
+      name: "Envíos / Entregas",
       path: "/envios",
       permiso: "Gestionar Envios",
       subItems: [],
