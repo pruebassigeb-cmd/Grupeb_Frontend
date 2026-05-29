@@ -551,7 +551,6 @@ export interface EntregaRemision {
   nota_no: string | null;
   nota_id: number | null;
   es_multi: boolean;
-  nota_observaciones: string | null;
   productos_detalle: ProductoDetalleEntrega[];
 }
 
