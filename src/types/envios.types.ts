@@ -206,7 +206,6 @@ export interface EnvioPaqueteria {
   fecha_envio: string;
   fecha_entrega_estimada: string | null;
   observaciones: string | null;
-  fecha_entrega_estimada?: string | null;
   no_pedido: string;
   cliente: string;
   empresa: string;
@@ -245,7 +244,6 @@ export interface EnvioRecoleccion {
   fecha_envio: string;
   fecha_entrega_estimada: string | null;
   observaciones: string | null;
-  fecha_entrega_estimada?: string | null;
   no_pedido: string;
   cliente: string;
   empresa: string;
@@ -498,7 +496,6 @@ export interface HistorialPaqueteriaItem {
   fecha_envio: string;
   fecha_entrega_estimada: string | null;
   observaciones: string | null;
-  fecha_entrega_estimada?: string | null;
   no_pedido: string;
   cliente: string;
   total_bultos: number;
@@ -555,8 +552,8 @@ export interface EntregaRemision {
   fecha_envio: string;
   numero_guia: string | null;
   observaciones: string | null;
-  observacion: "E" | "RA" | "RD" | "PD" | null;   // ← NUEVO: código de obs. de entrega
-  observacion_extra: string | null;                 // ← NUEVO: texto libre de obs. de entrega
+  observacion: "E" | "RA" | "RD" | "PD" | null;
+  observacion_extra: string | null;
   nota_observaciones: string | null;
   total_bultos: number;
   cantidad_entregada: number;

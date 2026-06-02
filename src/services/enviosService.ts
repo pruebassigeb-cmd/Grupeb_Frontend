@@ -299,6 +299,7 @@ export const marcarRecolectadoNotaRemision = async (
     unidad_marca?: string;
     unidad_modelo?: string;
     unidad_placas?: string;
+    observacion_extra?: string; // ← agregado
   },
 ): Promise<void> => {
   await api.patch(`/notas-remision/${idnota}/marcar-recogido`, datos);
