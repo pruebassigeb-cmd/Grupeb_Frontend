@@ -259,7 +259,7 @@ export default function EditarCotizacion({
           })),
         }))
       ),
-    });
+    }, true);
   } catch (pdfErr) {
     console.warn("⚠️ No se pudo generar el PDF de pedido automáticamente:", pdfErr);
   }

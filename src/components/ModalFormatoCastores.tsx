@@ -3,6 +3,7 @@ import Modal from "./Modal";
 import { inputClass, labelClass } from "./enviosConstants";
 import { getFormatoCastores, getProductosSat, updateClavesSatBultos } from "../services/enviosService";
 import { generarFormatoCastores } from "../utils/generarFormatoCastores";
+import { preguntarGuardarS3 } from "../services/pdfS3.service";
 import type { ProductoSat } from "../types/envios.types";
 import { showAlert } from './CustomAlert';
 
@@ -91,6 +92,7 @@ export default function ModalFormatoCastores({ idenvio, onClose }: Props) {
         clave_unidad_sat:   b.clave_unidad_sat,
       })));
 
+      const guardarS3 = await preguntarGuardarS3("formato Castores");
       await generarFormatoCastores({
         datos,
         bultosForms,
@@ -102,7 +104,7 @@ export default function ModalFormatoCastores({ idenvio, onClose }: Props) {
         cobrarDestino,
         observaciones,
         noConvenio,
-      });
+      }, guardarS3);
       onClose();
     } catch (e) {
       console.error("Error generando PDF:", e);

@@ -11,7 +11,6 @@ import ModalFormatoTresGuerras from "./ModalFormatoTresGuerras";
 import ModalGuiaPaqueteriaGeneral from "./ModalGuiaPaqueteriaGeneral";
 import { showAlert } from './CustomAlert';
 
-
 interface Props {
   carrito: CarritoPedido[];
   onSuccess: () => Promise<void>;
@@ -121,13 +120,20 @@ export default function FormularioProcesarCarrito({ carrito, onSuccess, onCancel
 
       const enviosCreados: EnvioCreado[] = result.envios_creados;
 
-      // ── Notas de remisión para envíos locales ──
-      const locales = enviosCreados.filter(e => e.tipo === "local");
-      if (locales.length > 0) {
+      // ── Notas de remisión para envíos locales y recolecciones ──
+      const enviosConNota = enviosCreados.filter(
+        e => e.tipo === "local" || e.tipo === "recoleccion"
+      );
+
+      if (enviosConNota.length > 0) {
         try {
-          const notas = await Promise.all(locales.map(e => getOrCreateNotaRemision(e.idenvio)));
-          await generarNotasMultiples(notas);
-        } catch { /* silencioso */ }
+          const notas = await Promise.all(
+            enviosConNota.map(e => getOrCreateNotaRemision(e.idenvio))
+          );
+          await generarNotasMultiples(notas, true);
+        } catch {
+          /* silencioso */
+        }
       }
 
       // ── Construir cola unificada para TODAS las paqueterías ──
@@ -310,12 +316,13 @@ export default function FormularioProcesarCarrito({ carrito, onSuccess, onCancel
         </div>
       )}
 
+      {/* Mensaje adicional para recolecciones ya está incluido en el bloque de arriba? Mejor un mensaje genérico */}
       {carrito.some(p => p.bultos.some(b =>
-        b.paqueteria_idpaqueteria != null &&
+        (b.paqueteria_idpaqueteria != null || p.tipo_envio === "recoleccion") &&
         (seleccion.get(p.idsolicitud)?.has(b.idbulto) ?? false)
       )) && (
           <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-2 text-xs text-amber-700">
-            📋 Se generará el formato correspondiente para cada paquetería al registrar el envío.
+            📋 Se generará el formato correspondiente para paqueterías y la nota de remisión para recolecciones.
           </div>
         )}
 

@@ -3,6 +3,7 @@ import Modal from "./Modal";
 import { inputClass, labelClass } from "./enviosConstants";
 import { getProductosSat, updateClavesSatBultos } from "../services/enviosService";
 import { generarFormatoTresGuerras } from "../utils/generarFormatoTresGuerras";
+import { preguntarGuardarS3 } from "../services/pdfS3.service";
 import type { ProductoSat } from "../types/envios.types";
 import api from "../services/api";
 import { showAlert } from './CustomAlert';
@@ -85,6 +86,7 @@ export default function ModalFormatoTresGuerras({ idenvio, onClose }: Props) {
         clave_unidad_sat:   b.clave_unidad_sat,
       })));
 
+      const guardarS3 = await preguntarGuardarS3("formato Tres Guerras");
       await generarFormatoTresGuerras({
         datos: {
           ...datos,

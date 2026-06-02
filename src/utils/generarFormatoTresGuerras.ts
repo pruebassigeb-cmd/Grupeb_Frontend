@@ -1,4 +1,5 @@
 import jsPDF from "jspdf";
+import { subirPdfA3 } from "../services/pdfS3.service";
 
 // 215mm x 140mm landscape
 // jsPDF: format:[140, 215] → PAGE_W=215mm, PAGE_H=140mm
@@ -84,7 +85,7 @@ function chk(doc: jsPDF, x: number, y: number, checked: boolean) {
   doc.text("X", x, y);
 }
 
-export async function generarFormatoTresGuerras(params: FormatoTresGuerrasParams) {
+export async function generarFormatoTresGuerras(params: FormatoTresGuerrasParams, guardarEnS3 = false) {
   const {
     datos,
     condicionPago, recoleccion, tipoEntrega,
@@ -243,5 +244,10 @@ export async function generarFormatoTresGuerras(params: FormatoTresGuerrasParams
     txt(doc, observaciones,    50, 130, 7);
   }
 
-  doc.save(`OrdenServicioTresGuerras_${datos.no_pedido}.pdf`);
+  const nombre = `OrdenServicioTresGuerras_${datos.no_pedido}.pdf`;
+  doc.save(nombre);
+  if (guardarEnS3) {
+    const blob = doc.output("blob");
+    await subirPdfA3(blob, nombre, "pdfs", "formas-envio");
+  }
 }

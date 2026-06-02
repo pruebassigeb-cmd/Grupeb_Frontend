@@ -1,5 +1,7 @@
 import jsPDF from "jspdf";
 import type { GuiaPaqueteriaGeneral } from "../types/envios.types";
+import { subirPdfA3 } from "../services/pdfS3.service";
+import { blob } from "stream/consumers";
 
 // Carta: 215.9mm x 279.4mm
 // jsPDF: format:"letter", orientation:"portrait"
@@ -18,7 +20,7 @@ function rect(doc: jsPDF, x: number, y: number, w: number, h: number, style: "S"
   doc.rect(x, y, w, h, style);
 }
 
-export function generarGuiaPaqueteriaGeneral(datos: GuiaPaqueteriaGeneral): void {
+export async function generarGuiaPaqueteriaGeneral(datos: GuiaPaqueteriaGeneral, guardarEnS3 = false): Promise<void> {
   const doc = new jsPDF({
     orientation: "portrait",
     unit:        "mm",
@@ -251,5 +253,10 @@ export function generarGuiaPaqueteriaGeneral(datos: GuiaPaqueteriaGeneral): void
   txt(doc, "Documento informativo — no tiene validez fiscal", ML, Y_PIE + 4, 7);
   txt(doc, folio, ML + CW - 25, Y_PIE + 4, 7);
 
-  doc.save(`GuiaEnvio_${datos.paqueteria}_${datos.no_pedido}.pdf`);
+  const nombre = `GuiaEnvio_${datos.paqueteria}_${datos.no_pedido}.pdf`;
+  doc.save(nombre);
+  if (guardarEnS3) {
+        const blob = doc.output("blob");
+    await subirPdfA3(blob, nombre, "pdfs", "formas-envio");
+  }
 }

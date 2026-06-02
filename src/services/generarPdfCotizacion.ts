@@ -10,6 +10,8 @@ import {
 } from "./Pdfutils";
 import type { ProductoPdf } from "./Pdfutils";
 import logoUrl from "../assets/logogrupeb.png";
+import { subirPdfA3 } from "./pdfS3.service";
+import { blob } from "stream/consumers";
 
 interface CotizacionPdf {
   no_cotizacion: string;
@@ -37,7 +39,7 @@ interface CotizacionPdf {
   identificar?: string | null;
 }
 
-export async function generarPdfCotizacion(cotizacion: CotizacionPdf): Promise<void> {
+export async function generarPdfCotizacion(cotizacion: CotizacionPdf, guardarEnS3 = false): Promise<void> {
   const logoBase64 = cotizacion.logoBase64 ?? await cargarLogoBase64(logoUrl);
   const sinIva = cotizacion.sin_iva === true;
 
@@ -303,5 +305,10 @@ export async function generarPdfCotizacion(cotizacion: CotizacionPdf): Promise<v
 
   dibujarCajasPie(doc, cotizacion.productos, condLines);
   dibujarPiePagina(doc, "COTIZACION", cotizacion.no_cotizacion, cotizacion.fecha);
-  doc.save(`Cotizacion_${cotizacion.no_cotizacion}.pdf`);
+  const nombre = `Cotizacion_${cotizacion.no_cotizacion}.pdf`;
+  doc.save(nombre);
+  if (guardarEnS3) {
+    const blob = doc.output("blob");
+    await subirPdfA3(blob, nombre, "pdfs", "cotizaciones");
+  }
 }

@@ -2,6 +2,7 @@ import jsPDF from "jspdf";
 import { cargarLogoBase64 } from "./Pdfutils";
 import type { EtiquetaData } from "./seguimientoService";
 import logoUrl from "../assets/grupeblanco.png";
+import { subirPdfA3 } from "./pdfS3.service";
 
 // ── Paleta B/N ───────────────────────────────────────────────
 const BLACK: [number, number, number] = [0, 0, 0];
@@ -361,7 +362,7 @@ function dibujarEtiqueta(
 }
 
 // ── Exportado principal ──────────────────────────────────────
-export async function generarPdfEtiquetas(data: EtiquetaData): Promise<void> {
+export async function generarPdfEtiquetas(data: EtiquetaData, guardarEnS3 = false): Promise<void> {
   const logoBase64 = await cargarLogoBase64(logoUrl);
 
   const doc = new jsPDF({
@@ -381,5 +382,10 @@ export async function generarPdfEtiquetas(data: EtiquetaData): Promise<void> {
   (doc.internal as any).scaleFactor = 1;
 
   const sufijo = data.es_parcialidad ? `_parcial${data.numero_envio_parcial ?? 1}` : "";
-  doc.save(`Etiquetas_${data.no_produccion ?? data.no_pedido}${sufijo}.pdf`);
+  const nombre = `Etiquetas_${data.no_produccion ?? data.no_pedido}${sufijo}.pdf`;
+  doc.save(nombre);
+  if (guardarEnS3) {
+    const blob = doc.output("blob");
+    await subirPdfA3(blob, nombre, "pdfs", "etiquetas");
+  }
 }

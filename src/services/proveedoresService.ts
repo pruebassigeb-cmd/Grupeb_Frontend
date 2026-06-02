@@ -9,50 +9,52 @@ export interface TipoInsumo {
 
 export interface RegimenFiscal {
   idregimen_fiscal: number;
-  tipo_regimen:     string;
-  codigo:           string;
+  tipo_regimen: string;
+  codigo: string;
 }
 
 export interface ProductoSat {
   idproducto_sat: number;
-  clave:          number;
-  pdft:           string;
+  clave: number;
+  pdft: string;
 }
 
 export interface Proveedor {
-  idproveedor:    number;
-  nombre:         string;
-  contacto:       string | null;
-  telefono:       string | null;
-  correo:         string | null;
-  direccion:      string | null;
-  notas:          string | null;
-  activo:         boolean;
-  created_at:     string;
+  idproveedor: number;
+  nombre: string;
+  contacto: string | null;
+  telefono: string | null;
+  correo: string | null;
+  direccion: string | null;
+  notas: string | null;
+  activo: boolean;
+  created_at: string;
   total_productos?: number;
   rfc_proveedor?: string | null;
   regimen_fiscal_idregimen_fiscal?: number | null;
-  regimen_fiscal_codigo?:           string | null;
-  regimen_fiscal_nombre?:           string | null;
+  regimen_fiscal_codigo?: string | null;
+  regimen_fiscal_nombre?: string | null;
+  condicion_compra?: string | null;
+  dias_credito?: number | null;
 }
 
 export interface ProductoProveedor {
-  idproveedor_producto:       number;
-  nombre:                     string;
-  codigo:                     string | null;
-  precio:                     number | null;
-  notas:                      string | null;
-  activo:                     boolean;
-  idtipo_insumo:              number;
-  tipo_insumo_nombre:         string;
-  proveedor_nombre?:          string;
-  idproveedor?:               number;
-  clave_producto?:            string | null;
-  minimo_compra?:             number | null;
-  unidad?:                    string | null;
+  idproveedor_producto: number;
+  nombre: string;
+  codigo: string | null;
+  precio: number | null;
+  notas: string | null;
+  activo: boolean;
+  idtipo_insumo: number;
+  tipo_insumo_nombre: string;
+  proveedor_nombre?: string;
+  idproveedor?: number;
+  clave_producto?: string | null;
+  minimo_compra?: number | null;
+  unidad?: string | null;
   producto_sat_idproducto_sat?: number | null;
-  producto_sat_clave?:         number | null;
-  producto_sat_nombre?:        string | null;
+  producto_sat_clave?: number | null;
+  producto_sat_nombre?: string | null;
 }
 
 export interface ProveedorDetalle extends Proveedor {
@@ -60,48 +62,48 @@ export interface ProveedorDetalle extends Proveedor {
 }
 
 export interface CreateProveedorDto {
-  nombre:                          string;
-  contacto?:                       string | null;
-  telefono?:                       string | null;
-  correo?:                         string | null;
-  direccion?:                      string | null;
-  notas?:                          string | null;
-  rfc_proveedor?:                  string | null;
+  nombre: string;
+  contacto?: string | null;
+  telefono?: string | null;
+  correo?: string | null;
+  direccion?: string | null;
+  notas?: string | null;
+  rfc_proveedor?: string | null;
   regimen_fiscal_idregimen_fiscal?: number | null;
 }
 
 export interface CreateProductoDto {
-  tipo_insumo_id:              number;
-  nombre:                      string;
-  codigo?:                     string | null;
-  precio?:                     number | null;
-  notas?:                      string | null;
-  clave_producto?:             string | null;
-  minimo_compra?:              number | null;
-  unidad?:                     "kilos" | "pzas" | "litros" | null;
+  tipo_insumo_id: number;
+  nombre: string;
+  codigo?: string | null;
+  precio?: number | null;
+  notas?: string | null;
+  clave_producto?: string | null;
+  minimo_compra?: number | null;
+  unidad?: "kilos" | "pzas" | "litros" | null;
   producto_sat_idproducto_sat?: number | null;
 }
 
 // ── Domicilio ─────────────────────────────────────────────────────────────────
 export interface DomicilioProveedor {
   idproveedor_domicilio?: number;
-  codigo_postal?:         string | null;
-  colonia?:               string | null;
-  domicilio?:             string | null;
-  municipio?:             string | null;
-  estado?:                string | null;
+  codigo_postal?: string | null;
+  colonia?: string | null;
+  domicilio?: string | null;
+  municipio?: string | null;
+  estado?: string | null;
 }
 
 // ── Facturación ───────────────────────────────────────────────────────────────
 export interface FacturacionProveedor {
   idproveedor_facturacion?: number;
-  banco?:                   string | null;
-  cuenta?:                  string | null;
-  clabe?:                   string | null;
-  convenio?:                string | null;
-  nombre_cuenta?:           string | null;
-  condicion_compra?:        string | null;
-  activo?:                  boolean;
+  banco: string;
+  cuenta: string;
+  clabe: string;
+  convenio: string;
+  nombre_cuenta: string;
+  condicion_compra: string;
+  dias_credito?: number | null;   // ← agrega esto
 }
 
 // ── Catálogos ─────────────────────────────────────────────────────────────────
@@ -189,9 +191,9 @@ export const buscarInsumos = async (
 // ── Registrar insumo rápido ───────────────────────────────────────────────────
 
 export interface RegistrarInsumoRapidoDto {
-  tipo_insumo_id:         number;
-  nombre:                 string;
-  codigo?:                string | null;
+  tipo_insumo_id: number;
+  nombre: string;
+  codigo?: string | null;
   proveedor_idproveedor?: number | null;
 }
 

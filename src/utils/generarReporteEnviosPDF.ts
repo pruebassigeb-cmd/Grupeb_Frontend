@@ -8,6 +8,7 @@
 
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { subirPdfA3 } from "../services/pdfS3.service";
 import type {
   HistorialLocalItem,
   HistorialPaqueteriaItem,
@@ -57,7 +58,7 @@ const fmtFiltroFecha = (f?: string) => (f ? fmtFecha(f) : "—");
 
 // ── Generador principal ───────────────────────────────────────
 
-export async function generarReporteEnviosPDF(params: GenerarReporteParams): Promise<void> {
+export async function generarReporteEnviosPDF(params: GenerarReporteParams, guardarEnS3 = false): Promise<void> {
   const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "letter" });
 
   const AZUL   = [37, 99, 235]  as [number, number, number];
@@ -250,4 +251,8 @@ export async function generarReporteEnviosPDF(params: GenerarReporteParams): Pro
     : `reporte_paqueteria_${new Date().toISOString().slice(0, 10)}.pdf`;
 
   doc.save(nombreArchivo);
+  if (guardarEnS3) {
+    const blob = doc.output("blob");
+    await subirPdfA3(blob, nombreArchivo, "pdfs", "formas-envio");
+  }
 }

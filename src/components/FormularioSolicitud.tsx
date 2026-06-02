@@ -21,6 +21,8 @@ import FormularioCliente from "./FormularioCliente";
 import { buscarInsumos, getTiposInsumo  } from "../services/proveedoresService";
 import type { ProductoProveedor } from "../services/proveedoresService";
 import ModalRegistrarInsumo from "./ModalRegistrarInsumo";
+import ComboboxInsumo from "./ComboboxInsumo";
+
 
 export default function FormularioSolicitud({
   onSubmit,
@@ -87,16 +89,9 @@ export default function FormularioSolicitud({
   // ── Color / Pantones ─────────────────────────────────────────────────────
   const [modoColor, setModoColor] = useState<"pantones" | null>("pantones");
   const [inputsPantones, setInputsPantones] = useState<string[]>(Array(1).fill(""));
-  const [sugerenciasPantones, setSugerenciasPantones] = useState<ProductoProveedor[][]>([]);
-  const [dropdownPantonAbierto, setDropdownPantonAbierto] = useState<number | null>(null);
-  const [sugerenciasPigmento, setSugerenciasPigmento] = useState<ProductoProveedor[]>([]);
-  const [dropdownPigmentoAbierto, setDropdownPigmentoAbierto] = useState(false);
   const [idTipoPigmento, setIdTipoPigmento] = useState<number | null>(null);
   const [idTipoPanton,  setIdTipoPanton]  = useState<number | null>(null);
-    //const [idTipoPigmento, setIdTipoPigmento] = useState<number | null>(null);
-    //const [sugerenciasPantones, setSugerenciasPantones] = useState<ProductoProveedor[][]>([]);    const [dropdownPantonAbierto, setDropdownPantonAbierto] = useState<number | null>(null);
-    //const [sugerenciasPigmento,  setSugerenciasPigmento]  = useState<ProductoProveedor[]>([]);
-    //const [dropdownPigmentoAbierto, setDropdownPigmentoAbierto] = useState(false);
+
     const [modalInsumo, setModalInsumo] = useState<{
       abierto: boolean;
       tipoId:  number;
@@ -532,77 +527,21 @@ export default function FormularioSolicitud({
     }
   };
 
-  const handlePantoneChange = (index: number, value: string) => {
-    const sanitizado = sanitizarTexto(value);
-    const nuevos = [...inputsPantones];
-    nuevos[index] = sanitizado;
-    setInputsPantones(nuevos);
-    setProductoActual(prev => ({
-      ...prev,
-      pantones: nuevos.join(", ").replace(/^[\s,]+|[\s,]+$/g, "") || null,
-    }));
-  };
-
-  const handlePantoneChangeConSugerencias = async (index: number, value: string) => {
-    handlePantoneChange(index, value); // lógica original intacta
-    if (!idTipoPanton) return;
-    if (value.trim().length === 0) {
-      setSugerenciasPantones(prev => { const n = [...prev]; n[index] = []; return n; });
-      return;
-    }
-    try {
-      const resultados = await buscarInsumos(idTipoPanton, value.trim());
-      setSugerenciasPantones(prev => {
-        const n = [...prev];
-        n[index] = resultados;
-        return n;
-      });
-    } catch { /* silencioso */ }
-  };
-
-  const handlePigmentoChangeConSugerencias = async (value: string) => {
-    handlePigmentoChange(value); // lógica original intacta
-    if (!idTipoPigmento || esBopp) return;
-    if (value.trim().length === 0) { setSugerenciasPigmento([]); return; }
-    try {
-      const resultados = await buscarInsumos(idTipoPigmento, value.trim());
-      setSugerenciasPigmento(resultados);
-    } catch { /* silencioso */ }
-  };
-
-  const seleccionarSugerenciaPanton = (index: number, item: ProductoProveedor) => {
-    const texto = item.codigo ? `${item.nombre} (${item.codigo})` : item.nombre;
-    const nuevos = [...inputsPantones];
-    nuevos[index] = texto;
-    setInputsPantones(nuevos);
-    setProductoActual(prev => ({
-      ...prev,
-      pantones: nuevos.join(", ").replace(/^[\s,]+|[\s,]+$/g, "") || null,
-    }));
-    setSugerenciasPantones(prev => { const n = [...prev]; n[index] = []; return n; });
-    setDropdownPantonAbierto(null);
-  };
-
-  const seleccionarSugerenciaPigmento = (item: ProductoProveedor) => {
-    const texto = item.codigo ? `${item.nombre} (${item.codigo})` : item.nombre;
-    setProductoActual(prev => ({ ...prev, pigmentos: texto }));
-    setSugerenciasPigmento([]);
-    setDropdownPigmentoAbierto(false);
-  };
-
   const handlePigmentoChange = (value: string) => {
     setProductoActual(prev => ({ ...prev, pigmentos: sanitizarTexto(value) || null }));
   };
-
-
- 
-
- 
-
+  const handlePantoneChange = (index: number, value: string) => {
+  const sanitizado = sanitizarTexto(value);
+  const nuevos = [...inputsPantones];
+  nuevos[index] = sanitizado;
+  setInputsPantones(nuevos);
+  setProductoActual(prev => ({
+    ...prev,
+    pantones: nuevos.join(", ").replace(/^[\s,]+|[\s,]+$/g, "") || null,
+  }));
+};
  
 const abrirModalInsumo = (tipoId: number, nombre: string, indice: number | null) => {
-  setDropdownPantonAbierto(null);
-  setDropdownPigmentoAbierto(false);
   setModalInsumo({ abierto: true, tipoId, nombre, indice });
 };
  
@@ -1321,197 +1260,99 @@ const handleInsumoRegistrado = (item: ProductoProveedor) => {
 
               
   {/* Modal registrar insumo nuevo */}
-  {modalInsumo.abierto && (
-    <ModalRegistrarInsumo
-      tipoInsumoInicial={modalInsumo.tipoId}
-      nombreInicial={modalInsumo.nombre}
-      onRegistrado={handleInsumoRegistrado}
-      onCancelar={() => setModalInsumo({ abierto: false, tipoId: 0, nombre: "", indice: null })}
-    />
-  )}
+{modalInsumo.abierto && (
+  <ModalRegistrarInsumo
+    tipoInsumoInicial={modalInsumo.tipoId}
+    nombreInicial={modalInsumo.nombre}
+    onRegistrado={handleInsumoRegistrado}
+    onCancelar={() => setModalInsumo({ abierto: false, tipoId: 0, nombre: "", indice: null })}
+  />
+)}
  
-  {/* Color / Pantones */}
-  <div className="space-y-3">
-    <label className="block text-sm font-medium text-gray-700">
-      Color / Tintas <span className="ml-2 text-xs text-gray-400 font-normal">(opcional)</span>
-    </label>
+{/* Color / Pantones */}
+<div className="space-y-4">
+  <label className="block text-sm font-medium text-gray-700">
+    Color / Tintas{" "}
+    <span className="ml-2 text-xs text-gray-400 font-normal">(opcional)</span>
+  </label>
  
-    <div className="flex items-center gap-3 flex-wrap">
-      <button type="button" onClick={() => handleCambiarModoColor("pantones")}
-        className="flex items-center gap-2 px-4 py-2 rounded-lg border-2 font-medium text-sm transition-all border-gray-300 bg-white text-gray-600 hover:border-purple-300">
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-            d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
-        </svg>
-        Pantones
-      </button>
- 
-      {/* Pigmentos con dropdown + botón registrar */}
-      <div className="flex items-center gap-2 flex-1 min-w-0">
-        <div className="relative group flex-shrink-0">
-          <button type="button" disabled={esBopp}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg border-2 font-medium text-sm transition-all ${
-              esBopp
-                ? "border-gray-200 bg-gray-50 text-gray-300 cursor-not-allowed"
-                : productoActual.pigmentos
-                  ? "border-orange-500 bg-orange-50 text-orange-700"
-                  : "border-gray-300 bg-white text-gray-600 hover:border-orange-300"
-            }`}>
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
-            </svg>
-            Pigmentos
-          </button>
-          {esBopp && (
-            <div className="absolute bottom-full left-0 mb-1 hidden group-hover:block bg-gray-800 text-white text-xs rounded px-2 py-1 whitespace-nowrap z-30">
-              Celofán/BOPP no lleva pigmentos
-            </div>
-          )}
-        </div>
- 
-        {/* Input pigmento */}
-        <div className="relative flex-1 min-w-0">
-          <input
-            type="text"
-            value={productoActual.pigmentos || ""}
-            onChange={e => handlePigmentoChangeConSugerencias(e.target.value)}
-            onFocus={() => setDropdownPigmentoAbierto(true)}
-            onBlur={() => setTimeout(() => setDropdownPigmentoAbierto(false), 150)}
-            disabled={esBopp}
-            placeholder={esBopp ? "No aplica (BOPP/Celofán)" : "Escribe o elige un pigmento..."}
-            className={`w-full px-3 py-2 border-2 rounded-lg text-sm transition-all focus:outline-none ${
-              esBopp
-                ? "border-gray-200 bg-gray-50 text-gray-300 cursor-not-allowed placeholder-gray-300"
-                : productoActual.pigmentos
-                  ? "border-orange-400 bg-orange-50 text-orange-800 focus:ring-2 focus:ring-orange-300"
-                  : "border-gray-300 bg-white text-gray-900 focus:border-orange-400 focus:ring-2 focus:ring-orange-200 placeholder-gray-400"
-            }`}
-          />
- 
-          {/* Dropdown sugerencias pigmento */}
-          {dropdownPigmentoAbierto && !esBopp && (
-            <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-orange-200 rounded-lg shadow-lg z-30">
-              {sugerenciasPigmento.length > 0 ? (
-                <ul className="max-h-48 overflow-y-auto">
-                  {sugerenciasPigmento.map(item => (
-                    <li key={item.idproveedor_producto}
-                      onMouseDown={() => seleccionarSugerenciaPigmento(item)}
-                      className="px-3 py-2 hover:bg-orange-50 cursor-pointer border-b border-gray-50 last:border-0">
-                      <span className="font-medium text-sm text-gray-900">{item.nombre}</span>
-                      {item.codigo && (
-                        <code className="ml-2 px-1.5 py-0.5 bg-gray-100 rounded text-xs font-mono text-gray-600">
-                          {item.codigo}
-                        </code>
-                      )}
-                      <span className="ml-2 text-xs text-gray-400">{item.proveedor_nombre}</span>
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
- 
-              {/* Botón registrar nuevo — siempre visible si hay texto */}
-              {(productoActual.pigmentos || "").trim() && idTipoPigmento && (
-                <button
-                  type="button"
-                  onMouseDown={() => abrirModalInsumo(
-                    idTipoPigmento,
-                    (productoActual.pigmentos || "").trim(),
-                    null
-                  )}
-                  className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-purple-700 hover:bg-purple-50 border-t border-gray-100 font-medium transition-colors">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                  </svg>
-                  Registrar "{(productoActual.pigmentos || "").trim()}" como nuevo insumo
-                </button>
-              )}
-            </div>
-          )}
-        </div>
- 
-        {productoActual.pigmentos && !esBopp && (
-          <button type="button"
-            onClick={() => { setProductoActual(p => ({ ...p, pigmentos: null })); setSugerenciasPigmento([]); }}
-            className="flex-shrink-0 p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        )}
-      </div>
+  {/* ── Pigmento ── */}
+  <div className="space-y-1">
+    <div className="flex items-center gap-2">
+      <span className="text-sm font-medium text-gray-600">Pigmento</span>
+      {esBopp && (
+        <span className="text-xs text-gray-400 italic">No aplica (BOPP/Celofán)</span>
+      )}
     </div>
- 
-    {/* Pantones — inputs con dropdown + botón registrar por tinta */}
-    {modoColor === "pantones" && (
-      <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 space-y-3">
-        <p className="text-xs text-purple-600 font-medium">
-          Ingresa o elige el pantón de cada tinta ({productoActual.tintas} tinta{productoActual.tintas > 1 ? "s" : ""})
-        </p>
-        <div className="grid grid-cols-2 gap-3">
-          {inputsPantones.map((valor, i) => (
-            <div key={i} className="flex items-center gap-2">
-              <span className="flex-shrink-0 w-6 h-6 rounded-full bg-purple-200 text-purple-800 text-xs font-bold flex items-center justify-center">
-                {i + 1}
-              </span>
-              <div className="relative flex-1">
-                <input
-                  type="text"
-                  value={valor}
-                  onChange={e => handlePantoneChangeConSugerencias(i, e.target.value)}
-                  onFocus={() => setDropdownPantonAbierto(i)}
-                  onBlur={() => setTimeout(() => setDropdownPantonAbierto(null), 150)}
-                  placeholder={`Tinta ${i + 1}`}
-                  className="w-full px-3 py-2 border border-purple-300 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-purple-400 focus:outline-none"
-                />
- 
-                {/* Dropdown sugerencias pantón */}
-                {dropdownPantonAbierto === i && (
-                  <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-purple-200 rounded-lg shadow-lg z-30">
-                    {(sugerenciasPantones[i]?.length ?? 0) > 0 ? (
-                      <ul className="max-h-40 overflow-y-auto">
-                        {sugerenciasPantones[i].map(item => (
-                          <li key={item.idproveedor_producto}
-                            onMouseDown={() => seleccionarSugerenciaPanton(i, item)}
-                            className="px-3 py-2 hover:bg-purple-50 cursor-pointer border-b border-gray-50 last:border-0">
-                            <span className="font-medium text-sm text-gray-900">{item.nombre}</span>
-                            {item.codigo && (
-                              <code className="ml-2 px-1.5 py-0.5 bg-gray-100 rounded text-xs font-mono text-gray-600">
-                                {item.codigo}
-                              </code>
-                            )}
-                            <span className="ml-2 text-xs text-gray-400">{item.proveedor_nombre}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : null}
- 
-                    {/* Botón registrar nuevo pantón */}
-                    {valor.trim() && idTipoPanton && (
-                      <button
-                        type="button"
-                        onMouseDown={() => abrirModalInsumo(idTipoPanton, valor.trim(), i)}
-                        className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-purple-700 hover:bg-purple-50 border-t border-gray-100 font-medium transition-colors">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                        </svg>
-                        Registrar "{valor.trim()}" como nuevo insumo
-                      </button>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-        {productoActual.pantones && (
-          <p className="text-xs text-purple-500">
-            Guardado: <span className="font-medium">{productoActual.pantones}</span>
-          </p>
-        )}
-      </div>
-    )}
+    <ComboboxInsumo
+      tipoId={idTipoPigmento}
+      placeholder="Buscar pigmento..."
+      value={productoActual.pigmentos || ""}
+      onChange={(val) => setProductoActual((p) => ({ ...p, pigmentos: sanitizarTexto(val) || null }))}
+      onSeleccionar={(item) => {
+        const texto = item.codigo ? `${item.nombre} (${item.codigo})` : item.nombre;
+        setProductoActual((p) => ({ ...p, pigmentos: texto }));
+      }}
+      onRegistrarNuevo={(nombre) =>
+        abrirModalInsumo(idTipoPigmento!, nombre, null)
+      }
+      disabled={esBopp}
+    />
   </div>
+ 
+  {/* ── Pantones — uno por tinta ── */}
+  <div className="space-y-2">
+    <p className="text-sm font-medium text-gray-600">
+      Pantones{" "}
+      <span className="text-xs text-gray-400 font-normal">
+        ({productoActual.tintas} tinta{productoActual.tintas > 1 ? "s" : ""})
+      </span>
+    </p>
+ 
+    <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 space-y-3">
+      <div className="grid grid-cols-2 gap-3">
+        {inputsPantones.map((valor, i) => (
+          <div key={i} className="flex items-start gap-2">
+            <span className="flex-shrink-0 w-6 h-6 mt-2 rounded-full bg-purple-200 text-purple-800 text-xs font-bold flex items-center justify-center">
+              {i + 1}
+            </span>
+            <ComboboxInsumo
+              tipoId={idTipoPanton}
+              placeholder={`Tinta ${i + 1}...`}
+              value={valor}
+              onChange={(val) => handlePantoneChange(i, val)}
+              onSeleccionar={(item) => {
+                const texto = item.codigo
+                  ? `${item.nombre} (${item.codigo})`
+                  : item.nombre;
+                const nuevos = [...inputsPantones];
+                nuevos[i] = texto;
+                setInputsPantones(nuevos);
+                setProductoActual((prev) => ({
+                  ...prev,
+                  pantones:
+                    nuevos.join(", ").replace(/^[\s,]+|[\s,]+$/g, "") || null,
+                }));
+              }}
+              onRegistrarNuevo={(nombre) =>
+                abrirModalInsumo(idTipoPanton!, nombre, i)
+              }
+              className="flex-1"
+            />
+          </div>
+        ))}
+      </div>
+ 
+      {productoActual.pantones && (
+        <p className="text-xs text-purple-500">
+          Guardado:{" "}
+          <span className="font-medium">{productoActual.pantones}</span>
+        </p>
+      )}
+    </div>
+  </div>
+</div>
+ 
 
 
               {/* Suaje */}

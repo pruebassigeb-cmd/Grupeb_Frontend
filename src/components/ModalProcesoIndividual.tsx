@@ -22,6 +22,7 @@ import type {
   NuevoBultoBatchPayload,
 } from "../services/seguimientoService";
 import { generarPdfEtiquetas } from "../services/generarPdfEtiquetas";
+import { preguntarGuardarS3 } from "../services/pdfS3.service";
 import type { PedidoSeguimiento } from "../types/seguimiento.types";
 
 // ─────────────────────────────────────────────
@@ -848,7 +849,8 @@ function FilaEnvioParcial({
           setReimp(true);
           try {
             const etiquetaData = await getBultosEtiqueta(idproduccion, num);
-            await generarPdfEtiquetas(etiquetaData);
+            const guardarS3 = await preguntarGuardarS3("etiquetas");
+            await generarPdfEtiquetas(etiquetaData, guardarS3);
           } catch (e: any) {
             onError(e.response?.data?.error || "Error al reimprimir");
           } finally {
@@ -1070,9 +1072,8 @@ function SeccionBultos({
     try {
       const etiquetaData = await getBultosEtiqueta(pedido.idproduccion);
       console.log("descripcion en etiquetaData:", etiquetaData.descripcion); // ← agregar esto
-      await generarPdfEtiquetas(etiquetaData); 
-
-
+      const guardarS3 = await preguntarGuardarS3("etiquetas");
+      await generarPdfEtiquetas(etiquetaData, guardarS3); 
       // ── Marcar bultos como enviados en este parcial ──────────────
       if (etiquetaData.es_parcialidad && etiquetaData.numero_envio_parcial) {
         const idbultos = etiquetaData.bultos.map(b => b.idbulto);

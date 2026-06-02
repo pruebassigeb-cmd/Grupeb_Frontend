@@ -16,9 +16,7 @@ export default function ProveedoresPage() {
 
   const handleGuardado = (p: Proveedor) => {
     setListaKey(k => k + 1);
-    if (proveedorActual) {
       irALista();
-    }
   };
 
   return (

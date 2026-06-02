@@ -95,7 +95,7 @@ async function descargarPdfOrden(noPedido: string, noProduccion: string): Promis
     metros_extruir:          producto.metros_extruir       ?? null,
     url_render:              (producto as any).url_render  ?? null,
     url_master:              (producto as any).url_master  ?? null,
-  });
+  }, true);
 }
 
 function Paginador({

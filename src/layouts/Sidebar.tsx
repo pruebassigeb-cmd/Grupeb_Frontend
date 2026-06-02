@@ -101,7 +101,7 @@ export default function Dashboard({ children }: DashboardProps) {
     {
       name: "Anticipo / Liquidación",
       path: "/anticipolicacion",
-      permiso: "Editar Anticipo y Liquidacion",
+      permiso: "Editar Anticipo y Liquidación",
       subItems: [],
     },
     {
@@ -127,7 +127,7 @@ export default function Dashboard({ children }: DashboardProps) {
     {
       name: "Gestor proveedores",
       path: "/proveedores",
-      accesoTotal: true,
+      permiso: "Gestionar Proveedores", 
       subItems: [],
     },
   ];

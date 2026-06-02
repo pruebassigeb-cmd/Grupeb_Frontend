@@ -3,6 +3,7 @@ import QRCode from "qrcode";
 import { cargarLogoBase64 } from "./Pdfutils";
 import type { EstadoCuenta } from "./estadoCuentaService";
 import logoUrl from "../assets/grupeblanco.png";
+import { subirPdfA3 } from "./pdfS3.service";
 
 const BLACK:   [number, number, number] = [0,   0,   0  ];
 const WHITE:   [number, number, number] = [255, 255, 255];
@@ -92,7 +93,8 @@ function filaTotales(
 }
 
 export async function generarPdfEstadoCuentaSimple(
-  datos: EstadoCuenta
+  datos: EstadoCuenta,
+  guardarEnS3 = false
 ): Promise<void> {
   const logoBase64 = await cargarLogoBase64(logoUrl);
   const qrWaBase64 = await generarQRBase64("https://wa.me/523339540924");
@@ -539,5 +541,10 @@ export async function generarPdfEstadoCuentaSimple(
   doc.text("www.grupoeb.com.mx", PW / 2, pieY + 10.5, { align: "center" });
 
   doc.setTextColor(...BLACK);
-  doc.save(`EstadoCuenta_Pedido${datos.no_pedido}.pdf`);
+  const nombre = `EstadoCuenta_Pedido${datos.no_pedido}.pdf`;
+  doc.save(nombre);
+  if (guardarEnS3) {
+    const blob = doc.output("blob");
+    await subirPdfA3(blob, nombre, "pdfs", "estados-cuenta-simple");
+  }
 }

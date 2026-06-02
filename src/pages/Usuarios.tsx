@@ -9,10 +9,10 @@ import { showAlert } from '../components/CustomAlert';
 import { showConfirm } from '../components/CustomConfirm';
 
 export default function Usuarios() {
-  const [modalOpen, setModalOpen]       = useState(false);
-  const [busqueda, setBusqueda]         = useState("");
-  const [usuarios, setUsuarios]         = useState<Usuario[]>([]);
-  const [loading, setLoading]           = useState(true);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [busqueda, setBusqueda] = useState("");
+  const [usuarios, setUsuarios] = useState<Usuario[]>([]);
+  const [loading, setLoading] = useState(true);
   const [usuarioEditar, setUsuarioEditar] = useState<Usuario | null>(null);
 
   useEffect(() => {
@@ -143,6 +143,18 @@ export default function Usuarios() {
         )}
       </div>
 
+      {/* BOTÓN AGREGAR */}
+      <div className="flex items-center gap-3 mb-6">
+        <div className="mt-6">
+          <button
+            onClick={handleAgregarUsuario}
+            className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-6 rounded-lg shadow transition duration-200"
+          >
+            + Agregar Nuevo Usuario
+          </button>
+        </div>
+      </div>
+
       {/* TABLA */}
       <div className="overflow-x-auto bg-white rounded-lg shadow">
         <table className="min-w-full divide-y divide-gray-200">
@@ -221,11 +233,10 @@ export default function Usuarios() {
 
                   {/* ROL */}
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                      usuario.acceso_total
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${usuario.acceso_total
                         ? "bg-purple-100 text-purple-800"
                         : "bg-blue-100 text-blue-800"
-                    }`}>
+                      }`}>
                       {usuario.rol || "Usuario"}
                     </span>
                   </td>
@@ -246,9 +257,8 @@ export default function Usuarios() {
                           : "bg-red-100 text-red-800"
                         }`}
                     >
-                      <span className={`w-1.5 h-1.5 rounded-full mr-1.5 ${
-                        usuario.activo !== false ? "bg-green-500" : "bg-red-500"
-                      }`} />
+                      <span className={`w-1.5 h-1.5 rounded-full mr-1.5 ${usuario.activo !== false ? "bg-green-500" : "bg-red-500"
+                        }`} />
                       {usuario.activo !== false ? "Activo" : "Inactivo"}
                     </button>
                   </td>
@@ -281,16 +291,6 @@ export default function Usuarios() {
             )}
           </tbody>
         </table>
-      </div>
-
-      {/* BOTÓN AGREGAR */}
-      <div className="mt-6">
-        <button
-          onClick={handleAgregarUsuario}
-          className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-6 rounded-lg shadow transition duration-200"
-        >
-          + Agregar Nuevo Usuario
-        </button>
       </div>
 
       {/* MODAL */}

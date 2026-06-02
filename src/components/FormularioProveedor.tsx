@@ -38,12 +38,12 @@ const VACIO_DOMICILIO: DomicilioProveedor = {
 };
 
 const VACIO_FACT: FacturacionProveedor = {
-  banco: "", cuenta: "", clabe: "", convenio: "", nombre_cuenta: "", condicion_compra: "",
+  banco: "", cuenta: "", clabe: "", convenio: "", nombre_cuenta: "", condicion_compra: "", dias_credito: null,
 };
 
 const PESTAÑAS: { key: Pestaña; label: string }[] = [
-  { key: "general",     label: "General" },
-  { key: "domicilio",   label: "Domicilio" },
+  { key: "general", label: "General" },
+  { key: "domicilio", label: "Domicilio" },
   { key: "facturacion", label: "Facturación" },
 ];
 
@@ -72,7 +72,7 @@ export default function FormularioProveedor({ proveedor, onGuardado, onCancel }:
 
   // ── Cargar catálogos ──────────────────────────────────────────────────────
   useEffect(() => {
-    getRegimenesFiscales().then(setRegimenes).catch(() => {});
+    getRegimenesFiscales().then(setRegimenes).catch(() => { });
   }, []);
 
   useEffect(() => {
@@ -83,12 +83,12 @@ export default function FormularioProveedor({ proveedor, onGuardado, onCancel }:
   useEffect(() => {
     if (proveedorLocal) {
       setForm({
-        nombre:                          proveedorLocal.nombre             ?? "",
-        contacto:                        proveedorLocal.contacto           ?? "",
-        telefono:                        proveedorLocal.telefono           ?? "",
-        correo:                          proveedorLocal.correo             ?? "",
-        notas:                           proveedorLocal.notas              ?? "",
-        rfc_proveedor:                   proveedorLocal.rfc_proveedor      ?? "",
+        nombre: proveedorLocal.nombre ?? "",
+        contacto: proveedorLocal.contacto ?? "",
+        telefono: proveedorLocal.telefono ?? "",
+        correo: proveedorLocal.correo ?? "",
+        notas: proveedorLocal.notas ?? "",
+        rfc_proveedor: proveedorLocal.rfc_proveedor ?? "",
         regimen_fiscal_idregimen_fiscal: proveedorLocal.regimen_fiscal_idregimen_fiscal ?? null,
       });
       setPasosVisitados(new Set(["general", "domicilio", "facturacion"]));
@@ -268,7 +268,7 @@ export default function FormularioProveedor({ proveedor, onGuardado, onCancel }:
                   className={`flex items-center justify-center w-10 h-10 rounded-full font-semibold text-sm transition-colors
                     ${activo ? "bg-blue-600 text-white" :
                       visitado ? "bg-green-100 text-green-700 border-2 border-green-500 cursor-pointer" :
-                      "bg-gray-200 text-gray-400 cursor-not-allowed"}`}>
+                        "bg-gray-200 text-gray-400 cursor-not-allowed"}`}>
                   {num}
                 </button>
                 {idx < PESTAÑAS.length - 1 && (
@@ -293,7 +293,7 @@ export default function FormularioProveedor({ proveedor, onGuardado, onCancel }:
             className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-lg transition-all flex-1 justify-center
               ${pestaña === p.key ? "bg-blue-600 text-white shadow-sm" :
                 pasosVisitados.has(p.key) ? "text-gray-600 hover:bg-gray-200 cursor-pointer" :
-                "text-gray-400 cursor-not-allowed"}`}>
+                  "text-gray-400 cursor-not-allowed"}`}>
             {p.label}
           </button>
         ))}
@@ -481,11 +481,14 @@ export default function FormularioProveedor({ proveedor, onGuardado, onCancel }:
                         {f.banco ?? "—"}{f.nombre_cuenta ? ` — ${f.nombre_cuenta}` : ""}
                       </p>
                       <div className="mt-1.5 grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-gray-500">
-                        {f.cuenta   && <span>Cuenta: <span className="font-mono text-gray-700">{f.cuenta}</span></span>}
-                        {f.clabe    && <span>CLABE: <span className="font-mono text-gray-700">{f.clabe}</span></span>}
+                        {f.cuenta && <span>Cuenta: <span className="font-mono text-gray-700">{f.cuenta}</span></span>}
+                        {f.clabe && <span>CLABE: <span className="font-mono text-gray-700">{f.clabe}</span></span>}
                         {f.convenio && <span>Convenio: <span className="text-gray-700">{f.convenio}</span></span>}
                         {f.condicion_compra && (
-                          <span className="col-span-2">Condición: <span className="text-gray-700">{f.condicion_compra}</span></span>
+                          <span className="col-span-2">Condición: <span className="text-gray-700">{f.condicion_compra}
+                            {f.condicion_compra === "Crédito" && f.dias_credito
+                              ? ` — ${f.dias_credito} días`
+                              : ""}</span></span>
                         )}
                       </div>
                     </div>
@@ -588,14 +591,43 @@ export default function FormularioProveedor({ proveedor, onGuardado, onCancel }:
                   placeholder="Número de convenio CIE" className={inputClass} maxLength={50} />
               </div>
 
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">
-                  Condición de pago <span className="text-gray-400 font-normal">(opcional)</span>
-                </label>
-                <input type="text" value={formFact.condicion_compra ?? ""}
-                  onChange={e => setFormFact(p => ({ ...p, condicion_compra: e.target.value }))}
-                  placeholder="Ej: Crédito 30 días, Contado..."
-                  className={inputClass} maxLength={255} />
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Condición de pago <span className="text-gray-400 font-normal">(opcional)</span>
+                  </label>
+                  <select
+                    value={formFact.condicion_compra ?? ""}
+                    onChange={e => setFormFact(p => ({
+                      ...p,
+                      condicion_compra: e.target.value,
+                      dias_credito: e.target.value !== "Crédito" ? null : p.dias_credito,
+                    }))}
+                    className={inputClass}
+                  >
+                    <option value="">Sin especificar</option>
+                    <option value="Contado">Contado</option>
+                    <option value="Crédito">Crédito</option>
+                  </select>
+                </div>
+
+                {formFact.condicion_compra === "Crédito" && (
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      Días de crédito <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={formFact.dias_credito ?? ""}
+                      onChange={e => setFormFact(p => ({ ...p, dias_credito: Number(e.target.value) }))}
+                      className={inputClass}
+                    >
+                      <option value="">Selecciona plazo...</option>
+                      {[30, 45, 60, 90].map(d => (
+                        <option key={d} value={d}>{d} días</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
               </div>
 
               <div className="flex justify-end gap-2 pt-1">

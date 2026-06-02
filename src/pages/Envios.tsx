@@ -30,6 +30,7 @@ export default function Envios() {
   const [modalProcesar, setModalProcesar] = useState(false);
   const [modalNotaRemision, setModalNotaRemision] = useState(false);
   const [animarCarrito, setAnimarCarrito] = useState(false);
+  const [refreshEnviosKey, setRefreshEnviosKey] = useState(0);
 
   const totalBultosCarrito = carrito.reduce(
     (sum, p) => sum + p.bultos.length,
@@ -54,6 +55,11 @@ export default function Envios() {
       /* silencioso */
     }
   }, []);
+
+  const refrescarModuloEnvios = useCallback(async () => {
+    await recargarCarrito();
+    setRefreshEnviosKey((prev) => prev + 1);
+  }, [recargarCarrito]);
 
   useEffect(() => {
     recargarCarrito();
@@ -91,11 +97,10 @@ export default function Envios() {
         Gestiona los envíos, bitácora, unidades y paqueterías.
       </p>
 
-      {/* Botón flotante carrito */}
       <button
         onClick={() => setModalCarrito(true)}
         className={`
-          fixed bottom-6 right-6 z-50
+          fixed top-6 right-6 z-50
           flex items-center gap-2
           px-5 py-3
           bg-blue-600 text-white
@@ -140,7 +145,6 @@ export default function Envios() {
         )}
       </button>
 
-      {/* TABS */}
       <div className="flex border-b border-gray-200 mb-6 gap-1 flex-wrap">
         {TABS.map((t) => (
           <button
@@ -158,14 +162,18 @@ export default function Envios() {
       </div>
 
       {tabActual === "envios" && (
-        <TabEnvios carrito={carrito} onCarritoChange={recargarCarrito} />
+        <TabEnvios
+          carrito={carrito}
+          onCarritoChange={recargarCarrito}
+          refreshKey={refreshEnviosKey}
+        />
       )}
+
       {tabActual === "bitacora" && <TabBitacora />}
       {tabActual === "unidades" && <TabUnidades />}
       {tabActual === "paqueterias" && <TabPaqueterias />}
       {tabActual === "historial" && <TabHistorialReportes />}
 
-      {/* MODAL CARRITO */}
       {modalCarrito && (
         <Modal
           isOpen={modalCarrito}
@@ -175,7 +183,7 @@ export default function Envios() {
           <VistaCarrito
             carrito={carrito}
             paqueterias={paqueterias}
-            onCarritoChange={recargarCarrito}
+            onCarritoChange={refrescarModuloEnvios}
             onProcesar={() => {
               setModalCarrito(false);
               setModalProcesar(true);
@@ -189,7 +197,6 @@ export default function Envios() {
         </Modal>
       )}
 
-      {/* MODAL PROCESAR */}
       {modalProcesar && (
         <Modal
           isOpen={modalProcesar}
@@ -200,14 +207,13 @@ export default function Envios() {
             carrito={carrito}
             onSuccess={async () => {
               setModalProcesar(false);
-              await recargarCarrito();
+              await refrescarModuloEnvios();
             }}
             onCancel={() => setModalProcesar(false)}
           />
         </Modal>
       )}
 
-      {/* MODAL NOTA REMISIÓN MULTI */}
       {modalNotaRemision && (
         <Modal
           isOpen={modalNotaRemision}
@@ -218,7 +224,7 @@ export default function Envios() {
             carrito={carrito}
             onSuccess={async () => {
               setModalNotaRemision(false);
-              await recargarCarrito();
+              await refrescarModuloEnvios();
             }}
             onCancel={() => setModalNotaRemision(false)}
           />

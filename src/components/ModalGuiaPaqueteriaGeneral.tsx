@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import Modal from "./Modal";
 import { getGuiaPaqueteriaGeneral, getProductosSat } from "../services/enviosService";
 import { generarGuiaPaqueteriaGeneral } from "../utils/generarGuiaPaqueteriaGeneral";
+import { preguntarGuardarS3 } from "../services/pdfS3.service";
 import { inputClass, labelClass } from "./enviosConstants";
 import type { GuiaPaqueteriaGeneral, ProductoSat } from "../types/envios.types";
 import { showAlert } from './CustomAlert';
@@ -98,7 +99,8 @@ export default function ModalGuiaPaqueteriaGeneral({ idenvio, onClose }: Props) 
         }),
       };
 
-      generarGuiaPaqueteriaGeneral(datosConClaves);
+      const guardarS3 = await preguntarGuardarS3("guía de paquetería");
+      generarGuiaPaqueteriaGeneral(datosConClaves, guardarS3);
       onClose();
     } catch {
       showAlert("Error al generar la guía. Intenta de nuevo.");

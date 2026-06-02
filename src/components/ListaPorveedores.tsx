@@ -12,7 +12,7 @@ interface Props {
   onEditar: (proveedor: Proveedor) => void;
   onVerProductos: (proveedor: Proveedor) => void;
 }
-
+ 
 export default function ListaProveedores({ onNuevo, onEditar, onVerProductos }: Props) {
   const [proveedores, setProveedores] = useState<Proveedor[]>([]);
   const [loading, setLoading]         = useState(true);
@@ -103,6 +103,7 @@ export default function ListaProveedores({ onNuevo, onEditar, onVerProductos }: 
                 <th className="text-left px-4 py-3 font-semibold text-gray-600">Contacto</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600">Teléfono</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600">Correo</th>
+                <th className="text-left px-4 py-3 font-semibold text-gray-600">Condición</th>
                 <th className="text-center px-4 py-3 font-semibold text-gray-600">Insumos</th>
                 <th className="text-right px-4 py-3 font-semibold text-gray-600">Acciones</th>
               </tr>
@@ -117,6 +118,27 @@ export default function ListaProveedores({ onNuevo, onEditar, onVerProductos }: 
                   <td className="px-4 py-3 text-gray-600">{p.contacto || "—"}</td>
                   <td className="px-4 py-3 text-gray-600">{p.telefono || "—"}</td>
                   <td className="px-4 py-3 text-gray-600">{p.correo || "—"}</td>
+<td className="px-4 py-3">
+  {p.condicion_compra === "Crédito" ? (
+    <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-100 text-amber-700 rounded-full text-xs font-semibold whitespace-nowrap">
+      <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+          d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+      </svg>
+      Crédito {p.dias_credito ? `${p.dias_credito}d` : ""}
+    </span>
+  ) : p.condicion_compra === "Contado" ? (
+    <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-green-100 text-green-700 rounded-full text-xs font-semibold">
+      <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+          d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+      Contado
+    </span>
+  ) : (
+    <span className="text-gray-400 text-xs">—</span>
+  )}
+</td>                  
                   <td className="px-4 py-3 text-center">
                     <button onClick={() => onVerProductos(p)}
                       className="inline-flex items-center gap-1.5 px-3 py-1 bg-indigo-50 text-indigo-700 rounded-full text-xs font-semibold hover:bg-indigo-100 transition-colors">

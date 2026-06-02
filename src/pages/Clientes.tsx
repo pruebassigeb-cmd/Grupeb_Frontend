@@ -11,10 +11,10 @@ import { showConfirm } from '../components/CustomConfirm';
 
 
 export default function Clientes() {
-  const [modalOpen,     setModalOpen]     = useState(false);
-  const [busqueda,      setBusqueda]      = useState("");
-  const [clientes,      setClientes]      = useState<Cliente[]>([]);
-  const [loading,       setLoading]       = useState(true);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [busqueda, setBusqueda] = useState("");
+  const [clientes, setClientes] = useState<Cliente[]>([]);
+  const [loading, setLoading] = useState(true);
   const [clienteEditar, setClienteEditar] = useState<Cliente | null>(null);
 
   useEffect(() => {
@@ -34,31 +34,31 @@ export default function Clientes() {
     }
   };
 
-const normalizarTexto = (texto: string | null | undefined) => {
-  if (!texto) return "";
-  return texto
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[.,\-]/g, "")
-    .trim();
-};
+  const normalizarTexto = (texto: string | null | undefined) => {
+    if (!texto) return "";
+    return texto
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[.,\-]/g, "")
+      .trim();
+  };
 
-const clientesFiltrados = clientes.filter((cliente) => {
-  if (!busqueda) return true;
+  const clientesFiltrados = clientes.filter((cliente) => {
+    if (!busqueda) return true;
 
-  const terminoBusqueda = normalizarTexto(busqueda);
+    const terminoBusqueda = normalizarTexto(busqueda);
 
-  return (
-    cliente.idclientes.toString().includes(busqueda.trim()) ||
-    normalizarTexto(cliente.empresa).includes(terminoBusqueda) ||
-    normalizarTexto(cliente.correo).includes(terminoBusqueda) ||
-    normalizarTexto(cliente.atencion).includes(terminoBusqueda) ||
-    normalizarTexto(cliente.impresion).includes(terminoBusqueda) ||
-    normalizarTexto(cliente.telefono).includes(terminoBusqueda) ||
-    normalizarTexto(cliente.rfc).includes(terminoBusqueda)
-  );
-});
+    return (
+      cliente.idclientes.toString().includes(busqueda.trim()) ||
+      normalizarTexto(cliente.empresa).includes(terminoBusqueda) ||
+      normalizarTexto(cliente.correo).includes(terminoBusqueda) ||
+      normalizarTexto(cliente.atencion).includes(terminoBusqueda) ||
+      normalizarTexto(cliente.impresion).includes(terminoBusqueda) ||
+      normalizarTexto(cliente.telefono).includes(terminoBusqueda) ||
+      normalizarTexto(cliente.rfc).includes(terminoBusqueda)
+    );
+  });
   const handleEditar = async (id: number) => {
     try {
       const cliente = await getClienteById(id);
@@ -152,6 +152,18 @@ const clientesFiltrados = clientes.filter((cliente) => {
         )}
       </div>
 
+      {/* BOTÓN AGREGAR */}
+      <div className="flex items-center gap-3 mb-6">
+        <div className="mt-6">
+          <button
+            onClick={handleAgregarCliente}
+            className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-6 rounded-lg shadow transition duration-200"
+          >
+            + Agregar Nuevo Cliente
+          </button>
+        </div>
+      </div>
+
       {/* TABLA */}
       <div className="overflow-x-auto bg-white rounded-lg shadow">
         <table className="min-w-full divide-y divide-gray-200">
@@ -232,16 +244,6 @@ const clientesFiltrados = clientes.filter((cliente) => {
             )}
           </tbody>
         </table>
-      </div>
-
-      {/* BOTÓN AGREGAR */}
-      <div className="mt-6">
-        <button
-          onClick={handleAgregarCliente}
-          className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-6 rounded-lg shadow transition duration-200"
-        >
-          + Agregar Nuevo Cliente
-        </button>
       </div>
 
       {/* MODAL */}

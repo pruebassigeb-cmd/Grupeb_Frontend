@@ -3,6 +3,7 @@ import { cargarLogoBase64 } from "./Pdfutils";
 import type { EstadoCuenta } from "./estadoCuentaService";
 import type { VentaPago } from "../types/ventas.types";
 import logoUrl from "../assets/logogrupeb.png";
+import { subirPdfA3 } from "./pdfS3.service";
 
 // ── Paleta monocromática ─────────────────────────────────────
 const BLACK:      [number, number, number] = [0,   0,   0  ];
@@ -84,7 +85,8 @@ function seccionHeader(
 
 export async function generarPdfEstadoCuenta(
   datos: EstadoCuenta,
-  pagos: VentaPago[]
+  pagos: VentaPago[],
+  guardarEnS3 = false
 ): Promise<void> {
   const logoBase64 = await cargarLogoBase64(logoUrl);
   const sinIva     = (datos as any).sin_iva === true;
@@ -530,5 +532,10 @@ export async function generarPdfEstadoCuenta(
   doc.text("ventas@grupoeb.com.mx", PW / 2, y, { align: "center" });
 
   doc.setTextColor(...BLACK);
-  doc.save(`EstadoCuenta_Pedido${datos.no_pedido}.pdf`);
+  const nombre = `EstadoCuenta_Pedido${datos.no_pedido}.pdf`;
+  doc.save(nombre);
+  if (guardarEnS3) {
+    const blob = doc.output("blob");
+    await subirPdfA3(blob, nombre, "pdfs", "estados-cuenta-detallado");
+  }
 }

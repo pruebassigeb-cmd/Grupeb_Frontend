@@ -15,6 +15,7 @@ import { generarPdfEstadoCuenta } from "../services/generarPdfEstadoCuenta";
 import { generarPdfEstadoCuentaSimple } from "../services/generarPdfEstadoCuentaSimple";
 import { generarPdfHistorialPagos } from "../services/generarPdfHistorialPagos";
 import { getEstadoCuenta } from "../services/estadoCuentaService";
+import { preguntarGuardarS3 } from "../services/pdfS3.service";
 import type { EstadoCuenta } from "../services/estadoCuentaService";
 import type { Venta, VentaPago, MetodoPago } from "../types/ventas.types";
 import { showAlert } from '../components/CustomAlert';
@@ -118,7 +119,7 @@ async function descargarPdfOrden(noPedido: string, noProduccion: string): Promis
     metros_extruir:          producto.metros_extruir       ?? null,
     url_render:              (producto as any).url_render  ?? null,
     url_master:              (producto as any).url_master  ?? null,
-  });
+  }, true);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -230,7 +231,10 @@ function SeccionEstadoCuenta({
   const handleDescargarSimple = async () => {
     if (!datos) return;
     setGenerandoSimple(true);
-    try { await generarPdfEstadoCuentaSimple(datos); }
+    try { 
+      const guardarS3 = await preguntarGuardarS3("estado de cuenta");
+      await generarPdfEstadoCuentaSimple(datos, guardarS3); 
+    }
     catch (e) { console.error("Error al generar PDF estado de cuenta simple:", e); }
     finally { setGenerandoSimple(false); }
   };
@@ -238,7 +242,10 @@ function SeccionEstadoCuenta({
   const handleDescargarDetalle = async () => {
     if (!datos) return;
     setGenerandoDetalle(true);
-    try { await generarPdfEstadoCuenta(datos, pagos); }
+    try { 
+      const guardarS3 = await preguntarGuardarS3("estado de cuenta");
+      await generarPdfEstadoCuenta(datos, pagos, guardarS3); 
+    }
     catch (e) { console.error("Error al generar PDF estado de cuenta detallado:", e); }
     finally { setGenerandoDetalle(false); }
   };
@@ -643,7 +650,10 @@ export function EditarAntLiqReal({
 
   const handleDescargarHistorial = async () => {
     setDescargandoHist(true);
-    try { await generarPdfHistorialPagos(venta); }
+    try { 
+      const guardarS3 = await preguntarGuardarS3("historial de pagos");
+      await generarPdfHistorialPagos(venta, guardarS3); 
+    }
     catch (e) { console.error("Error al generar PDF historial:", e); }
     finally { setDescargandoHist(false); }
   };

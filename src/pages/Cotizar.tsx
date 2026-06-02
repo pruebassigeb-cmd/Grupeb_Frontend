@@ -10,6 +10,7 @@ import {
   eliminarCotizacion,
 } from "../services/cotizacionesService";
 import { generarPdfCotizacion } from "../services/generarPdfCotizacion";
+import { preguntarGuardarS3 } from "../services/pdfS3.service";
 import type { CatalogosPlastico } from "../types/productos-plastico.types";
 import type { Cotizacion } from "../types/cotizaciones.types";
 import { showAlert } from '../components/CustomAlert';
@@ -20,20 +21,20 @@ import { showConfirm } from '../components/CustomConfirm';
 const ITEMS_POR_PAGINA = 7;
 
 export default function Cotizaciones() {
-  const [cotizaciones,  setCotizaciones]  = useState<Cotizacion[]>([]);
-  const [loadingCots,   setLoadingCots]   = useState(false);
-  const [busqueda,      setBusqueda]      = useState("");
-  const [modalOpen,     setModalOpen]     = useState(false);
-  const [guardando,     setGuardando]     = useState(false);
-  const [errorGuardar,  setErrorGuardar]  = useState<string | null>(null);
-  const [modalEditarOpen,    setModalEditarOpen]    = useState(false);
+  const [cotizaciones, setCotizaciones] = useState<Cotizacion[]>([]);
+  const [loadingCots, setLoadingCots] = useState(false);
+  const [busqueda, setBusqueda] = useState("");
+  const [modalOpen, setModalOpen] = useState(false);
+  const [guardando, setGuardando] = useState(false);
+  const [errorGuardar, setErrorGuardar] = useState<string | null>(null);
+  const [modalEditarOpen, setModalEditarOpen] = useState(false);
   const [cotizacionEditando, setCotizacionEditando] = useState<Cotizacion | null>(null);
-  const [catalogos,          setCatalogos]          = useState<CatalogosPlastico>({
+  const [catalogos, setCatalogos] = useState<CatalogosPlastico>({
     tiposProducto: [], materiales: [], calibres: [],
   });
   const [cargandoCatalogos, setCargandoCatalogos] = useState(false);
-  const [errorCatalogos,    setErrorCatalogos]    = useState("");
-  const [expandidas,   setExpandidas]   = useState<Set<string>>(new Set());
+  const [errorCatalogos, setErrorCatalogos] = useState("");
+  const [expandidas, setExpandidas] = useState<Set<string>>(new Set());
   const [paginaActual, setPaginaActual] = useState(1);
 
   useEffect(() => { cargarCatalogos(); cargarCotizaciones(); }, []);
@@ -71,22 +72,22 @@ export default function Cotizaciones() {
     if (!busqueda) return true;
     const t = normalizar(busqueda);
     return (
-      normalizar(c.cliente  ?? "").includes(t) ||
-      normalizar(c.empresa  ?? "").includes(t) ||
-      normalizar(c.correo   ?? "").includes(t) ||
+      normalizar(c.cliente ?? "").includes(t) ||
+      normalizar(c.empresa ?? "").includes(t) ||
+      normalizar(c.correo ?? "").includes(t) ||
       normalizar(c.telefono ?? "").includes(t) ||
-      normalizar(c.estado).includes(t)         ||
+      normalizar(c.estado).includes(t) ||
       String(c.cliente_id ?? "").includes(busqueda.trim()) ||
       normalizar(c.impresion ?? "").includes(t) ||
       (c.no_cotizacion ?? "").toLowerCase().includes(t)
     );
   });
 
-  const totalPaginas       = Math.max(1, Math.ceil(cotizacionesFiltradas.length / ITEMS_POR_PAGINA));
-  const paginaSegura       = Math.min(paginaActual, totalPaginas);
-  const inicio             = (paginaSegura - 1) * ITEMS_POR_PAGINA;
+  const totalPaginas = Math.max(1, Math.ceil(cotizacionesFiltradas.length / ITEMS_POR_PAGINA));
+  const paginaSegura = Math.min(paginaActual, totalPaginas);
+  const inicio = (paginaSegura - 1) * ITEMS_POR_PAGINA;
   const cotizacionesPagina = cotizacionesFiltradas.slice(inicio, inicio + ITEMS_POR_PAGINA);
-  const irAPagina          = (p: number) => setPaginaActual(Math.max(1, Math.min(p, totalPaginas)));
+  const irAPagina = (p: number) => setPaginaActual(Math.max(1, Math.min(p, totalPaginas)));
 
   const resolverCalibre = (p: any): string => {
     const mat = (p.material || "").toUpperCase();
@@ -103,31 +104,31 @@ export default function Cotizaciones() {
 
   const buildProductosPdf = (productos: any[]) =>
     productos.map((p: any) => ({
-      nombre:             p.nombre,
-      material:           p.material            || "",
-      calibre:            resolverCalibre(p),
-      tintas:             p.tintas,
-      caras:              p.caras,
-      medidasFormateadas: p.medidasFormateadas   || "",
-      medidas:            p.medidas             || {},
-      bk:                 p.bk                  || null,
-      foil:               p.foil                || null,
-      laminado:           p.laminado            || null,
-      uvBr:               (p.uv_br ?? p.uvBr)    || null,
-      pigmentos:          p.pigmentos            || null,
-      pantones:           p.pantones             || null,
-      asa_suaje:          p.asa_suaje            || null,
-      observacion:        p.observacion          || null,
-      descripcion:        p.descripcion          || null,
-      perforacion:        p.perforacion          ??false,
-      por_kilo:           p.por_kilo             || null,
+      nombre: p.nombre,
+      material: p.material || "",
+      calibre: resolverCalibre(p),
+      tintas: p.tintas,
+      caras: p.caras,
+      medidasFormateadas: p.medidasFormateadas || "",
+      medidas: p.medidas || {},
+      bk: p.bk || null,
+      foil: p.foil || null,
+      laminado: p.laminado || null,
+      uvBr: (p.uv_br ?? p.uvBr) || null,
+      pigmentos: p.pigmentos || null,
+      pantones: p.pantones || null,
+      asa_suaje: p.asa_suaje || null,
+      observacion: p.observacion || null,
+      descripcion: p.descripcion || null,
+      perforacion: p.perforacion ?? false,
+      por_kilo: p.por_kilo || null,
       herramental_descripcion: p.herramental_descripcion ?? null,
-      herramental_precio:      p.herramental_precio != null ? Number(p.herramental_precio) : null,
-      herramental_aprobado:    p.herramental_aprobado    ?? null,
+      herramental_precio: p.herramental_precio != null ? Number(p.herramental_precio) : null,
+      herramental_aprobado: p.herramental_aprobado ?? null,
       detalles: (p.detalles || []).map((d: any) => ({
-        cantidad:      d.cantidad,
-        precio_total:  d.precio_total,
-        kilogramos:    d.kilogramos   ?? null,
+        cantidad: d.cantidad,
+        precio_total: d.precio_total,
+        kilogramos: d.kilogramos ?? null,
         modo_cantidad: d.modo_cantidad || "unidad",
       })),
     }));
@@ -143,27 +144,27 @@ export default function Cotizaciones() {
       const productosPdf = datos.productos.map((prod: any) => {
         const modo = prod.modoCantidad || "unidad";
         return {
-          nombre:             prod.nombre || `Producto #${prod.productoId}`,
-          material:           prod.material           || "",
-          calibre:            resolverCalibre(prod),
-          tintas:             prod.tintas             ?? "—",
-          caras:              prod.caras              ?? "—",
+          nombre: prod.nombre || `Producto #${prod.productoId}`,
+          material: prod.material || "",
+          calibre: resolverCalibre(prod),
+          tintas: prod.tintas ?? "—",
+          caras: prod.caras ?? "—",
           medidasFormateadas: prod.medidasFormateadas || "",
-          medidas:            prod.medidas            || {},
-          bk:                 prod.bk        || null,
-          foil:               prod.foil      || null,
-          laminado:           prod.laminado  || null,
-          uvBr:               prod.uvBr      || null,
-          pigmentos:          prod.pigmentos || null,
-          pantones:           prod.pantones  || null,
-          asa_suaje:          prod.suajeTipo || null,
-          observacion:        prod.observacion || null,
-          descripcion:        prod.descripcion || null,
-          perforacion:        prod.perforacion ?? false,
-          por_kilo:           prod.porKilo    || null,
+          medidas: prod.medidas || {},
+          bk: prod.bk || null,
+          foil: prod.foil || null,
+          laminado: prod.laminado || null,
+          uvBr: prod.uvBr || null,
+          pigmentos: prod.pigmentos || null,
+          pantones: prod.pantones || null,
+          asa_suaje: prod.suajeTipo || null,
+          observacion: prod.observacion || null,
+          descripcion: prod.descripcion || null,
+          perforacion: prod.perforacion ?? false,
+          por_kilo: prod.porKilo || null,
           herramental_descripcion: prod.herramental_descripcion ?? null,
-          herramental_precio:      prod.herramental_precio != null ? Number(prod.herramental_precio) : null,
-          herramental_aprobado:    prod.herramental_aprobado    ?? null,
+          herramental_precio: prod.herramental_precio != null ? Number(prod.herramental_precio) : null,
+          herramental_aprobado: prod.herramental_aprobado ?? null,
           detalles: prod.cantidades
             .map((cant: number, i: number) => {
               if (cant <= 0 || prod.precios[i] <= 0) return null;
@@ -177,9 +178,9 @@ export default function Cotizaciones() {
               }
 
               return {
-                cantidad:      cant,
-                precio_total:  precioTotal,
-                kilogramos:    prod.kilogramos?.[i] > 0 ? prod.kilogramos[i] : null,
+                cantidad: cant,
+                precio_total: precioTotal,
+                kilogramos: prod.kilogramos?.[i] > 0 ? prod.kilogramos[i] : null,
                 modo_cantidad: modo,
               };
             })
@@ -189,29 +190,29 @@ export default function Cotizaciones() {
 
       try {
         await generarPdfCotizacion({
-          no_cotizacion:  respuesta.no_cotizacion ?? respuesta.no_pedido ?? "",
-          fecha:          new Date().toISOString(),
-          cliente:        datos.cliente   || "",
-          empresa:        datos.empresa   || "",
-          telefono:       datos.telefono  || "",
-          correo:         datos.correo    || "",
-          estado:         "Pendiente",
-          impresion:      datos.impresion ?? null,
-          celular:        datos.celular        ?? null,
-          razon_social:   datos.razon_social   ?? null,
-          rfc:            datos.rfc            ?? null,
-          domicilio:      datos.domicilio      ?? null,
-          numero:         datos.numero         ?? null,
-          colonia:        datos.colonia        ?? null,
-          codigo_postal:  datos.codigo_postal  ?? null,
-          poblacion:      datos.poblacion      ?? null,
+          no_cotizacion: respuesta.no_cotizacion ?? respuesta.no_pedido ?? "",
+          fecha: new Date().toISOString(),
+          cliente: datos.cliente || "",
+          empresa: datos.empresa || "",
+          telefono: datos.telefono || "",
+          correo: datos.correo || "",
+          estado: "Pendiente",
+          impresion: datos.impresion ?? null,
+          celular: datos.celular ?? null,
+          razon_social: datos.razon_social ?? null,
+          rfc: datos.rfc ?? null,
+          domicilio: datos.domicilio ?? null,
+          numero: datos.numero ?? null,
+          colonia: datos.colonia ?? null,
+          codigo_postal: datos.codigo_postal ?? null,
+          poblacion: datos.poblacion ?? null,
           estado_cliente: datos.estado_cliente ?? null,
-          cliente_id:     datos.cliente_id     ?? null,
-          identificar:      datos.identificar    ?? null,
+          cliente_id: datos.cliente_id ?? null,
+          identificar: datos.identificar ?? null,
           total: productosPdf.reduce((sum: number, prod: any) =>
             sum + prod.detalles.reduce((s: number, d: any) => s + d.precio_total, 0), 0),
           productos: productosPdf,
-        });
+        }, true);
       } catch (pdfErr) { console.warn("⚠️ PDF:", pdfErr); }
 
     } catch (e: any) {
@@ -228,32 +229,33 @@ export default function Cotizaciones() {
         detalles: esPedido ? p.detalles.filter(d => d.aprobado === true) : p.detalles,
       }))
     );
+    const guardarS3 = await preguntarGuardarS3("cotización");
     await generarPdfCotizacion({
-      no_cotizacion:  cot.no_cotizacion,
-      fecha:          cot.fecha,
-      cliente:        cot.cliente,
-      empresa:        cot.empresa,
-      telefono:       cot.telefono,
-      correo:         cot.correo,
-      estado:         cot.estado,
-      impresion:      cot.impresion      ?? null,
-      celular:        cot.celular        ?? null,
-      razon_social:   cot.razon_social   ?? null,
-      rfc:            cot.rfc            ?? null,
-      domicilio:      cot.domicilio      ?? null,
-      numero:         cot.numero         ?? null,
-      colonia:        cot.colonia        ?? null,
-      codigo_postal:  cot.codigo_postal  ?? null,
-      poblacion:      cot.poblacion      ?? null,
+      no_cotizacion: cot.no_cotizacion,
+      fecha: cot.fecha,
+      cliente: cot.cliente,
+      empresa: cot.empresa,
+      telefono: cot.telefono,
+      correo: cot.correo,
+      estado: cot.estado,
+      impresion: cot.impresion ?? null,
+      celular: cot.celular ?? null,
+      razon_social: cot.razon_social ?? null,
+      rfc: cot.rfc ?? null,
+      domicilio: cot.domicilio ?? null,
+      numero: cot.numero ?? null,
+      colonia: cot.colonia ?? null,
+      codigo_postal: cot.codigo_postal ?? null,
+      poblacion: cot.poblacion ?? null,
       estado_cliente: cot.estado_cliente ?? null,
-      cliente_id:     cot.cliente_id     ?? null,
-      identificar:      cot.identificar    ?? null,
+      cliente_id: cot.cliente_id ?? null,
+      identificar: cot.identificar ?? null,
       total: esPedido
         ? cot.productos.reduce((sum, p) =>
-            sum + p.detalles.filter(d => d.aprobado === true).reduce((s, d) => s + d.precio_total, 0), 0)
+          sum + p.detalles.filter(d => d.aprobado === true).reduce((s, d) => s + d.precio_total, 0), 0)
         : cot.total,
       productos: productosParaPdf,
-    });
+    }, guardarS3);
   };
 
   const handleEliminar = async (cot: Cotizacion) => {
@@ -265,7 +267,7 @@ export default function Cotizaciones() {
     } catch (e: any) { showAlert(e.response?.data?.error || "Error al eliminar"); }
   };
 
-  const handleEditar       = (cot: Cotizacion) => { setCotizacionEditando(cot); setModalEditarOpen(true); };
+  const handleEditar = (cot: Cotizacion) => { setCotizacionEditando(cot); setModalEditarOpen(true); };
   const handleCerrarEditar = () => { setModalEditarOpen(false); setCotizacionEditando(null); };
 
   const handleGuardarEdicion = async (cot: Cotizacion) => {
@@ -280,7 +282,7 @@ export default function Cotizaciones() {
   const estadoBadge = (estado: string) => {
     const m: Record<string, string> = {
       Pendiente: "bg-yellow-100 text-yellow-800",
-      Aprobada:  "bg-green-100 text-green-800",
+      Aprobada: "bg-green-100 text-green-800",
       Rechazada: "bg-red-100 text-red-800",
     };
     return (
@@ -372,6 +374,13 @@ export default function Cotizaciones() {
         {busqueda && <p className="mt-2 text-sm text-gray-500">{cotizacionesFiltradas.length} resultado(s)</p>}
       </div>
 
+      <div className="flex items-center gap-3 mb-6">
+        <button onClick={() => { setErrorGuardar(null); setModalOpen(true); }}
+          className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-6 rounded-lg shadow transition">
+          + Nueva Cotización
+        </button>
+      </div>
+
       <div className="overflow-x-auto bg-white rounded-lg shadow mb-6">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
@@ -388,7 +397,7 @@ export default function Cotizaciones() {
                 <p className="mt-3 text-gray-500">Cargando cotizaciones...</p>
               </td></tr>
             ) : cotizacionesPagina.length > 0 ? cotizacionesPagina.map(cot => {
-              const expandida     = expandidas.has(cot.no_cotizacion);
+              const expandida = expandidas.has(cot.no_cotizacion);
               const puedeEliminar = cot.estado !== "Aprobada";
               return (
                 <>
@@ -462,7 +471,7 @@ export default function Cotizaciones() {
                                     )}
                                   </div>
                                   {p.medidasFormateadas && <p className="text-xs text-gray-400 mt-0.5">Medidas: {p.medidasFormateadas}</p>}
-                                  {p.pantones  && <p className="text-xs text-purple-600 mt-0.5">🎨 {Array.isArray(p.pantones) ? p.pantones.join(", ") : p.pantones}</p>}
+                                  {p.pantones && <p className="text-xs text-purple-600 mt-0.5">🎨 {Array.isArray(p.pantones) ? p.pantones.join(", ") : p.pantones}</p>}
                                   {p.pigmentos && <p className="text-xs text-orange-600 mt-0.5">🧪 {p.pigmentos}</p>}
                                   {p.herramental_precio != null && p.herramental_precio > 0 && (
                                     <p className="text-xs text-amber-700 mt-0.5">
@@ -497,10 +506,7 @@ export default function Cotizaciones() {
         {!loadingCots && cotizacionesFiltradas.length > 0 && <Paginador />}
       </div>
 
-      <button onClick={() => { setErrorGuardar(null); setModalOpen(true); }}
-        className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-6 rounded-lg shadow transition">
-        + Nueva Cotización
-      </button>
+
 
       <Modal isOpen={modalOpen} onClose={() => setModalOpen(false)} title="Nueva Cotización">
         {cargandoCatalogos ? (

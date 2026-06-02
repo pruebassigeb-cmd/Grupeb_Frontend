@@ -6,13 +6,15 @@ import { getPedidos, actualizarPedido } from "../services/pedidosService";
 import type { Pedido } from "../types/cotizaciones.types";
 import { usePreciosBatch } from "../hooks/usePrecioCalculado";
 import api from "../services/api";
+import ModalCambiarProducto from "./ModalCambiarProducto";
+import type { ProductoReemplazo } from "./ModalCambiarProducto";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 interface DetalleEdit {
   iddetalle:       number | null;
-  cantidad:        string;   // en modo kilo: muestra kg; en modo unidad: muestra bolsas
+  cantidad:        string;
   precio_total:    string;
-  precio_unitario: string;   // precio por bolsa — siempre en bolsas, independiente del modo
+  precio_unitario: string;
   kilogramos:      string;
   modo_cantidad:   "unidad" | "kilo";
 }
@@ -37,22 +39,40 @@ interface ProductoEdit {
   herramental_aprobado:    boolean | null;
   detalles:                DetalleEdit[];
   _eliminado:              boolean;
+  // Cuando el usuario cambia el producto desde el modal, se actualiza
+  // el configuracion_plastico en lugar de eliminar+crear.
+  _configuracionCambiada?: boolean;
+  nuevo_configuracion_id?:  number;
   idsuaje:                 number | null;
   suaje_tipo:              string | null;
   id_color:                number | null;
   color_asa_nombre:        string | null;
   id_medidatro:            number | null;
   medida_troquel:          string | null;
+  // IDs de catálogo — necesarios para pre-poblar el modal
+  tipo_producto_id:        number;
+  tipo_producto_nombre:    string;   // nombre exacto del catálogo, ej: "Bolsa asa flexible"
+  material_id:             number;
+  calibre_id:              number;
+  medidas: {
+    altura:         string;
+    ancho:          string;
+    fuelleFondo:    string;
+    fuelleLateral1: string;
+    fuelleLateral2: string;
+    refuerzo:       string;
+  };
 }
 
-// ─── Utils ────────────────────────────────────────────────────────────────────
-const esDecimal = (v: string) => /^\d*\.?\d{0,6}$/.test(v);
-const esEntero  = (v: string) => /^\d*$/.test(v);
-const fmt       = (n: number, d = 2) =>
-  n.toLocaleString("es-MX", { minimumFractionDigits: d, maximumFractionDigits: d });
-const parseSafe = (v: string) => { const n = parseFloat(v); return isNaN(n) ? 0 : n; };
+type ProductoRow = ProductoEdit;
 
-// ─── Helpers de tipo de producto ─────────────────────────────────────────────
+// ─── Utils ────────────────────────────────────────────────────────────────────
+const esDecimal  = (v: string) => /^\d*\.?\d{0,6}$/.test(v);
+const esEntero   = (v: string) => /^\d*$/.test(v);
+const fmt        = (n: number, d = 2) =>
+  n.toLocaleString("es-MX", { minimumFractionDigits: d, maximumFractionDigits: d });
+const parseSafe  = (v: string) => { const n = parseFloat(v); return isNaN(n) ? 0 : n; };
+
 const esBopp = (material: string, nombre: string = "") => {
   const m = material.toUpperCase();
   const n = nombre.toUpperCase();
@@ -62,7 +82,6 @@ const esBopp = (material: string, nombre: string = "") => {
   );
 };
 
-// Solo bolsa plana, bolsa de envío y bolsa celofán pueden tener perforación.
 const permitePerforacion = (nombre: string) => {
   const n = nombre.toLowerCase();
   return (
@@ -76,12 +95,14 @@ const permitePerforacion = (nombre: string) => {
 
 // ─── Subcomponente por producto ───────────────────────────────────────────────
 function ProductoEditable({
-  prod, pi, setProductoField, setDetalleField,
+  prod, pi, displayIndex, setProductoField, setDetalleField,
   agregarDetalle, eliminarDetalle,
   suajes, coloresAsa, medidasTroquel, catalogoTintas,
+  onCambiarProducto,
 }: {
-  prod: ProductoEdit;
+  prod: ProductoRow;
   pi: number;
+  displayIndex: number;
   setProductoField: <K extends keyof ProductoEdit>(pi: number, k: K, v: ProductoEdit[K]) => void;
   setDetalleField: (pi: number, di: number, k: keyof DetalleEdit, v: string) => void;
   agregarDetalle: (pi: number) => void;
@@ -90,18 +111,17 @@ function ProductoEditable({
   coloresAsa: any[];
   medidasTroquel: any[];
   catalogoTintas: any[];
+  onCambiarProducto: (pi: number) => void;
 }) {
   const esAsaFlexible   = prod.nombre.toLowerCase().includes("asa flexible");
   const esTroquel       = prod.nombre.toLowerCase().includes("troquelada");
   const esBoppProd      = esBopp(prod.material, prod.nombre);
   const puedePerforar   = permitePerforacion(prod.nombre);
 
-  // Find tintasId by matching cantidad. Falls back to stored tintasId.
   const tintasIdResuelto = catalogoTintas.length > 0
     ? (catalogoTintas.find((t: any) => t.cantidad === prod.tintas)?.id ?? prod.tintasId)
     : prod.tintasId;
 
-  // ── Precios editados manualmente en esta sesión ───────────────────────────
   const [preciosEditadosManual, setPreciosEditadosManual] = useState<boolean[]>(
     prod.detalles.map(() => false)
   );
@@ -118,14 +138,9 @@ function ProductoEditable({
     })
   );
 
-  // ── Cuáles detalles pueden recibir precio automático ─────────────────────
-  // Un detalle con iddetalle = viene de DB → protegido salvo que el usuario
-  // cambie tintas. tintasCambiadas se persiste en ref para no causar re-renders.
   const tintasCambiadasRef = useRef(false);
   const [tintasCambiadasState, setTintasCambiadasState] = useState(false);
 
-  // Todos los índices con cantidad > 0 se envían al hook; el efecto de resultados
-  // decide si aplicar el precio basado en si el detalle está "libre".
   const cantidadesEnBolsas = useMemo(
     () => prod.detalles.map(d => {
       const c = parseSafe(d.cantidad);
@@ -134,13 +149,10 @@ function ProductoEditable({
       }
       return c;
     }),
-    // recalculate when any quantity or mode changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [prod.detalles.map(d => `${d.cantidad}|${d.modo_cantidad}`).join(","), prod.por_kilo]
   );
 
-  // Hook activo cuando hay cantidades y porKilo.
-  // tintasCambiadasState se incluye para forzar re-render cuando cambian tintas.
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const _tintasRender = tintasCambiadasState;
   const hookEnabled = cantidadesEnBolsas.some(v => v > 0) && !!prod.por_kilo && !!tintasIdResuelto;
@@ -152,11 +164,9 @@ function ProductoEditable({
     enabled:    hookEnabled,
   });
 
-  // Detectar cambio de tintas (saltar primer render)
   const primeraVezTintas = useRef(true);
   useEffect(() => {
     if (primeraVezTintas.current) { primeraVezTintas.current = false; return; }
-    // Usuario cambió tintas → liberar todos los detalles para recálculo
     tintasCambiadasRef.current = true;
     setTintasCambiadasState(true);
     setPreciosEditadosManual(prod.detalles.map(() => false));
@@ -164,7 +174,6 @@ function ProductoEditable({
     setPreciosUnitTexto(prod.detalles.map(() => ""));
   }, [prod.tintasId]);
 
-  // indicesLibres: detalles nuevos (null iddetalle) ó tintas cambiadas
   const indicesLibres = prod.detalles
     .map((d, i) => {
       const esNuevo = d.iddetalle === null || d.iddetalle === undefined;
@@ -172,12 +181,10 @@ function ProductoEditable({
     })
     .filter(i => i !== -1);
 
-  // Aplicar resultados automáticos a los índices que lo necesitan
   useEffect(() => {
     if (!resultados.length) return;
     resultados.forEach((r, di) => {
       if (!r) return;
-      // Detalle de DB sin tintas cambiadas y sin edición manual → no tocar
       const det = prod.detalles[di];
       if (!det) return;
       const esNuevo  = det.iddetalle === null || det.iddetalle === undefined;
@@ -186,8 +193,7 @@ function ProductoEditable({
       if (preciosEditadosManual[di]) return;
 
       const pk = parseSafe(prod.por_kilo);
-      const pu = r.precio_unitario; // siempre precio/bolsa
-
+      const pu = r.precio_unitario;
       let precioTotal = 0;
       if (det.modo_cantidad === "kilo") {
         const kgs = parseSafe(det.kilogramos || det.cantidad);
@@ -200,7 +206,6 @@ function ProductoEditable({
         setDetalleField(pi, di, "precio_total",    precioTotal.toFixed(2));
         setDetalleField(pi, di, "precio_unitario", pu.toFixed(6));
         setPreciosTexto(prev => { const n = [...prev]; n[di] = precioTotal.toFixed(2); return n; });
-        // precio unitario mostrado: /kg en modo kilo, /bolsa en modo unidad
         const puMostrado = det.modo_cantidad === "kilo" && pk > 0 ? (pu * pk).toFixed(4) : pu.toFixed(4);
         setPreciosUnitTexto(prev => { const n = [...prev]; n[di] = puMostrado; return n; });
       }
@@ -210,6 +215,8 @@ function ProductoEditable({
   const subtotal = prod.detalles.reduce((s, d) => s + parseSafe(d.precio_total), 0)
     + parseSafe(prod.herramental_precio);
 
+  const esProductoCambiado = !!prod._configuracionCambiada;
+
   return (
     <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
 
@@ -218,10 +225,17 @@ function ProductoEditable({
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-2 min-w-0">
             <span className="flex-shrink-0 w-7 h-7 rounded-full bg-blue-600 text-white text-xs font-bold flex items-center justify-center">
-              {pi + 1}
+              {displayIndex}
             </span>
             <div className="min-w-0">
-              <p className="text-sm font-semibold text-gray-900 truncate">{prod.nombre}</p>
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-semibold text-gray-900 truncate">{prod.nombre}</p>
+                {esProductoCambiado && (
+                  <span className="flex-shrink-0 text-xs px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded-full font-medium">
+                    Cambiado
+                  </span>
+                )}
+              </div>
               <div className="flex flex-wrap gap-x-3 mt-0.5 text-xs text-gray-400">
                 {prod.material           && <span>{prod.material}</span>}
                 {prod.calibre            && <span>Cal. {prod.calibre}</span>}
@@ -231,10 +245,28 @@ function ProductoEditable({
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-3 flex-shrink-0">
-            <span className="text-sm font-bold text-gray-700">${fmt(subtotal)}</span>
-            <button onClick={() => setProductoField(pi, "_eliminado", true)} title="Marcar para eliminar"
-              className="p-1.5 rounded-lg text-red-400 hover:text-red-600 hover:bg-red-50 transition">
+
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <span className="text-sm font-bold text-gray-700 mr-2">${fmt(subtotal)}</span>
+
+            {/* Botón cambiar producto */}
+            <button
+              onClick={() => onCambiarProducto(pi)}
+              title={esProductoCambiado ? "Cambiar de nuevo" : "Cambiar producto"}
+              className="p-1.5 rounded-lg text-blue-400 hover:text-blue-600 hover:bg-blue-50 transition"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+              </svg>
+            </button>
+
+            {/* Botón eliminar */}
+            <button
+              onClick={() => setProductoField(pi, "_eliminado", true)}
+              title="Marcar para eliminar"
+              className="p-1.5 rounded-lg text-red-400 hover:text-red-600 hover:bg-red-50 transition"
+            >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                   d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -253,7 +285,6 @@ function ProductoEditable({
             <select value={prod.tintas}
               onChange={e => {
                 const n = Number(e.target.value);
-                // e.target.value = cantidad; find the matching id from catalog
                 const tintaEncontrada = catalogoTintas.find((t: any) => t.cantidad === n);
                 const nuevoId = tintaEncontrada?.id ?? prod.tintasId;
                 setProductoField(pi, "tintas",   n);
@@ -313,7 +344,7 @@ function ProductoEditable({
           </div>
         </div>
 
-        {/* ── Pigmentos — deshabilitado para BOPP/Celofán ── */}
+        {/* ── Pigmentos ── */}
         <div>
           <label className={`block text-xs font-semibold uppercase tracking-wide mb-1 ${esBoppProd ? "text-gray-300" : "text-gray-500"}`}>
             Pigmentos <span className="font-normal text-gray-300">(opcional)</span>
@@ -329,7 +360,7 @@ function ProductoEditable({
             }`} />
         </div>
 
-        {/* ── Suaje / Asa — solo asa flexible ── */}
+        {/* ── Suaje / Asa ── */}
         {esAsaFlexible && (
           <div>
             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
@@ -352,9 +383,6 @@ function ProductoEditable({
                 <option key={s.idsuaje} value={s.idsuaje}>{s.tipo}</option>
               ))}
             </select>
-            {prod.idsuaje && prod.suaje_tipo && (
-              <p className="mt-1 text-xs text-blue-600 font-medium">✓ {prod.suaje_tipo}</p>
-            )}
           </div>
         )}
 
@@ -377,9 +405,6 @@ function ProductoEditable({
                 <option key={c.id_color} value={c.id_color} className="capitalize">{c.color}</option>
               ))}
             </select>
-            {prod.id_color && prod.color_asa_nombre && (
-              <p className="mt-1 text-xs text-teal-600 font-medium capitalize">✓ {prod.color_asa_nombre}</p>
-            )}
           </div>
         )}
 
@@ -402,13 +427,10 @@ function ProductoEditable({
                 <option key={m.id_medidatro} value={m.id_medidatro}>{m.medida}</option>
               ))}
             </select>
-            {prod.id_medidatro && prod.medida_troquel && (
-              <p className="mt-1 text-xs text-violet-600 font-medium">✓ {prod.medida_troquel}</p>
-            )}
           </div>
         )}
 
-        {/* ── Perforación — solo bolsa plana / bolsa envío / celofán ── */}
+        {/* ── Perforación ── */}
         {puedePerforar && (
           <div className={`flex items-center gap-3 py-3 px-4 rounded-lg border ${prod.perforacion ? "bg-sky-50 border-sky-300" : "bg-gray-50 border-gray-200"}`}>
             <input type="checkbox" id={`perf-${pi}`} checked={prod.perforacion}
@@ -416,7 +438,6 @@ function ProductoEditable({
               className="w-5 h-5 rounded border-sky-400 text-sky-600 focus:ring-sky-400 cursor-pointer" />
             <label htmlFor={`perf-${pi}`} className="flex items-center gap-2 cursor-pointer select-none">
               <span className={`font-semibold text-sm ${prod.perforacion ? "text-sky-700" : "text-gray-600"}`}>Perforación</span>
-              <span className="text-xs text-gray-400">(bolsa con perforación)</span>
             </label>
             {prod.perforacion && (
               <span className="ml-auto inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-sky-200 text-sky-800">✓ Con perforación</span>
@@ -431,12 +452,9 @@ function ProductoEditable({
           </label>
           <input type="text" value={prod.descripcion}
             onChange={e => setProductoField(pi, "descripcion", e.target.value)}
-            placeholder="Ej: 1er Grado, Talla M, Color Rojo..."
+            placeholder="Ej: 1er Grado, Talla M..."
             maxLength={150}
             className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-purple-400" />
-          {prod.descripcion && (
-            <p className="mt-1 text-xs text-purple-600 font-medium">✓ {prod.descripcion}</p>
-          )}
         </div>
 
         {/* ── Observaciones ── */}
@@ -446,7 +464,7 @@ function ProductoEditable({
           </label>
           <textarea value={prod.observacion} rows={2}
             onChange={e => setProductoField(pi, "observacion", e.target.value)}
-            placeholder="Ej: Impresión a 2 colores, acabado mate..."
+            placeholder="Ej: Impresión a 2 colores..."
             className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-blue-500 resize-none" />
         </div>
 
@@ -505,28 +523,21 @@ function ProductoEditable({
 
           <div className="space-y-3">
             {prod.detalles.map((det, di) => {
-              const r            = resultados[di];
-              const pk           = parseSafe(prod.por_kilo);
-              const esLibre      = indicesLibres.includes(di);
-              const esModoKilo   = det.modo_cantidad === "kilo";
+              const r          = resultados[di];
+              const pk         = parseSafe(prod.por_kilo);
+              const esLibre    = indicesLibres.includes(di);
+              const esModoKilo = det.modo_cantidad === "kilo";
 
-              // precio_unitario en DB siempre está en bolsas.
-              // Para mostrar: si el modo es kilo → convertir a kg (* pk).
               const puBolsaGuardado = parseSafe(det.precio_unitario);
               const puBolsaHook     = r?.precio_unitario ?? 0;
-              // puBolsa = precio/bolsa que usamos internamente
               const puBolsa         = esLibre && !preciosEditadosManual[di] && puBolsaHook > 0
                                         ? puBolsaHook
                                         : puBolsaGuardado;
-              // puMostrar = lo que el usuario ve en el input
               const puMostrar       = esModoKilo && pk > 0 ? puBolsa * pk : puBolsa;
-              const labelUnidad     = esModoKilo ? "/kg" : "/bolsa";
 
               return (
                 <div key={di} className="p-3 bg-gray-50 rounded-lg border border-gray-100 space-y-2">
                   <div className="flex items-end gap-2">
-
-                    {/* Cantidad */}
                     <div className="flex-1">
                       <label className="block text-xs text-gray-400 mb-1">
                         {det.modo_cantidad === "kilo" ? "Cantidad (kg)" : "Cantidad (pzas)"}
@@ -536,8 +547,6 @@ function ProductoEditable({
                         placeholder="0"
                         className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-blue-400" />
                     </div>
-
-                    {/* Precio total — solo lectura, se calcula desde precio unitario × cantidad */}
                     <div className="flex-1">
                       <label className="block text-xs text-gray-400 mb-1">Precio total</label>
                       <div className="relative">
@@ -549,8 +558,6 @@ function ProductoEditable({
                       </div>
                       <p className="mt-0.5 text-xs text-gray-400">Calculado automáticamente</p>
                     </div>
-
-                    {/* Precio unitario (por bolsa) — editable */}
                     <div className="flex-1">
                       <label className="block text-xs text-gray-400 mb-1">
                         {esModoKilo && pk > 0 ? "Precio/kg" : "Precio/bolsa"}
@@ -558,8 +565,6 @@ function ProductoEditable({
                       <div className="relative">
                         <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs">$</span>
                         <input type="text" inputMode="decimal"
-                          // El input muestra precio/kg en modo kilo, precio/bolsa en modo unidad.
-                          // preciosUnitTexto almacena el valor tal como lo ve el usuario.
                           value={
                             preciosUnitTexto[di] !== ""
                               ? preciosUnitTexto[di]
@@ -570,21 +575,13 @@ function ProductoEditable({
                             const nuevos = [...preciosUnitTexto];
                             nuevos[di] = e.target.value;
                             setPreciosUnitTexto(nuevos);
-
                             const valorIngresado = parseSafe(e.target.value);
-                            // Convertir a precio/bolsa para guardar en DB
-                            const puBolsaNuevo = esModoKilo && pk > 0
-                              ? valorIngresado / pk
-                              : valorIngresado;
-
+                            const puBolsaNuevo = esModoKilo && pk > 0 ? valorIngresado / pk : valorIngresado;
                             setDetalleField(pi, di, "precio_unitario", puBolsaNuevo.toFixed(6));
-
-                            // Recalcular precio total
                             const kgs  = parseSafe(det.kilogramos || det.cantidad);
                             const cant = parseSafe(det.cantidad);
                             let newTotal = 0;
                             if (esModoKilo) {
-                              // precio total = kg × precio/kg
                               newTotal = Math.round(valorIngresado * kgs * 100) / 100;
                             } else {
                               newTotal = Math.round(puBolsaNuevo * cant * 100) / 100;
@@ -607,22 +604,13 @@ function ProductoEditable({
                               setPreciosUnitTexto(nuevos);
                             }
                           }}
-                          placeholder={esModoKilo && pk > 0 ? "0.0000" : "0.0000"}
+                          placeholder="0.0000"
                           className="w-full pl-6 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-blue-300" />
                       </div>
                       {esModoKilo && pk > 0 && puBolsa > 0 && (
-                        <p className="mt-0.5 text-xs text-gray-400">
-                          ≈ ${puBolsa.toFixed(6)}/bolsa
-                        </p>
-                      )}
-                      {!esModoKilo && pk > 0 && puBolsa > 0 && (
-                        <p className="mt-0.5 text-xs text-emerald-600">
-                          ≈ ${(puBolsa * pk).toFixed(4)}/kg
-                        </p>
+                        <p className="mt-0.5 text-xs text-gray-400">≈ ${puBolsa.toFixed(6)}/bolsa</p>
                       )}
                     </div>
-
-                    {/* Modo */}
                     <div className="flex-shrink-0">
                       <label className="block text-xs text-gray-400 mb-1">Modo</label>
                       <select value={det.modo_cantidad}
@@ -632,8 +620,6 @@ function ProductoEditable({
                         <option value="kilo">kg</option>
                       </select>
                     </div>
-
-                    {/* Borrar fila */}
                     {prod.detalles.length > 1 && (
                       <button onClick={() => eliminarDetalle(pi, di)}
                         className="flex-shrink-0 p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition">
@@ -643,21 +629,11 @@ function ProductoEditable({
                       </button>
                     )}
                   </div>
-
-                  {/* Info precio unitario calculado */}
-                  {esLibre && puBolsa > 0 && (
-                    <div className="flex gap-4 text-xs text-gray-400 pl-1">
-                      <span>≈ ${puBolsa.toFixed(6)}/bolsa</span>
-                      {pk > 0 && <span>≈ ${(puBolsa * pk).toFixed(4)}/kg</span>}
-                      {calculando && <span className="text-blue-400 animate-pulse">Recalculando...</span>}
-                    </div>
-                  )}
                 </div>
               );
             })}
           </div>
 
-          {/* Mini resumen */}
           <div className="mt-2 flex items-center justify-between px-3 py-2 bg-blue-50/60 rounded-lg">
             <span className="text-xs text-gray-500">
               {prod.detalles.length} detalle{prod.detalles.length !== 1 ? "s" : ""}
@@ -668,7 +644,6 @@ function ProductoEditable({
             <span className="text-sm font-bold text-blue-700">${fmt(subtotal)}</span>
           </div>
         </div>
-
       </div>
     </div>
   );
@@ -685,12 +660,18 @@ export default function EditarPedido() {
   const [errorGuardar, setErrorGuardar] = useState<string | null>(null);
   const [exito,        setExito]        = useState(false);
   const [pedidoOrig,   setPedidoOrig]   = useState<Pedido | null>(null);
-  const [productos,    setProductos]    = useState<ProductoEdit[]>([]);
+  const [productos,    setProductos]    = useState<ProductoRow[]>([]);
 
   const [suajes,         setSuajes]         = useState<any[]>([]);
   const [coloresAsa,     setColoresAsa]     = useState<any[]>([]);
   const [medidasTroquel, setMedidasTroquel] = useState<any[]>([]);
   const [catalogoTintas, setCatalogoTintas] = useState<any[]>([]);
+
+  // ── Estado del modal ──────────────────────────────────────────────────────
+  const [modal, setModal] = useState<{
+    abierto:  boolean;
+    piOrigen: number;
+  }>({ abierto: false, piOrigen: -1 });
 
   useEffect(() => {
     if (!noPedido) return;
@@ -737,9 +718,21 @@ export default function EditarPedido() {
           color_asa_nombre: p.color_asa_nombre ?? null,
           id_medidatro:     p.id_medidatro     ?? null,
           medida_troquel:   p.medida_troquel   ?? null,
+          // IDs de catálogo para pre-poblar el modal
+          tipo_producto_id:     p.tipo_producto_id     ?? 0,
+          tipo_producto_nombre: p.tipo_producto_nombre ?? p.nombre.split(" ").slice(0, 2).join(" "),
+          material_id:      p.material_id      ?? 0,
+          calibre_id:       p.calibre_id       ?? 0,
+          medidas: {
+            altura:         p.medidas?.altura         || "",
+            ancho:          p.medidas?.ancho          || "",
+            fuelleFondo:    p.medidas?.fuelleFondo    || "",
+            fuelleLateral1: p.medidas?.fuelleLateral1 || "",
+            fuelleLateral2: p.medidas?.fuelleLateral2 || "",
+            refuerzo:       p.medidas?.refuerzo       || "",
+          },
           detalles: (p.detalles || []).map((d: any) => ({
             iddetalle:       d.iddetalle    ?? null,
-            // En modo kilo mostramos kg; en unidad mostramos bolsas
             cantidad:        d.modo_cantidad === "kilo" && d.kilogramos != null
                                ? String(d.kilogramos)
                                : String(d.cantidad ?? ""),
@@ -785,54 +778,99 @@ export default function EditarPedido() {
       ...p, detalles: p.detalles.filter((_, j) => j !== di),
     }));
 
-  const calcularTotalProducto = (p: ProductoEdit) =>
+  // ── Abrir modal ────────────────────────────────────────────────────────────
+  const handleCambiarProducto = (pi: number) =>
+    setModal({ abierto: true, piOrigen: pi });
+
+  // ── Confirmar reemplazo desde modal ───────────────────────────────────────
+  const handleConfirmarModal = (reemplazo: ProductoReemplazo) => {
+    const pi = modal.piOrigen;
+
+    // En lugar de eliminar el original y crear uno nuevo,
+    // actualizamos el producto existente con el nuevo configuracion_plastico_id.
+    // El registro en BD se conserva, solo cambia a qué producto apunta.
+    setProductos(prev => prev.map((p, i) => {
+      if (i !== pi) return p;
+      return {
+        ...p,
+        // Nuevo producto seleccionado
+        nombre:             reemplazo.nombre,
+        material:           reemplazo.material,
+        calibre:            reemplazo.calibre,
+        medidasFormateadas: reemplazo.medidasFormateadas,
+        por_kilo:           reemplazo.por_kilo,
+        medidas:            reemplazo.medidas,
+        // Marcar que el configuracion_plastico cambió
+        _configuracionCambiada:    true,
+        nuevo_configuracion_id:    reemplazo.configuracion_plastico_id,
+        // Limpiar pigmentos si el nuevo es BOPP
+        pigmentos: esBopp(reemplazo.material, reemplazo.nombre) ? "" : p.pigmentos,
+        // Limpiar precios de los detalles para recalcular con nuevo por_kilo
+        detalles: p.detalles.map(d => ({
+          ...d,
+          precio_total:    "",
+          precio_unitario: "",
+        })),
+      };
+    }));
+
+    setModal({ abierto: false, piOrigen: -1 });
+  };
+
+  // ── Cálculos de totales ────────────────────────────────────────────────────
+  const calcularTotalProducto = (p: ProductoRow) =>
     p.detalles.reduce((s, d) => s + parseSafe(d.precio_total), 0) + parseSafe(p.herramental_precio);
 
   const calcularTotal = () =>
     productos.filter(p => !p._eliminado).reduce((s, p) => s + calcularTotalProducto(p), 0);
 
   // ── Guardar ────────────────────────────────────────────────────────────────
+  const mapearDetalle = (d: DetalleEdit, porKilo: string) => {
+    const kgs = d.kilogramos !== "" ? parseSafe(d.kilogramos) : parseSafe(d.cantidad);
+    const pk  = parseSafe(porKilo);
+    const cantidadParaBackend =
+      d.modo_cantidad === "kilo" && pk > 0
+        ? Math.round(kgs * pk)
+        : parseSafe(d.cantidad);
+    return {
+      iddetalle:       d.iddetalle,
+      cantidad:        cantidadParaBackend,
+      precio_total:    parseSafe(d.precio_total),
+      precio_unitario: d.precio_unitario !== "" ? parseSafe(d.precio_unitario) : null,
+      kilogramos:      d.modo_cantidad === "kilo" ? kgs : null,
+      modo_cantidad:   d.modo_cantidad,
+    };
+  };
+
   const handleGuardar = async () => {
     if (!pedidoOrig) return;
     setGuardando(true);
     setErrorGuardar(null);
     try {
-      await actualizarPedido(pedidoOrig.no_pedido, {
-        productos: productos.map(p => ({
-          idsolicitud_producto:    p.idsolicitud_producto,
-          eliminado:               p._eliminado,
-          tintas:                  p.tintas,
-          caras:                   p.caras,
-          pantones:                p.pantones    || null,
-          pigmentos:               esBopp(p.material, p.nombre) ? null : (p.pigmentos || null),
-          observacion:             p.observacion || null,
-          descripcion:             p.descripcion || null,
-          perforacion:             permitePerforacion(p.nombre) ? p.perforacion : false,
-          herramental_descripcion: p.herramental_descripcion || null,
-          herramental_precio:      p.herramental_precio !== "" ? parseSafe(p.herramental_precio) : null,
-          herramental_aprobado:    p.herramental_aprobado ?? null,
-          idsuaje:                 p.idsuaje      ?? null,
-          id_color:                p.id_color     ?? null,
-          id_medidatro:            p.id_medidatro ?? null,
-          detalles: p.detalles.map(d => {
-            // En modo kilo d.cantidad tiene kg → recalcular bolsas para el backend
-            const kgs = d.kilogramos !== "" ? parseSafe(d.kilogramos) : parseSafe(d.cantidad);
-            const pk  = parseSafe(p.por_kilo);
-            const cantidadParaBackend =
-              d.modo_cantidad === "kilo" && pk > 0
-                ? Math.round(kgs * pk)
-                : parseSafe(d.cantidad);
-            return {
-              iddetalle:       d.iddetalle,
-              cantidad:        cantidadParaBackend,
-              precio_total:    parseSafe(d.precio_total),
-              precio_unitario: d.precio_unitario !== "" ? parseSafe(d.precio_unitario) : null,
-              kilogramos:      d.modo_cantidad === "kilo" ? kgs : null,
-              modo_cantidad:   d.modo_cantidad,
-            };
-          }),
+      const payload = {
+        productos: (productos as ProductoEdit[]).map(p => ({
+          idsolicitud_producto:      p.idsolicitud_producto,
+          eliminado:                 p._eliminado,
+          // Si cambió la configuración, enviar el nuevo id
+          nuevo_configuracion_id:    p._configuracionCambiada ? p.nuevo_configuracion_id : undefined,
+          tintas:                    p.tintas,
+          caras:                     p.caras,
+          pantones:                  p.pantones    || null,
+          pigmentos:                 esBopp(p.material, p.nombre) ? null : (p.pigmentos || null),
+          observacion:               p.observacion || null,
+          descripcion:               p.descripcion || null,
+          perforacion:               permitePerforacion(p.nombre) ? p.perforacion : false,
+          herramental_descripcion:   p.herramental_descripcion || null,
+          herramental_precio:        p.herramental_precio !== "" ? parseSafe(p.herramental_precio) : null,
+          herramental_aprobado:      p.herramental_aprobado ?? null,
+          idsuaje:                   p.idsuaje      ?? null,
+          id_color:                  p.id_color     ?? null,
+          id_medidatro:              p.id_medidatro ?? null,
+          detalles:                  p.detalles.map(d => mapearDetalle(d, p.por_kilo)),
         })),
-      });
+      };
+
+      await actualizarPedido(pedidoOrig.no_pedido, payload);
       setExito(true);
       setTimeout(() => navigate("/pedido"), 1500);
     } catch (e: any) {
@@ -842,7 +880,25 @@ export default function EditarPedido() {
     }
   };
 
-  // ── Estados especiales ─────────────────────────────────────────────────────
+  // ── datosActuales para el modal ────────────────────────────────────────────
+  const datosParaModal = modal.piOrigen >= 0 && modal.piOrigen < productos.length
+    ? (() => {
+        const p = productos[modal.piOrigen];
+        return {
+          nombre:             p.nombre,
+          material:           p.material,
+          calibre:            p.calibre,
+          medidasFormateadas: p.medidasFormateadas,
+          tipo_producto_id:     p.tipo_producto_id,
+          tipo_producto_nombre: p.tipo_producto_nombre,
+          material_id:        p.material_id,
+          calibre_id:         p.calibre_id,
+          medidas:            p.medidas,
+        };
+      })()
+    : null;
+
+  // ── Render ─────────────────────────────────────────────────────────────────
   if (cargando) return (
     <Dashboard>
       <div className="flex flex-col items-center justify-center h-64 gap-4">
@@ -925,26 +981,36 @@ export default function EditarPedido() {
       )}
 
       <div className="space-y-5">
-
-        {productos.map((prod, pi) => {
+        {(() => {
+          let activeIndex = 0;
+          return productos.map((prod, pi) => {
           if (prod._eliminado) return (
-            <div key={prod.idsolicitud_producto}
+            <div key={`${prod.idsolicitud_producto}-${pi}`}
               className="flex items-center justify-between p-4 bg-red-50 border border-red-200 rounded-xl opacity-70">
               <div>
                 <p className="text-sm font-semibold text-red-700 line-through">{prod.nombre}</p>
                 <p className="text-xs text-red-400 mt-0.5">Marcado para eliminar al guardar</p>
               </div>
-              <button onClick={() => setProductoField(pi, "_eliminado", false)}
+              <button
+                onClick={() => {
+                  setProductos(prev => prev.map((p, i) =>
+                    i === pi
+                      ? { ...p, _eliminado: false }
+                      : p
+                  ));
+                }}
                 className="text-xs px-3 py-1.5 bg-white border border-red-300 text-red-600 rounded-lg hover:bg-red-100 transition">
                 Restaurar
               </button>
             </div>
           );
 
+          const currentIndex = ++activeIndex;
           return (
             <ProductoEditable
-              key={prod.idsolicitud_producto}
+              key={`${prod.idsolicitud_producto}-${pi}`}
               prod={prod} pi={pi}
+              displayIndex={currentIndex}
               setProductoField={setProductoField}
               setDetalleField={setDetalleField}
               agregarDetalle={agregarDetalle}
@@ -953,13 +1019,15 @@ export default function EditarPedido() {
               coloresAsa={coloresAsa}
               medidasTroquel={medidasTroquel}
               catalogoTintas={catalogoTintas}
+              onCambiarProducto={handleCambiarProducto}
             />
           );
-        })}
+        });
+        })()}
 
         {productos.some(p => p._eliminado) && (
           <p className="text-xs text-center text-gray-400 py-1">
-            {productos.filter(p => p._eliminado).length} producto(s) marcado(s) para eliminar — se procesarán al guardar
+            {productos.filter(p => p._eliminado).length} producto(s) marcado(s) para eliminar
           </p>
         )}
 
@@ -973,7 +1041,11 @@ export default function EditarPedido() {
             {productosActivos.map((p, i) => (
               <div key={i} className="flex items-center justify-between text-sm">
                 <span className="text-gray-500 truncate flex-1 mr-2">
-                  <span className="text-gray-300 mr-1">{i + 1}.</span>{p.nombre}
+                  <span className="text-gray-300 mr-1">{i + 1}.</span>
+                  {p.nombre}
+                  {p._configuracionCambiada && (
+                    <span className="ml-1.5 text-xs text-amber-500">● cambiado</span>
+                  )}
                 </span>
                 <span className="font-medium text-gray-800 flex-shrink-0">${fmt(calcularTotalProducto(p))}</span>
               </div>
@@ -1012,8 +1084,16 @@ export default function EditarPedido() {
             }
           </button>
         </div>
-
       </div>
+
+      {/* Modal */}
+      <ModalCambiarProducto
+        abierto={modal.abierto}
+        onCerrar={() => setModal({ abierto: false, piOrigen: -1 })}
+        onConfirmar={handleConfirmarModal}
+        datosActuales={datosParaModal}
+      />
+
     </Dashboard>
   );
 }

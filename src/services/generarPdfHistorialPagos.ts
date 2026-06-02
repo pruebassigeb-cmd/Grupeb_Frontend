@@ -2,6 +2,7 @@ import jsPDF from "jspdf";
 import { cargarLogoBase64 } from "./Pdfutils";
 import type { Venta, VentaPago } from "../types/ventas.types";
 import logoUrl from "../assets/logogrupeb.png";
+import { subirPdfA3 } from "./pdfS3.service";
 
 
 // ── Paleta monocromática ─────────────────────────────────────
@@ -79,7 +80,7 @@ function seccionHeader(
   doc.setTextColor(...BLACK);
 }
 
-export async function generarPdfHistorialPagos(venta: Venta): Promise<void> {
+export async function generarPdfHistorialPagos(venta: Venta, guardarEnS3 = false): Promise<void> {
 const logoBase64 = await cargarLogoBase64(logoUrl);
 
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
@@ -374,5 +375,10 @@ const logoBase64 = await cargarLogoBase64(logoUrl);
   doc.text("ventas@grupoeb.com.mx", PW / 2, y, { align: "center" });
 
   doc.setTextColor(...BLACK);
-  doc.save(`HistorialPagos_Pedido${venta.no_pedido}.pdf`);
+  const nombre = `HistorialPagos_Pedido${venta.no_pedido}.pdf`;
+  doc.save(nombre);
+  if (guardarEnS3) {
+    const blob = doc.output("blob");
+    await subirPdfA3(blob, nombre, "pdfs", "historial-pagos");
+  }
 }

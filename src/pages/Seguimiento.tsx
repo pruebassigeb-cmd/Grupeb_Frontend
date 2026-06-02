@@ -6,6 +6,7 @@ import { generarPdfOrdenProduccion } from "../services/generarPdfOrdenProduccion
 import { generarPdfEstadoCuentaSimple } from "../services/generarPdfEstadoCuentaSimple";
 import { generarPdfPedido } from "../services/generarPdfPedido";
 import { getEstadoCuenta } from "../services/estadoCuentaService";
+import { preguntarGuardarS3 } from "../services/pdfS3.service";
 import { getVentaByPedido, getMetodosPago } from "../services/ventasservice";
 import { getPedidos } from "../services/pedidosService";
 import type { PedidoSeguimiento } from "../types/seguimiento.types";
@@ -184,6 +185,7 @@ function BotonPdfPedido({ pedido, puedePdf }: { pedido: PedidoSeguimiento; puede
       const [todos, venta] = await Promise.all([getPedidos(), getVentaByPedido(pedido.no_pedido)]);
       const ped: Pedido | undefined = (todos as Pedido[]).find(p => p.no_pedido === pedido.no_pedido);
       if (!ped) { showAlert("No se encontró el pedido."); return; }
+      const guardarS3 = await preguntarGuardarS3("pedido");
       await generarPdfPedido({
         no_pedido: ped.no_pedido,
         no_cotizacion: ped.no_cotizacion ?? null,
@@ -209,7 +211,7 @@ function BotonPdfPedido({ pedido, puedePdf }: { pedido: PedidoSeguimiento; puede
         anticipo: Number(venta.anticipo),
         saldo: Number(venta.saldo),
         productos: buildProductosPdf(ped.productos),
-      });
+      }, guardarS3);
     } catch {
       showAlert("No se pudo generar el PDF del pedido.");
     } finally { setDescargando(false); }
@@ -243,7 +245,8 @@ function BotonEstadoCuentaPdf({ noPedido }: { noPedido: string }) {
     setDescargando(true);
     try {
       const datos = await getEstadoCuenta(noPedido);
-      await generarPdfEstadoCuentaSimple(datos);
+      const guardarS3 = await preguntarGuardarS3("estado de cuenta");
+      await generarPdfEstadoCuentaSimple(datos, guardarS3);
     } catch (e: any) {
       const msg = e?.response?.data?.detalle || e?.response?.data?.error || null;
       showAlert(msg
@@ -294,6 +297,7 @@ function BotonPdfDirecto({ pedido }: { pedido: PedidoSeguimiento }) {
         }
       }
 
+      const guardarS3 = await preguntarGuardarS3("orden de producción");
       await generarPdfOrdenProduccion({
         no_pedido: data.no_pedido,
         no_produccion: producto.no_produccion,
@@ -354,7 +358,7 @@ function BotonPdfDirecto({ pedido }: { pedido: PedidoSeguimiento }) {
         // ── Imágenes resueltas ──
         url_render,
         url_master,
-      });
+      }, guardarS3);
     } catch { showAlert("No se pudo generar el PDF."); }
     finally { setDescargando(false); }
   };
@@ -450,7 +454,7 @@ export default function Seguimiento() {
   const puedeVerEnvio = esAccesoTotal || usePermiso("Gestionar Envios");
   const puedeVerOD = esAccesoTotal || usePermiso("Orden de Diseño");
   const puedePdfPedido = esAccesoTotal || usePermiso("Descargar PDF Pedido");
-
+const [ordenFecha, setOrdenFecha] = useState<"reciente" | "antiguo">("antiguo");
   useEffect(() => {
     cargar();
     const onVisible = () => { if (document.visibilityState === "visible") cargar(); };
@@ -513,7 +517,10 @@ export default function Seguimiento() {
         (x.descripcion ?? "") === (p.descripcion ?? "")
       ) === idx
     )
-    .reverse();
+    .sort((a, b) => {
+  const diff = new Date(b.fecha).getTime() - new Date(a.fecha).getTime();
+  return ordenFecha === "reciente" ? diff : -diff;
+});
 
   // REEMPLAZA por:
   const inicio = 0;
@@ -859,6 +866,17 @@ export default function Seguimiento() {
               </button>
             ))}
           </div>
+          <div className="flex items-center gap-2">
+  <label className="text-sm font-medium text-gray-700">Orden:</label>
+  <select
+    value={ordenFecha}
+    onChange={e => setOrdenFecha(e.target.value as "antiguo" | "reciente")}
+    className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-700 bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+  >
+    <option value="antiguo">Más antiguo</option>
+    <option value="reciente">Más reciente</option>
+  </select>
+</div>
           {(busqueda || filtroTipo !== "todos") && (
             <span className="text-sm text-gray-500 ml-auto">
               {pedidosFiltrados.length} resultado{pedidosFiltrados.length !== 1 ? "s" : ""}

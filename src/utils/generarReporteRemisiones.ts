@@ -1,22 +1,26 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { subirPdfA3 } from "../services/pdfS3.service";
 import type { PedidoRemision, HistorialEntregasPedido } from "../types/envios.types";
 
-const AZUL   = [37, 99, 235]   as [number, number, number];
-const AZUL_L = [219, 234, 254] as [number, number, number];
-const GRIS   = [107, 114, 128] as [number, number, number];
-const NEGRO  = [17, 24, 39]    as [number, number, number];
-const BLANCO = [255, 255, 255] as [number, number, number];
-const VERDE  = [220, 252, 231] as [number, number, number];
-const VERDE_T = [21, 128, 61]  as [number, number, number];
+const AZUL    = [37, 99, 235]   as [number, number, number];
+const AZUL_L  = [219, 234, 254] as [number, number, number];
+const GRIS    = [107, 114, 128] as [number, number, number];
+const NEGRO   = [17, 24, 39]    as [number, number, number];
+const BLANCO  = [255, 255, 255] as [number, number, number];
+const VERDE   = [220, 252, 231] as [number, number, number];
+const VERDE_T = [21, 128, 61]   as [number, number, number];
 const GRIS_L  = [248, 250, 252] as [number, number, number];
+const AMBER   = [255, 251, 235] as [number, number, number];
+const AMBER_T = [92, 64, 0]     as [number, number, number];
 
 const fmtFecha = (iso: string) =>
   new Date(iso).toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric" });
-
-const fmtNum = (n: number) => n.toLocaleString("es-MX");
-const fmtCant = (n: number) => 
-  Number.isInteger(n) ? n.toLocaleString("es-MX") : n.toLocaleString("es-MX", { minimumFractionDigits: 1, maximumFractionDigits: 2 });
+const fmtNum  = (n: number) => n.toLocaleString("es-MX");
+const fmtCant = (n: number) =>
+  Number.isInteger(n)
+    ? n.toLocaleString("es-MX")
+    : n.toLocaleString("es-MX", { minimumFractionDigits: 1, maximumFractionDigits: 2 });
 
 const buildProd = (p: any) => {
   let s = p.nombre_producto || "";
@@ -28,11 +32,15 @@ const buildProd = (p: any) => {
 const TIPO_LABEL: Record<string, string> = {
   local: "Local", paqueteria: "Paquetería", recoleccion: "Recolección",
 };
-
 const ESTADO_LABEL: Record<string, string> = {
-  entregado: "Entregado", en_camino: "En camino", pendiente: "Pendiente",
-  preparando: "Pendiente",
+  entregado: "Entregado", en_camino: "En camino", pendiente: "Pendiente", preparando: "Pendiente",
 };
+const OBS_LABEL: Record<string, string> = {
+  E: "Entregado", RA: "Rechazado — Ausente", RD: "Rechazado — Direc.", PD: "Pdte. entrega",
+};
+
+// buildGuiaObsPdf — solo el número de guía
+const buildGuiaObsPdf = (e: any): string => e.numero_guia || "—";
 
 export interface ReporteRemisionesParams {
   cliente: string;
@@ -41,13 +49,16 @@ export interface ReporteRemisionesParams {
   pedidosSeleccionados: number[];
 }
 
-export async function generarReporteRemisiones(params: ReporteRemisionesParams): Promise<void> {
+export async function generarReporteRemisiones(
+  params: ReporteRemisionesParams,
+  guardarEnS3 = false
+): Promise<void> {
   const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "letter" });
 
   const hoyStr  = new Date().toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" });
   const horaStr = new Date().toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" });
 
-  const pedidoMap   = new Map(params.pedidos.map(p => [p.idsolicitud, p]));
+  const pedidoMap    = new Map(params.pedidos.map(p => [p.idsolicitud, p]));
   const historialMap = new Map(params.historial.map(h => [h.idsolicitud, h]));
 
   let primeraHoja = true;
@@ -60,7 +71,7 @@ export async function generarReporteRemisiones(params: ReporteRemisionesParams):
     if (!primeraHoja) doc.addPage();
     primeraHoja = false;
 
-    // ── Encabezado ──────────────────────────────────────────────────────────
+    // ── Encabezado ───────────────────────────────────────────────────────────
     doc.setFillColor(...AZUL);
     doc.rect(0, 0, 279, 20, "F");
     doc.setTextColor(...BLANCO);
@@ -71,7 +82,7 @@ export async function generarReporteRemisiones(params: ReporteRemisionesParams):
     doc.setFont("helvetica", "normal");
     doc.text(`Generado: ${hoyStr} ${horaStr}`, 279 - 10, 10, { align: "right" });
 
-    // ── Info pedido ─────────────────────────────────────────────────────────
+    // ── Info pedido ──────────────────────────────────────────────────────────
     let y = 25;
     doc.setFillColor(...AZUL_L);
     doc.rect(10, y - 4, 259, 14, "F");
@@ -87,7 +98,7 @@ export async function generarReporteRemisiones(params: ReporteRemisionesParams):
     );
     y += 16;
 
-    // ── Tabla productos del pedido ──────────────────────────────────────────
+    // ── Tabla productos del pedido ───────────────────────────────────────────
     doc.setFontSize(8);
     doc.setFont("helvetica", "bold");
     doc.setTextColor(...GRIS);
@@ -103,12 +114,7 @@ export async function generarReporteRemisiones(params: ReporteRemisionesParams):
         const pct       = total > 0 ? Math.round((entregado / total) * 100) : 0;
         const unidad    = p.modo_cantidad === "kilo" ? "kg" : "pzs";
         const nombre    = `${p.nombre_producto || "—"}${p.medida ? ` (${p.medida})` : ""}${p.descripcion ? ` — ${p.descripcion}` : ""}`;
-        return [
-          nombre,
-          total > 0 ? `${fmtNum(total)} ${unidad}` : "—",
-          `${fmtNum(entregado)} ${unidad}`,
-          `${pct}%`,
-        ];
+        return [nombre, total > 0 ? `${fmtNum(total)} ${unidad}` : "—", `${fmtNum(entregado)} ${unidad}`, `${pct}%`];
       }),
       styles:             { fontSize: 7.5, cellPadding: 2, textColor: NEGRO },
       headStyles:         { fillColor: AZUL, textColor: BLANCO, fontStyle: "bold", fontSize: 7.5 },
@@ -124,7 +130,7 @@ export async function generarReporteRemisiones(params: ReporteRemisionesParams):
 
     y = (doc as any).lastAutoTable.finalY + 6;
 
-    // ── Tabla entregas ──────────────────────────────────────────────────────
+    // ── Tabla entregas ───────────────────────────────────────────────────────
     doc.setFontSize(8);
     doc.setFont("helvetica", "bold");
     doc.setTextColor(...GRIS);
@@ -136,14 +142,15 @@ export async function generarReporteRemisiones(params: ReporteRemisionesParams):
     historial.entregas.forEach((e, idx) => {
       const productos = (e as any).productos_detalle?.length > 0
         ? (e as any).productos_detalle
-        : [{ nombre_producto: e.productos || "—", medida: "", descripcion: null, total_bultos: e.total_bultos, cantidad: e.cantidad_entregada, modo_cantidad: e.modo_cantidad }];
+        : [{
+            nombre_producto: e.productos || "—", medida: "", descripcion: null,
+            total_bultos: e.total_bultos, cantidad: e.cantidad_entregada, modo_cantidad: e.modo_cantidad,
+          }];
 
-      // ── Celda Nota: solo el número de nota (las observaciones van en fila aparte)
-      const notaObs = String((e as any).nota_observaciones || "").trim();
+      const notaObs  = String((e as any).nota_observaciones || "").trim();
+      const envioObs = String((e as any).observaciones || "").trim();
       const notaCell = e.nota_no || "—";
-
-      // ── Celda Guía/Obs: guía de paquetería o descripción de entrega ────────
-      const guiaCell = e.numero_guia || e.observaciones || "—";
+      const guiaObs  = buildGuiaObsPdf(e);
 
       productos.forEach((p: any, pIdx: number) => {
         const esFirst = pIdx === 0;
@@ -155,31 +162,24 @@ export async function generarReporteRemisiones(params: ReporteRemisionesParams):
           buildProd(p),
           String(p.total_bultos),
           `${fmtCant(p.cantidad)} ${p.modo_cantidad === "kilo" ? "kg" : "pzs"}`,
-          esFirst ? guiaCell : "",
+          esFirst ? guiaObs : "",
           esFirst ? (ESTADO_LABEL[e.estado] || e.estado) : "",
         ]);
       });
 
-      // ── Fila adicional con observaciones de la nota (si existen) ──────────
-      if (notaObs) {
-        body.push([
-          {
-            content: `Observaciones de la remisión: ${notaObs}`,
-            colSpan: 9,
-            styles: {
-              fontStyle: "italic",
-              textColor: [80, 60, 0],
-              fillColor: [255, 253, 230],
-              halign: "left",
-            },
-          },
-        ]);
+      // Fila de obs. del envío (las de cuando se levanta)
+      if (envioObs) {
+        body.push([{
+          content: `Obs. del envío: ${envioObs}`,
+          colSpan: 9,
+          styles: { fontStyle: "italic" as const, textColor: [80, 60, 0], fillColor: [255, 253, 230], halign: "left" as const },
+        }]);
       }
     });
 
     autoTable(doc, {
       startY: y,
-      head: [["#", "Fecha", "Nota", "Tipo", "Producto", "Bultos", "Cantidad", "Guía / Obs.", "Estado"]],
+      head: [["#", "Fecha", "Nota", "Tipo", "Producto", "Bultos", "Cantidad", "Guía", "Estado"]],
       body,
       styles:             { fontSize: 7, cellPadding: 1.8, textColor: NEGRO },
       headStyles:         { fillColor: NEGRO, textColor: BLANCO, fontStyle: "bold", fontSize: 7 },
@@ -187,18 +187,18 @@ export async function generarReporteRemisiones(params: ReporteRemisionesParams):
       columnStyles: {
         0: { cellWidth: 8,  halign: "center" },
         1: { cellWidth: 20 },
-        2: { cellWidth: 30 },
+        2: { cellWidth: 28 },
         3: { cellWidth: 20 },
-        4: { cellWidth: 75 },
+        4: { cellWidth: 72 },
         5: { cellWidth: 13, halign: "center" },
         6: { cellWidth: 25, halign: "center" },
-        7: { cellWidth: 40 },
+        7: { cellWidth: 45 },
         8: { cellWidth: 24, halign: "center" },
       },
       margin: { left: 10, right: 10 },
     });
 
-    // ── Totales kg / pzs ────────────────────────────────────────────────────
+    // ── Totales ──────────────────────────────────────────────────────────────
     const finalY = (doc as any).lastAutoTable.finalY + 5;
 
     const totKg = historial.entregas.reduce((s, e) => {
@@ -206,7 +206,6 @@ export async function generarReporteRemisiones(params: ReporteRemisionesParams):
         return s + (e as any).productos_detalle.filter((p: any) => p.modo_cantidad === "kilo").reduce((ss: number, p: any) => ss + p.cantidad, 0);
       return e.modo_cantidad === "kilo" ? s + e.cantidad_entregada : s;
     }, 0);
-
     const totPzs = historial.entregas.reduce((s, e) => {
       if ((e as any).productos_detalle?.length > 0)
         return s + (e as any).productos_detalle.filter((p: any) => p.modo_cantidad !== "kilo").reduce((ss: number, p: any) => ss + p.cantidad, 0);
@@ -228,7 +227,7 @@ export async function generarReporteRemisiones(params: ReporteRemisionesParams):
     );
   }
 
-  // ── Pie de página ─────────────────────────────────────────────────────────
+  // ── Pie de página ────────────────────────────────────────────────────────
   const pageCount = (doc as any).internal.getNumberOfPages();
   for (let i = 1; i <= pageCount; i++) {
     doc.setPage(i);
@@ -237,5 +236,10 @@ export async function generarReporteRemisiones(params: ReporteRemisionesParams):
     doc.text(`Página ${i} de ${pageCount}`, 279 - 10, 210 - 5, { align: "right" });
   }
 
-  doc.save(`historial_remisiones_${new Date().toISOString().slice(0, 10)}.pdf`);
+  const nombreArchivo = `historial_remisiones_${new Date().toISOString().slice(0, 10)}.pdf`;
+  doc.save(nombreArchivo);
+  if (guardarEnS3) {
+    const blob = doc.output("blob");
+    await subirPdfA3(blob, nombreArchivo, "pdfs", "notas-remision");
+  }
 }

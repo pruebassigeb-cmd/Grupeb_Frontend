@@ -7,11 +7,15 @@ import { getCatalogosPlastico } from "../services/productosPlasticoService";
 import { getPedidos, eliminarPedido } from "../services/pedidosService";
 import { crearCotizacion } from "../services/cotizacionesService";
 import { generarPdfPedido } from "../services/generarPdfPedido";
+import { preguntarGuardarS3 } from "../services/pdfS3.service";
 import { getVentaByPedido } from "../services/ventasservice";
 import type { CatalogosPlastico } from "../types/productos-plastico.types";
 import type { Pedido } from "../types/cotizaciones.types";
 import { showAlert } from '../components/CustomAlert';
 import { showConfirm } from '../components/CustomConfirm';
+import ModalRepetirPedido from "../components/ModalRepetirPedido";
+import { buildPayloadDesdePedido } from "../utils/buildPayloadDesdePedido";
+import { getHistorialPedidosPorCliente } from "../services/pedidosService";
 
 
 const ITEMS_POR_PAGINA = 7;
@@ -30,6 +34,8 @@ export default function Pedidos() {
   const [errorCatalogos, setErrorCatalogos] = useState("");
   const [expandidas, setExpandidas] = useState<Set<string>>(new Set());
   const [paginaActual, setPaginaActual] = useState(1);
+  const [modalRepetirOpen, setModalRepetirOpen] = useState(false);
+
 
   useEffect(() => { cargarCatalogos(); cargarPedidos(); }, []);
   useEffect(() => { setPaginaActual(1); }, [busqueda]);
@@ -127,6 +133,61 @@ export default function Pedidos() {
       })),
     }));
 
+  //Handler — recibe el pedido seleccionado desde el modal
+  const handleRepetirPedido = async (ped: Pedido) => {
+    setModalRepetirOpen(false);
+    console.log("=== PED COMPLETO ===", JSON.stringify(ped, null, 2));
+
+    try {
+      const payload = buildPayloadDesdePedido(ped);
+      const respuesta = await crearCotizacion(payload);
+      await cargarPedidos();
+
+      try {
+        const noPedido = respuesta.no_pedido ?? "";
+        if (!noPedido) throw new Error("No se recibió no_pedido");
+        const [pedidosActualizados, venta] = await Promise.all([
+          getPedidos(),
+          getVentaByPedido(noPedido),
+        ]);
+        const pedidoCompleto = (pedidosActualizados as Pedido[]).find(
+          p => p.no_pedido === noPedido
+        );
+        await generarPdfPedido({
+          no_pedido: noPedido,
+          no_cotizacion: null,
+          fecha: new Date().toISOString(),
+          cliente: pedidoCompleto?.cliente ?? ped.cliente,
+          empresa: pedidoCompleto?.empresa ?? ped.empresa,
+          telefono: pedidoCompleto?.telefono ?? ped.telefono,
+          correo: pedidoCompleto?.correo ?? ped.correo,
+          impresion: pedidoCompleto?.impresion ?? ped.impresion ?? null,
+          celular: pedidoCompleto?.celular ?? null,
+          razon_social: pedidoCompleto?.razon_social ?? null,
+          rfc: pedidoCompleto?.rfc ?? null,
+          domicilio: pedidoCompleto?.domicilio ?? null,
+          numero: pedidoCompleto?.numero ?? null,
+          colonia: pedidoCompleto?.colonia ?? null,
+          codigo_postal: pedidoCompleto?.codigo_postal ?? null,
+          poblacion: pedidoCompleto?.poblacion ?? null,
+          estado_cliente: pedidoCompleto?.estado_cliente ?? null,
+          cliente_id: pedidoCompleto?.cliente_id ?? null,
+          identificar: pedidoCompleto?.identificar ?? null,
+          subtotal: Number(venta.subtotal),
+          iva: Number(venta.iva),
+          total: Number(venta.total),
+          anticipo: Number(venta.anticipo),
+          saldo: Number(venta.saldo),
+          productos: buildProductosPdf(pedidoCompleto?.productos ?? ped.productos),
+        }, true);
+      } catch (pdfErr) { console.warn("⚠️ PDF:", pdfErr); }
+
+      showAlert(`✅ Nuevo pedido creado: ${respuesta.no_pedido}`);
+    } catch (e: any) {
+      showAlert(e.response?.data?.error || e.message || "Error al crear el pedido");
+    }
+  };
+
   const handleSubmit = async (datos: any) => {
     setGuardando(true);
     setErrorGuardar(null);
@@ -221,7 +282,7 @@ export default function Pedidos() {
           anticipo: Number(venta.anticipo),
           saldo: Number(venta.saldo),
           productos: productosPdf,
-        });
+        }, true);
       } catch (pdfErr) { console.warn("⚠️ PDF:", pdfErr); }
 
     } catch (e: any) {
@@ -233,6 +294,7 @@ export default function Pedidos() {
   const handleDescargarPdf = async (ped: Pedido) => {
     try {
       const venta = await getVentaByPedido(ped.no_pedido);
+      const guardarS3 = await preguntarGuardarS3("pedido");
       await generarPdfPedido({
         no_pedido: ped.no_pedido,
         no_cotizacion: ped.no_cotizacion ?? null,
@@ -259,7 +321,7 @@ export default function Pedidos() {
         anticipo: Number(venta.anticipo),
         saldo: Number(venta.saldo),
         productos: buildProductosPdf(ped.productos),
-      });
+      }, guardarS3);
     } catch (e) {
       console.error("❌ Error al obtener venta para PDF:", e);
       showAlert("No se pudo generar el PDF. Verifica que la venta esté registrada.");
@@ -267,41 +329,41 @@ export default function Pedidos() {
   };
 
   const handleEliminar = async (ped: Pedido) => {
-  const confirmar = await showConfirm(
-    `⚠️ ELIMINAR PEDIDO ${ped.no_pedido}\n\n` +
-    `Esta acción eliminará TODO lo relacionado:\n` +
-    `• Pedido\n` +
-    `• Productos\n` +
-    `• Detalles\n` +
-    `• Ventas y pagos\n` +
-    `• Diseño\n` +
-    `• Producción\n` +
-    `• Bultos\n` +
-    `• Envíos\n` +
-    `• Notas de remisión\n` +
-    `• Bitácora de reparto\n\n` +
-    `Esta operación NO se puede deshacer.\n\n` +
-    `¿Confirmas eliminarlo completamente?`
-  );
-
-  if (!confirmar) return;
-
-  try {
-    await eliminarPedido(ped.no_pedido);
-
-    setPedidos(prev =>
-      prev.filter(p => p.no_pedido !== ped.no_pedido)
+    const confirmar = await showConfirm(
+      `⚠️ ELIMINAR PEDIDO ${ped.no_pedido}\n\n` +
+      `Esta acción eliminará TODO lo relacionado:\n` +
+      `• Pedido\n` +
+      `• Productos\n` +
+      `• Detalles\n` +
+      `• Ventas y pagos\n` +
+      `• Diseño\n` +
+      `• Producción\n` +
+      `• Bultos\n` +
+      `• Envíos\n` +
+      `• Notas de remisión\n` +
+      `• Bitácora de reparto\n\n` +
+      `Esta operación NO se puede deshacer.\n\n` +
+      `¿Confirmas eliminarlo completamente?`
     );
 
-    showAlert(`✅ Pedido ${ped.no_pedido} eliminado completamente`);
-  } catch (e: any) {
-    showAlert(
-      e.response?.data?.detalle ||
-      e.response?.data?.error ||
-      "Error al eliminar el pedido"
-    );
-  }
-};
+    if (!confirmar) return;
+
+    try {
+      await eliminarPedido(ped.no_pedido);
+
+      setPedidos(prev =>
+        prev.filter(p => p.no_pedido !== ped.no_pedido)
+      );
+
+      showAlert(`✅ Pedido ${ped.no_pedido} eliminado completamente`);
+    } catch (e: any) {
+      showAlert(
+        e.response?.data?.detalle ||
+        e.response?.data?.error ||
+        "Error al eliminar el pedido"
+      );
+    }
+  };
 
   const formatFecha = (iso: string) => {
     try { return new Date(iso).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" }); }
@@ -385,6 +447,25 @@ export default function Pedidos() {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
         </svg>
         {busqueda && <p className="mt-2 text-sm text-gray-500">{pedidosFiltrados.length} resultado(s)</p>}
+      </div>
+
+      <div className="flex items-center gap-3 mb-6">
+        <button
+          onClick={() => { setErrorGuardar(null); setModalOpen(true); }}
+          className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-6 rounded-lg shadow transition">
+          + Nuevo Pedido
+        </button>
+
+        <button
+          onClick={() => setModalRepetirOpen(true)}
+          title="Repetir pedido anterior"
+          className="p-2.5 rounded-lg border border-gray-300 text-gray-500 hover:text-purple-600 hover:border-purple-400 hover:bg-purple-50 transition-colors shadow-sm"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+        </button>
       </div>
 
       <div className="overflow-x-auto bg-white rounded-lg shadow mb-6">
@@ -521,11 +602,6 @@ export default function Pedidos() {
         {!loadingPeds && pedidosFiltrados.length > 0 && <Paginador />}
       </div>
 
-      <button onClick={() => { setErrorGuardar(null); setModalOpen(true); }}
-        className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-6 rounded-lg shadow transition">
-        + Nuevo Pedido
-      </button>
-
       <Modal isOpen={modalOpen} onClose={() => setModalOpen(false)} title="Nuevo Pedido Directo">
         {cargandoCatalogos ? (
           <div className="flex items-center justify-center p-8">
@@ -551,6 +627,12 @@ export default function Pedidos() {
           </div>
         )}
       </Modal>
+      {modalRepetirOpen && (
+        <ModalRepetirPedido
+          onSeleccionar={handleRepetirPedido}
+          onClose={() => setModalRepetirOpen(false)}
+        />
+      )}
     </Dashboard>
   );
 }

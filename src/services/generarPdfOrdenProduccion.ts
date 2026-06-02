@@ -2,6 +2,7 @@ import jsPDF from "jspdf";
 import { cargarLogoBase64, parsePantones } from "./Pdfutils";
 import type { MedidaKey } from "../types/productos-plastico.types";
 import logoUrl from "../assets/logogrupeb.png";
+import { subirPdfA3 } from "./pdfS3.service";
 
 export interface OrdenProduccionData {
   no_pedido: string;
@@ -440,7 +441,7 @@ function construirRepeticionStr(data: OrdenProduccionData): string {
   return partes.join("\n");
 }
 
-export async function generarPdfOrdenProduccion(data: OrdenProduccionData): Promise<void> {
+export async function generarPdfOrdenProduccion(data: OrdenProduccionData, guardarEnS3 = false): Promise<void> {
   const logoBase64 = await cargarLogoBase64(logoUrl);
   const repeticionStr = construirRepeticionStr(data);
   const pantStr = parsePantones(data.pantones);
@@ -904,38 +905,43 @@ doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);  celdaLabel(doc, "Cantidad", can
     doc.rect(masterX, masterY, masterW, masterH);
 
     try {
-  const masterSize = await getImageSize(masterImg);
-  const isLandscape = masterSize.width > masterSize.height;
+      const masterSize = await getImageSize(masterImg);
+      const isLandscape = masterSize.width > masterSize.height;
 
-  if (isLandscape) {
-    // Rotar 90° para que quede "parada" en la hoja portrait
-    const canvas = document.createElement("canvas");
-    canvas.width = masterSize.height;
-    canvas.height = masterSize.width;
-    const ctx = canvas.getContext("2d")!;
-    const img = new Image();
-    await new Promise<void>((resolve, reject) => {
-      img.onload = () => resolve();
-      img.onerror = reject;
-      img.src = masterImg!.dataUrl;
-    });
-    ctx.translate(canvas.width / 2, canvas.height / 2);
-    ctx.rotate(Math.PI / 2);
-    ctx.drawImage(img, -masterSize.width / 2, -masterSize.height / 2);
+      if (isLandscape) {
+        // Rotar 90° para que quede "parada" en la hoja portrait
+        const canvas = document.createElement("canvas");
+        canvas.width = masterSize.height;
+        canvas.height = masterSize.width;
+        const ctx = canvas.getContext("2d")!;
+        const img = new Image();
+        await new Promise<void>((resolve, reject) => {
+          img.onload = () => resolve();
+          img.onerror = reject;
+          img.src = masterImg!.dataUrl;
+        });
+        ctx.translate(canvas.width / 2, canvas.height / 2);
+        ctx.rotate(Math.PI / 2);
+        ctx.drawImage(img, -masterSize.width / 2, -masterSize.height / 2);
 
-    const rotatedDataUrl = canvas.toDataURL("image/png");
-    const rotatedImg = dataUrlToImgData(rotatedDataUrl);
-    if (rotatedImg) {
-      await addImageContain(doc, rotatedImg, masterX, masterY, masterW, masterH);
+        const rotatedDataUrl = canvas.toDataURL("image/png");
+        const rotatedImg = dataUrlToImgData(rotatedDataUrl);
+        if (rotatedImg) {
+          await addImageContain(doc, rotatedImg, masterX, masterY, masterW, masterH);
+        }
+      } else {
+        await addImageContain(doc, masterImg, masterX, masterY, masterW, masterH);
+      }
+    } catch (e) {
+      console.error("❌ addImage master error:", e);
+      // ... tu manejo de error existente
     }
-  } else {
-    await addImageContain(doc, masterImg, masterX, masterY, masterW, masterH);
-  }
-} catch (e) {
-  console.error("❌ addImage master error:", e);
-  // ... tu manejo de error existente
-}
   }
 
-  doc.save(`OrdenProduccion_${data.no_produccion ?? data.no_pedido}.pdf`);
+  const nombre = `OrdenProduccion_${data.no_produccion ?? data.no_pedido}.pdf`;
+doc.save(nombre);
+if (guardarEnS3) {
+  const blob = doc.output("blob");
+  await subirPdfA3(blob, nombre, "pdfs", "ordenes-produccion");
+}
 }

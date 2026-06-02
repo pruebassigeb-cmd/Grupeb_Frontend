@@ -1,4 +1,5 @@
 import jsPDF from "jspdf";
+import { subirPdfA3 } from "../services/pdfS3.service";
 
 const ROW_H         = 11.8;
 const TABLA_Y_START = 362;
@@ -86,7 +87,7 @@ function chk(doc: jsPDF, x: number, y: number, checked: boolean) {
   doc.text("X", x, y);
 }
 
-export async function generarFormatoCastores(params: FormatoCastoresParams) {
+export async function generarFormatoCastores(params: FormatoCastoresParams, guardarEnS3 = false) {
   const {
     datos, bultosForms, requiereFactura,
     formaPago, metodoPago,
@@ -211,5 +212,10 @@ export async function generarFormatoCastores(params: FormatoCastoresParams) {
     txt(doc, observaciones, 120, 536, 7);
   }
 
-  doc.save(`SolicitudCastores_${datos.no_pedido}.pdf`);
+  const nombre = `SolicitudCastores_${datos.no_pedido}.pdf`;
+  doc.save(nombre);
+  if (guardarEnS3) {
+    const blob = doc.output("blob");
+    await subirPdfA3(blob, nombre, "pdfs", "formas-envio");
+  }
 }

@@ -78,6 +78,8 @@ export const getObservacionProducto = async (id: number) => {
   const res = await api.get(`/orden-diseno/${id}/observacion-producto`);
   return res.data;
 };
+// src/services/ordenDisenoService.ts — reemplaza getImagenesDiseno
+
 export const getImagenesDiseno = async (
   idorden: number
 ): Promise<{ url_render: string | null; url_master: string | null }> => {
@@ -93,10 +95,13 @@ export const getImagenesDiseno = async (
     return { url_render: null, url_master: null };
   }
 
-  // categoria siempre llega null — asignar por posición:
-  // archivos[0] → render cliente, archivos[1] → master graphic
-  const renderArchivo = ultimaRevision.archivos[0] ?? null;
-  const masterArchivo = ultimaRevision.archivos[1] ?? null;
+  // ✅ Busca por categoría real, no por posición
+  const renderArchivo = ultimaRevision.archivos.find(a => a.categoria === "render")
+    ?? ultimaRevision.archivos[0]   // fallback para archivos viejos sin categoría
+    ?? null;
+
+  const masterArchivo = ultimaRevision.archivos.find(a => a.categoria === "master")
+    ?? null;  // master no tiene fallback — si no está marcado, no se muestra
 
   return {
     url_render: renderArchivo?.url ?? null,

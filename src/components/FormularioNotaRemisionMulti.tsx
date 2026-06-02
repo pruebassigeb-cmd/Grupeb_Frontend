@@ -2,7 +2,6 @@ import { useState, useEffect } from "react";
 import {
   getConductores, getUnidades,
   procesarCarrito, crearNotaRemisionMulti,
-  type EnvioCreado,
 } from "../services/enviosService";
 import { generarNotaRemisionMulti } from "../utils/generarNotaRemision";
 import type { CarritoPedido, Conductor, Unidad, TipoEnvioCarrito } from "../types/envios.types";
@@ -21,14 +20,11 @@ export default function FormularioNotaRemisionMulti({ carrito, onSuccess, onCanc
   const [cargando,       setCargando]       = useState(true);
   const [procesando,     setProcesando]     = useState(false);
 
-  const [tipoEntrega, setTipoEntrega] = useState<"recoleccion" | "local" | null>(null);
-  const [choferSeleccionado, setChoferSeleccionado] = useState(0);
-  const [unidadSeleccionada, setUnidadSeleccionada] = useState(0);
-
-  // Campos extra para envío local
+  const [tipoEntrega,          setTipoEntrega]          = useState<"recoleccion" | "local" | null>(null);
+  const [choferSeleccionado,   setChoferSeleccionado]   = useState(0);
+  const [unidadSeleccionada,   setUnidadSeleccionada]   = useState(0);
   const [costoFlete,           setCostoFlete]           = useState("");
   const [fechaEntregaEstimada, setFechaEntregaEstimada] = useState("");
-  // Observaciones de la nota (aplica para cualquier tipo de entrega)
   const [observaciones,        setObservaciones]        = useState("");
 
   useEffect(() => {
@@ -51,7 +47,6 @@ export default function FormularioNotaRemisionMulti({ carrito, onSuccess, onCanc
       showAlert("Selecciona el tipo de entrega para la nota de remisión");
       return;
     }
-
     if (tipoEntrega === "local" && (!choferSeleccionado || !unidadSeleccionada)) {
       showAlert("Para entrega local selecciona chofer y unidad");
       return;
@@ -69,22 +64,22 @@ export default function FormularioNotaRemisionMulti({ carrito, onSuccess, onCanc
       }));
 
       const resultCarrito = await procesarCarrito({
-        usuarios_idusuario:      tipoEntrega === "local" ? choferSeleccionado || undefined : undefined,
-        unidades_idunidad:       tipoEntrega === "local" ? unidadSeleccionada || undefined : undefined,
-        costo_flete:             tipoEntrega === "local" && costoFlete ? Number(costoFlete) : undefined,
-        fecha_entrega_estimada:  tipoEntrega === "local" && fechaEntregaEstimada ? fechaEntregaEstimada : undefined,
-        // NOTA: las observaciones son para la nota, no para el envío
+        usuarios_idusuario:     tipoEntrega === "local" ? choferSeleccionado || undefined : undefined,
+        unidades_idunidad:      tipoEntrega === "local" ? unidadSeleccionada || undefined : undefined,
+        costo_flete:            tipoEntrega === "local" && costoFlete ? Number(costoFlete) : undefined,
+        fecha_entrega_estimada: fechaEntregaEstimada || undefined,
+        observaciones:          observaciones.trim() || undefined,
         pedidos: pedidosPayload,
       });
 
       const enviosIds = resultCarrito.envios_creados.map(e => e.idenvio);
 
       const notaMulti = await crearNotaRemisionMulti({
-        envios_ids:        enviosIds,
-        tipo_entrega:      tipoEntrega,
-        chofer_idusuario:  tipoEntrega === "local" ? choferSeleccionado || undefined : undefined,
-        unidad_idunidad:   tipoEntrega === "local" ? unidadSeleccionada || undefined : undefined,
-        observaciones:     observaciones.trim() || undefined,
+        envios_ids:       enviosIds,
+        tipo_entrega:     tipoEntrega,
+        chofer_idusuario: tipoEntrega === "local" ? choferSeleccionado || undefined : undefined,
+        unidad_idunidad:  tipoEntrega === "local" ? unidadSeleccionada || undefined : undefined,
+        observaciones:    observaciones.trim() || undefined,
       });
 
       await generarNotaRemisionMulti(notaMulti);
@@ -133,7 +128,8 @@ export default function FormularioNotaRemisionMulti({ carrito, onSuccess, onCanc
               tipoEntrega === "recoleccion"
                 ? "border-purple-600 bg-purple-50 text-purple-700"
                 : "border-gray-200 text-gray-500 hover:border-gray-300"
-            }`}>
+            }`}
+          >
             🏭 Recolección en planta
             <p className="text-xs font-normal mt-0.5 opacity-70">El cliente pasa a recoger</p>
           </button>
@@ -144,23 +140,41 @@ export default function FormularioNotaRemisionMulti({ carrito, onSuccess, onCanc
               tipoEntrega === "local"
                 ? "border-blue-600 bg-blue-50 text-blue-700"
                 : "border-gray-200 text-gray-500 hover:border-gray-300"
-            }`}>
+            }`}
+          >
             🚚 Envío local
             <p className="text-xs font-normal mt-0.5 opacity-70">Se envía con chofer propio</p>
           </button>
         </div>
       </div>
 
-      {/* Campos solo si es local */}
+      {/* Campos para recolección */}
+      {tipoEntrega === "recoleccion" && (
+        <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 space-y-3">
+          <p className="text-xs font-semibold text-purple-700 uppercase tracking-wide">Datos de recolección</p>
+          <div>
+            <label className={labelClass}>Fecha estimada de recolección (opcional)</label>
+            <input
+              type="date"
+              value={fechaEntregaEstimada}
+              onChange={e => setFechaEntregaEstimada(e.target.value)}
+              className={inputClass}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Campos para envío local */}
       {tipoEntrega === "local" && (
         <div className="space-y-3 bg-blue-50 border border-blue-200 rounded-lg p-4">
           <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Datos del reparto</p>
-
           <div>
             <label className={labelClass}>Chofer *</label>
-            <select value={choferSeleccionado}
+            <select
+              value={choferSeleccionado}
               onChange={e => setChoferSeleccionado(Number(e.target.value))}
-              className={inputClass}>
+              className={inputClass}
+            >
               <option value={0}>Seleccionar chofer...</option>
               {conductores.map(c => (
                 <option key={c.idusuario} value={c.idusuario}>
@@ -169,12 +183,13 @@ export default function FormularioNotaRemisionMulti({ carrito, onSuccess, onCanc
               ))}
             </select>
           </div>
-
           <div>
             <label className={labelClass}>Unidad *</label>
-            <select value={unidadSeleccionada}
+            <select
+              value={unidadSeleccionada}
               onChange={e => setUnidadSeleccionada(Number(e.target.value))}
-              className={inputClass}>
+              className={inputClass}
+            >
               <option value={0}>Seleccionar unidad...</option>
               {unidades.map(u => (
                 <option key={u.idunidad} value={u.idunidad}>
@@ -183,28 +198,35 @@ export default function FormularioNotaRemisionMulti({ carrito, onSuccess, onCanc
               ))}
             </select>
           </div>
-
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={labelClass}>Costo de Flete (opcional)</label>
-              <input type="text" inputMode="decimal" value={costoFlete}
+              <input
+                type="text"
+                inputMode="decimal"
+                value={costoFlete}
                 onChange={e => setCostoFlete(e.target.value.replace(/[^0-9.]/g, ""))}
-                className={inputClass} placeholder="0.00" />
+                className={inputClass}
+                placeholder="0.00"
+              />
             </div>
             <div>
-              <label className={labelClass}>Fecha Estimada de Entrega</label>
-              <input type="date" value={fechaEntregaEstimada}
+              <label className={labelClass}>Fecha estimada de entrega</label>
+              <input
+                type="date"
+                value={fechaEntregaEstimada}
                 onChange={e => setFechaEntregaEstimada(e.target.value)}
-                className={inputClass} />
+                className={inputClass}
+              />
             </div>
           </div>
         </div>
       )}
 
-      {/* Observaciones — aplica para CUALQUIER tipo de entrega */}
+      {/* Observaciones — aplica para cualquier tipo */}
       {tipoEntrega && (
         <div>
-          <label className={labelClass}>Observaciones de la nota (opcional)</label>
+          <label className={labelClass}>Observaciones del envío / nota (opcional)</label>
           <textarea
             value={observaciones}
             onChange={e => setObservaciones(e.target.value)}
@@ -212,15 +234,13 @@ export default function FormularioNotaRemisionMulti({ carrito, onSuccess, onCanc
             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white placeholder-gray-400 resize-none"
             placeholder="Ej: Favor de revisar embalaje, producto frágil, instrucciones especiales..."
           />
-          <p className="text-xs text-gray-400 mt-1">Se imprimirá en la parte inferior de la nota de remisión.</p>
+          <p className="text-xs text-gray-400 mt-1">Se guardará en el envío y se imprimirá en la parte inferior de la nota de remisión.</p>
         </div>
       )}
 
       {/* Desglose de pedidos */}
       <div>
-        <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">
-          Contenido de la nota
-        </p>
+        <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Contenido de la nota</p>
         <div className="space-y-2">
           {carrito.map(pedido => (
             <div key={pedido.idsolicitud} className="bg-gray-50 rounded-lg px-3 py-2 text-xs">
@@ -236,13 +256,18 @@ export default function FormularioNotaRemisionMulti({ carrito, onSuccess, onCanc
 
       {/* Botones */}
       <div className="flex justify-end gap-3 pt-2 border-t border-gray-100">
-        <button onClick={onCancel} disabled={procesando}
-          className="px-5 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50">
+        <button
+          onClick={onCancel}
+          disabled={procesando}
+          className="px-5 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+        >
           Cancelar
         </button>
-        <button onClick={handleSubmit}
+        <button
+          onClick={handleSubmit}
           disabled={procesando || !tipoEntrega}
-          className="px-5 py-2 bg-emerald-600 text-white rounded-lg font-semibold hover:bg-emerald-700 disabled:opacity-50">
+          className="px-5 py-2 bg-emerald-600 text-white rounded-lg font-semibold hover:bg-emerald-700 disabled:opacity-50"
+        >
           {procesando ? "Generando..." : "📋 Crear Nota de Remisión"}
         </button>
       </div>

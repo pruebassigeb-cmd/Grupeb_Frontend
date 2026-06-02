@@ -2,6 +2,8 @@ import jsPDF from "jspdf";
 import type { NotaRemisionData } from "../services/enviosService";
 import type { NotaRemisionMultiData } from "../types/envios.types";
 import logoGrupeb from "../assets/grupeblanco.png";
+import { subirPdfA3 } from "../services/pdfS3.service";
+import { blob } from "stream/consumers";
 
 // ─────────────────────────────────────────────────────────────────
 // UTILIDADES
@@ -318,7 +320,8 @@ const ALTO_COPIA = 130;
 const SEP = 7;
 
 export const generarNotaRemision = async (
-  data: NotaRemisionData
+  data: NotaRemisionData,
+  guardarEnS3 = false
 ): Promise<void> => {
   const doc = new jsPDF({
     unit: "mm",
@@ -341,11 +344,17 @@ export const generarNotaRemision = async (
 
   dibujarNota(doc, data, ALTO_COPIA + SEP, "COPIA");
 
-  doc.save(`nota-remision-${data.no_nota}.pdf`);
+  const nombre = `nota-remision-${data.no_nota}.pdf`;
+  doc.save(nombre);
+  if (guardarEnS3) {
+    const blob = doc.output("blob");
+    await subirPdfA3(blob, nombre, "pdfs", "notas-remision");
+  }
 };
 
 export const generarNotasMultiples = async (
-  notas: NotaRemisionData[]
+  notas: NotaRemisionData[],
+  guardarEnS3 = false
 ): Promise<void> => {
   const doc = new jsPDF({
     unit: "mm",
@@ -372,6 +381,11 @@ export const generarNotasMultiples = async (
     dibujarNota(doc, nota, ALTO_COPIA + SEP, "COPIA");
   });
 
+  if (guardarEnS3) {
+    const nombreMulti = `notas-remision-batch-${Date.now()}.pdf`;
+    const blob = doc.output("blob");
+    await subirPdfA3(blob, nombreMulti, "pdfs", "notas-remision");
+  }
   doc.output("dataurlnewwindow");
 };
 
@@ -574,7 +588,8 @@ const ALTO_COPIA_MULTI = 138;
 const SEP_MULTI = 7;
 
 export const generarNotaRemisionMulti = async (
-  data: NotaRemisionMultiData
+  data: NotaRemisionMultiData,
+  guardarEnS3 = false
 ): Promise<void> => {
   const doc = new jsPDF({
     unit: "mm",
@@ -597,5 +612,10 @@ export const generarNotaRemisionMulti = async (
 
   dibujarNotaMulti(doc, data, ALTO_COPIA_MULTI + SEP_MULTI, "COPIA");
 
-  doc.save(`nota-remision-${data.no_nota}.pdf`);
+  const nombre = `nota-remision-${data.no_nota}.pdf`;
+  doc.save(nombre);
+  if (guardarEnS3) {
+    const blob = doc.output("blob");
+    await subirPdfA3(blob, nombre, "pdfs", "notas-remision");
+  }
 };

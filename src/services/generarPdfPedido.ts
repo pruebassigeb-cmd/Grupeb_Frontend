@@ -11,6 +11,7 @@ import {
 } from "./Pdfutils";
 import type { ProductoPdf } from "./Pdfutils";
 import logoUrl from "../assets/logogrupeb.png";
+import { subirPdfA3 } from "./pdfS3.service";
 
 interface PedidoPdf {
   no_pedido: string;
@@ -42,7 +43,7 @@ interface PedidoPdf {
   identificar?: string | null;
 }
 
-export async function generarPdfPedido(pedido: PedidoPdf): Promise<void> {
+export async function generarPdfPedido(pedido: PedidoPdf, guardarEnS3 = false): Promise<void> {
   const logoBase64 = pedido.logoBase64 ?? await cargarLogoBase64(logoUrl);
   const sinIva = pedido.sin_iva === true;
 
@@ -141,7 +142,6 @@ export async function generarPdfPedido(pedido: PedidoPdf): Promise<void> {
 
     bodyRows.push(comboRow);
 
-    // ── Fila descripción — fila propia con fondo azul suave ──────────────────
     if (descripcion) {
       const descRow = new Array(headAll.length).fill("");
       descRow[0] = `DESC:${descripcion}`;
@@ -218,11 +218,10 @@ export async function generarPdfPedido(pedido: PedidoPdf): Promise<void> {
         const ci   = data.column.index;
         const lastCol = headAll.length - 1;
 
-        // ── Fila descripción propia ──────────────────────────────────────────
         if (raw0.startsWith("DESC:")) {
           if (ci === 0) {
             data.cell.colSpan            = headAll.length;
-            data.cell.styles.fillColor   = [235, 242, 255] as [number, number, number]; // azul suave
+            data.cell.styles.fillColor   = [235, 242, 255] as [number, number, number];
             data.cell.styles.fontStyle   = "bold";
             data.cell.styles.fontSize    = 8;
             data.cell.styles.textColor   = [40, 80, 180] as [number, number, number];
@@ -236,7 +235,6 @@ export async function generarPdfPedido(pedido: PedidoPdf): Promise<void> {
           return;
         }
 
-        // ── Fila observaciones ────────────────────────────────────────────────
         const isCombo = raw0.startsWith("Obs:");
         if (!isCombo) return;
 
@@ -278,8 +276,6 @@ export async function generarPdfPedido(pedido: PedidoPdf): Promise<void> {
         }
       }
     },
-
-
   });
 
   const finalY = (doc as any).lastAutoTable?.finalY ?? 0;
@@ -296,5 +292,15 @@ export async function generarPdfPedido(pedido: PedidoPdf): Promise<void> {
   });
 
   dibujarPiePagina(doc, "PEDIDO", pedido.no_pedido, pedido.fecha);
-  doc.save(`Pedido_${pedido.no_pedido}.pdf`);
+
+  // ── IMPORTANTE: obtener el blob ANTES de doc.save() ──────────────────────
+  // doc.save() en algunos entornos "consume" el estado interno del doc.
+  // doc.output("blob") genera el binario sin abrir el diálogo de descarga.
+  const nombre = `Pedido_${pedido.no_pedido}.pdf`;
+  const blob = doc.output("blob");   // ← primero el blob
+  doc.save(nombre);                  // ← luego la descarga
+
+  if (guardarEnS3) {
+    await subirPdfA3(blob, nombre, "pdfs", "pedidos");
+  }
 }

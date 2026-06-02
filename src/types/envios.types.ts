@@ -168,6 +168,7 @@ export interface BitacoraRegistro {
   firma: string | null;
   created_at: string;
   updated_at: string;
+  observaciones_envio?: string | null;
   envio: {
     idenvio: number;
     tipo: string;
@@ -205,6 +206,7 @@ export interface EnvioPaqueteria {
   fecha_envio: string;
   fecha_entrega_estimada: string | null;
   observaciones: string | null;
+  fecha_entrega_estimada?: string | null;
   no_pedido: string;
   cliente: string;
   empresa: string;
@@ -213,6 +215,12 @@ export interface EnvioPaqueteria {
     nombre: string;
   };
   total_bultos: number;
+  idbitacora: number | null;
+  hora_salida: string | null;
+  hora_llegada: string | null;
+  observacion: "E" | "RA" | "RD" | "PD" | null;
+  observacion_extra: string | null;
+  firma: string | null;
 }
 
 // ==========================
@@ -227,6 +235,7 @@ export interface RecoleccionDatos {
   tiene_foto: boolean;
   foto_s3_key: string | null;
   fecha_recogido: string | null;
+  observacion_extra?: string | null;
 }
 
 export interface EnvioRecoleccion {
@@ -236,6 +245,7 @@ export interface EnvioRecoleccion {
   fecha_envio: string;
   fecha_entrega_estimada: string | null;
   observaciones: string | null;
+  fecha_entrega_estimada?: string | null;
   no_pedido: string;
   cliente: string;
   empresa: string;
@@ -399,6 +409,7 @@ export interface NotaRemisionRecoleccionDatos {
   unidad_modelo: string | null;
   unidad_placas: string | null;
   fecha: string | null;
+  observacion_extra?: string | null;
 }
 
 export interface NotaRemisionLocalDatos {
@@ -417,6 +428,7 @@ export interface NotaRemisionBitacoraItem {
   tipo_entrega: "recoleccion" | "local";
   estado: "pendiente" | "entregado";
   observaciones: string | null;
+  fecha_entrega_estimada?: string | null;
   no_pedido: string;
   cliente: string;
   total_pedidos: number;
@@ -486,6 +498,7 @@ export interface HistorialPaqueteriaItem {
   fecha_envio: string;
   fecha_entrega_estimada: string | null;
   observaciones: string | null;
+  fecha_entrega_estimada?: string | null;
   no_pedido: string;
   cliente: string;
   total_bultos: number;
@@ -527,11 +540,11 @@ export interface PedidoRemision {
 
 export interface ProductoDetalleEntrega {
   nombre_producto: string;
-  medida:          string;
-  descripcion:     string | null;
-  total_bultos:    number;
-  cantidad:        number;
-  modo_cantidad:   "unidad" | "kilo";
+  medida: string;
+  descripcion: string | null;
+  total_bultos: number;
+  cantidad: number;
+  modo_cantidad: "unidad" | "kilo";
 }
 
 export interface EntregaRemision {
@@ -542,6 +555,8 @@ export interface EntregaRemision {
   fecha_envio: string;
   numero_guia: string | null;
   observaciones: string | null;
+  observacion: "E" | "RA" | "RD" | "PD" | null;   // ← NUEVO: código de obs. de entrega
+  observacion_extra: string | null;                 // ← NUEVO: texto libre de obs. de entrega
   nota_observaciones: string | null;
   total_bultos: number;
   cantidad_entregada: number;

@@ -55,7 +55,7 @@ export default function ProductosProveedor({ proveedor, onVolver }: Props) {
     useEffect(() => { cargar(); }, [proveedor.idproveedor]);
 
     useEffect(() => {
-        getProductosSat().then(setProductosSat).catch(() => {});
+        getProductosSat().then(setProductosSat).catch(() => { });
     }, []);
 
     const cargar = async () => {
@@ -95,14 +95,14 @@ export default function ProductosProveedor({ proveedor, onVolver }: Props) {
     const abrirEditar = (p: ProductoProveedor) => {
         setEditando(p);
         setForm({
-            tipo_insumo_id:              p.idtipo_insumo,
-            nombre:                      p.nombre,
-            codigo:                      p.codigo ?? "",
-            precio:                      p.precio,
-            notas:                       p.notas ?? "",
-            clave_producto:              p.clave_producto ?? "",
-            minimo_compra:               p.minimo_compra,
-            unidad:                      p.unidad as "kilos" | "pzas" | "litros" | null,
+            tipo_insumo_id: p.idtipo_insumo,
+            nombre: p.nombre,
+            codigo: p.codigo ?? "",
+            precio: p.precio,
+            notas: p.notas ?? "",
+            clave_producto: p.clave_producto ?? "",
+            minimo_compra: p.minimo_compra,
+            unidad: p.unidad as "kilos" | "pzas" | "litros" | null,
             producto_sat_idproducto_sat: p.producto_sat_idproducto_sat ?? null,
         });
         setPrecioTexto(p.precio != null ? String(p.precio) : "");
@@ -168,10 +168,12 @@ export default function ProductosProveedor({ proveedor, onVolver }: Props) {
                 setTipos(prev => [...prev, nuevoTipo]);
                 tipoIdFinal = nuevoTipo.idtipo_insumo;
                 setNuevoTipoNombre("");
+                set("tipo_insumo_id", nuevoTipo.idtipo_insumo);
             } catch (error: any) {
                 if (error?.response?.status === 409) {
                     tipoIdFinal = error.response.data.existente.idtipo_insumo;
                     setNuevoTipoNombre("");
+                    set("tipo_insumo_id", tipoIdFinal);
                 } else {
                     showAlert(error?.response?.data?.error || "Error al crear tipo", "error");
                     setGuardandoTipo(false);
@@ -188,14 +190,14 @@ export default function ProductosProveedor({ proveedor, onVolver }: Props) {
         setGuardando(true);
         try {
             const dto: CreateProductoDto = {
-                tipo_insumo_id:              tipoIdFinal,
-                nombre:                      form.nombre.trim(),
-                codigo:                      form.codigo?.trim()         || null,
-                precio:                      form.precio,
-                notas:                       form.notas?.trim()          || null,
-                clave_producto:              form.clave_producto?.trim() || null,
-                minimo_compra:               form.minimo_compra,
-                unidad:                      form.unidad,
+                tipo_insumo_id: tipoIdFinal,
+                nombre: form.nombre.trim(),
+                codigo: form.codigo?.trim() || null,
+                precio: form.precio,
+                notas: form.notas?.trim() || null,
+                clave_producto: form.clave_producto?.trim() || null,
+                minimo_compra: form.minimo_compra,
+                unidad: form.unidad,
                 producto_sat_idproducto_sat: form.producto_sat_idproducto_sat,
             };
 
@@ -237,15 +239,24 @@ export default function ProductosProveedor({ proveedor, onVolver }: Props) {
 
     const inputClass = "w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm placeholder-gray-400";
 
-    const tipoBadgeClass: Record<string, string> = {
-        "Pantón":            "bg-purple-100 text-purple-700 border-purple-200",
-        "Pigmento":          "bg-orange-100 text-orange-700 border-orange-200",
-        "Material plástico": "bg-blue-100   text-blue-700   border-blue-200",
-        "Suaje":             "bg-teal-100   text-teal-700   border-teal-200",
-        "Otro":              "bg-gray-100   text-gray-600   border-gray-200",
-    };
-    const getBadgeClass = (tipo: string) =>
-        tipoBadgeClass[tipo] ?? "bg-gray-100 text-gray-600 border-gray-200";
+    const PALETTE = [
+    "bg-purple-100 text-purple-700 border-purple-200",
+    "bg-orange-100 text-orange-700 border-orange-200",
+    "bg-blue-100   text-blue-700   border-blue-200",
+    "bg-teal-100   text-teal-700   border-teal-200",
+    "bg-pink-100   text-pink-700   border-pink-200",
+    "bg-yellow-100 text-yellow-700 border-yellow-200",
+    "bg-green-100  text-green-700  border-green-200",
+    "bg-red-100    text-red-700    border-red-200",
+    "bg-indigo-100 text-indigo-700 border-indigo-200",
+    "bg-cyan-100   text-cyan-700   border-cyan-200",
+];
+
+// Reemplaza tipoBadgeClass y getBadgeClass por esto:
+const getBadgeClass = (tipo: string) => {
+    const idx = [...tipo].reduce((acc, c) => acc + c.charCodeAt(0), 0) % PALETTE.length;
+    return PALETTE[idx];
+};
 
     return (
         <div className="space-y-5">
@@ -310,12 +321,18 @@ export default function ProductosProveedor({ proveedor, onVolver }: Props) {
                                     Tipo de insumo <span className="text-red-500">*</span>
                                 </label>
                                 <select value={form.tipo_insumo_id}
-                                    onChange={e => set("tipo_insumo_id", Number(e.target.value))}
+                                    onChange={e => { set("tipo_insumo_id", Number(e.target.value)); setNuevoTipoNombre(""); }}
                                     className={inputClass}>
                                     <option value={0} disabled>Seleccionar...</option>
-                                    {tipos.map(t => (
-                                        <option key={t.idtipo_insumo} value={t.idtipo_insumo}>{t.nombre}</option>
-                                    ))}
+                                    {tipos
+                                        .filter(t => t.nombre !== "Otro")
+                                        .map(t => (
+                                            <option key={t.idtipo_insumo} value={t.idtipo_insumo}>{t.nombre}</option>
+                                        ))
+                                    }
+                                    {idTipoOtro && (
+                                        <option value={idTipoOtro}>Otro (crear nuevo tipo...)</option>
+                                    )}
                                 </select>
                             </div>
                             <div>
