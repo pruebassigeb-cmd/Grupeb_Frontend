@@ -3,14 +3,14 @@ import {
   quitarDelCarrito,
   vaciarCarrito,
   asignarTipoEnvioPedido,
-} from "../services/enviosService";
+} from "../../services/enviosService";
 import type {
   CarritoPedido,
   Paqueteria,
   TipoEnvioCarrito,
-} from "../types/envios.types";
-import { showAlert } from "./CustomAlert";
-import { showConfirm } from "./CustomConfirm";
+} from "../../types/envios.types";
+import { showAlert } from "../CustomAlert";
+import { showConfirm } from "../CustomConfirm";
 
 interface Props {
   carrito: CarritoPedido[];

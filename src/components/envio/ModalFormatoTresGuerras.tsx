@@ -1,12 +1,12 @@
 import { useState, useEffect } from "react";
-import Modal from "./Modal";
-import { inputClass, labelClass } from "./enviosConstants";
-import { getProductosSat, updateClavesSatBultos } from "../services/enviosService";
-import { generarFormatoTresGuerras } from "../utils/generarFormatoTresGuerras";
-import { preguntarGuardarS3 } from "../services/pdfS3.service";
-import type { ProductoSat } from "../types/envios.types";
-import api from "../services/api";
-import { showAlert } from './CustomAlert';
+import Modal from "./../Modal";
+import { inputClass, labelClass } from "./../enviosConstants";
+import { getProductosSat, updateClavesSatBultos } from "../../services/enviosService";
+import { generarFormatoTresGuerras } from "../../utils/generarFormatoTresGuerras";
+import { preguntarGuardarS3 } from "../../services/pdfS3.service";
+import type { ProductoSat } from "../../types/envios.types";
+import api from "../../services/api";
+import { showAlert } from './../CustomAlert';
 
 
 interface BultoForm {

@@ -39,8 +39,9 @@ export default function SubirRender({
     if (!e.target.files || e.target.files.length === 0) return;
     const nuevos: ArchivoConCategoria[] = Array.from(e.target.files).map(file => ({
       file,
-      // Para tipo render, por defecto la categoría es "render"; para feedback es "otro"
-      categoria: tipo === "render" ? "render" : "otro",
+      // Para tipo render, por defecto "otro" para que el usuario elija explícitamente.
+      // Para feedback siempre "otro".
+      categoria: "otro" as CategoriaArchivo,
     }));
     setArchivos(prev => [...prev, ...nuevos]);
     if (inputRef.current) inputRef.current.value = "";
@@ -71,7 +72,7 @@ export default function SubirRender({
     setProgreso(0);
 
     try {
-      const idsSubidos: { id_archivo: number }[] = [];
+      const idsSubidos: { id_archivo: number; categoria: CategoriaArchivo }[] = [];
       const total = archivos.length;
 
       for (let i = 0; i < total; i++) {
@@ -86,7 +87,7 @@ export default function SubirRender({
           headers: { "Content-Type": "multipart/form-data" },
         });
 
-        idsSubidos.push({ id_archivo: res.data.id_archivo });
+        idsSubidos.push({ id_archivo: res.data.id_archivo, categoria });
         setProgreso(Math.round(((i + 1) / total) * 90));
       }
 

@@ -11,7 +11,6 @@ import {
 import type { ProductoPdf } from "./Pdfutils";
 import logoUrl from "../assets/logogrupeb.png";
 import { subirPdfA3 } from "./pdfS3.service";
-import { blob } from "stream/consumers";
 
 interface CotizacionPdf {
   no_cotizacion: string;

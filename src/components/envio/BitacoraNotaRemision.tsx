@@ -2,13 +2,13 @@ import { useState, useEffect, useRef } from "react";
 import {
   getNotasRemisionBitacora, getNotaRemisionMulti,
   marcarRecolectadoNotaRemision, marcarSalidaLocalNota, marcarEntregadoLocalNota,
-} from "../services/enviosService";
-import { getFotosNota, subirArchivo, type Archivo } from "../services/archivos.service";
-import { generarNotaRemisionMulti } from "../utils/generarNotaRemision";
-import { OBSERVACIONES, formatFechaHora, inputClass, labelClass } from "./enviosConstants";
-import Modal from "./Modal";
-import { showAlert } from "./CustomAlert";
-import type { NotaRemisionBitacoraItem } from "../types/envios.types";
+} from "../../services/enviosService";
+import { getFotosNota, subirArchivo, type Archivo } from "../../services/archivos.service";
+import { generarNotaRemisionMulti } from "../../utils/generarNotaRemision";
+import { OBSERVACIONES, formatFechaHora, inputClass, labelClass } from "./../enviosConstants";
+import Modal from "./../Modal";
+import { showAlert } from "./../CustomAlert";
+import type { NotaRemisionBitacoraItem } from "../../types/envios.types";
 
 const ChevronIcon = ({ open }: { open: boolean }) => (
   <svg className={`w-4 h-4 text-gray-400 transition-transform duration-200 flex-shrink-0 ${open ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">

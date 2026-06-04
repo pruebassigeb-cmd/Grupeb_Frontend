@@ -234,7 +234,7 @@ export default function FormularioProveedor({ proveedor, onGuardado, onCancel }:
   );
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 max-w-2xl">
+    <div className="bg-white rounded-xl border  border-gray-200 shadow-sm p-6 w-full max-w-2xl">
 
       {/* Header */}
       <div className="flex items-center gap-3 mb-5">

@@ -2,11 +2,11 @@ import { useState, useEffect } from "react";
 import {
   getConductores, getUnidades,
   procesarCarrito, crearNotaRemisionMulti,
-} from "../services/enviosService";
-import { generarNotaRemisionMulti } from "../utils/generarNotaRemision";
-import type { CarritoPedido, Conductor, Unidad, TipoEnvioCarrito } from "../types/envios.types";
-import { inputClass, labelClass } from "./enviosConstants";
-import { showAlert } from "./CustomAlert";
+} from "../../services/enviosService";
+import { generarNotaRemisionMulti } from "../../utils/generarNotaRemision";
+import type { CarritoPedido, Conductor, Unidad, TipoEnvioCarrito } from "../../types/envios.types";
+import { inputClass, labelClass } from "./../enviosConstants";
+import { showAlert } from ".././CustomAlert";
 
 interface Props {
   carrito:   CarritoPedido[];

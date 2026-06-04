@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState } from "react";
-import Modal from "./Modal";
-import { OBSERVACIONES, inputClass, labelClass } from "./enviosConstants";
+import Modal from "./../Modal";
+import { OBSERVACIONES, inputClass, labelClass } from "./../enviosConstants";
 import {
   getFotosEnvio,
   type Archivo,
-} from "../services/archivos.service";
+} from "../../services/archivos.service";
 import type {
   BitacoraRegistro,
   UpdateBitacoraRequest,
-} from "../types/envios.types";
+} from "../../types/envios.types";
 
 interface Props {
   registro: BitacoraRegistro;

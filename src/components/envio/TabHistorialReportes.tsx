@@ -2,11 +2,11 @@ import { useState, useEffect } from "react";
 import {
   getClientesRemisiones, getPedidosClienteRemisiones, getHistorialEntregas,
   getOrCreateNotaRemision, getNotaRemisionMulti,
-} from "../services/enviosService";
-import { generarReporteRemisiones } from "../utils/generarReporteRemisiones";
-import { generarNotaRemision, generarNotaRemisionMulti } from "../utils/generarNotaRemision";
-import type { ClienteRemision, PedidoRemision, HistorialEntregasPedido } from "../types/envios.types";
-import { showAlert } from "./CustomAlert";
+} from "../../services/enviosService";
+import { generarReporteRemisiones } from "../../utils/generarReporteRemisiones";
+import { generarNotaRemision, generarNotaRemisionMulti } from "../../utils/generarNotaRemision";
+import type { ClienteRemision, PedidoRemision, HistorialEntregasPedido } from "../../types/envios.types";
+import { showAlert } from "./../CustomAlert";
 
 const fmtFecha = (iso: string) =>
   new Date(iso).toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric" });

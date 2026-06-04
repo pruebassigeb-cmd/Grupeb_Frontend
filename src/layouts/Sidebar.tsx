@@ -59,6 +59,7 @@ export default function Dashboard({ children }: DashboardProps) {
       permiso: "Dar de alta productos",
       subItems: [
         { name: "Plástico", path: "/plastico", permiso: "Dar de alta productos" },
+        //{ name: "Papel",    path: "/papel",    permiso: "Dar de alta productos" },
       ],
     },
     {
@@ -111,6 +112,13 @@ export default function Dashboard({ children }: DashboardProps) {
         { name: "Plástico", path: "/precioplastico", permiso: "Modificar Catalogo de precios" },
       ],
     },
+    /*{
+      name: "Catálogos",
+      permiso: "Dar de alta productos",
+      subItems: [
+        { name: "Gestión de catálogos", path: "/catalogos", permiso: "Dar de alta productos" },
+      ],
+    },*/
     {
       name: "Archivos",
       path: "/archivos",
@@ -123,11 +131,10 @@ export default function Dashboard({ children }: DashboardProps) {
       accesoTotal: true,
       subItems: [],
     },
-
     {
       name: "Gestor proveedores",
       path: "/proveedores",
-      permiso: "Gestionar Proveedores", 
+      permiso: "Gestionar Proveedores",
       subItems: [],
     },
   ];
@@ -220,7 +227,6 @@ export default function Dashboard({ children }: DashboardProps) {
     );
   };
 
-  // ── Avatar del usuario ──────────────────────────────────────────────────────
   const UserAvatar = ({ size = "md" }: { size?: "sm" | "md" }) => {
     const dim = size === "sm" ? "w-7 h-7 text-xs" : "w-10 h-10 text-sm";
     return (

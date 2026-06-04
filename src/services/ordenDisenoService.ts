@@ -44,7 +44,7 @@ export const subirRevision = async (
   data: {
     tipo:           "render" | "feedback";
     observaciones?: string;
-    archivos:       { id_archivo: number }[];
+    archivos:       { id_archivo: number; categoria?: string }[];
   }
 ) => {
   const res = await api.post(`/orden-diseno/${id}/revision`, data);
@@ -96,9 +96,8 @@ export const getImagenesDiseno = async (
   }
 
   // ✅ Busca por categoría real, no por posición
-  const renderArchivo = ultimaRevision.archivos.find(a => a.categoria === "render")
-    ?? ultimaRevision.archivos[0]   // fallback para archivos viejos sin categoría
-    ?? null;
+  const renderArchivo = ultimaRevision.archivos.find(a => a.categoria === "render") ?? null;
+
 
   const masterArchivo = ultimaRevision.archivos.find(a => a.categoria === "master")
     ?? null;  // master no tiene fallback — si no está marcado, no se muestra

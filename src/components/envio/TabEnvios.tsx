@@ -1,22 +1,22 @@
 import { useState, useEffect, useCallback } from "react";
-import Modal from "./Modal";
+import Modal from "./../Modal";
 import {
   getPedidosDisponibles, getBultosPedido, getEnviosPedido,
   agregarAlCarrito, updateEstadoEnvio, deleteEnvio,
   getOrCreateNotaRemision,
-} from "../services/enviosService";
-import { generarNotaRemision } from "../utils/generarNotaRemision";
-import { preguntarGuardarS3 } from "../services/pdfS3.service";
+} from "../../services/enviosService";
+import { generarNotaRemision } from "../../utils/generarNotaRemision";
+import { preguntarGuardarS3 } from "../../services/pdfS3.service";
 import {
   ESTADO_ENVIO_BADGE, ESTADO_ENVIO_LABEL,
   ESTADO_BULTO_BADGE, ESTADO_BULTO_LABEL,
   ESTADO_BADGE, ESTADO_LABEL,
   buildMapsUrl, copiarLink,
-} from "./enviosConstants";
+} from "./../enviosConstants";
 import FormularioEnvioIndividual from "./FormularioEnvioIndividual";
-import type { PedidoDisponible, BultoPedido, Envio, CarritoPedido } from "../types/envios.types";
-import { showAlert } from "./CustomAlert";
-import { showConfirm } from "./CustomConfirm";
+import type { PedidoDisponible, BultoPedido, Envio, CarritoPedido } from "../../types/envios.types";
+import { showAlert } from "./../CustomAlert";
+import { showConfirm } from "./../CustomConfirm";
 
 interface Props {
   carrito: CarritoPedido[];

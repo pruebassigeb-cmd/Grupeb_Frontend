@@ -1,11 +1,11 @@
 import { useState, useEffect } from "react";
-import Modal from "./Modal";
-import { getGuiaPaqueteriaGeneral, getProductosSat } from "../services/enviosService";
-import { generarGuiaPaqueteriaGeneral } from "../utils/generarGuiaPaqueteriaGeneral";
-import { preguntarGuardarS3 } from "../services/pdfS3.service";
-import { inputClass, labelClass } from "./enviosConstants";
-import type { GuiaPaqueteriaGeneral, ProductoSat } from "../types/envios.types";
-import { showAlert } from './CustomAlert';
+import Modal from "./../Modal";
+import { getGuiaPaqueteriaGeneral, getProductosSat } from "../../services/enviosService";
+import { generarGuiaPaqueteriaGeneral } from "../../utils/generarGuiaPaqueteriaGeneral";
+import { preguntarGuardarS3 } from "../../services/pdfS3.service";
+import { inputClass, labelClass } from "./../enviosConstants";
+import type { GuiaPaqueteriaGeneral, ProductoSat } from "../../types/envios.types";
+import { showAlert } from './../CustomAlert';
 
 
 interface Props {

@@ -19,6 +19,8 @@ import Envios from "./pages/Envios";
 import GestorArchivos from "./components/GestorArchivos";
 import GestorBackups from "./components/GestorBackups.tsx";
 import ProveedoresPage from "./pages/ProveedoresPage";
+import Papel from "./pages/Papel";
+import Catalogos from "./pages/catalogos.tsx";
 
 const PERMISOS = {
   usuarios: "Crear/Editar/Eliminar Usuarios",
@@ -133,6 +135,16 @@ function App() {
           {/* Backups BD — solo admins (accesoTotal), protección extra por código dentro del componente */}
           <Route path="/backups" element={
             <ProtectedRoute><GestorBackups /></ProtectedRoute>
+          } />
+
+          <Route path="/papel" element={
+            <ProtectedRoute><Papel /></ProtectedRoute>
+          } />
+
+          <Route path="/catalogos" element={
+            <ProtectedRoute permiso={PERMISOS.plastico}>
+              <Catalogos />
+            </ProtectedRoute>
           } />
 
           {/* Proveedores */}

@@ -3,7 +3,6 @@ import type { NotaRemisionData } from "../services/enviosService";
 import type { NotaRemisionMultiData } from "../types/envios.types";
 import logoGrupeb from "../assets/grupeblanco.png";
 import { subirPdfA3 } from "../services/pdfS3.service";
-import { blob } from "stream/consumers";
 
 // ─────────────────────────────────────────────────────────────────
 // UTILIDADES

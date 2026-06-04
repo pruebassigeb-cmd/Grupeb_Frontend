@@ -14,7 +14,7 @@ import type { Venta, MetodoPago } from "../types/ventas.types";
 import type { Pedido } from "../types/cotizaciones.types";
 import Modal from "../components/Modal";
 import ModalProcesoIndividual from "../components/ModalProcesoIndividual";
-import ModalEnvioSeguimiento from "../components/ModalEnvioSeguimiento";
+import ModalEnvioSeguimiento from "../components/envio/ModalEnvioSeguimiento";
 import ChatRevision from "../components/ChatRevision";
 import { EditarAntLiqReal } from "./AnticipoLiquidacion";
 import { EditarDisenoReal } from "./Diseno";

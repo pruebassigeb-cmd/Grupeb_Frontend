@@ -7,21 +7,21 @@ import type { Pedido } from "../types/cotizaciones.types";
 
 interface Props {
   onSeleccionar: (pedido: Pedido) => void;
-  onClose:       () => void;
+  onClose: () => void;
 }
 
 type Paso = "cliente" | "historial";
 
 export default function ModalRepetirPedido({ onSeleccionar, onClose }: Props) {
-  const [paso, setPaso]                     = useState<Paso>("cliente");
-  const [busqueda, setBusqueda]             = useState("");
-  const [clientes, setClientes]             = useState<ClienteBusqueda[]>([]);
+  const [paso, setPaso] = useState<Paso>("cliente");
+  const [busqueda, setBusqueda] = useState("");
+  const [clientes, setClientes] = useState<ClienteBusqueda[]>([]);
   const [loadingClientes, setLoadingClientes] = useState(false);
 
   const [clienteSeleccionado, setClienteSeleccionado] = useState<ClienteBusqueda | null>(null);
-  const [historial, setHistorial]           = useState<Pedido[]>([]);
+  const [historial, setHistorial] = useState<Pedido[]>([]);
   const [loadingHistorial, setLoadingHistorial] = useState(false);
-  const [expandidos, setExpandidos]         = useState<Set<string>>(new Set());
+  const [expandidos, setExpandidos] = useState<Set<string>>(new Set());
 
   // ── Buscar clientes ──────────────────────────────────────────────────────
   const buscarClientes = async (q: string) => {
@@ -153,7 +153,7 @@ export default function ModalRepetirPedido({ onSeleccionar, onClose }: Props) {
                     )}
                     <div className="flex gap-3 mt-1 text-xs text-gray-400">
                       {c.telefono && <span>{c.telefono}</span>}
-                      {c.correo   && <span>{c.correo}</span>}
+                      {c.correo && <span>{c.correo}</span>}
                     </div>
                   </button>
                 ))}
@@ -192,8 +192,11 @@ export default function ModalRepetirPedido({ onSeleccionar, onClose }: Props) {
                         <div className="flex items-center gap-3 min-w-0">
                           <span className="font-bold text-gray-900 text-sm shrink-0">{ped.no_pedido}</span>
                           <span className="text-xs text-gray-400 shrink-0">{formatFecha(ped.fecha)}</span>
+                          {/* Resumen de productos con descripción */}
                           <span className="text-xs text-gray-500 truncate">
-                            {ped.productos.length} producto{ped.productos.length !== 1 ? "s" : ""}
+                            {ped.productos.map((p: any) =>
+                              p.descripcion ? `${p.nombre} · ${p.descripcion}` : p.nombre
+                            ).join(", ")}
                           </span>
                           <span className="text-sm font-semibold text-gray-800 shrink-0">
                             ${ped.total.toFixed(2)}
@@ -230,12 +233,20 @@ export default function ModalRepetirPedido({ onSeleccionar, onClose }: Props) {
                                 {i + 1}
                               </span>
                               <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium text-gray-800 truncate">{p.nombre}</p>
+                                {/* Nombre + descripción */}
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <p className="text-sm font-medium text-gray-800 truncate">{p.nombre}</p>
+                                  {p.descripcion && (
+                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800 border border-purple-200">
+                                      {p.descripcion}
+                                    </span>
+                                  )}
+                                </div>
                                 <div className="flex flex-wrap gap-x-3 text-xs text-gray-400 mt-0.5">
-                                  {p.material    && <span>{p.material}</span>}
-                                  {p.calibre     && <span>Cal. {p.calibre}</span>}
-                                  {p.tintas      && <span>{p.tintas} tinta{p.tintas > 1 ? "s" : ""}</span>}
-                                  {p.asa_suaje   && <span>Suaje: {p.asa_suaje}</span>}
+                                  {p.material && <span>{p.material}</span>}
+                                  {p.calibre && <span>Cal. {p.calibre}</span>}
+                                  {p.tintas && <span>{p.tintas} tinta{p.tintas > 1 ? "s" : ""}</span>}
+                                  {p.asa_suaje && <span>Suaje: {p.asa_suaje}</span>}
                                 </div>
                                 {p.detalles?.map((d: any, j: number) => (
                                   <p key={j} className="text-xs text-gray-500 mt-0.5">

@@ -1,11 +1,11 @@
 import { useState, useEffect } from "react";
-import { getConductores, getUnidades, getPaqueterias, createEnvio, getEnviosPedido } from "../services/enviosService";
-import type { Conductor, Unidad, Paqueteria, PedidoDisponible } from "../types/envios.types";
-import { inputClass, labelClass } from "./enviosConstants";
+import { getConductores, getUnidades, getPaqueterias, createEnvio, getEnviosPedido } from "../../services/enviosService";
+import type { Conductor, Unidad, Paqueteria, PedidoDisponible } from "../../types/envios.types";
+import { inputClass, labelClass } from "./../enviosConstants";
 import ModalFormatoCastores       from "./ModalFormatoCastores";
 import ModalFormatoTresGuerras    from "./ModalFormatoTresGuerras";
 import ModalGuiaPaqueteriaGeneral from "./ModalGuiaPaqueteriaGeneral";
-import { showAlert } from './CustomAlert';
+import { showAlert } from './../CustomAlert';
 
 
 interface Props {

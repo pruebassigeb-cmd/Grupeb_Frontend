@@ -5,6 +5,7 @@ import ProductosProveedor from "../components/ProductosProveedor";
 import type { Proveedor } from "../services/proveedoresService";
 import Dashboard from "../layouts/Sidebar";
 
+
 type Vista = "lista" | "formulario" | "productos";
 
 export default function ProveedoresPage() {
@@ -21,7 +22,7 @@ export default function ProveedoresPage() {
 
   return (
     <Dashboard>
-      <div className="p-6 max-w-6xl mx-auto">
+      <div className="p-6 max-w-6xl mx-auto flex flex-col items-center">
         {vista === "lista" && (
           <ListaProveedores
             key={listaKey}

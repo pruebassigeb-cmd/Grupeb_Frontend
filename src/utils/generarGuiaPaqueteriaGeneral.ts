@@ -1,8 +1,6 @@
 import jsPDF from "jspdf";
 import type { GuiaPaqueteriaGeneral } from "../types/envios.types";
 import { subirPdfA3 } from "../services/pdfS3.service";
-import { blob } from "stream/consumers";
-
 // Carta: 215.9mm x 279.4mm
 // jsPDF: format:"letter", orientation:"portrait"
 

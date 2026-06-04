@@ -289,9 +289,9 @@ const subirFotosINE = async (idusuario: number) => {
       e.telefono = "El teléfono debe tener 10 dígitos";
     if (!esEdicion) {
       if (!datos.codigo?.trim()) e.codigo = "El código es requerido";
-      else if (!/^\d{5}$/.test(datos.codigo)) e.codigo = "El código debe tener exactamente 5 dígitos";
-    } else if (datos.codigo?.trim() && !/^\d{5}$/.test(datos.codigo)) {
-      e.codigo = "El código debe tener exactamente 5 dígitos";
+else if (!/^\d{4,5}$/.test(datos.codigo)) e.codigo = "El código debe tener entre 4 y 5 dígitos";
+   } else if (datos.codigo?.trim() && !/^\d{4,5}$/.test(datos.codigo)) {
+  e.codigo = "El código debe tener entre 4 y 5 dígitos";
     }
     if (!datos.roles_idroles || datos.roles_idroles === 0)
       e.roles_idroles = "Debe seleccionar un rol";

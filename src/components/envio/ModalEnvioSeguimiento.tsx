@@ -1,18 +1,18 @@
 import { useState, useEffect, useCallback } from "react";
-import Modal from "./Modal";
+import Modal from "../Modal";
 import {
   getBultosPorProduccion,
   updateEstadoEnvio,
   deleteEnvio,
   agregarAlCarrito,
   getOrCreateNotaRemision,
-} from "../services/enviosService";
-import type { BultoPedido, Envio } from "../types/envios.types";
-import type { PedidoSeguimiento } from "../types/seguimiento.types";
+} from "../../services/enviosService";
+import type { BultoPedido, Envio } from "../../types/envios.types";
+import type { PedidoSeguimiento } from "../../types/seguimiento.types";
 import FormularioEnvioIndividual from "./FormularioEnvioIndividual";
-import { generarNotaRemision } from "../utils/generarNotaRemision";
-import { showAlert } from "./CustomAlert";
-import { showConfirm } from "./CustomConfirm";
+import { generarNotaRemision } from "../../utils/generarNotaRemision";
+import { showAlert } from "../CustomAlert";
+import { showConfirm } from "../CustomConfirm";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TIPOS LOCALES

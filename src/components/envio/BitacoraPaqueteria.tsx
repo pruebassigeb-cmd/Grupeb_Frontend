@@ -1,11 +1,11 @@
 import { useState, useEffect } from "react";
-import { getEnviosPaqueteriaBitacora, marcarSalidaEnvio, marcarEntregaEnvio, updateEstadoEnvio } from "../services/enviosService";
-import { getFotosEnvio, subirArchivo, eliminarArchivo, type Archivo } from "../services/archivos.service";
-import { ESTADO_BADGE, ESTADO_LABEL, formatFechaHora } from "./enviosConstants";
+import { getEnviosPaqueteriaBitacora, marcarSalidaEnvio, marcarEntregaEnvio, updateEstadoEnvio } from "../../services/enviosService";
+import { getFotosEnvio, subirArchivo, eliminarArchivo, type Archivo } from "../../services/archivos.service";
+import { ESTADO_BADGE, ESTADO_LABEL, formatFechaHora } from "./../enviosConstants";
 import ModalEditarBitacora from "./ModalEditarBitacora";
 import ModalFotoEnvio from "./ModalFotoEnvio";
-import { showAlert } from "./CustomAlert";
-import type { EnvioPaqueteria, BitacoraRegistro, UpdateBitacoraRequest } from "../types/envios.types";
+import { showAlert } from "./../CustomAlert";
+import type { EnvioPaqueteria, BitacoraRegistro, UpdateBitacoraRequest } from "../../types/envios.types";
 
 const toDatetimeLocal = (iso: string) => {
   const d = new Date(iso), pad = (n: number) => String(n).padStart(2, "0");

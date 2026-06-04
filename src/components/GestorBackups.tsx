@@ -5,13 +5,7 @@ import { showAlert } from "./CustomAlert";
 import {
   verificarCodigo,
   ejecutarBackupManual,
-  getSchedule,
-  updateSchedule,
   getHistorialBackups,
-  FRECUENCIA_LABELS,
-  DIA_SEMANA_LABELS,
-  type BackupSchedule,
-  type FrecuenciaBackup,
   type ArchivoBackup,
 } from "../services/backup.service";
 
@@ -26,14 +20,6 @@ const formatFecha = (iso: string) =>
     day: "2-digit", month: "short", year: "numeric",
     hour: "2-digit", minute: "2-digit",
   });
-
-const FRECUENCIAS: FrecuenciaBackup[] = [
-  "diario", "cada_2_dias", "cada_3_dias",
-  "semanal", "cada_2_semanas", "mensual",
-];
-
-const necesitaDiaSemana = (f: FrecuenciaBackup) =>
-  f === "semanal" || f === "cada_2_semanas";
 
 // ─────────────────────────────────────────────────────────
 // Modal de código de acceso
@@ -174,32 +160,20 @@ export default function GestorBackups() {
   }
 
   const [desbloqueado,   setDesbloqueado]   = useState(false);
-  const [modalCodigo,    setModalCodigo]    = useState<"desbloquear" | "backup" | "schedule" | null>(null);
-  const [schedule,       setSchedule]       = useState<BackupSchedule | null>(null);
+  const [modalCodigo,    setModalCodigo]    = useState<"desbloquear" | "backup" | null>(null);
   const [historial,      setHistorial]      = useState<ArchivoBackup[]>([]);
+  const [ultimoBackup,   setUltimoBackup]   = useState<string | null>(null);
   const [cargandoData,   setCargandoData]   = useState(false);
   const [haciendoBackup, setHaciendoBackup] = useState(false);
-  const [guardandoSched, setGuardandoSched] = useState(false);
-
-  const [schedActivo,     setSchedActivo]     = useState(false);
-  const [schedFrecuencia, setSchedFrecuencia] = useState<FrecuenciaBackup>("semanal");
-  const [schedHora,       setSchedHora]       = useState("02:00");
-  const [schedDiaSemana,  setSchedDiaSemana]  = useState(0);
 
   const cargarDatos = async () => {
     setCargandoData(true);
     try {
-      const [sched, hist] = await Promise.all([getSchedule(), getHistorialBackups()]);
-      if (sched) {
-        setSchedule(sched);
-        setSchedActivo(sched.activo);
-        setSchedFrecuencia(sched.frecuencia);
-        setSchedHora(sched.hora);
-        setSchedDiaSemana(sched.dia_semana ?? 0);
-      }
+      const hist = await getHistorialBackups();
       setHistorial(hist);
+      if (hist.length > 0) setUltimoBackup(hist[0].created_at);
     } catch {
-      showAlert("Error al cargar datos de backup");
+      showAlert("Error al cargar historial de backups");
     } finally {
       setCargandoData(false);
     }
@@ -224,23 +198,6 @@ export default function GestorBackups() {
       showAlert(e?.response?.data?.error || "Error al generar el backup");
     } finally {
       setHaciendoBackup(false);
-    }
-  };
-
-  const handleGuardarSchedule = async (codigo: string) => {
-    setModalCodigo(null);
-    setGuardandoSched(true);
-    try {
-      await updateSchedule(codigo, {
-        activo: schedActivo, frecuencia: schedFrecuencia,
-        hora: schedHora, dia_semana: schedDiaSemana,
-      });
-      showAlert("✅ Configuración guardada");
-      await cargarDatos();
-    } catch (e: any) {
-      showAlert(e?.response?.data?.error || "Error al guardar configuración");
-    } finally {
-      setGuardandoSched(false);
     }
   };
 
@@ -269,15 +226,18 @@ export default function GestorBackups() {
           </button>
         </div>
         {modalCodigo === "desbloquear" && (
-          <ModalCodigo titulo="Acceso a Backups BD"
+          <ModalCodigo
+            titulo="Acceso a Backups BD"
             descripcion="Ingresa tu código de administrador para desbloquear esta sección."
-            onConfirmar={handleDesbloquear} onCerrar={() => setModalCodigo(null)}/>
+            onConfirmar={handleDesbloquear}
+            onCerrar={() => setModalCodigo(null)}
+          />
         )}
       </Dashboard>
     );
   }
 
-  // ── Vista desbloqueada — layout 2 columnas ──
+  // ── Vista desbloqueada ──
   return (
     <Dashboard>
       <div className="space-y-4">
@@ -294,189 +254,73 @@ export default function GestorBackups() {
           </div>
         </div>
 
-        {/* ── Grid principal: izquierda acciones / derecha historial ── */}
+        {/* Grid principal */}
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 items-start">
 
-          {/* ── Columna izquierda ── */}
-          <div className="space-y-5">
-
-            {/* Backup inmediato */}
-            <div className="bg-white border border-gray-200 rounded-2xl p-6 space-y-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center">
-                  <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                      d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
-                  </svg>
-                </div>
-                <div>
-                  <h2 className="text-sm font-bold text-gray-800">Backup inmediato</h2>
-                  <p className="text-xs text-gray-500">Genera un respaldo ahora mismo y lo guarda en Backups BD</p>
-                </div>
+          {/* ── Backup inmediato ── */}
+          <div className="bg-white border border-gray-200 rounded-2xl p-6 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center">
+                <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+                </svg>
               </div>
-
-              {schedule?.ultimo_backup && (
-                <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-xl text-xs text-gray-500">
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                      d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                  </svg>
-                  Último backup:&nbsp;
-                  <span className="font-semibold text-gray-700">{formatFecha(schedule.ultimo_backup)}</span>
-                </div>
-              )}
-
-              <button onClick={() => setModalCodigo("backup")} disabled={haciendoBackup}
-                className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-                {haciendoBackup ? (
-                  <>
-                    <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
-                    </svg>
-                    Generando backup…
-                  </>
-                ) : (
-                  <>
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                        d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
-                    </svg>
-                    Generar backup ahora
-                  </>
-                )}
-              </button>
+              <div>
+                <h2 className="text-sm font-bold text-gray-800">Backup inmediato</h2>
+                <p className="text-xs text-gray-500">Genera un respaldo ahora mismo y lo guarda en S3</p>
+              </div>
             </div>
 
-            {/* Backups automáticos */}
-            <div className="bg-white border border-gray-200 rounded-2xl p-6 space-y-5">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center">
-                  <svg className="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                      d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                  </svg>
-                </div>
-                <div>
-                  <h2 className="text-sm font-bold text-gray-800">Backups automáticos</h2>
-                  <p className="text-xs text-gray-500">Configura la frecuencia y hora de los respaldos</p>
-                </div>
+            {ultimoBackup && (
+              <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-xl text-xs text-gray-500">
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                    d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                Último backup:&nbsp;
+                <span className="font-semibold text-gray-700">{formatFecha(ultimoBackup)}</span>
               </div>
+            )}
 
-              {cargandoData ? (
-                <div className="flex justify-center py-6">
-                  <svg className="w-6 h-6 animate-spin text-indigo-400" fill="none" viewBox="0 0 24 24">
+            {/* Info backups automáticos */}
+            <div className="flex items-start gap-2 px-3 py-2.5 bg-indigo-50 border border-indigo-100 rounded-xl">
+              <svg className="w-4 h-4 text-indigo-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+              </svg>
+              <p className="text-xs text-indigo-600">
+                Los backups automáticos se ejecutan cada semana vía cron-job.org y aparecerán aquí en el historial.
+              </p>
+            </div>
+
+            <button
+              onClick={() => setModalCodigo("backup")}
+              disabled={haciendoBackup}
+              className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {haciendoBackup ? (
+                <>
+                  <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
                   </svg>
-                </div>
+                  Generando backup…
+                </>
               ) : (
-                <div className="space-y-4">
-                  {/* Toggle */}
-                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
-                    <div>
-                      <p className="text-sm font-semibold text-gray-700">Activar backups automáticos</p>
-                      <p className="text-xs text-gray-400 mt-0.5">
-                        {schedActivo ? "Activados — se ejecutarán según la programación" : "Desactivados"}
-                      </p>
-                    </div>
-                    <button onClick={() => setSchedActivo(v => !v)}
-                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                        schedActivo ? "bg-indigo-600" : "bg-gray-300"
-                      }`}>
-                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
-                        schedActivo ? "translate-x-6" : "translate-x-1"
-                      }`}/>
-                    </button>
-                  </div>
-
-                  {schedActivo && (
-                    <div className="space-y-4 pl-1">
-                      {/* Frecuencia */}
-                      <div className="space-y-2">
-                        <label className="block text-sm font-semibold text-gray-700">Frecuencia</label>
-                        <div className="grid grid-cols-3 gap-2">
-                          {FRECUENCIAS.map(f => (
-                            <button key={f} onClick={() => setSchedFrecuencia(f)}
-                              className={`px-2 py-2.5 rounded-xl text-xs font-semibold border-2 transition-all ${
-                                schedFrecuencia === f
-                                  ? "border-indigo-500 bg-indigo-50 text-indigo-700"
-                                  : "border-gray-200 bg-white text-gray-600 hover:border-gray-300"
-                              }`}>
-                              {FRECUENCIA_LABELS[f]}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Día de la semana */}
-                      {necesitaDiaSemana(schedFrecuencia) && (
-                        <div className="space-y-2">
-                          <label className="block text-sm font-semibold text-gray-700">Día de la semana</label>
-                          <div className="flex flex-wrap gap-2">
-                            {DIA_SEMANA_LABELS.map((dia, i) => (
-                              <button key={i} onClick={() => setSchedDiaSemana(i)}
-                                className={`px-3 py-1.5 rounded-lg text-xs font-semibold border-2 transition-all ${
-                                  schedDiaSemana === i
-                                    ? "border-indigo-500 bg-indigo-50 text-indigo-700"
-                                    : "border-gray-200 bg-white text-gray-600 hover:border-gray-300"
-                                }`}>
-                                {dia}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Hora */}
-                      <div className="space-y-2">
-                        <label className="block text-sm font-semibold text-gray-700">
-                          Hora del backup
-                          <span className="text-gray-400 font-normal ml-1">(hora del servidor)</span>
-                        </label>
-                        <input type="time" value={schedHora} onChange={e => setSchedHora(e.target.value)}
-                          className="w-36 px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"/>
-                        <p className="text-xs text-gray-400">Recomendado: madrugada (01:00 – 04:00)</p>
-                      </div>
-
-                      {/* Resumen */}
-                      <div className="flex items-center gap-2 px-4 py-3 bg-indigo-50 border border-indigo-200 rounded-xl">
-                        <svg className="w-4 h-4 text-indigo-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                            d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                        </svg>
-                        <p className="text-xs text-indigo-700">
-                          <span className="font-semibold">Resumen: </span>
-                          Backup {FRECUENCIA_LABELS[schedFrecuencia].toLowerCase()}
-                          {necesitaDiaSemana(schedFrecuencia) && ` los ${DIA_SEMANA_LABELS[schedDiaSemana]}`}
-                          {" "}a las <span className="font-semibold">{schedHora}</span>
-                        </p>
-                      </div>
-                    </div>
-                  )}
-
-                  <button onClick={() => setModalCodigo("schedule")} disabled={guardandoSched}
-                    className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-semibold transition-colors disabled:opacity-50">
-                    {guardandoSched ? (
-                      <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
-                      </svg>
-                    ) : (
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"/>
-                      </svg>
-                    )}
-                    Guardar configuración
-                  </button>
-                </div>
+                <>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                      d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+                  </svg>
+                  Generar backup ahora
+                </>
               )}
-            </div>
+            </button>
           </div>
 
-          {/* ── Columna derecha — Historial ── */}
-          <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden flex flex-col"
-            style={{ minHeight: "520px" }}>
+          {/* ── Historial ── */}
+          <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden flex flex-col" style={{ minHeight: "320px" }}>
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-xl bg-gray-100 flex items-center justify-center">
@@ -488,12 +332,16 @@ export default function GestorBackups() {
                 <div>
                   <h2 className="text-sm font-bold text-gray-800">Historial de backups</h2>
                   <p className="text-xs text-gray-500">
-                    {historial.length > 0 ? `${historial.length} respaldo${historial.length !== 1 ? "s" : ""}` : "Sin respaldos aún"}
+                    {historial.length > 0
+                      ? `${historial.length} respaldo${historial.length !== 1 ? "s" : ""}`
+                      : "Sin respaldos aún"}
                   </p>
                 </div>
               </div>
-              <button onClick={cargarDatos}
-                className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 font-medium transition-colors">
+              <button
+                onClick={cargarDatos}
+                className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 font-medium transition-colors"
+              >
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                     d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
@@ -519,13 +367,13 @@ export default function GestorBackups() {
                 <p className="text-xs mt-1">Genera tu primer respaldo con el botón de la izquierda</p>
               </div>
             ) : (
-              /* Lista con scroll propio si hay muchos backups */
               <div className="overflow-y-auto flex-1 divide-y divide-gray-50">
                 {historial.map((backup, i) => (
-                  <div key={backup.id_archivo}
-                    className="flex items-center justify-between px-5 py-3.5 hover:bg-gray-50 transition-colors group">
+                  <div
+                    key={backup.id_archivo}
+                    className="flex items-center justify-between px-5 py-3.5 hover:bg-gray-50 transition-colors group"
+                  >
                     <div className="flex items-center gap-3 min-w-0">
-                      {/* Número de versión */}
                       <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 text-[10px] font-bold ${
                         i === 0 ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-500"
                       }`}>
@@ -549,8 +397,12 @@ export default function GestorBackups() {
                         </p>
                       </div>
                     </div>
-                    <a href={backup.url} target="_blank" rel="noopener noreferrer"
-                      className="flex items-center gap-1 px-2.5 py-1.5 bg-white border border-gray-200 text-gray-500 hover:border-blue-300 hover:text-blue-600 rounded-lg text-xs font-medium transition-colors flex-shrink-0 ml-2 opacity-0 group-hover:opacity-100">
+                    <a
+                      href={backup.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1 px-2.5 py-1.5 bg-white border border-gray-200 text-gray-500 hover:border-blue-300 hover:text-blue-600 rounded-lg text-xs font-medium transition-colors flex-shrink-0 ml-2 opacity-0 group-hover:opacity-100"
+                    >
                       <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                           d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
@@ -567,14 +419,12 @@ export default function GestorBackups() {
 
       {/* Modales */}
       {modalCodigo === "backup" && (
-        <ModalCodigo titulo="Confirmar backup manual"
+        <ModalCodigo
+          titulo="Confirmar backup manual"
           descripcion="Ingresa tu código de administrador para generar el backup."
-          onConfirmar={handleBackupManual} onCerrar={() => setModalCodigo(null)}/>
-      )}
-      {modalCodigo === "schedule" && (
-        <ModalCodigo titulo="Confirmar configuración"
-          descripcion="Ingresa tu código de administrador para guardar la programación."
-          onConfirmar={handleGuardarSchedule} onCerrar={() => setModalCodigo(null)}/>
+          onConfirmar={handleBackupManual}
+          onCerrar={() => setModalCodigo(null)}
+        />
       )}
     </Dashboard>
   );

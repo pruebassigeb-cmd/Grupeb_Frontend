@@ -3,14 +3,14 @@ import Dashboard from "../layouts/Sidebar";
 import Modal from "../components/Modal";
 import { getCarrito, getPaqueterias } from "../services/enviosService";
 import type { CarritoPedido, Paqueteria } from "../types/envios.types";
-import TabEnvios from "../components/TabEnvios";
-import TabBitacora from "../components/TabBitacora";
-import TabUnidades from "../components/TabUnidades";
-import TabPaqueterias from "../components/TabPaqueterias";
-import TabHistorialReportes from "../components/TabHistorialReportes";
-import VistaCarrito from "../components/VistaCarrito";
-import FormularioProcesarCarrito from "../components/FormularioProcesarCarrito";
-import FormularioNotaRemisionMulti from "../components/FormularioNotaRemisionMulti";
+import TabEnvios from "../components/envio/TabEnvios";
+import TabBitacora from "../components/envio/TabBitacora";
+import TabUnidades from "../components/envio/TabUnidades";
+import TabPaqueterias from "../components/envio/TabPaqueterias";
+import TabHistorialReportes from "../components/envio/TabHistorialReportes";
+import VistaCarrito from "../components/envio/VistaCarrito";
+import FormularioProcesarCarrito from "../components/envio/FormularioProcesarCarrito";
+import FormularioNotaRemisionMulti from "../components/envio/FormularioNotaRemisionMulti";
 
 type Tab = "envios" | "bitacora" | "unidades" | "paqueterias" | "historial";
 

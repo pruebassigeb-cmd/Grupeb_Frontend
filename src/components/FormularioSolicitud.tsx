@@ -547,19 +547,23 @@ const abrirModalInsumo = (tipoId: number, nombre: string, indice: number | null)
  
 const handleInsumoRegistrado = (item: ProductoProveedor) => {
   const texto = item.codigo ? `${item.nombre} (${item.codigo})` : item.nombre;
+  
   if (modalInsumo.indice !== null) {
-    // Es un pantón
-    const nuevos = [...inputsPantones];
-    nuevos[modalInsumo.indice] = texto;
-    setInputsPantones(nuevos);
-    setProductoActual(prev => ({
-      ...prev,
-      pantones: nuevos.join(", ").replace(/^[\s,]+|[\s,]+$/g, "") || null,
-    }));
+    const indice = modalInsumo.indice; // 👈 captura antes de cerrar
+    
+    setInputsPantones(prev => {        // 👈 setter funcional, no closure
+      const nuevos = [...prev];
+      nuevos[indice] = texto;
+      setProductoActual(p => ({
+        ...p,
+        pantones: nuevos.join(", ").replace(/^[\s,]+|[\s,]+$/g, "") || null,
+      }));
+      return nuevos;
+    });
   } else {
-    // Es un pigmento
     setProductoActual(prev => ({ ...prev, pigmentos: texto }));
   }
+  
   setModalInsumo({ abierto: false, tipoId: 0, nombre: "", indice: null });
 };
 

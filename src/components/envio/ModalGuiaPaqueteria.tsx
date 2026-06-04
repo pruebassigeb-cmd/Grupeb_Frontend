@@ -1,6 +1,6 @@
-import Modal from "./Modal";
-import { inputClass, labelClass } from "./enviosConstants";
-import type { EnvioPaqueteria } from "../types/envios.types";
+import Modal from "./../Modal";
+import { inputClass, labelClass } from "./../enviosConstants";
+import type { EnvioPaqueteria } from "../../types/envios.types";
 
 interface Props {
   envio:     EnvioPaqueteria;
