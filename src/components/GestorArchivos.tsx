@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
-import type { Archivo, CarpetaFrontend, Estadisticas, SubcarpetaPDF } from "../services/archivos.service";
-import { subirArchivo, listarArchivos, eliminarArchivo, CARPETAS_LABELS, obtenerEstadisticas, SUBCARPETAS_PDF } from "../services/archivos.service";
+import type { Archivo, CarpetaFrontend, Estadisticas, SubcarpetaPDF, SubcarpetaSuaje } from "../services/archivos.service";
+import { subirArchivo, listarArchivos, eliminarArchivo, CARPETAS_LABELS, obtenerEstadisticas, SUBCARPETAS_PDF, SUBCARPETAS_SUAJE } from "../services/archivos.service";
 import { verificarCodigo } from "../services/backup.service";
 import Dashboard from "../layouts/Sidebar";
 import { showAlert } from './CustomAlert';
@@ -16,10 +16,13 @@ const CARPETAS_OPTIONS: { value: CarpetaFrontend; label: string }[] = [
   { value: "pdfs",         label: "PDFs"            },
   { value: "fotos-envios", label: "Fotos de Envíos" },
   { value: "backups",      label: "Backups BD"      },
+  { value: "suaje",        label: "Suajes"           }, // ← NUEVO
 ];
 
 const CARPETAS_PROTEGIDAS: CarpetaFrontend[] = ["backups"];
-const CARPETAS_CON_SUBCARPETAS: CarpetaFrontend[] = ["pdfs"];
+
+// Carpetas que tienen subcarpetas y deben mostrar la vista intermedia
+const CARPETAS_CON_SUBCARPETAS: CarpetaFrontend[] = ["pdfs", "suaje"]; // ← suaje agregado
 
 const ORDEN_OPTIONS: { value: OrdenTipo; label: string }[] = [
   { value: "fecha_desc",  label: "Fecha: más reciente" },
@@ -192,6 +195,13 @@ const agruparArchivos = (archivos: Archivo[], agrupacion: AgrupaTipo): { clave: 
   return Array.from(mapa.entries()).map(([clave, items]) => ({ clave, items }));
 };
 
+// Devuelve las subcarpetas según la carpeta activa
+const getSubcarpetasDeCarpeta = (carpeta: CarpetaFrontend) => {
+  if (carpeta === "pdfs")   return SUBCARPETAS_PDF;
+  if (carpeta === "suaje")  return SUBCARPETAS_SUAJE;
+  return [];
+};
+
 // ── Componente principal ─────────────────────────────────────
 export default function GestorArchivos() {
   const { user } = useAuth();
@@ -222,9 +232,9 @@ export default function GestorArchivos() {
   const [eliminando,            setEliminando]            = useState(false);
   const [vista,                 setVista]                 = useState<Vista>("carpetas");
   const [carpetaActiva,         setCarpetaActiva]         = useState<CarpetaFrontend | null>(null);
-  const [subcarpetaActiva,      setSubcarpetaActiva]      = useState<SubcarpetaPDF | null>(null);
+  const [subcarpetaActiva,      setSubcarpetaActiva]      = useState<SubcarpetaPDF | SubcarpetaSuaje | null>(null);
   const [carpetaSeleccion,      setCarpetaSeleccion]      = useState<CarpetaFrontend>("disenos");
-  const [subcarpetaSeleccion,   setSubcarpetaSeleccion]   = useState<SubcarpetaPDF | null>(null);
+  const [subcarpetaSeleccion,   setSubcarpetaSeleccion]   = useState<SubcarpetaPDF | SubcarpetaSuaje | null>(null);
   const [modalSubir,            setModalSubir]            = useState(false);
   const [modalEliminar,         setModalEliminar]         = useState(false);
   const [confirmTexto,          setConfirmTexto]          = useState("");
@@ -299,7 +309,6 @@ export default function GestorArchivos() {
     setBusqueda("");
     setOrden("fecha_desc");
     setAgrupacion("ninguno");
-    // Si tiene subcarpetas muestra la vista de subcarpetas, si no va directo a archivos
     if (CARPETAS_CON_SUBCARPETAS.includes(carpeta)) {
       setVista("subcarpetas");
     } else {
@@ -307,7 +316,7 @@ export default function GestorArchivos() {
     }
   };
 
-  const abrirSubcarpeta = (subcarpeta: SubcarpetaPDF) => {
+  const abrirSubcarpeta = (subcarpeta: SubcarpetaPDF | SubcarpetaSuaje) => {
     setSubcarpetaActiva(subcarpeta);
     setVista("archivos");
     setBusqueda("");
@@ -432,9 +441,7 @@ export default function GestorArchivos() {
   const archivosDeCarpeta = archivos.filter(a => {
     if (a.carpeta !== carpetaActiva) return false;
     if (subcarpetaActiva) return a.subcarpeta === subcarpetaActiva;
-    // Si la carpeta no tiene subcarpetas muestra todos
     if (!CARPETAS_CON_SUBCARPETAS.includes(carpetaActiva!)) return true;
-    // Si tiene subcarpetas y no hay ninguna activa no muestra nada aquí
     return false;
   });
 
@@ -446,7 +453,7 @@ export default function GestorArchivos() {
 
   const contarPorCarpeta = (carpeta: CarpetaFrontend) => archivos.filter(a => a.carpeta === carpeta).length;
 
-  const contarPorSubcarpeta = (subcarpeta: SubcarpetaPDF) =>
+  const contarPorSubcarpeta = (subcarpeta: string) =>
     archivos.filter(a => a.carpeta === carpetaActiva && a.subcarpeta === subcarpeta).length;
 
   const formatFecha = (fecha: string) =>
@@ -456,7 +463,15 @@ export default function GestorArchivos() {
 
   const ordenActualLabel  = ORDEN_OPTIONS.find(o => o.value === orden)?.label       ?? "Ordenar";
   const agrupaActualLabel = AGRUPA_OPTIONS.find(o => o.value === agrupacion)?.label ?? "Agrupar";
-  const subcarpetaLabel   = SUBCARPETAS_PDF.find(s => s.value === subcarpetaActiva)?.label ?? "";
+
+  // Label de subcarpeta activa (busca en PDF y Suaje)
+  const subcarpetaLabel = carpetaActiva === "suaje"
+    ? SUBCARPETAS_SUAJE.find(s => s.value === subcarpetaActiva)?.label ?? ""
+    : SUBCARPETAS_PDF.find(s => s.value === subcarpetaActiva)?.label ?? "";
+
+  // Subcarpetas para el modal de subida según carpeta seleccionada
+  const subcarpetasDelModal = getSubcarpetasDeCarpeta(carpetaSeleccion);
+  const necesitaSubcarpeta  = CARPETAS_CON_SUBCARPETAS.includes(carpetaSeleccion);
 
   const todosSeleccionados =
     archivosFiltradosYOrdenados.length > 0 &&
@@ -495,6 +510,7 @@ export default function GestorArchivos() {
       "pdfs":         "text-red-400",
       "fotos-envios": "text-green-400",
       "backups":      "text-gray-400",
+      "suaje":        "text-purple-400", // ← color para suaje
     };
     return (
       <svg className={`w-16 h-16 ${colores[carpeta]}`} fill="currentColor" viewBox="0 0 24 24">
@@ -503,11 +519,14 @@ export default function GestorArchivos() {
     );
   };
 
-  const renderIconoSubcarpeta = () => (
-    <svg className="w-12 h-12 text-red-300" fill="currentColor" viewBox="0 0 24 24">
-      <path d="M10 4H4c-1.11 0-2 .89-2 2v12c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2h-8l-2-2z"/>
-    </svg>
-  );
+  const renderIconoSubcarpeta = (carpeta: CarpetaFrontend | null) => {
+    const color = carpeta === "suaje" ? "text-purple-300" : "text-red-300";
+    return (
+      <svg className={`w-12 h-12 ${color}`} fill="currentColor" viewBox="0 0 24 24">
+        <path d="M10 4H4c-1.11 0-2 .89-2 2v12c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2h-8l-2-2z"/>
+      </svg>
+    );
+  };
 
   const renderGrillaArchivos = (items: Archivo[]) => (
     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
@@ -606,6 +625,13 @@ export default function GestorArchivos() {
     return `${archivosFiltradosYOrdenados.length} de ${archivosDeCarpeta.length} archivo${archivosDeCarpeta.length !== 1 ? "s" : ""}`;
   };
 
+  // Número de subcarpetas para mostrar en el badge de la carpeta
+  const getNumSubcarpetas = (carpeta: CarpetaFrontend) => {
+    if (carpeta === "pdfs")  return SUBCARPETAS_PDF.length;
+    if (carpeta === "suaje") return SUBCARPETAS_SUAJE.length;
+    return 0;
+  };
+
   return (
     <Dashboard>
       <div className="space-y-6">
@@ -681,12 +707,13 @@ export default function GestorArchivos() {
                 : "bg-blue-600"
               }`} style={{ width: `${Math.max(estadisticas.almacenamiento.porcentaje, 0.5)}%` }}/>
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-1">
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 pt-1">
               {[
-                { label: "Diseños",         value: estadisticas.por_carpeta.disenos,      color: "bg-blue-50 text-blue-700"   },
-                { label: "PDFs",            value: estadisticas.por_carpeta.pdfs,         color: "bg-red-50 text-red-700"     },
-                { label: "Fotos de Envíos", value: estadisticas.por_carpeta.fotos_envios, color: "bg-green-50 text-green-700" },
-                { label: "Backups BD",      value: estadisticas.por_carpeta.backups,      color: "bg-gray-100 text-gray-700"  },
+                { label: "Diseños",         value: estadisticas.por_carpeta.disenos,      color: "bg-blue-50 text-blue-700"     },
+                { label: "PDFs",            value: estadisticas.por_carpeta.pdfs,         color: "bg-red-50 text-red-700"       },
+                { label: "Fotos de Envíos", value: estadisticas.por_carpeta.fotos_envios, color: "bg-green-50 text-green-700"   },
+                { label: "Backups BD",      value: estadisticas.por_carpeta.backups,      color: "bg-gray-100 text-gray-700"    },
+                { label: "Suajes",           value: estadisticas.por_carpeta.suaje,        color: "bg-purple-50 text-purple-700" },
               ].map(item => (
                 <div key={item.label} className={`rounded-xl px-3 py-2 ${item.color}`}>
                   <p className="text-xs font-semibold">{item.label}</p>
@@ -853,12 +880,13 @@ export default function GestorArchivos() {
               </svg>
             </div>
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
               {CARPETAS_OPTIONS.map(carpeta => {
                 const total        = contarPorCarpeta(carpeta.value);
                 const protegida    = CARPETAS_PROTEGIDAS.includes(carpeta.value);
                 const desbloqueada = carpetasDesbloqueadas.has(carpeta.value);
                 const conSub       = CARPETAS_CON_SUBCARPETAS.includes(carpeta.value);
+                const numSub       = getNumSubcarpetas(carpeta.value);
                 return (
                   <button key={carpeta.value} onClick={() => abrirCarpeta(carpeta.value)}
                     className="flex flex-col items-center gap-3 p-6 bg-white border border-gray-200 rounded-2xl hover:border-blue-300 hover:shadow-md transition-all group text-center relative">
@@ -877,8 +905,8 @@ export default function GestorArchivos() {
                       </div>
                     )}
                     {conSub && (
-                      <div className="absolute top-2.5 left-2.5 px-1.5 py-0.5 bg-red-50 text-red-500 rounded text-xs font-semibold">
-                        9
+                      <div className="absolute top-2.5 left-2.5 px-1.5 py-0.5 bg-purple-50 text-purple-500 rounded text-xs font-semibold">
+                        {numSub}
                       </div>
                     )}
                     {renderIconoCarpeta(carpeta.value)}
@@ -888,7 +916,7 @@ export default function GestorArchivos() {
                       </p>
                       <p className="text-xs text-gray-400 mt-0.5">
                         {total} archivo{total !== 1 ? "s" : ""}
-                        {conSub ? " · 9 subcarpetas" : ""}
+                        {conSub ? ` · ${numSub} subcarpetas` : ""}
                       </p>
                     </div>
                   </button>
@@ -898,17 +926,25 @@ export default function GestorArchivos() {
           )
         )}
 
-        {/* Vista subcarpetas — solo para PDFs */}
-        {vista === "subcarpetas" && (
+        {/* Vista subcarpetas — dinámica según carpeta activa */}
+        {vista === "subcarpetas" && carpetaActiva && (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-            {SUBCARPETAS_PDF.map(sub => {
+            {getSubcarpetasDeCarpeta(carpetaActiva).map(sub => {
               const total = contarPorSubcarpeta(sub.value);
               return (
-                <button key={sub.value} onClick={() => abrirSubcarpeta(sub.value)}
-                  className="flex flex-col items-center gap-3 p-5 bg-white border border-gray-200 rounded-2xl hover:border-red-300 hover:shadow-md transition-all group text-center">
-                  {renderIconoSubcarpeta()}
+                <button key={sub.value} onClick={() => abrirSubcarpeta(sub.value as any)}
+                  className={`flex flex-col items-center gap-3 p-5 bg-white border border-gray-200 rounded-2xl transition-all group text-center ${
+                    carpetaActiva === "suaje"
+                      ? "hover:border-purple-300 hover:shadow-md"
+                      : "hover:border-red-300 hover:shadow-md"
+                  }`}>
+                  {renderIconoSubcarpeta(carpetaActiva)}
                   <div>
-                    <p className="text-sm font-semibold text-gray-800 group-hover:text-red-600 transition-colors">
+                    <p className={`text-sm font-semibold text-gray-800 transition-colors ${
+                      carpetaActiva === "suaje"
+                        ? "group-hover:text-purple-600"
+                        : "group-hover:text-red-600"
+                    }`}>
                       {sub.label}
                     </p>
                     <p className="text-xs text-gray-400 mt-0.5">
@@ -1002,10 +1038,10 @@ export default function GestorArchivos() {
             </div>
 
             {/* Selector carpeta */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-2">
               {CARPETAS_OPTIONS.map(c => (
                 <button key={c.value} onClick={() => { setCarpetaSeleccion(c.value); setSubcarpetaSeleccion(null); }}
-                  className={`flex items-center gap-3 px-4 py-3 rounded-xl border-2 text-sm font-semibold transition-all ${
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border-2 text-sm font-semibold transition-all ${
                     carpetaSeleccion === c.value
                       ? "border-blue-600 bg-blue-50 text-blue-700"
                       : "border-gray-200 text-gray-600 hover:border-gray-300"
@@ -1018,20 +1054,26 @@ export default function GestorArchivos() {
               ))}
             </div>
 
-            {/* Selector subcarpeta — solo si carpeta es PDFs */}
-            {carpetaSeleccion === "pdfs" && (
+            {/* Selector subcarpeta — dinámica según carpeta seleccionada */}
+            {necesitaSubcarpeta && subcarpetasDelModal.length > 0 && (
               <div className="space-y-2">
-                <label className="block text-sm font-semibold text-gray-700">Subcarpeta de PDFs</label>
+                <label className="block text-sm font-semibold text-gray-700">
+                  Subcarpeta de {CARPETAS_LABELS[carpetaSeleccion]}
+                </label>
                 <div className="grid grid-cols-1 gap-1.5 max-h-40 overflow-y-auto pr-1">
-                  {SUBCARPETAS_PDF.map(sub => (
+                  {subcarpetasDelModal.map(sub => (
                     <button key={sub.value}
-                      onClick={() => setSubcarpetaSeleccion(sub.value)}
+                      onClick={() => setSubcarpetaSeleccion(sub.value as any)}
                       className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm transition-all text-left ${
                         subcarpetaSeleccion === sub.value
-                          ? "border-red-400 bg-red-50 text-red-700 font-semibold"
+                          ? carpetaSeleccion === "suaje"
+                            ? "border-purple-400 bg-purple-50 text-purple-700 font-semibold"
+                            : "border-red-400 bg-red-50 text-red-700 font-semibold"
                           : "border-gray-200 text-gray-600 hover:border-gray-300"
                       }`}>
-                      <svg className="w-4 h-4 flex-shrink-0 text-red-300" fill="currentColor" viewBox="0 0 24 24">
+                      <svg className={`w-4 h-4 flex-shrink-0 ${
+                        carpetaSeleccion === "suaje" ? "text-purple-300" : "text-red-300"
+                      }`} fill="currentColor" viewBox="0 0 24 24">
                         <path d="M10 4H4c-1.11 0-2 .89-2 2v12c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2h-8l-2-2z"/>
                       </svg>
                       {sub.label}
@@ -1048,7 +1090,7 @@ export default function GestorArchivos() {
                 Cancelar
               </button>
               <button onClick={handleConfirmarSubida}
-                disabled={subiendo || (carpetaSeleccion === "pdfs" && !subcarpetaSeleccion)}
+                disabled={subiendo || (necesitaSubcarpeta && !subcarpetaSeleccion)}
                 className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
                 {subiendo ? (
                   <>
@@ -1065,8 +1107,8 @@ export default function GestorArchivos() {
                         d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
                     </svg>
                     Subir a {subcarpetaSeleccion
-                      ? SUBCARPETAS_PDF.find(s => s.value === subcarpetaSeleccion)?.label
-                      : CARPETAS_OPTIONS.find(c => c.value === carpetaSeleccion)?.label}
+                      ? subcarpetasDelModal.find(s => s.value === subcarpetaSeleccion)?.label
+                      : CARPETAS_LABELS[carpetaSeleccion]}
                   </>
                 )}
               </button>

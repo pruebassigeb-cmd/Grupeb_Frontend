@@ -16,7 +16,7 @@ export interface Archivo {
   created_at: string;
 }
 
-export type CarpetaFrontend = "disenos" | "pdfs" | "fotos-envios" | "backups";
+export type CarpetaFrontend = "disenos" | "pdfs" | "fotos-envios" | "backups" | "suaje";
 
 export type SubcarpetaPDF =
   | "cotizaciones"
@@ -29,41 +29,48 @@ export type SubcarpetaPDF =
   | "notas-remision"
   | "formas-envio";
 
+export type SubcarpetaSuaje = "catalogo" | "imagen" | "rendimiento";
+
 export const CARPETAS_LABELS: Record<CarpetaFrontend, string> = {
   "disenos":      "Diseños",
   "pdfs":         "PDFs",
   "fotos-envios": "Fotos de Envíos",
   "backups":      "Backups BD",
+  "suaje":        "Suaje",
 };
 
 export const SUBCARPETAS_PDF: { value: SubcarpetaPDF; label: string }[] = [
-  { value: "cotizaciones",             label: "Cotizaciones"                  },
-  { value: "pedidos",                  label: "Pedidos"                       },
-  { value: "ordenes-produccion",       label: "Órdenes de Producción"         },
-  { value: "estados-cuenta-detallado", label: "Estados de Cuenta Detallados"  },
-  { value: "estados-cuenta-simple",    label: "Estados de Cuenta Simple"      },
-  { value: "historial-pagos",          label: "Historial de Pagos"            },
-  { value: "etiquetas",                label: "Etiquetas"                     },
-  { value: "notas-remision",           label: "Notas de Remisión"             },
-  { value: "formas-envio",             label: "Formas de Envío"               },
+  { value: "cotizaciones",             label: "Cotizaciones"                 },
+  { value: "pedidos",                  label: "Pedidos"                      },
+  { value: "ordenes-produccion",       label: "Órdenes de Producción"        },
+  { value: "estados-cuenta-detallado", label: "Estados de Cuenta Detallados" },
+  { value: "estados-cuenta-simple",    label: "Estados de Cuenta Simple"     },
+  { value: "historial-pagos",          label: "Historial de Pagos"           },
+  { value: "etiquetas",                label: "Etiquetas"                    },
+  { value: "notas-remision",           label: "Notas de Remisión"            },
+  { value: "formas-envio",             label: "Formas de Envío"              },
 ];
 
-
+export const SUBCARPETAS_SUAJE: { value: SubcarpetaSuaje; label: string }[] = [
+  { value: "catalogo",    label: "Catálogo"    },
+  { value: "imagen",      label: "Imagen"      },
+  { value: "rendimiento", label: "Rendimiento" },
+];
 
 // Subir archivo — acepta envio_id y nota_id opcionales
 export const subirArchivo = async (
   file: File,
   carpeta: CarpetaFrontend,
-  subcarpeta?: SubcarpetaPDF,
+  subcarpeta?: SubcarpetaPDF | SubcarpetaSuaje,
   envio_id?: number,
-  nota_id?: number,           // ← NUEVO
+  nota_id?: number,
 ): Promise<Archivo> => {
   const formData = new FormData();
   formData.append("archivo", file);
   formData.append("carpeta", carpeta);
-  if (subcarpeta)          formData.append("subcarpeta", subcarpeta);
+  if (subcarpeta != null)  formData.append("subcarpeta", subcarpeta);
   if (envio_id != null)    formData.append("envio_id",   String(envio_id));
-  if (nota_id  != null)    formData.append("nota_id",    String(nota_id));  // ← NUEVO
+  if (nota_id  != null)    formData.append("nota_id",    String(nota_id));
 
   const { data } = await api.post<Archivo>("/archivos/upload", formData, {
     headers: { "Content-Type": "multipart/form-data" },
@@ -78,12 +85,11 @@ export const getFotosEnvio = async (idenvio: number): Promise<Archivo[]> => {
   return data;
 };
 
-// Obtener fotos de una nota de remisión  ← NUEVO
+// Obtener fotos de una nota de remisión
 export const getFotosNota = async (idnota: number): Promise<Archivo[]> => {
   const { data } = await api.get<Archivo[]>(`/archivos/nota/${idnota}`);
   return data;
 };
-
 
 export const listarArchivos = async (): Promise<Archivo[]> => {
   const { data } = await api.get<Archivo[]>("/archivos");
@@ -111,6 +117,7 @@ export interface Estadisticas {
     pdfs:         number;
     fotos_envios: number;
     backups:      number;
+    suaje:        number;
   };
 }
 

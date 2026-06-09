@@ -59,7 +59,7 @@ export default function Dashboard({ children }: DashboardProps) {
       permiso: "Dar de alta productos",
       subItems: [
         { name: "Plástico", path: "/plastico", permiso: "Dar de alta productos" },
-        //{ name: "Papel",    path: "/papel",    permiso: "Dar de alta productos" },
+        { name: "Papel",    path: "/papel",    permiso: "Dar de alta productos" },
       ],
     },
     {
@@ -112,13 +112,14 @@ export default function Dashboard({ children }: DashboardProps) {
         { name: "Plástico", path: "/precioplastico", permiso: "Modificar Catalogo de precios" },
       ],
     },
-    /*{
+    
+    {
       name: "Catálogos",
       permiso: "Dar de alta productos",
       subItems: [
         { name: "Gestión de catálogos", path: "/catalogos", permiso: "Dar de alta productos" },
       ],
-    },*/
+    },
     {
       name: "Archivos",
       path: "/archivos",

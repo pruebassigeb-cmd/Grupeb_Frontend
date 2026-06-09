@@ -233,6 +233,7 @@ export default function FormularioSolicitud({
 
   useEffect(() => {
       getTiposInsumo().then(tipos => {
+          console.log("Tipos insumo:", tipos.map(t => `"${t.nombre}"`));  // 👈
         const panton   = tipos.find(t => t.nombre === "Pantón");
         const pigmento = tipos.find(t => t.nombre === "Pigmento");
         if (panton)   setIdTipoPanton(panton.idtipo_insumo);

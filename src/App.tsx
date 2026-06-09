@@ -19,8 +19,8 @@ import Envios from "./pages/Envios";
 import GestorArchivos from "./components/GestorArchivos";
 import GestorBackups from "./components/GestorBackups.tsx";
 import ProveedoresPage from "./pages/ProveedoresPage";
-import Papel from "./pages/Papel";
-import Catalogos from "./pages/catalogos.tsx";
+import Papel from "./pages/papel/Papel";
+import Catalogos from "./pages/papel/catalogos.tsx";
 
 const PERMISOS = {
   usuarios: "Crear/Editar/Eliminar Usuarios",
