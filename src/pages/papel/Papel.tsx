@@ -27,13 +27,13 @@ const calcBase = (ancho: string, fuelle: string) => {
   return (!isNaN(a) && !isNaN(f)) ? `${(a - 0.5).toFixed(1)}x${(f - 0.5).toFixed(1)} cm` : "";
 };
 
-const ICON_PDF = "\uD83D\uDCC4";
-const ICON_IMG = "\uD83D\uDDBC\uFE0F";
+const ICON_PDF   = "\uD83D\uDCC4";
+const ICON_IMG   = "\uD83D\uDDBC\uFE0F";
 const ICON_CHART = "\uD83D\uDCCA";
 
 const CATEGORIA_A_SUBCARPETA: Record<string, string> = {
-  "catalogo-suaje-papel": "catalogo",
-  "imagen-suaje-papel": "imagen",
+  "catalogo-suaje-papel":    "catalogo",
+  "imagen-suaje-papel":      "imagen",
   "rendimiento-suaje-papel": "rendimiento",
 };
 
@@ -49,12 +49,12 @@ const CATEGORIA_A_SUBCARPETA: Record<string, string> = {
 // Archivos       → gris neutro
 // ═══════════════════════════════════════════════════════════════════════════
 const SEC_COLORS: Record<string, { border: string; headerBg: string; headerText: string; leftBar: string }> = {
-  tipo: { border: "#CBD5E1", headerBg: "#F1F5F9", headerText: "#334155", leftBar: "#64748B" },
-  papel: { border: "#CBD5E1", headerBg: "#F1F5F9", headerText: "#334155", leftBar: "#64748B" },
-  suaje: { border: "#CBD5E1", headerBg: "#F1F5F9", headerText: "#334155", leftBar: "#64748B" },
-  acabados: { border: "#CBD5E1", headerBg: "#F1F5F9", headerText: "#334155", leftBar: "#64748B" },
+  tipo:       { border: "#CBD5E1", headerBg: "#F1F5F9", headerText: "#334155", leftBar: "#64748B" },
+  papel:      { border: "#CBD5E1", headerBg: "#F1F5F9", headerText: "#334155", leftBar: "#64748B" },
+  suaje:      { border: "#CBD5E1", headerBg: "#F1F5F9", headerText: "#334155", leftBar: "#64748B" },
+  acabados:   { border: "#CBD5E1", headerBg: "#F1F5F9", headerText: "#334155", leftBar: "#64748B" },
   maquinaria: { border: "#E2E8F0", headerBg: "#F8FAFC", headerText: "#475569", leftBar: "#94A3B8" },
-  archivos: { border: "#E5E7EB", headerBg: "#F9FAFB", headerText: "#6B7280", leftBar: "#9CA3AF" },
+  archivos:   { border: "#E5E7EB", headerBg: "#F9FAFB", headerText: "#6B7280", leftBar: "#9CA3AF" },
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -357,8 +357,8 @@ const getTipoDeFile = (file: File): "pdf" | "image" | "document" => {
 };
 
 const ICONOS_CATEGORIA: Record<string, string> = {
-  "catalogo-suaje-papel": ICON_PDF,
-  "imagen-suaje-papel": ICON_IMG,
+  "catalogo-suaje-papel":    ICON_PDF,
+  "imagen-suaje-papel":      ICON_IMG,
   "rendimiento-suaje-papel": ICON_CHART,
 };
 
@@ -388,7 +388,7 @@ function SecArchivos({
     })
       .then(r => r.json())
       .then(d => setArchivosGuardados((d.archivos ?? []).map((a: any) => ({ ...a, pendiente: false }))))
-      .catch(() => { });
+      .catch(() => {});
   }, [idproducto, isEdit]);
 
   useEffect(() => {
@@ -404,13 +404,13 @@ function SecArchivos({
   const handleFile = async (file: File, categoria: string) => {
     if (!isEdit) {
       const pendiente: ArchivoPendiente = {
-        uid: `${Date.now()}-${Math.random()}`,
+        uid:        `${Date.now()}-${Math.random()}`,
         file,
         categoria,
         previewUrl: URL.createObjectURL(file),
-        nombre: file.name,
-        tipo: getTipoDeFile(file),
-        pendiente: true,
+        nombre:     file.name,
+        tipo:       getTipoDeFile(file),
+        pendiente:  true,
       };
       setArchivosPendientes(prev => [...prev, pendiente]);
       return;
@@ -421,10 +421,10 @@ function SecArchivos({
     try {
       const subcarpeta = CATEGORIA_A_SUBCARPETA[categoria] ?? "catalogo";
       const formData = new FormData();
-      formData.append("archivo", file);
-      formData.append("carpeta", "suaje");
-      formData.append("subcarpeta", subcarpeta);
-      formData.append("categoria", categoria);
+      formData.append("archivo",          file);
+      formData.append("carpeta",          "suaje");
+      formData.append("subcarpeta",       subcarpeta);
+      formData.append("categoria",        categoria);
       formData.append("idproducto_papel", String(idproducto));
 
       const BASE = (import.meta as any).env.VITE_API_URL;
@@ -507,9 +507,9 @@ function SecArchivos({
         </p>
       )}
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: todosLosArchivos.length > 0 ? 12 : 0 }}>
-        <UploadBtn label="Catalogo" categoria="catalogo-suaje-papel" accept=".pdf,.doc,.docx,.xls,.xlsx" icon={ICON_PDF} />
-        <UploadBtn label="Imagen" categoria="imagen-suaje-papel" accept="image/*" icon={ICON_IMG} />
-        <UploadBtn label="Rendimiento" categoria="rendimiento-suaje-papel" accept=".pdf,.xlsx,.xls,image/*" icon={ICON_CHART} />
+        <UploadBtn label="Catalogo"    categoria="catalogo-suaje-papel"    accept=".pdf,.doc,.docx,.xls,.xlsx" icon={ICON_PDF}   />
+        <UploadBtn label="Imagen"      categoria="imagen-suaje-papel"      accept="image/*"                    icon={ICON_IMG}   />
+        <UploadBtn label="Rendimiento" categoria="rendimiento-suaje-papel" accept=".pdf,.xlsx,.xls,image/*"    icon={ICON_CHART} />
       </div>
       {todosLosArchivos.length > 0 && (
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
@@ -555,10 +555,10 @@ function SecArchivos({
 async function subirArchivoPendiente(pendiente: ArchivoPendiente, idproducto_papel: number): Promise<void> {
   const subcarpeta = CATEGORIA_A_SUBCARPETA[pendiente.categoria] ?? "catalogo";
   const formData = new FormData();
-  formData.append("archivo", pendiente.file);
-  formData.append("carpeta", "suaje");
-  formData.append("subcarpeta", subcarpeta);
-  formData.append("categoria", pendiente.categoria);
+  formData.append("archivo",          pendiente.file);
+  formData.append("carpeta",          "suaje");
+  formData.append("subcarpeta",       subcarpeta);
+  formData.append("categoria",        pendiente.categoria);
   formData.append("idproducto_papel", String(idproducto_papel));
 
   const BASE = (import.meta as any).env.VITE_API_URL;
@@ -709,17 +709,12 @@ function FormularioProducto({ initial, onSave, onCancel, saving }: {
           <Field label="Tamano">  <Inp value={form.suaje.tamano} onChange={v => updSuaje({ tamano: v })} /></Field>
           <Field label="Metros">  <Inp value={form.suaje.metros} onChange={v => updSuaje({ metros: v })} /></Field>
           <Field label="Matrix">
-            <SelConAlta
-              catKey="matrix"
-              options={names("matrix")}
-              value={form.suaje.matrix}
-              onChange={(v) => {
-                const item = catalogs.matrix.find(i => i.nombre === v);
-                updSuaje({ matrix: v, idcat_matrix: item?.id ?? null });
-              }}
-              onAdd={addItem}
-            />
-          </Field>          <Field label="Corte tipo">  <Inp value={form.suaje.corte1Tipo} onChange={v => updSuaje({ corte1Tipo: v })} /></Field>
+            <SelConAlta catKey={"matrix" as CatKey} options={names("matrix" as CatKey)}
+              value={(form.suaje as any).matrixNombre ?? ""}
+              onChange={(v) => { const item = (catalogs as any).matrix?.find((i: any) => i.nombre === v); updSuaje({ matrixNombre: v, idcat_matrix: item?.id ?? null }); }}
+              onAdd={addItem} placeholder="" />
+          </Field>
+          <Field label="Corte tipo">  <Inp value={form.suaje.corte1Tipo} onChange={v => updSuaje({ corte1Tipo: v })} /></Field>
           <Field label="Corte medida"><Inp value={form.suaje.corte1Medida} onChange={v => updSuaje({ corte1Medida: v })} /></Field>
         </div>
         {/* Renglón 2: Dobles, T.Arreglo, Sacabocado, Perforado */}
@@ -839,10 +834,10 @@ function FormularioProducto({ initial, onSave, onCancel, saving }: {
         <FG cols={5} gap="6px 10px" style={{ marginBottom: 8 }}>
           {([
             ["hojeado_guillotina", "Hojeado / Guill."],
-            ["impresora", "Impresora"],
-            ["hs_ar", "Hs y AR"],
-            ["suaje_maquina", "Suaje"],
-            ["uv", "UV"],
+            ["impresora",          "Impresora"],
+            ["hs_ar",              "Hs y AR"],
+            ["suaje_maquina",      "Suaje"],
+            ["uv",                 "UV"],
           ] as [string, string][]).map(([key, label]) => (
             <Field key={key} label={label}>
               <MaquinariaMultiSelect
@@ -858,11 +853,11 @@ function FormularioProducto({ initial, onSave, onCancel, saving }: {
         </FG>
         <FG cols={5} gap="6px 10px">
           {([
-            ["textura", "Textura"],
-            ["empalme", "Empalme"],
-            ["armado", "Armado"],
+            ["textura",      "Textura"],
+            ["empalme",      "Empalme"],
+            ["armado",       "Armado"],
             ["asas_maquina", "Asas"],
-            ["desbarbe", "Desbarbe"],
+            ["desbarbe",     "Desbarbe"],
           ] as [string, string][]).map(([key, label]) => (
             <Field key={key} label={label}>
               <MaquinariaMultiSelect
@@ -973,15 +968,15 @@ function DetalleProducto({ id }: { id: number }) {
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "3px 32px" }}>
             {([
               ["hojeado_guillotina", "Hojeado / Guill."],
-              ["impresora", "Impresora"],
-              ["hs_ar", "Hs y AR"],
-              ["suaje_maquina", "Suaje"],
-              ["uv", "UV"],
-              ["textura", "Textura"],
-              ["empalme", "Empalme"],
-              ["armado", "Armado"],
-              ["asas_maquina", "Asas"],
-              ["desbarbe", "Desbarbe"],
+              ["impresora",          "Impresora"],
+              ["hs_ar",              "Hs y AR"],
+              ["suaje_maquina",      "Suaje"],
+              ["uv",                 "UV"],
+              ["textura",            "Textura"],
+              ["empalme",            "Empalme"],
+              ["armado",             "Armado"],
+              ["asas_maquina",       "Asas"],
+              ["desbarbe",           "Desbarbe"],
             ] as [string, string][]).map(([key, label]) => {
               const items: { id: number; nombre: string }[] = detalle.maquinaria[key] ?? [];
               return items.length > 0 ? row(label, items.map((i: any) => i.nombre).join(", ")) : null;
@@ -1045,7 +1040,7 @@ function DetalleProducto({ id }: { id: number }) {
                 <span style={{ fontSize: 13 }}>
                   {a.categoria === "imagen-suaje-papel" ? ICON_IMG
                     : a.categoria === "rendimiento-suaje-papel" ? ICON_CHART
-                      : ICON_PDF}
+                    : ICON_PDF}
                 </span>
                 <span style={{ maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={a.nombre}>{a.nombre}</span>
                 <span style={{ fontSize: 10, color: "#9CA3AF", flexShrink: 0 }}>{a.categoria}</span>
@@ -1212,8 +1207,9 @@ export default function Papel() {
         form.suaje.dobles1Tipo = d.suaje.dobles1_tipo ?? "";
         form.suaje.dobles1Medida = d.suaje.dobles1_medida ?? "";
         form.suaje.metros = d.suaje.metros ?? "";
-        form.suaje.matrix = d.suaje.matrix_nombre ?? "";
-        form.suaje.idcat_matrix = d.suaje.idcat_matrix ?? null; form.suaje.tiempoArreglo = d.suaje.tiempo_arreglo ? String(d.suaje.tiempo_arreglo) : "";
+        form.suaje.idcat_matrix = d.suaje.idcat_matrix ?? null;
+        form.suaje.matrixNombre = d.suaje.matrix_nombre ?? "";
+        form.suaje.tiempoArreglo = d.suaje.tiempo_arreglo ? String(d.suaje.tiempo_arreglo) : "";
         form.suaje.idcat_sacabocados = d.suaje.idcat_sacabocados ?? null;
         form.suaje.sacabocadoNombre = d.suaje.sacabocado_nombre
           ? (d.suaje.sacabocado_medida ? `${d.suaje.sacabocado_nombre} -- ${d.suaje.sacabocado_medida}` : d.suaje.sacabocado_nombre)
@@ -1244,9 +1240,9 @@ export default function Papel() {
 
       if (d.maquinaria) {
         const maq = d.maquinaria;
-        const keys = ["hojeado_guillotina", "impresora", "hs_ar", "suaje_maquina", "uv", "textura", "empalme", "armado", "asas_maquina", "desbarbe"];
+        const keys = ["hojeado_guillotina","impresora","hs_ar","suaje_maquina","uv","textura","empalme","armado","asas_maquina","desbarbe"];
         for (const key of keys) {
-          form.maquinaria[key] = (maq[key] ?? []).map((i: any) => i.id);
+          form.maquinaria[key]             = (maq[key] ?? []).map((i: any) => i.id);
           form.maquinaria[`${key}_nombres`] = (maq[key] ?? []).map((i: any) => i.nombre);
         }
       }

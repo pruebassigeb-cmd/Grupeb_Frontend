@@ -31,7 +31,7 @@ export type CatKey =
   | "armado"
   | "asas_maquina"
   | "desbarbe"
-  | "matrix";          // ← nuevo
+  | "matrix";
 
 export type Catalogs = Record<CatKey, CatItem[]>;
 
@@ -78,8 +78,8 @@ export interface Suaje {
   dobles1Tipo: string;
   dobles1Medida: string;
   metros: string;
-  matrix: string;          // nombre para mostrar
-  idcat_matrix: number | null;  // ← nuevo FK
+  idcat_matrix: number | null;
+  matrixNombre: string;
   tiempoArreglo: string;
   idcat_sacabocados: number | null;
   sacabocadoNombre: string;
@@ -109,7 +109,7 @@ export interface Acabados {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// MAQUINARIA
+// MAQUINARIA — multiselect, cada campo es array de ids + array de nombres
 // ═══════════════════════════════════════════════════════════════════════════
 export interface Maquinaria {
   hojeado_guillotina:         number[];
@@ -132,7 +132,7 @@ export interface Maquinaria {
   asas_maquina_nombres:       string[];
   desbarbe:                   number[];
   desbarbe_nombres:           string[];
-  [key: string]: number[] | string[];
+  [key: string]: number[] | string[]; // index signature para acceso dinámico
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -198,10 +198,7 @@ export const newSuaje = (): Suaje => ({
   numero: "", pzs: "", tamano: "",
   corte1Tipo: "", corte1Medida: "",
   dobles1Tipo: "", dobles1Medida: "",
-  metros: "",
-  matrix: "",
-  idcat_matrix: null,   // ← nuevo
-  tiempoArreglo: "",
+  metros: "", idcat_matrix: null, matrixNombre: "", tiempoArreglo: "",
   idcat_sacabocados: null, sacabocadoNombre: "", cantidad_sacabocado: "",
   idcat_perforado: null, perforadoNombre: "", cantidad_perforado: "",
 });
