@@ -11,17 +11,15 @@ const headers = () => ({
 // CATÁLOGOS
 // ═══════════════════════════════════════════════════════════════════════════
 
-// Cada tabla retorna su PK con nombre específico (idcat_laminado, idcat_calibre, etc.)
-// Este mapper normaliza todos a { id, nombre, medida? } para que el frontend los maneje igual
 const normalizarItems = (items: any[]): { id: number; nombre: string; medida?: string }[] =>
   items.map(item => {
-    // Buscar la clave que empiece con "idcat_" o sea el primer campo numérico
-    const pkKey = Object.keys(item).find(k => k.startsWith("idcat_"));
+    // matrix usa idmatrix como PK, no sigue el patrón idcat_*
+    const pkKey = Object.keys(item).find(k => k.startsWith("idcat_")) ?? "idmatrix";
     return {
-      id:     pkKey ? item[pkKey] : item.id,
-      nombre: item.nombre,
-      medida: item.medida,
-      numero_maquina: item.numero_maquina, // para catálogo de maquinaria, opcional en otros
+      id:             item[pkKey] ?? item.id,
+      nombre:         item.nombre ?? item.medida_matrix,  // matrix usa medida_matrix
+      medida:         item.medida,
+      numero_maquina: item.numero_maquina,
     };
   });
 
@@ -29,7 +27,6 @@ export const fetchCatalogosPapel = async (): Promise<Catalogs> => {
   const res = await fetch(`${BASE}/catalogos-papel`, { headers: headers() });
   if (!res.ok) throw new Error("Error al cargar catálogos");
   const raw = await res.json();
-  // Normalizar todos los catálogos
   const normalizado: any = {};
   for (const key of Object.keys(raw)) {
     normalizado[key] = normalizarItems(raw[key]);
@@ -50,8 +47,12 @@ export const agregarItemCatalogo = async (
   });
   if (!res.ok) throw new Error("Error al agregar item al catálogo");
   const raw = await res.json();
-  const pkKey = Object.keys(raw).find(k => k.startsWith("idcat_"));
-  return { id: pkKey ? raw[pkKey] : raw.id, nombre: raw.nombre, medida: raw.medida };
+  const pkKey = Object.keys(raw).find(k => k.startsWith("idcat_")) ?? "idmatrix";
+  return {
+    id:     raw[pkKey] ?? raw.id,
+    nombre: raw.nombre ?? raw.medida_matrix,
+    medida: raw.medida,
+  };
 };
 
 export const editarItemCatalogo = async (
@@ -150,6 +151,7 @@ export const eliminarProductoPapel = async (id: number): Promise<void> => {
 // ═══════════════════════════════════════════════════════════════════════════
 const mapFormToApi = (form: ProductoPapelForm) => ({
   idcat_tipo_producto_papel: form.idcat_tipo_producto_papel,
+  descripcion_papel: form.descripcion || null,
   ancho:   form.ancho   || null,
   fuelle:  form.fuelle  || null,
   altura:  form.altura  || null,
@@ -182,18 +184,18 @@ const mapFormToApi = (form: ProductoPapelForm) => ({
     dobles1_tipo:    form.suaje.dobles1Tipo    || null,
     dobles1_medida:  form.suaje.dobles1Medida  || null,
     metros:          form.suaje.metros         || null,
-    matrix:          form.suaje.matrix         || null,
+    idcat_matrix:    form.suaje.idcat_matrix,           // ← FK en lugar de texto
     tiempo_arreglo:  form.suaje.tiempoArreglo  ? parseInt(form.suaje.tiempoArreglo) : null,
-    idcat_sacabocados:    form.suaje.idcat_sacabocados,
-    cantidad_sacabocado:  form.suaje.cantidad_sacabocado ? parseInt(form.suaje.cantidad_sacabocado) : null,
-    idcat_perforado:      form.suaje.idcat_perforado,
-    cantidad_perforado:   form.suaje.cantidad_perforado  ? parseInt(form.suaje.cantidad_perforado)  : null,
+    idcat_sacabocados:   form.suaje.idcat_sacabocados,
+    cantidad_sacabocado: form.suaje.cantidad_sacabocado ? parseInt(form.suaje.cantidad_sacabocado) : null,
+    idcat_perforado:     form.suaje.idcat_perforado,
+    cantidad_perforado:  form.suaje.cantidad_perforado  ? parseInt(form.suaje.cantidad_perforado)  : null,
   },
 
   acabados: {
     idcat_tipo_pegado:       form.acabados.idcat_tipo_pegado,
     idcat_pegamento:         form.acabados.idcat_pegamento,
-    idcat_laminado:          form.acabados.idcat_laminado,
+    laminados:               form.acabados.laminados,
     asas:                    form.acabados.asas,
     idcat_refuerzo_material: form.acabados.idcat_refuerzo_material,
     idcat_refuerzo_medidas:  form.acabados.idcat_refuerzo_medidas,
@@ -204,15 +206,15 @@ const mapFormToApi = (form: ProductoPapelForm) => ({
   },
 
   maquinaria: {
-    idcat_hojeado_guillotina: form.maquinaria.idcat_hojeado_guillotina,
-    idcat_impresora:          form.maquinaria.idcat_impresora,
-    idcat_hs_ar:              form.maquinaria.idcat_hs_ar,
-    idcat_suaje_maquina:      form.maquinaria.idcat_suaje_maquina,
-    idcat_uv:                 form.maquinaria.idcat_uv,
-    idcat_textura:            form.maquinaria.idcat_textura,
-    idcat_empalme:            form.maquinaria.idcat_empalme,
-    idcat_armado:             form.maquinaria.idcat_armado,
-    idcat_asas_maquina:       form.maquinaria.idcat_asas_maquina,
-    idcat_desbarbe:           form.maquinaria.idcat_desbarbe,
+    hojeado_guillotina: form.maquinaria.hojeado_guillotina,
+    impresora:          form.maquinaria.impresora,
+    hs_ar:              form.maquinaria.hs_ar,
+    suaje_maquina:      form.maquinaria.suaje_maquina,
+    uv:                 form.maquinaria.uv,
+    textura:            form.maquinaria.textura,
+    empalme:            form.maquinaria.empalme,
+    armado:             form.maquinaria.armado,
+    asas_maquina:       form.maquinaria.asas_maquina,
+    desbarbe:           form.maquinaria.desbarbe,
   },
 });

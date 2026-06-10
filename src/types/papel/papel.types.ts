@@ -30,7 +30,8 @@ export type CatKey =
   | "empalme"
   | "armado"
   | "asas_maquina"
-  | "desbarbe";
+  | "desbarbe"
+  | "matrix";          // ← nuevo
 
 export type Catalogs = Record<CatKey, CatItem[]>;
 
@@ -46,11 +47,11 @@ export interface Hojeado {
 }
 
 export interface MaterialEntry {
-  id: number;   // id local para el form (Date.now())
+  id: number;
   idcat_tipo_papel: number | null;
   idcat_calibre: number | null;
-  tipo: string;   // nombre display
-  calibre: string;   // nombre display
+  tipo: string;
+  calibre: string;
   pliego: string;
   rendimiento: string;
   corte: string;
@@ -58,8 +59,8 @@ export interface MaterialEntry {
 }
 
 export interface GrupoPapel {
-  id: number;   // id local para el form
-  idgrupo_papel?: number;   // id real de BD (presente al editar)
+  id: number;
+  idgrupo_papel?: number;
   materiales: MaterialEntry[];
   draft: MaterialEntry;
   precioSugerido: string;
@@ -77,7 +78,8 @@ export interface Suaje {
   dobles1Tipo: string;
   dobles1Medida: string;
   metros: string;
-  matrix: string;
+  matrix: string;          // nombre para mostrar
+  idcat_matrix: number | null;  // ← nuevo FK
   tiempoArreglo: string;
   idcat_sacabocados: number | null;
   sacabocadoNombre: string;
@@ -93,14 +95,15 @@ export interface Suaje {
 export interface Acabados {
   idcat_tipo_pegado: number | null;
   idcat_pegamento: number | null;
-  idcat_laminado: number | null;
-  asas: number[];   // array de idcat_tipo_asa
-  asasNombres: string[];   // para display
+  laminados:        number[];
+  laminadosNombres: string[];
+  asas: number[];
+  asasNombres: string[];
   idcat_refuerzo_material: number | null;
   idcat_refuerzo_medidas: number | null;
   refuerzoMedidaNombre: string;
   idcat_base_material: number | null;
-  base_medida: string;     // calculado auto
+  base_medida: string;
   idcat_empaque: number | null;
   pzs_caja: string;
 }
@@ -109,16 +112,27 @@ export interface Acabados {
 // MAQUINARIA
 // ═══════════════════════════════════════════════════════════════════════════
 export interface Maquinaria {
-  idcat_hojeado_guillotina: number | null;
-  idcat_impresora: number | null;
-  idcat_hs_ar: number | null;
-  idcat_suaje_maquina: number | null;
-  idcat_uv: number | null;
-  idcat_textura: number | null;
-  idcat_empalme: number | null;
-  idcat_armado: number | null;
-  idcat_asas_maquina: number | null;
-  idcat_desbarbe: number | null;
+  hojeado_guillotina:         number[];
+  hojeado_guillotina_nombres: string[];
+  impresora:                  number[];
+  impresora_nombres:          string[];
+  hs_ar:                      number[];
+  hs_ar_nombres:              string[];
+  suaje_maquina:              number[];
+  suaje_maquina_nombres:      string[];
+  uv:                         number[];
+  uv_nombres:                 string[];
+  textura:                    number[];
+  textura_nombres:            string[];
+  empalme:                    number[];
+  empalme_nombres:            string[];
+  armado:                     number[];
+  armado_nombres:             string[];
+  asas_maquina:               number[];
+  asas_maquina_nombres:       string[];
+  desbarbe:                   number[];
+  desbarbe_nombres:           string[];
+  [key: string]: number[] | string[];
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -127,6 +141,7 @@ export interface Maquinaria {
 export interface ProductoPapelForm {
   idcat_tipo_producto_papel: number | null;
   tipoProductoNombre: string;
+  descripcion: string;
   ancho: string;
   fuelle: string;
   altura: string;
@@ -143,6 +158,7 @@ export interface ProductoPapelForm {
 export interface ProductoPapelListItem {
   idproducto_papel: number;
   tipo_producto: string;
+  descripcion_papel: string | null;
   ancho: number | null;
   fuelle: number | null;
   altura: number | null;
@@ -182,13 +198,17 @@ export const newSuaje = (): Suaje => ({
   numero: "", pzs: "", tamano: "",
   corte1Tipo: "", corte1Medida: "",
   dobles1Tipo: "", dobles1Medida: "",
-  metros: "", matrix: "", tiempoArreglo: "",
+  metros: "",
+  matrix: "",
+  idcat_matrix: null,   // ← nuevo
+  tiempoArreglo: "",
   idcat_sacabocados: null, sacabocadoNombre: "", cantidad_sacabocado: "",
   idcat_perforado: null, perforadoNombre: "", cantidad_perforado: "",
 });
 
 export const newAcabados = (): Acabados => ({
-  idcat_tipo_pegado: null, idcat_pegamento: null, idcat_laminado: null,
+  idcat_tipo_pegado: null, idcat_pegamento: null,
+  laminados: [], laminadosNombres: [],
   asas: [], asasNombres: [],
   idcat_refuerzo_material: null, idcat_refuerzo_medidas: null, refuerzoMedidaNombre: "",
   idcat_base_material: null, base_medida: "",
@@ -196,14 +216,22 @@ export const newAcabados = (): Acabados => ({
 });
 
 export const newMaquinaria = (): Maquinaria => ({
-  idcat_hojeado_guillotina: null, idcat_impresora: null, idcat_hs_ar: null,
-  idcat_suaje_maquina: null, idcat_uv: null, idcat_textura: null,
-  idcat_empalme: null, idcat_armado: null, idcat_asas_maquina: null, idcat_desbarbe: null,
+  hojeado_guillotina:         [], hojeado_guillotina_nombres: [],
+  impresora:                  [], impresora_nombres:          [],
+  hs_ar:                      [], hs_ar_nombres:              [],
+  suaje_maquina:              [], suaje_maquina_nombres:      [],
+  uv:                         [], uv_nombres:                 [],
+  textura:                    [], textura_nombres:            [],
+  empalme:                    [], empalme_nombres:            [],
+  armado:                     [], armado_nombres:             [],
+  asas_maquina:               [], asas_maquina_nombres:       [],
+  desbarbe:                   [], desbarbe_nombres:           [],
 });
 
 export const newProductoForm = (): ProductoPapelForm => ({
   idcat_tipo_producto_papel: null,
   tipoProductoNombre: "",
+  descripcion: "",
   ancho: "", fuelle: "", altura: "", medida: "",
   grupos: [newGrupo()],
   suaje: newSuaje(),

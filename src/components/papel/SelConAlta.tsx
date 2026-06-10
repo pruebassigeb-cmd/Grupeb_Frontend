@@ -63,7 +63,7 @@ function CalibreAddInput({ value, onChange, inputRef }: {
     <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
       <input
         ref={inputRef}
-        type="text" inputMode="numeric" placeholder="ej: 14"
+        type="text" inputMode="numeric"
         value={num}
         onChange={e => { const v = e.target.value.replace(/[^0-9]/g, ""); setNum(v); update(v, unit); }}
         style={{ flex: 1, padding: "0 6px", border: "none", fontSize: 13, color: "#111827", outline: "none", background: "transparent", minWidth: 0 }}
@@ -90,14 +90,14 @@ function MaquinaAddInput({ nombre, onNombre, numMaquina, onNumMaquina, inputRef 
     <div style={{ display: "flex", flex: 1, gap: 4, overflow: "hidden", alignItems: "center" }}>
       <input
         ref={inputRef}
-        type="text" placeholder="Nombre…"
+        type="text"
         value={nombre}
         onChange={e => onNombre(e.target.value)}
         style={{ flex: 2, padding: "0 6px", border: "none", fontSize: 13, color: "#111827", outline: "none", background: "transparent", minWidth: 0 }}
       />
       <span style={{ fontSize: 10, color: "#9CA3AF", whiteSpace: "nowrap", flexShrink: 0 }}>N°</span>
       <input
-        type="text" placeholder="1.2"
+        type="text"
         value={numMaquina}
         onChange={e => onNumMaquina(e.target.value)}
         style={{ flex: 1, padding: "0 6px", border: "none", borderLeft: "1px solid #BFDBFE", fontSize: 13, color: "#111827", outline: "none", background: "transparent", minWidth: 0 }}
@@ -164,13 +164,13 @@ export default function SelConAlta({ catKey, options, value, onChange, onAdd, pl
       <div style={{ display: "flex", height: 34, border: "1px solid #1D4ED8", borderRadius: 5, overflow: "hidden", background: "#fff", boxShadow: "0 0 0 2px #BFDBFE" }}>
 
         {catKey === "sacabocados" ? (
-          <SufijoInput value={newVal} onChange={setNewVal} sufijo="mm" placeholder="ej: 3" inputRef={inputRef} />
+          <SufijoInput value={newVal} onChange={setNewVal} sufijo="mm" inputRef={inputRef} />
 
         ) : catKey === "perforado" ? (
-          <SufijoInput value={newVal} onChange={setNewVal} sufijo="mm" placeholder="ej: 6.35x6.35" permitirDecimal permitirX inputRef={inputRef} />
+          <SufijoInput value={newVal} onChange={setNewVal} sufijo="mm" permitirDecimal permitirX inputRef={inputRef} />
 
         ) : catKey === "refuerzo_medidas" ? (
-          <SufijoInput value={newVal} onChange={setNewVal} sufijo="cm" placeholder="ej: 10x10" permitirDecimal permitirX inputRef={inputRef} />
+          <SufijoInput value={newVal} onChange={setNewVal} sufijo="cm" permitirDecimal permitirX inputRef={inputRef} />
 
         ) : catKey === "calibre" || catKey === "refuerzo_material" ? (
           <CalibreAddInput value={newVal} onChange={setNewVal} inputRef={inputRef} />
@@ -182,7 +182,6 @@ export default function SelConAlta({ catKey, options, value, onChange, onAdd, pl
           <input
             ref={inputRef}
             type="text"
-            placeholder="Escribe y presiona Enter…"
             value={newVal}
             onChange={e => setNewVal(e.target.value)}
             onKeyDown={e => { if (e.key === "Enter") handleAdd(); if (e.key === "Escape") resetAdding(); }}
@@ -217,30 +216,36 @@ export default function SelConAlta({ catKey, options, value, onChange, onAdd, pl
         if (e.target.value === "__add__") { setAdding(true); return; }
         onChange(e.target.value);
       }}
-      style={{ width: "100%", height: 34, padding: "0 8px", border: "1px solid #D1D5DB", borderRadius: 5, fontSize: 13, color: value ? "#111827" : "#9CA3AF", background: "#fff", outline: "none", boxSizing: "border-box", cursor: "pointer" }}
+      style={{
+        width: "100%", height: 34, padding: "0 8px",
+        border: "1px solid #D1D5DB", borderRadius: 5,
+        fontSize: 13, color: "#111827",
+        background: "#fff", outline: "none",
+        boxSizing: "border-box", cursor: "pointer",
+      }}
     >
-      <option value="" disabled>{placeholder ?? "Seleccionar…"}</option>
+      <option value="" disabled hidden></option>
 
       {esCalibreKey ? (
         <>
           {optsPts.length > 0 && (
             <optgroup label="Puntos">
-              {optsPts.map(o => <option key={o} value={o}>{o}</option>)}
+              {optsPts.map(o => <option key={o} value={o} style={{ color: "#111827" }}>{o}</option>)}
             </optgroup>
           )}
           {optsGms.length > 0 && (
             <optgroup label="Gramaje">
-              {optsGms.map(o => <option key={o} value={o}>{o}</option>)}
+              {optsGms.map(o => <option key={o} value={o} style={{ color: "#111827" }}>{o}</option>)}
             </optgroup>
           )}
           {optsOtros.length > 0 && (
             <optgroup label="Otros">
-              {optsOtros.map(o => <option key={o} value={o}>{o}</option>)}
+              {optsOtros.map(o => <option key={o} value={o} style={{ color: "#111827" }}>{o}</option>)}
             </optgroup>
           )}
         </>
       ) : (
-        options.map(o => <option key={o} value={o}>{o}</option>)
+        options.map(o => <option key={o} value={o} style={{ color: "#111827" }}>{o}</option>)
       )}
 
       <option value="__add__" style={{ color: "#1D4ED8", fontWeight: 600 }}>+ Agregar nuevo…</option>

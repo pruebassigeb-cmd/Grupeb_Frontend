@@ -15,6 +15,7 @@ const EMPTY: Catalogs = {
   refuerzo_material: [], empaque: [], sacabocados: [], perforado: [],
   hojeado_guillotina: [], impresora: [], hs_ar: [], suaje_maquina: [],
   uv: [], textura: [], empalme: [], armado: [], asas_maquina: [], desbarbe: [],
+  matrix: [],  // ← agregado
 };
 
 export function useCatalogosPapel() {
@@ -54,74 +55,71 @@ export function useCatalogosPapel() {
     }
   }, []);
 
-  // ── Helper de nombres para selects ────────────────────────────────────
-  const names = (key: CatKey) => catalogs[key].map(i => i.nombre);
+  // ── Helper de nombres para selects — defensivo contra undefined ────────
+  const names = (key: CatKey) => (catalogs[key] ?? []).map(i => i.nombre);
 
   // ── Agregar — optimistic, reemplaza temp con id real sin reload ────────
   const addItem = async (key: CatKey, nombre: string, medida?: string, numeroMaquina?: string) => {
-  const tempId = Date.now();
-  setCatalogs(prev => ({
-    ...prev,
-    [key]: [...prev[key], { id: tempId, nombre, medida, numero_maquina: numeroMaquina }],
-  }));
-  try {
-    const created = await agregarItemCatalogo(key, nombre, medida, numeroMaquina);
+    const tempId = Date.now();
     setCatalogs(prev => ({
       ...prev,
-      [key]: prev[key].map(i => i.id === tempId ? created : i),
+      [key]: [...(prev[key] ?? []), { id: tempId, nombre, medida, numero_maquina: numeroMaquina }],
     }));
-  } catch {
-    setCatalogs(prev => ({
-      ...prev,
-      [key]: prev[key].filter(i => i.id !== tempId),
-    }));
-  }
-};
+    try {
+      const created = await agregarItemCatalogo(key, nombre, medida, numeroMaquina);
+      setCatalogs(prev => ({
+        ...prev,
+        [key]: (prev[key] ?? []).map(i => i.id === tempId ? created : i),
+      }));
+    } catch {
+      setCatalogs(prev => ({
+        ...prev,
+        [key]: (prev[key] ?? []).filter(i => i.id !== tempId),
+      }));
+    }
+  };
 
   // ── Editar — optimistic, sin reload ───────────────────────────────────
   const editItem = async (key: CatKey, id: number, nombre: string, medida?: string, numeroMaquina?: string) => {
-  const backup = catalogs[key].find(i => i.id === id);
-  setCatalogs(prev => ({
-    ...prev,
-    [key]: prev[key].map(i => i.id === id ? { ...i, nombre, medida, numero_maquina: numeroMaquina } : i),
-  }));
-  try {
-    await editarItemCatalogo(key, id, nombre, medida, numeroMaquina);
-  } catch {
-    if (backup) {
-      setCatalogs(prev => ({
-        ...prev,
-        [key]: prev[key].map(i => i.id === id ? backup : i),
-      }));
+    const backup = (catalogs[key] ?? []).find(i => i.id === id);
+    setCatalogs(prev => ({
+      ...prev,
+      [key]: (prev[key] ?? []).map(i => i.id === id ? { ...i, nombre, medida, numero_maquina: numeroMaquina } : i),
+    }));
+    try {
+      await editarItemCatalogo(key, id, nombre, medida, numeroMaquina);
+    } catch {
+      if (backup) {
+        setCatalogs(prev => ({
+          ...prev,
+          [key]: (prev[key] ?? []).map(i => i.id === id ? backup : i),
+        }));
+      }
     }
-  }
-};
+  };
 
   // ── Eliminar — optimistic, mueve a inactivos ───────────────────────────
   const deleteItem = async (key: CatKey, id: number) => {
-    const item = catalogs[key].find(i => i.id === id);
-    const backup = catalogs[key];
-    // Quitar de activos
+    const item   = (catalogs[key] ?? []).find(i => i.id === id);
+    const backup = catalogs[key] ?? [];
     setCatalogs(prev => ({
       ...prev,
-      [key]: prev[key].filter(i => i.id !== id),
+      [key]: (prev[key] ?? []).filter(i => i.id !== id),
     }));
-    // Agregar a inactivos localmente
     if (item) {
       setCatalogsInactivos(prev => ({
         ...prev,
-        [key]: [...prev[key], item],
+        [key]: [...(prev[key] ?? []), item],
       }));
     }
     try {
       await eliminarItemCatalogo(key, id);
     } catch {
-      // Revertir
       setCatalogs(prev => ({ ...prev, [key]: backup }));
       if (item) {
         setCatalogsInactivos(prev => ({
           ...prev,
-          [key]: prev[key].filter(i => i.id !== id),
+          [key]: (prev[key] ?? []).filter(i => i.id !== id),
         }));
       }
     }
@@ -129,29 +127,26 @@ export function useCatalogosPapel() {
 
   // ── Reactivar — optimistic, mueve a activos ────────────────────────────
   const reactivarItem = async (key: CatKey, id: number) => {
-    const item = catalogsInactivos[key].find(i => i.id === id);
-    const backupInactivos = catalogsInactivos[key];
-    // Quitar de inactivos
+    const item            = (catalogsInactivos[key] ?? []).find(i => i.id === id);
+    const backupInactivos = catalogsInactivos[key] ?? [];
     setCatalogsInactivos(prev => ({
       ...prev,
-      [key]: prev[key].filter(i => i.id !== id),
+      [key]: (prev[key] ?? []).filter(i => i.id !== id),
     }));
-    // Agregar a activos
     if (item) {
       setCatalogs(prev => ({
         ...prev,
-        [key]: [...prev[key], item],
+        [key]: [...(prev[key] ?? []), item],
       }));
     }
     try {
       await reactivarItemCatalogo(key, id);
     } catch {
-      // Revertir
       setCatalogsInactivos(prev => ({ ...prev, [key]: backupInactivos }));
       if (item) {
         setCatalogs(prev => ({
           ...prev,
-          [key]: prev[key].filter(i => i.id !== id),
+          [key]: (prev[key] ?? []).filter(i => i.id !== id),
         }));
       }
     }

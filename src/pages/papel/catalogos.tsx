@@ -3,6 +3,7 @@ import { useAuth } from "../../context/AuthContext";
 import Dashboard from "../../layouts/Sidebar";
 import type { CatKey, CatItem } from "../../types/papel/papel.types";
 import { useCatalogosPapel } from "../../hooks/papel/useCatalogosPapel";
+import FoilPanel from "./FoilPanel";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TAB CONFIG
@@ -21,37 +22,40 @@ const TAB_GROUPS: TabGroup[] = [
   {
     groupLabel: "Producto",
     tabs: [
-      { key: "tipo_producto",  label: "Tipo de producto", hasMedida: false, icon: "📦" },
-      { key: "tipo_papel",     label: "Tipo de papel",    hasMedida: false, icon: "📄" },
-      { key: "calibre",        label: "Calibre",          hasMedida: false, icon: "📐" },
-      { key: "tipo_pegado",    label: "Tipo de pegado",   hasMedida: false, icon: "🔧" },
-      { key: "pegamento",      label: "Pegamento",        hasMedida: false, icon: "🧴" },
-      { key: "tipo_asa",       label: "Tipo de asa",      hasMedida: false, icon: "🪢" },
-      { key: "laminado",       label: "Laminado",         hasMedida: false, icon: "✨" },
-      { key: "refuerzoBase",   label: "Refuerzo y base",  hasMedida: false, icon: "🔩", combined: true },
-      { key: "empaque",        label: "Empaque",          hasMedida: false, icon: "📫" },
+      { key: "tipo_producto", label: "Tipo de producto", hasMedida: false, icon: "📦" },
+      { key: "tipo_papel", label: "Tipo de papel", hasMedida: false, icon: "📄" },
+      { key: "calibre", label: "Calibre", hasMedida: false, icon: "📐" },
+      { key: "tipo_pegado", label: "Tipo de pegado", hasMedida: false, icon: "🔧" },
+      { key: "pegamento", label: "Pegamento", hasMedida: false, icon: "🧴" },
+      { key: "tipo_asa", label: "Tipo de asa", hasMedida: false, icon: "🪢" },
+      { key: "laminado", label: "Laminado", hasMedida: false, icon: "✨" },
+      { key: "refuerzoBase", label: "Refuerzo y base", hasMedida: false, icon: "🔩", combined: true },
+      { key: "empaque", label: "Empaque", hasMedida: false, icon: "📫" },
+      { key: "foil" as any, label: "Foil", hasMedida: false, icon: "✨" },
     ],
   },
   {
     groupLabel: "Especiales",
     tabs: [
       { key: "sacabocados", label: "Sacabocados", hasMedida: true, icon: "⭕" },
-      { key: "perforado",   label: "Perforado",   hasMedida: true, icon: "🔵" },
+      { key: "perforado", label: "Perforado", hasMedida: true, icon: "🔵" },
+      { key: "matrix", label: "Matrix", hasMedida: false, icon: "🔲" }, // ← nuevo
+
     ],
   },
   {
     groupLabel: "Maquinaria",
     tabs: [
-      { key: "hojeado_guillotina", label: "Hojeado / Guillotina", hasMedida: false, tieneNumMaquina: true, icon: "✂️"  },
-      { key: "impresora",          label: "Impresora",            hasMedida: false, tieneNumMaquina: true, icon: "🖨️" },
-      { key: "hs_ar",              label: "Hs y AR",              hasMedida: false, tieneNumMaquina: true, icon: "⚙️"  },
-      { key: "suaje_maquina",      label: "Suaje (máquina)",      hasMedida: false, tieneNumMaquina: true, icon: "🗜️" },
-      { key: "uv",                 label: "UV",                   hasMedida: false, tieneNumMaquina: true, icon: "🔆"  },
-      { key: "textura",            label: "Textura",              hasMedida: false, tieneNumMaquina: true, icon: "🟫"  },
-      { key: "empalme",            label: "Empalme",              hasMedida: false, tieneNumMaquina: true, icon: "🔗"  },
-      { key: "armado",             label: "Armado",               hasMedida: false, tieneNumMaquina: true, icon: "🏗️" },
-      { key: "asas_maquina",       label: "Asas (máquina)",       hasMedida: false, tieneNumMaquina: true, icon: "🔄"  },
-      { key: "desbarbe",           label: "Desbarbe",             hasMedida: false, tieneNumMaquina: true, icon: "🪚"  },
+      { key: "hojeado_guillotina", label: "Hojeado / Guillotina", hasMedida: false, tieneNumMaquina: true, icon: "✂️" },
+      { key: "impresora", label: "Impresora", hasMedida: false, tieneNumMaquina: true, icon: "🖨️" },
+      { key: "hs_ar", label: "Hs y AR", hasMedida: false, tieneNumMaquina: true, icon: "⚙️" },
+      { key: "suaje_maquina", label: "Suaje (máquina)", hasMedida: false, tieneNumMaquina: true, icon: "🗜️" },
+      { key: "uv", label: "UV", hasMedida: false, tieneNumMaquina: true, icon: "🔆" },
+      { key: "textura", label: "Textura", hasMedida: false, tieneNumMaquina: true, icon: "🟫" },
+      { key: "empalme", label: "Empalme", hasMedida: false, tieneNumMaquina: true, icon: "🔗" },
+      { key: "armado", label: "Armado", hasMedida: false, tieneNumMaquina: true, icon: "🏗️" },
+      { key: "asas_maquina", label: "Asas (máquina)", hasMedida: false, tieneNumMaquina: true, icon: "🔄" },
+      { key: "desbarbe", label: "Desbarbe", hasMedida: false, tieneNumMaquina: true, icon: "🪚" },
     ],
   },
 ];
@@ -86,10 +90,10 @@ function Btn({ children, onClick, variant = "primary", small }: {
   variant?: "primary" | "secondary" | "danger" | "ghost"; small?: boolean;
 }) {
   const styles: Record<string, React.CSSProperties> = {
-    primary:   { background: "#1D4ED8", color: "#fff",     border: "none" },
-    secondary: { background: "#F3F4F6", color: "#374151",  border: "1px solid #D1D5DB" },
-    danger:    { background: "#FEE2E2", color: "#DC2626",  border: "none" },
-    ghost:     { background: "none",   color: "#6B7280",   border: "1px solid #E5E7EB" },
+    primary: { background: "#1D4ED8", color: "#fff", border: "none" },
+    secondary: { background: "#F3F4F6", color: "#374151", border: "1px solid #D1D5DB" },
+    danger: { background: "#FEE2E2", color: "#DC2626", border: "none" },
+    ghost: { background: "none", color: "#6B7280", border: "1px solid #E5E7EB" },
   };
   return (
     <button onClick={onClick} style={{
@@ -171,7 +175,7 @@ function CalibreInput({ value, onChange }: { value: string; onChange: (v: string
     return { num: m?.[1] ?? "", unit: (m?.[3]?.toLowerCase() ?? "pts") as "pts" | "gms" };
   };
   const parsed = parseVal(value);
-  const [num,  setNum]  = useState(parsed.num);
+  const [num, setNum] = useState(parsed.num);
   const [unit, setUnit] = useState<"pts" | "gms">(parsed.unit);
 
   const update = (n: string, u: "pts" | "gms") => onChange(n ? `${n}${u}` : "");
@@ -200,25 +204,25 @@ function CalibreInput({ value, onChange }: { value: string; onChange: (v: string
 // CAT PANEL
 // ═══════════════════════════════════════════════════════════════════════════
 function CatPanel({ tab, items, onAdd, onEdit, onDelete, onReactivar, verInactivos, loadingInactivos }: {
-  tab:               TabConfig & { key: CatKey };
-  items:             CatItem[];
-  onAdd?:            (nombre: string, medida?: string, numeroMaquina?: string) => Promise<void>;
-  onEdit?:           (id: number, nombre: string, medida?: string, numeroMaquina?: string) => Promise<void>;
-  onDelete?:         (id: number) => Promise<void>;
-  onReactivar?:      (id: number) => Promise<void>;
-  verInactivos?:     boolean;
+  tab: TabConfig & { key: CatKey };
+  items: CatItem[];
+  onAdd?: (nombre: string, medida?: string, numeroMaquina?: string) => Promise<void>;
+  onEdit?: (id: number, nombre: string, medida?: string, numeroMaquina?: string) => Promise<void>;
+  onDelete?: (id: number) => Promise<void>;
+  onReactivar?: (id: number) => Promise<void>;
+  verInactivos?: boolean;
   loadingInactivos?: boolean;
 }) {
-  const [search,         setSearch]         = useState("");
-  const [newNombre,      setNewNombre]      = useState("");
-  const [newMedida,      setNewMedida]      = useState("");
-  const [newNumMaquina,  setNewNumMaquina]  = useState("");
-  const [editId,         setEditId]         = useState<number | null>(null);
-  const [editNombre,     setEditNombre]     = useState("");
-  const [editMedida,     setEditMedida]     = useState("");
+  const [search, setSearch] = useState("");
+  const [newNombre, setNewNombre] = useState("");
+  const [newMedida, setNewMedida] = useState("");
+  const [newNumMaquina, setNewNumMaquina] = useState("");
+  const [editId, setEditId] = useState<number | null>(null);
+  const [editNombre, setEditNombre] = useState("");
+  const [editMedida, setEditMedida] = useState("");
   const [editNumMaquina, setEditNumMaquina] = useState("");
-  const [deleteId,       setDeleteId]       = useState<number | null>(null);
-  const [saving,         setSaving]         = useState(false);
+  const [deleteId, setDeleteId] = useState<number | null>(null);
+  const [saving, setSaving] = useState(false);
 
   // ── Filtrado y ordenamiento ───────────────────────────────────────────
   const filtered = (() => {
@@ -230,8 +234,8 @@ function CatPanel({ tab, items, onAdd, onEdit, onDelete, onReactivar, verInactiv
 
     if (tab.key !== "calibre") return base;
 
-    const pts   = base.filter(it => it.nombre.toLowerCase().endsWith("pts")).sort((a, b) => parseInt(a.nombre) - parseInt(b.nombre));
-    const gms   = base.filter(it => it.nombre.toLowerCase().endsWith("gms")).sort((a, b) => parseInt(a.nombre) - parseInt(b.nombre));
+    const pts = base.filter(it => it.nombre.toLowerCase().endsWith("pts")).sort((a, b) => parseInt(a.nombre) - parseInt(b.nombre));
+    const gms = base.filter(it => it.nombre.toLowerCase().endsWith("gms")).sort((a, b) => parseInt(a.nombre) - parseInt(b.nombre));
     const otros = base.filter(it => !it.nombre.toLowerCase().endsWith("pts") && !it.nombre.toLowerCase().endsWith("gms"));
     return [...pts, ...gms, ...otros];
   })();
@@ -315,12 +319,12 @@ function CatPanel({ tab, items, onAdd, onEdit, onDelete, onReactivar, verInactiv
   const colLabel = tab.key === "refuerzo_medidas"
     ? "Medida"
     : tab.key === "sacabocados" ? "Sacabocado"
-    : tab.key === "perforado"   ? "Perforación"
-    : "Nombre";
+      : tab.key === "perforado" ? "Perforación"
+        : "Nombre";
 
   // Columnas de la tabla
-  const esFijoTab  = tab.key === "sacabocados" || tab.key === "perforado";
-  const gridCols   = tab.hasMedida
+  const esFijoTab = tab.key === "sacabocados" || tab.key === "perforado";
+  const gridCols = tab.hasMedida
     ? "40px 1fr 1fr auto"
     : tab.tieneNumMaquina
       ? "40px 1fr 100px auto"
@@ -450,8 +454,8 @@ function CatPanel({ tab, items, onAdd, onEdit, onDelete, onReactivar, verInactiv
             {editId === item.id
               ? esFijoTab
                 ? <span style={{ fontSize: 13, color: "#9CA3AF", fontStyle: "italic" }}>
-                    {tab.key === "sacabocados" ? "Sacabocado" : "Perforación"}
-                  </span>
+                  {tab.key === "sacabocados" ? "Sacabocado" : "Perforación"}
+                </span>
                 : <Inp value={editNombre} onChange={setEditNombre} style={{ height: 32, fontSize: 13 }} />
               : <span style={{ fontSize: 13, color: "#111827" }}>{item.nombre}</span>
             }
@@ -481,12 +485,12 @@ function CatPanel({ tab, items, onAdd, onEdit, onDelete, onReactivar, verInactiv
               ) : editId === item.id ? (
                 <>
                   <Btn variant="primary" small onClick={handleEdit}>{saving ? "…" : "✓ Guardar"}</Btn>
-                  <Btn variant="ghost"   small onClick={() => setEditId(null)}>Cancelar</Btn>
+                  <Btn variant="ghost" small onClick={() => setEditId(null)}>Cancelar</Btn>
                 </>
               ) : (
                 <>
                   <Btn variant="secondary" small onClick={() => startEdit(item)}>✎ Editar</Btn>
-                  <Btn variant="danger"    small onClick={() => setDeleteId(item.id)}>× Eliminar</Btn>
+                  <Btn variant="danger" small onClick={() => setDeleteId(item.id)}>× Eliminar</Btn>
                 </>
               )}
             </div>
@@ -505,22 +509,22 @@ function CatPanel({ tab, items, onAdd, onEdit, onDelete, onReactivar, verInactiv
 // PANEL REFUERZO Y BASE
 // ═══════════════════════════════════════════════════════════════════════════
 function RefuerzoBasePanel({ catalogs, addItem, editItem, deleteItem, reactivarItem, verInactivos, loadingInactivos }: {
-  catalogs:          any;
-  addItem:           (key: CatKey, nombre: string, medida?: string, numeroMaquina?: string) => Promise<void>;
-  editItem:          (key: CatKey, id: number, nombre: string, medida?: string, numeroMaquina?: string) => Promise<void>;
-  deleteItem:        (key: CatKey, id: number) => Promise<void>;
-  reactivarItem:     (key: CatKey, id: number) => Promise<void>;
-  verInactivos?:     boolean;
+  catalogs: any;
+  addItem: (key: CatKey, nombre: string, medida?: string, numeroMaquina?: string) => Promise<void>;
+  editItem: (key: CatKey, id: number, nombre: string, medida?: string, numeroMaquina?: string) => Promise<void>;
+  deleteItem: (key: CatKey, id: number) => Promise<void>;
+  reactivarItem: (key: CatKey, id: number) => Promise<void>;
+  verInactivos?: boolean;
   loadingInactivos?: boolean;
 }) {
   const [activeSection, setActiveSection] = useState<"medidas" | "material">("medidas");
 
-  const medidasTab:  TabConfig & { key: CatKey } = { key: "refuerzo_medidas",  label: "Medidas",  hasMedida: false, icon: "📏" };
+  const medidasTab: TabConfig & { key: CatKey } = { key: "refuerzo_medidas", label: "Medidas", hasMedida: false, icon: "📏" };
   const materialTab: TabConfig & { key: CatKey } = { key: "refuerzo_material", label: "Material", hasMedida: false, icon: "🧱" };
 
   const sections = [
-    { key: "medidas"   as const, label: "Medidas",  icon: "📏", count: catalogs.refuerzo_medidas.length  },
-    { key: "material"  as const, label: "Material", icon: "🧱", count: catalogs.refuerzo_material.length },
+    { key: "medidas" as const, label: "Medidas", icon: "📏", count: catalogs.refuerzo_medidas.length },
+    { key: "material" as const, label: "Material", icon: "🧱", count: catalogs.refuerzo_material.length },
   ];
 
   const activeKey: CatKey = activeSection === "medidas" ? "refuerzo_medidas" : "refuerzo_material";
@@ -544,8 +548,8 @@ function RefuerzoBasePanel({ catalogs, addItem, editItem, deleteItem, reactivarI
         key={activeSection + (verInactivos ? "-inactivos" : "")}
         tab={activeTab}
         items={catalogs[activeKey] ?? []}
-        onAdd={verInactivos    ? undefined : (nombre, medida) => addItem(activeKey, nombre, medida)}
-        onEdit={verInactivos   ? undefined : (id, nombre, medida) => editItem(activeKey, id, nombre, medida)}
+        onAdd={verInactivos ? undefined : (nombre, medida) => addItem(activeKey, nombre, medida)}
+        onEdit={verInactivos ? undefined : (id, nombre, medida) => editItem(activeKey, id, nombre, medida)}
         onDelete={verInactivos ? undefined : (id) => deleteItem(activeKey, id)}
         onReactivar={verInactivos ? (id) => reactivarItem(activeKey, id) : undefined}
         verInactivos={verInactivos}
@@ -567,7 +571,7 @@ export default function Catalogos() {
     loadInactivos,
   } = useCatalogosPapel();
   const [verInactivos, setVerInactivos] = useState(false);
-  const [activeTab, setActiveTab]       = useState<CatKey | "refuerzoBase">("tipo_producto");
+  const [activeTab, setActiveTab] = useState<CatKey | "refuerzoBase">("tipo_producto");
 
   const handleToggleInactivos = () => {
     if (!verInactivos) loadInactivos();
@@ -575,7 +579,7 @@ export default function Catalogos() {
   };
 
   const refuerzoBaseCount = catalogs.refuerzo_medidas.length + catalogs.refuerzo_material.length;
-  const activeTabConfig   = ALL_TABS.find(t => t.key === activeTab);
+  const activeTabConfig = ALL_TABS.find(t => t.key === activeTab);
 
   if (loading) {
     return (
@@ -605,7 +609,7 @@ export default function Catalogos() {
                 </div>
                 {group.tabs.map(tab => {
                   const active = tab.key === activeTab;
-                  const count  = tab.combined
+                  const count = tab.combined
                     ? refuerzoBaseCount
                     : tab.key in catalogs ? (catalogs as any)[tab.key as CatKey].length : 0;
                   return (
@@ -632,7 +636,7 @@ export default function Catalogos() {
                   {activeTab === "refuerzoBase" ? "Refuerzo y base" : activeTabConfig?.label}
                 </h2>
                 {activeTab === "refuerzoBase" && <p style={{ fontSize: 11, color: "#9CA3AF", margin: "2px 0 0" }}>Medidas y materiales compartidos para refuerzo y base</p>}
-                {activeTabConfig?.hasMedida      && <p style={{ fontSize: 11, color: "#9CA3AF", margin: "2px 0 0" }}>Incluye nombre y medida</p>}
+                {activeTabConfig?.hasMedida && <p style={{ fontSize: 11, color: "#9CA3AF", margin: "2px 0 0" }}>Incluye nombre y medida</p>}
                 {activeTabConfig?.tieneNumMaquina && <p style={{ fontSize: 11, color: "#9CA3AF", margin: "2px 0 0" }}>Incluye nombre y número de máquina</p>}
               </div>
             </div>
@@ -661,16 +665,18 @@ export default function Catalogos() {
                 verInactivos={verInactivos}
                 loadingInactivos={loadingInactivos}
               />
+            ) : (activeTab as any) === "foil" ? (
+              <FoilPanel />
             ) : activeTabConfig ? (
               <CatPanel
                 key={activeTab + (verInactivos ? "-inactivos" : "")}
                 tab={activeTabConfig as TabConfig & { key: CatKey }}
                 items={verInactivos
                   ? (catalogsInactivos as any)[activeTab as CatKey] ?? []
-                  : (catalogs        as any)[activeTab as CatKey] ?? []
+                  : (catalogs as any)[activeTab as CatKey] ?? []
                 }
-                onAdd={verInactivos    ? undefined : (nombre, medida, numeroMaquina) => addItem(activeTab as CatKey, nombre, medida, numeroMaquina)}
-                onEdit={verInactivos   ? undefined : (id, nombre, medida, numeroMaquina) => editItem(activeTab as CatKey, id, nombre, medida, numeroMaquina)}
+                onAdd={verInactivos ? undefined : (nombre, medida, numeroMaquina) => addItem(activeTab as CatKey, nombre, medida, numeroMaquina)}
+                onEdit={verInactivos ? undefined : (id, nombre, medida, numeroMaquina) => editItem(activeTab as CatKey, id, nombre, medida, numeroMaquina)}
                 onDelete={verInactivos ? undefined : (id) => deleteItem(activeTab as CatKey, id)}
                 onReactivar={verInactivos ? (id) => reactivarItem(activeTab as CatKey, id) : undefined}
                 verInactivos={verInactivos}
