@@ -15,7 +15,10 @@ const EMPTY: Catalogs = {
   refuerzo_material: [], empaque: [], sacabocados: [], perforado: [],
   hojeado_guillotina: [], impresora: [], hs_ar: [], suaje_maquina: [],
   uv: [], textura: [], empalme: [], armado: [], asas_maquina: [], desbarbe: [],
-  matrix: [],  // ← agregado
+  matrix: [],
+  cortes: [],   // ← nuevo
+  dobles: [],   // ← nuevo
+  puntos: [],   // ← nuevo
 };
 
 export function useCatalogosPapel() {
@@ -25,7 +28,6 @@ export function useCatalogosPapel() {
   const [loadingInactivos,  setLoadingInactivos]  = useState(false);
   const [error,             setError]             = useState<string | null>(null);
 
-  // ── Carga inicial (activos) ────────────────────────────────────────────
   const load = useCallback(async () => {
     try {
       setLoading(true);
@@ -41,7 +43,6 @@ export function useCatalogosPapel() {
 
   useEffect(() => { load(); }, [load]);
 
-  // ── Cargar inactivos (solo cuando se pide) ─────────────────────────────
   const loadInactivos = useCallback(async () => {
     try {
       setLoadingInactivos(true);
@@ -55,10 +56,9 @@ export function useCatalogosPapel() {
     }
   }, []);
 
-  // ── Helper de nombres para selects — defensivo contra undefined ────────
+  // defensivo contra undefined
   const names = (key: CatKey) => (catalogs[key] ?? []).map(i => i.nombre);
 
-  // ── Agregar — optimistic, reemplaza temp con id real sin reload ────────
   const addItem = async (key: CatKey, nombre: string, medida?: string, numeroMaquina?: string) => {
     const tempId = Date.now();
     setCatalogs(prev => ({
@@ -79,7 +79,6 @@ export function useCatalogosPapel() {
     }
   };
 
-  // ── Editar — optimistic, sin reload ───────────────────────────────────
   const editItem = async (key: CatKey, id: number, nombre: string, medida?: string, numeroMaquina?: string) => {
     const backup = (catalogs[key] ?? []).find(i => i.id === id);
     setCatalogs(prev => ({
@@ -98,7 +97,6 @@ export function useCatalogosPapel() {
     }
   };
 
-  // ── Eliminar — optimistic, mueve a inactivos ───────────────────────────
   const deleteItem = async (key: CatKey, id: number) => {
     const item   = (catalogs[key] ?? []).find(i => i.id === id);
     const backup = catalogs[key] ?? [];
@@ -125,7 +123,6 @@ export function useCatalogosPapel() {
     }
   };
 
-  // ── Reactivar — optimistic, mueve a activos ────────────────────────────
   const reactivarItem = async (key: CatKey, id: number) => {
     const item            = (catalogsInactivos[key] ?? []).find(i => i.id === id);
     const backupInactivos = catalogsInactivos[key] ?? [];

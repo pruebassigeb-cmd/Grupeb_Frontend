@@ -37,17 +37,6 @@ const CATEGORIA_A_SUBCARPETA: Record<string, string> = {
   "rendimiento-suaje-papel": "rendimiento",
 };
 
-// ═══════════════════════════════════════════════════════════════════════════
-// PALETA DE SECCIONES — sutil, no arcoíris
-// Tipo producto  → azul pizarra
-// Tipo de papel  → índigo suave
-// Suaje          → verde azulado (teal)
-// Pegado/Acabados→ ámbar apagado
-// Refuerzo/Base  → mismo ámbar
-// Empaque        → mismo ámbar
-// Maquinaria     → gris azulado
-// Archivos       → gris neutro
-// ═══════════════════════════════════════════════════════════════════════════
 const SEC_COLORS: Record<string, { border: string; headerBg: string; headerText: string; leftBar: string }> = {
   tipo:       { border: "#CBD5E1", headerBg: "#F1F5F9", headerText: "#334155", leftBar: "#64748B" },
   papel:      { border: "#CBD5E1", headerBg: "#F1F5F9", headerText: "#334155", leftBar: "#64748B" },
@@ -100,81 +89,6 @@ function Sec({ title, children, action, colorKey = "archivos" }: {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// HYBRID INPUT CON ALTA
-// ═══════════════════════════════════════════════════════════════════════════
-function HybridInputConAlta({ catKey, options, value, onChange, onAdd }: {
-  catKey: CatKey; options: string[]; value: string; onChange: (v: string) => void;
-  onAdd: (key: CatKey, nombre: string) => Promise<void>;
-}) {
-  const [open, setOpen] = useState(false);
-  const [adding, setAdding] = useState(false);
-  const [newVal, setNewVal] = useState("");
-  const [saving, setSaving] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  const addRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) { setOpen(false); setAdding(false); setNewVal(""); } };
-    document.addEventListener("mousedown", h);
-    return () => document.removeEventListener("mousedown", h);
-  }, []);
-  useEffect(() => { if (adding) addRef.current?.focus(); }, [adding]);
-
-  const handleAdd = async () => {
-    const t = newVal.trim();
-    if (!t) return;
-    const nombre = catKey === "refuerzo_medidas"
-      ? (t.endsWith(" cm") ? t : `${t} cm`)
-      : t;
-    setSaving(true);
-    try {
-      await onAdd(catKey, nombre);
-      onChange(nombre);
-      setNewVal(""); setAdding(false); setOpen(false);
-    } finally { setSaving(false); }
-  };
-
-  return (
-    <div ref={ref} style={{ position: "relative" }}>
-      <div style={{ display: "flex", height: 34, border: "1px solid #D1D5DB", borderRadius: 5, overflow: "hidden", background: "#fff" }}>
-        <input type="text" value={value} onChange={(e) => onChange(e.target.value)}
-          style={{ flex: 1, padding: "0 8px", border: "none", fontSize: 13, color: "#111827", outline: "none", minWidth: 0, background: "transparent" }} />
-        <button type="button" onClick={() => { setOpen(!open); setAdding(false); }}
-          style={{ width: 28, flexShrink: 0, border: "none", borderLeft: "1px solid #E5E7EB", background: "#F9FAFB", cursor: "pointer", color: "#6B7280", fontSize: 11, display: "flex", alignItems: "center", justifyContent: "center" }}>{">"}</button>
-      </div>
-      {open && (
-        <div style={{ position: "absolute", top: "calc(100% + 2px)", left: 0, right: 0, background: "#fff", border: "1px solid #D1D5DB", borderRadius: 6, zIndex: 50, boxShadow: "0 4px 12px rgba(0,0,0,0.1)", padding: "4px 0", maxHeight: 220, overflowY: "auto" }}>
-          {options.map(o => (
-            <button key={o} type="button" onClick={() => { onChange(o); setOpen(false); }}
-              style={{ width: "100%", padding: "5px 12px", border: "none", background: value === o ? "#EFF6FF" : "transparent", color: value === o ? "#1D4ED8" : "#111827", fontSize: 13, cursor: "pointer", textAlign: "left", fontWeight: value === o ? 600 : 400 }}>{o}</button>
-          ))}
-          <div style={{ borderTop: "1px solid #F3F4F6", marginTop: 2, paddingTop: 2 }}>
-            {adding ? (
-              <div style={{ display: "flex", gap: 4, padding: "5px 8px", alignItems: "center" }}>
-                <div style={{ flex: 1, display: "flex", height: 28, border: "1px solid #1D4ED8", borderRadius: 4, overflow: "hidden" }}>
-                  <input ref={addRef} type="text" inputMode="decimal" value={newVal}
-                    onChange={e => setNewVal(e.target.value.replace(/[^0-9.xX]/g, "").toUpperCase())}
-                    onKeyDown={e => { if (e.key === "Enter") handleAdd(); if (e.key === "Escape") { setAdding(false); setNewVal(""); } }}
-                    style={{ flex: 1, padding: "0 6px", border: "none", fontSize: 12, color: "#111827", outline: "none", background: "#fff" }} />
-                  <span style={{ padding: "0 8px", borderLeft: "1px solid #BFDBFE", background: "#EFF6FF", fontSize: 12, fontWeight: 700, color: "#1D4ED8", display: "flex", alignItems: "center" }}>cm</span>
-                </div>
-                <button onClick={handleAdd} disabled={saving} style={{ height: 28, padding: "0 8px", background: "#1D4ED8", border: "none", borderRadius: 4, cursor: saving ? "wait" : "pointer", color: "#fff", fontSize: 12, fontWeight: 700 }}>{saving ? "..." : "OK"}</button>
-                <button onClick={() => { setAdding(false); setNewVal(""); }} style={{ height: 28, padding: "0 6px", background: "#F3F4F6", border: "none", borderRadius: 4, cursor: "pointer", color: "#6B7280", fontSize: 13 }}>X</button>
-              </div>
-            ) : (
-              <button type="button" onClick={() => setAdding(true)}
-                style={{ width: "100%", padding: "6px 12px", border: "none", background: "transparent", color: "#1D4ED8", fontSize: 12, cursor: "pointer", textAlign: "left", fontWeight: 600 }}>
-                + Agregar nuevo...
-              </button>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
 // ASA MULTI-SELECT CON ALTA
 // ═══════════════════════════════════════════════════════════════════════════
 function AsaMultiSelect({ selectedIds, selectedNames, catItems, onChange, onAdd, catKeyForAdd = "tipo_asa" }: {
@@ -185,11 +99,11 @@ function AsaMultiSelect({ selectedIds, selectedNames, catItems, onChange, onAdd,
   onAdd: (key: CatKey, nombre: string) => Promise<void>;
   catKeyForAdd?: CatKey;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen]     = useState(false);
   const [adding, setAdding] = useState(false);
   const [newVal, setNewVal] = useState("");
   const [saving, setSaving] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const ref    = useRef<HTMLDivElement>(null);
   const addRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -252,7 +166,7 @@ function AsaMultiSelect({ selectedIds, selectedNames, catItems, onChange, onAdd,
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// MAQUINARIA MULTI-SELECT CON ALTA — igual que AsaMultiSelect
+// MAQUINARIA MULTI-SELECT CON ALTA
 // ═══════════════════════════════════════════════════════════════════════════
 function MaquinariaMultiSelect({ catKey, selectedIds, selectedNames, catItems, onChange, onAdd }: {
   catKey: CatKey;
@@ -262,11 +176,11 @@ function MaquinariaMultiSelect({ catKey, selectedIds, selectedNames, catItems, o
   onChange: (ids: number[], nombres: string[]) => void;
   onAdd: (key: CatKey, nombre: string) => Promise<void>;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen]     = useState(false);
   const [adding, setAdding] = useState(false);
   const [newVal, setNewVal] = useState("");
   const [saving, setSaving] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const ref    = useRef<HTMLDivElement>(null);
   const addRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -328,7 +242,9 @@ function MaquinariaMultiSelect({ catKey, selectedIds, selectedNames, catItems, o
   );
 }
 
-
+// ═══════════════════════════════════════════════════════════════════════════
+// ARCHIVOS
+// ═══════════════════════════════════════════════════════════════════════════
 interface ArchivoGuardado {
   id_archivo: number;
   nombre: string;
@@ -362,21 +278,13 @@ const ICONOS_CATEGORIA: Record<string, string> = {
   "rendimiento-suaje-papel": ICON_CHART,
 };
 
-// ═══════════════════════════════════════════════════════════════════════════
-// SEC ARCHIVOS
-// ═══════════════════════════════════════════════════════════════════════════
-function SecArchivos({
-  idproducto,
-  isEdit,
-  archivosIniciales,
-  onPendientesChange,
-}: {
+function SecArchivos({ idproducto, isEdit, archivosIniciales, onPendientesChange }: {
   idproducto: number | null;
   isEdit: boolean;
   archivosIniciales: ArchivoGuardado[];
   onPendientesChange: (pendientes: ArchivoPendiente[]) => void;
 }) {
-  const [archivosGuardados, setArchivosGuardados] = useState<ArchivoGuardado[]>(archivosIniciales);
+  const [archivosGuardados,  setArchivosGuardados]  = useState<ArchivoGuardado[]>(archivosIniciales);
   const [archivosPendientes, setArchivosPendientes] = useState<ArchivoPendiente[]>([]);
   const [subiendo, setSubiendo] = useState(false);
 
@@ -391,73 +299,47 @@ function SecArchivos({
       .catch(() => {});
   }, [idproducto, isEdit]);
 
-  useEffect(() => {
-    onPendientesChange(archivosPendientes);
-  }, [archivosPendientes]);
-
-  useEffect(() => {
-    return () => {
-      archivosPendientes.forEach(p => URL.revokeObjectURL(p.previewUrl));
-    };
-  }, []);
+  useEffect(() => { onPendientesChange(archivosPendientes); }, [archivosPendientes]);
+  useEffect(() => { return () => { archivosPendientes.forEach(p => URL.revokeObjectURL(p.previewUrl)); }; }, []);
 
   const handleFile = async (file: File, categoria: string) => {
     if (!isEdit) {
       const pendiente: ArchivoPendiente = {
-        uid:        `${Date.now()}-${Math.random()}`,
-        file,
-        categoria,
-        previewUrl: URL.createObjectURL(file),
-        nombre:     file.name,
-        tipo:       getTipoDeFile(file),
-        pendiente:  true,
+        uid: `${Date.now()}-${Math.random()}`, file, categoria,
+        previewUrl: URL.createObjectURL(file), nombre: file.name,
+        tipo: getTipoDeFile(file), pendiente: true,
       };
       setArchivosPendientes(prev => [...prev, pendiente]);
       return;
     }
-
     if (!idproducto) return;
     setSubiendo(true);
     try {
       const subcarpeta = CATEGORIA_A_SUBCARPETA[categoria] ?? "catalogo";
       const formData = new FormData();
-      formData.append("archivo",          file);
-      formData.append("carpeta",          "suaje");
-      formData.append("subcarpeta",       subcarpeta);
-      formData.append("categoria",        categoria);
+      formData.append("archivo", file);
+      formData.append("carpeta", "suaje");
+      formData.append("subcarpeta", subcarpeta);
+      formData.append("categoria", categoria);
       formData.append("idproducto_papel", String(idproducto));
-
       const BASE = (import.meta as any).env.VITE_API_URL;
       const res = await fetch(`${BASE}/archivos/upload`, {
         method: "POST",
         headers: { Authorization: `Bearer ${localStorage.getItem("token") ?? ""}` },
         body: formData,
       });
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        alert(`Error al subir: ${err.error ?? res.statusText}`);
-        return;
-      }
-
-      const r2 = await fetch(`${BASE}/productos-papel/${idproducto}`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem("token") ?? ""}` },
-      });
+      if (!res.ok) { const err = await res.json().catch(() => ({})); alert(`Error al subir: ${err.error ?? res.statusText}`); return; }
+      const r2 = await fetch(`${BASE}/productos-papel/${idproducto}`, { headers: { Authorization: `Bearer ${localStorage.getItem("token") ?? ""}` } });
       const d = await r2.json();
       setArchivosGuardados((d.archivos ?? []).map((a: any) => ({ ...a, pendiente: false })));
-    } finally {
-      setSubiendo(false);
-    }
+    } finally { setSubiendo(false); }
   };
 
   const eliminarGuardado = async (idArchivo: number) => {
     if (!confirm("Eliminar este archivo?")) return;
     try {
       const BASE = (import.meta as any).env.VITE_API_URL;
-      await fetch(`${BASE}/archivos/${idArchivo}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${localStorage.getItem("token") ?? ""}` },
-      });
+      await fetch(`${BASE}/archivos/${idArchivo}`, { method: "DELETE", headers: { Authorization: `Bearer ${localStorage.getItem("token") ?? ""}` } });
       setArchivosGuardados(prev => prev.filter(a => a.id_archivo !== idArchivo));
     } catch { }
   };
@@ -470,18 +352,12 @@ function SecArchivos({
     });
   };
 
-  const UploadBtn = ({ label, categoria, accept, icon }: {
-    label: string; categoria: string; accept: string; icon: string;
-  }) => {
+  const UploadBtn = ({ label, categoria, accept, icon }: { label: string; categoria: string; accept: string; icon: string }) => {
     const ref = useRef<HTMLInputElement>(null);
     return (
       <div>
         <input ref={ref} type="file" accept={accept} style={{ display: "none" }}
-          onChange={(e) => {
-            if (e.target.files?.[0]) handleFile(e.target.files[0], categoria);
-            e.target.value = "";
-          }}
-        />
+          onChange={(e) => { if (e.target.files?.[0]) handleFile(e.target.files[0], categoria); e.target.value = ""; }} />
         <button type="button" onClick={() => ref.current?.click()} disabled={subiendo}
           style={{ display: "flex", alignItems: "center", gap: 6, padding: "0 14px", height: 34, background: "#fff", border: "1.5px dashed #D1D5DB", borderRadius: 6, cursor: subiendo ? "wait" : "pointer", fontSize: 12, color: "#374151", fontWeight: 500, whiteSpace: "nowrap" }}>
           <span style={{ fontSize: 14 }}>{icon}</span>
@@ -496,9 +372,7 @@ function SecArchivos({
   return (
     <Sec title="Archivos" colorKey="archivos">
       {!isEdit && archivosPendientes.length === 0 && (
-        <p style={{ fontSize: 12, color: "#9CA3AF", margin: "0 0 10px" }}>
-          Los archivos se subiran al servidor cuando guardes el producto.
-        </p>
+        <p style={{ fontSize: 12, color: "#9CA3AF", margin: "0 0 10px" }}>Los archivos se subiran al servidor cuando guardes el producto.</p>
       )}
       {!isEdit && archivosPendientes.length > 0 && (
         <p style={{ fontSize: 12, color: "#D97706", margin: "0 0 10px", display: "flex", alignItems: "center", gap: 5 }}>
@@ -514,35 +388,24 @@ function SecArchivos({
       {todosLosArchivos.length > 0 && (
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
           {todosLosArchivos.map((a) => {
-            const icono = ICONOS_CATEGORIA[a.categoria]
-              ?? (a.tipo === "image" ? ICON_IMG : a.tipo === "pdf" ? ICON_PDF : ICON_CHART);
-
+            const icono = ICONOS_CATEGORIA[a.categoria] ?? (a.tipo === "image" ? ICON_IMG : a.tipo === "pdf" ? ICON_PDF : ICON_CHART);
             if (a.pendiente) {
               return (
-                <div key={a.uid}
-                  style={{ display: "flex", alignItems: "center", gap: 6, background: "#FFFBEB", border: "1px dashed #D97706", borderRadius: 6, padding: "5px 10px" }}>
+                <div key={a.uid} style={{ display: "flex", alignItems: "center", gap: 6, background: "#FFFBEB", border: "1px dashed #D97706", borderRadius: 6, padding: "5px 10px" }}>
                   <span style={{ fontSize: 13 }}>{icono}</span>
-                  <span style={{ fontSize: 12, color: "#92400E", maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-                    title={a.nombre}>{a.nombre}</span>
+                  <span style={{ fontSize: 12, color: "#92400E", maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={a.nombre}>{a.nombre}</span>
                   <span style={{ fontSize: 10, color: "#D97706", flexShrink: 0, fontWeight: 600 }}>pendiente</span>
-                  <button onClick={() => eliminarPendiente(a.uid)}
-                    style={{ width: 18, height: 18, border: "none", borderRadius: 3, background: "#FEF3C7", color: "#D97706", cursor: "pointer", fontSize: 11, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, padding: 0 }}
-                    title="Quitar archivo">x</button>
+                  <button onClick={() => eliminarPendiente(a.uid)} style={{ width: 18, height: 18, border: "none", borderRadius: 3, background: "#FEF3C7", color: "#D97706", cursor: "pointer", fontSize: 11, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, padding: 0 }}>x</button>
                 </div>
               );
             }
-
             return (
-              <div key={a.id_archivo}
-                style={{ display: "flex", alignItems: "center", gap: 6, background: "#F3F4F6", border: "1px solid #E5E7EB", borderRadius: 6, padding: "5px 10px" }}>
+              <div key={a.id_archivo} style={{ display: "flex", alignItems: "center", gap: 6, background: "#F3F4F6", border: "1px solid #E5E7EB", borderRadius: 6, padding: "5px 10px" }}>
                 <span style={{ fontSize: 13 }}>{icono}</span>
                 <a href={a.url} target="_blank" rel="noreferrer"
-                  style={{ fontSize: 12, color: "#1D4ED8", textDecoration: "none", maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-                  title={a.nombre}>{a.nombre}</a>
+                  style={{ fontSize: 12, color: "#1D4ED8", textDecoration: "none", maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={a.nombre}>{a.nombre}</a>
                 <span style={{ fontSize: 10, color: "#9CA3AF", flexShrink: 0 }}>{a.categoria}</span>
-                <button onClick={() => eliminarGuardado(a.id_archivo)}
-                  style={{ width: 18, height: 18, border: "none", borderRadius: 3, background: "#FEE2E2", color: "#DC2626", cursor: "pointer", fontSize: 11, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, padding: 0 }}
-                  title="Eliminar archivo">x</button>
+                <button onClick={() => eliminarGuardado(a.id_archivo)} style={{ width: 18, height: 18, border: "none", borderRadius: 3, background: "#FEE2E2", color: "#DC2626", cursor: "pointer", fontSize: 11, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, padding: 0 }}>x</button>
               </div>
             );
           })}
@@ -555,23 +418,18 @@ function SecArchivos({
 async function subirArchivoPendiente(pendiente: ArchivoPendiente, idproducto_papel: number): Promise<void> {
   const subcarpeta = CATEGORIA_A_SUBCARPETA[pendiente.categoria] ?? "catalogo";
   const formData = new FormData();
-  formData.append("archivo",          pendiente.file);
-  formData.append("carpeta",          "suaje");
-  formData.append("subcarpeta",       subcarpeta);
-  formData.append("categoria",        pendiente.categoria);
+  formData.append("archivo", pendiente.file);
+  formData.append("carpeta", "suaje");
+  formData.append("subcarpeta", subcarpeta);
+  formData.append("categoria", pendiente.categoria);
   formData.append("idproducto_papel", String(idproducto_papel));
-
   const BASE = (import.meta as any).env.VITE_API_URL;
   const res = await fetch(`${BASE}/archivos/upload`, {
     method: "POST",
     headers: { Authorization: `Bearer ${localStorage.getItem("token") ?? ""}` },
     body: formData,
   });
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error ?? res.statusText);
-  }
+  if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.error ?? res.statusText); }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -594,15 +452,15 @@ function FormularioProducto({ initial, onSave, onCancel, saving }: {
   const [expandedGrupoId, setExpandedGrupoId] = useState<number | null>(form.grupos[0]?.id ?? null);
   const pendientesRef = useRef<ArchivoPendiente[]>([]);
 
-  const upd = (patch: Partial<ProductoPapelForm>) => setForm(prev => ({ ...prev, ...patch }));
-  const updSuaje = (patch: any) => upd({ suaje: { ...form.suaje, ...patch } });
+  const upd        = (patch: Partial<ProductoPapelForm>) => setForm(prev => ({ ...prev, ...patch }));
+  const updSuaje   = (patch: any) => upd({ suaje:    { ...form.suaje,    ...patch } });
   const updAcabados = (patch: any) => upd({ acabados: { ...form.acabados, ...patch } });
-  const updMaq = (patch: any) => upd({ maquinaria: { ...form.maquinaria, ...patch } });
+  const updMaq     = (patch: any) => upd({ maquinaria: { ...form.maquinaria, ...patch } });
 
   useEffect(() => {
     const b = calcBase(form.ancho, form.fuelle);
     if (b) updAcabados({ base_medida: b });
-    const ancho = form.ancho.trim();
+    const ancho  = form.ancho.trim();
     const fuelle = form.fuelle.trim();
     const altura = form.altura.trim();
     let medida = "";
@@ -676,7 +534,7 @@ function FormularioProducto({ initial, onSave, onCancel, saving }: {
             <Field label="Descripción" style={{ gridColumn: "span 2" }}>
               <Inp value={form.descripcion} onChange={v => upd({ descripcion: v })} />
             </Field>
-            <Field label="Ancho">  <Inp value={form.ancho} onChange={v => upd({ ancho: v })} /></Field>
+            <Field label="Ancho">  <Inp value={form.ancho}  onChange={v => upd({ ancho: v })}  /></Field>
             <Field label="Fuelle"> <Inp value={form.fuelle} onChange={v => upd({ fuelle: v })} /></Field>
             <Field label="Altura"> <Inp value={form.altura} onChange={v => upd({ altura: v })} /></Field>
             <Field label="Medida"> <Inp value={form.medida} readOnly /></Field>
@@ -702,46 +560,75 @@ function FormularioProducto({ initial, onSave, onCancel, saving }: {
 
       {/* Suaje */}
       <Sec title="Suaje" colorKey="suaje">
-        {/* Renglón 1: Numero, PZS, Tamano, Metros, Matrix, Corte */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr 1fr 1fr", gap: "6px 8px", marginBottom: 8, alignItems: "end" }}>
+        <FG cols={5} gap="6px 8px" style={{ marginBottom: 8 }}>
           <Field label="Numero">  <Inp value={form.suaje.numero} onChange={v => updSuaje({ numero: v })} /></Field>
-          <Field label="PZS">     <Inp value={form.suaje.pzs} onChange={v => updSuaje({ pzs: v })} /></Field>
+          <Field label="PZS">     <Inp value={form.suaje.pzs}    onChange={v => updSuaje({ pzs: v })}    /></Field>
           <Field label="Tamano">  <Inp value={form.suaje.tamano} onChange={v => updSuaje({ tamano: v })} /></Field>
           <Field label="Metros">  <Inp value={form.suaje.metros} onChange={v => updSuaje({ metros: v })} /></Field>
           <Field label="Matrix">
-            <SelConAlta catKey={"matrix" as CatKey} options={names("matrix" as CatKey)}
-              value={(form.suaje as any).matrixNombre ?? ""}
-              onChange={(v) => { const item = (catalogs as any).matrix?.find((i: any) => i.nombre === v); updSuaje({ matrixNombre: v, idcat_matrix: item?.id ?? null }); }}
-              onAdd={addItem} placeholder="" />
+            <SelConAlta
+              catKey="matrix"
+              options={names("matrix")}
+              value={form.suaje.matrix}
+              onChange={(v) => {
+                const item = catalogs.matrix.find(i => i.nombre === v);
+                updSuaje({ matrix: v, idcat_matrix: item?.id ?? null });
+              }}
+              onAdd={addItem}
+            />
           </Field>
-          <Field label="Corte tipo">  <Inp value={form.suaje.corte1Tipo} onChange={v => updSuaje({ corte1Tipo: v })} /></Field>
-          <Field label="Corte medida"><Inp value={form.suaje.corte1Medida} onChange={v => updSuaje({ corte1Medida: v })} /></Field>
+        </FG>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "0 10px", marginBottom: 10 }}>
+          <Field label="Corte">
+            <SelConAlta
+              catKey={"cortes" as CatKey}
+              options={(catalogs as any).cortes?.map((i: any) => i.nombre) ?? []}
+              value={form.suaje.corte1Tipo}
+              onChange={(v) => {
+                const item = (catalogs as any).cortes?.find((i: any) => i.nombre === v);
+                updSuaje({ corte1Tipo: v, corte1Medida: item?.altura ?? "", idcat_corte: item?.id ?? null });
+              }}
+              onAdd={addItem}
+              placeholder=""
+            />
+          </Field>
+          <Field label="Dobles">
+            <SelConAlta
+              catKey={"dobles" as CatKey}
+              options={(catalogs as any).dobles?.map((i: any) => i.nombre) ?? []}
+              value={form.suaje.dobles1Tipo}
+              onChange={(v) => {
+                const item = (catalogs as any).dobles?.find((i: any) => i.nombre === v);
+                updSuaje({ dobles1Tipo: v, dobles1Medida: item?.altura ?? "", idcat_doble: item?.id ?? null });
+              }}
+              onAdd={addItem}
+              placeholder=""
+            />
+          </Field>
+          <Field label="T. arreglo (min)">
+            <Inp value={form.suaje.tiempoArreglo} onChange={v => updSuaje({ tiempoArreglo: v })} />
+          </Field>
         </div>
-        {/* Renglón 2: Dobles, T.Arreglo, Sacabocado, Perforado */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 2fr 56px 2fr 56px", gap: "6px 8px", alignItems: "end" }}>
-          <Field label="Dobles tipo">  <Inp value={form.suaje.dobles1Tipo} onChange={v => updSuaje({ dobles1Tipo: v })} /></Field>
-          <Field label="Dobles medida"><Inp value={form.suaje.dobles1Medida} onChange={v => updSuaje({ dobles1Medida: v })} /></Field>
-          <Field label="T. arreglo (min)"><Inp value={form.suaje.tiempoArreglo} onChange={v => updSuaje({ tiempoArreglo: v })} /></Field>
-          <Field label="Sacabocado">
+
+        <div>
+          <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#6B7280", display: "block", marginBottom: 6 }}>Especiales</span>
+          <div style={{ display: "grid", gridTemplateColumns: "auto minmax(120px, 1fr) 64px auto minmax(120px, 1fr) 64px", gap: "0 8px", alignItems: "center" }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", whiteSpace: "nowrap" }}>Sacabocado</span>
             <SelConAlta catKey="sacabocados" options={namesMedida("sacabocados")} value={form.suaje.sacabocadoNombre}
               onChange={(v) => { const item = (catalogs.sacabocados as any[]).find((i: any) => labelConMedida(i) === v); updSuaje({ sacabocadoNombre: v, idcat_sacabocados: item?.id ?? null }); }}
               onAdd={addItem} placeholder="" />
-          </Field>
-          <Field label="Cant.">
             <input type="text" inputMode="numeric" value={form.suaje.cantidad_sacabocado}
               onChange={e => updSuaje({ cantidad_sacabocado: e.target.value })}
-              style={{ width: "100%", height: 34, padding: "0 8px", border: "1px solid #D1D5DB", borderRadius: 5, fontSize: 13, color: "#111827", background: "#fff", outline: "none", boxSizing: "border-box" }} />
-          </Field>
-          <Field label="Perforado">
+              style={{ height: 34, padding: "0 8px", border: "1px solid #D1D5DB", borderRadius: 5, fontSize: 13, color: "#111827", background: "#fff", outline: "none", boxSizing: "border-box" }} />
+            <span style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", whiteSpace: "nowrap", marginLeft: 8 }}>Perforado</span>
             <SelConAlta catKey="perforado" options={namesMedida("perforado")} value={form.suaje.perforadoNombre}
               onChange={(v) => { const item = (catalogs.perforado as any[]).find((i: any) => labelConMedida(i) === v); updSuaje({ perforadoNombre: v, idcat_perforado: item?.id ?? null }); }}
               onAdd={addItem} placeholder="" />
-          </Field>
-          <Field label="Cant.">
             <input type="text" inputMode="numeric" value={form.suaje.cantidad_perforado}
               onChange={e => updSuaje({ cantidad_perforado: e.target.value })}
-              style={{ width: "100%", height: 34, padding: "0 8px", border: "1px solid #D1D5DB", borderRadius: 5, fontSize: 13, color: "#111827", background: "#fff", outline: "none", boxSizing: "border-box" }} />
-          </Field>
+              style={{ height: 34, padding: "0 8px", border: "1px solid #D1D5DB", borderRadius: 5, fontSize: 13, color: "#111827", background: "#fff", outline: "none", boxSizing: "border-box" }} />
+          </div>
         </div>
       </Sec>
 
@@ -762,20 +649,19 @@ function FormularioProducto({ initial, onSave, onCancel, saving }: {
                 onAdd={addItem} />
             </Field>
             <Field label="Asa">
-              <AsaMultiSelect selectedIds={form.acabados.asas} selectedNames={form.acabados.asasNombres}
+              <AsaMultiSelect
+                selectedIds={form.acabados.asas} selectedNames={form.acabados.asasNombres}
                 catItems={catalogs.tipo_asa}
                 onChange={(ids, nombres) => updAcabados({ asas: ids, asasNombres: nombres })}
                 onAdd={addItem} />
             </Field>
             <Field label="Laminado">
               <AsaMultiSelect
-                selectedIds={form.acabados.laminados}
-                selectedNames={form.acabados.laminadosNombres}
+                selectedIds={form.acabados.laminados} selectedNames={form.acabados.laminadosNombres}
                 catItems={catalogs.laminado}
                 onChange={(ids, nombres) => updAcabados({ laminados: ids, laminadosNombres: nombres })}
                 onAdd={addItem}
-                catKeyForAdd={"laminado" as CatKey}
-              />
+                catKeyForAdd={"laminado" as CatKey} />
             </Field>
           </FG>
         </Sec>
@@ -904,12 +790,8 @@ function DetalleProducto({ id }: { id: number }) {
     </div>
   ) : null;
 
-  if (loading) return (
-    <div style={{ padding: "16px", background: "#F9FAFB", borderTop: "1px solid #E5E7EB", fontSize: 12, color: "#9CA3AF" }}>Cargando detalle...</div>
-  );
-  if (!detalle) return (
-    <div style={{ padding: "16px", background: "#F9FAFB", borderTop: "1px solid #E5E7EB", fontSize: 12, color: "#DC2626" }}>Error al cargar el detalle.</div>
-  );
+  if (loading) return <div style={{ padding: "16px", background: "#F9FAFB", borderTop: "1px solid #E5E7EB", fontSize: 12, color: "#9CA3AF" }}>Cargando detalle...</div>;
+  if (!detalle) return <div style={{ padding: "16px", background: "#F9FAFB", borderTop: "1px solid #E5E7EB", fontSize: 12, color: "#DC2626" }}>Error al cargar el detalle.</div>;
 
   const COLORS = ["#7C3AED", "#0891B2", "#059669", "#D97706", "#DC2626", "#DB2777"];
   const LIGHTS = ["#EDE9FE", "#CFFAFE", "#D1FAE5", "#FEF3C7", "#FEE2E2", "#FCE7F3"];
@@ -917,29 +799,29 @@ function DetalleProducto({ id }: { id: number }) {
   return (
     <div style={{ padding: "14px 16px", background: "#F9FAFB", borderTop: "1px solid #E5E7EB" }}>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "3px 32px", marginBottom: 14 }}>
-        {row("Tipo", detalle.tipo_producto)}
+        {row("Tipo",        detalle.tipo_producto)}
         {row("Descripción", detalle.descripcion_papel)}
-        {row("Ancho", detalle.ancho)}
-        {row("Fuelle", detalle.fuelle)}
-        {row("Altura", detalle.altura)}
-        {row("Medida", detalle.medida)}
-        {row("Creado por", detalle.creado_por_nombre)}
+        {row("Ancho",       detalle.ancho)}
+        {row("Fuelle",      detalle.fuelle)}
+        {row("Altura",      detalle.altura)}
+        {row("Medida",      detalle.medida)}
+        {row("Creado por",  detalle.creado_por_nombre)}
       </div>
 
       {detalle.suaje && (
         <div style={{ marginBottom: 14 }}>
           <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#0F766E", margin: "0 0 6px" }}>Suaje</p>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "3px 32px" }}>
-            {row("Numero", detalle.suaje.numero)}
-            {row("PZS", detalle.suaje.pzs)}
-            {row("Tamano", detalle.suaje.tamano)}
-            {row("Metros", detalle.suaje.metros)}
-            {row("Matrix", detalle.suaje.matrix_nombre)}
+            {row("Numero",     detalle.suaje.numero)}
+            {row("PZS",        detalle.suaje.pzs)}
+            {row("Tamano",     detalle.suaje.tamano)}
+            {row("Metros",     detalle.suaje.metros)}
+            {row("Matrix",     detalle.suaje.matrix_nombre)}
             {row("T. arreglo", detalle.suaje.tiempo_arreglo ? `${detalle.suaje.tiempo_arreglo} min` : null)}
-            {row("Corte", [detalle.suaje.corte1_tipo, detalle.suaje.corte1_medida].filter(Boolean).join(" / "))}
+            {row("Corte",  [detalle.suaje.corte1_tipo,  detalle.suaje.corte1_medida ].filter(Boolean).join(" / "))}
             {row("Dobles", [detalle.suaje.dobles1_tipo, detalle.suaje.dobles1_medida].filter(Boolean).join(" / "))}
             {detalle.suaje.sacabocado_nombre && row("Sacabocado", `${detalle.suaje.sacabocado_nombre}${detalle.suaje.sacabocado_medida ? " -- " + detalle.suaje.sacabocado_medida : ""} x ${detalle.suaje.cantidad_sacabocado ?? "--"}`)}
-            {detalle.suaje.perforado_nombre && row("Perforado", `${detalle.suaje.perforado_nombre}${detalle.suaje.perforado_medida ? " -- " + detalle.suaje.perforado_medida : ""} x ${detalle.suaje.cantidad_perforado ?? "--"}`)}
+            {detalle.suaje.perforado_nombre  && row("Perforado",  `${detalle.suaje.perforado_nombre}${detalle.suaje.perforado_medida   ? " -- " + detalle.suaje.perforado_medida   : ""} x ${detalle.suaje.cantidad_perforado  ?? "--"}`)}
           </div>
         </div>
       )}
@@ -949,14 +831,14 @@ function DetalleProducto({ id }: { id: number }) {
           <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#92400E", margin: "0 0 6px" }}>Acabados</p>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "3px 32px" }}>
             {row("Tipo de pegado", detalle.acabados.tipo_pegado)}
-            {row("Pegamento", detalle.acabados.pegamento)}
+            {row("Pegamento",      detalle.acabados.pegamento)}
             {detalle.acabados.laminados?.length > 0 && row("Laminado", detalle.acabados.laminados.map((l: any) => l.nombre).join(", "))}
             {row("Refuerzo material", detalle.acabados.refuerzo_material)}
-            {row("Refuerzo medida", detalle.acabados.refuerzo_medida)}
-            {row("Base material", detalle.acabados.base_material)}
-            {row("Base medida", detalle.acabados.base_medida)}
-            {row("Empaque", detalle.acabados.empaque)}
-            {row("Pzs / caja", detalle.acabados.pzs_caja)}
+            {row("Refuerzo medida",   detalle.acabados.refuerzo_medida)}
+            {row("Base material",     detalle.acabados.base_material)}
+            {row("Base medida",       detalle.acabados.base_medida)}
+            {row("Empaque",           detalle.acabados.empaque)}
+            {row("Pzs / caja",        detalle.acabados.pzs_caja)}
             {detalle.acabados.asas?.length > 0 && row("Asas", detalle.acabados.asas.map((a: any) => a.tipo_asa).join(", "))}
           </div>
         </div>
@@ -1038,9 +920,7 @@ function DetalleProducto({ id }: { id: number }) {
               <a key={a.id_archivo} href={a.url} target="_blank" rel="noreferrer"
                 style={{ display: "flex", alignItems: "center", gap: 6, background: "#F3F4F6", border: "1px solid #E5E7EB", borderRadius: 6, padding: "5px 10px", fontSize: 12, color: "#1D4ED8", textDecoration: "none" }}>
                 <span style={{ fontSize: 13 }}>
-                  {a.categoria === "imagen-suaje-papel" ? ICON_IMG
-                    : a.categoria === "rendimiento-suaje-papel" ? ICON_CHART
-                    : ICON_PDF}
+                  {a.categoria === "imagen-suaje-papel" ? ICON_IMG : a.categoria === "rendimiento-suaje-papel" ? ICON_CHART : ICON_PDF}
                 </span>
                 <span style={{ maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={a.nombre}>{a.nombre}</span>
                 <span style={{ fontSize: 10, color: "#9CA3AF", flexShrink: 0 }}>{a.categoria}</span>
@@ -1049,6 +929,76 @@ function DetalleProducto({ id }: { id: number }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TIPOS EXTENDIDOS PARA LA TABLA
+// ═══════════════════════════════════════════════════════════════════════════
+interface ArchivoPreview {
+  id_archivo: number;
+  url: string;
+  categoria: string;
+  nombre: string;
+  tipo?: string;
+}
+
+interface ProductoPapelListItemEx extends ProductoPapelListItem {
+  primer_tipo_papel?: string;
+  primer_calibre?:    string;
+  primer_pliego?:     string;
+  archivos_preview?:  ArchivoPreview[];
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MINI ARCHIVOS EN TABLA
+// ═══════════════════════════════════════════════════════════════════════════
+function ArchivosMini({ archivos }: { archivos?: ArchivoPreview[] }) {
+  if (!archivos || archivos.length === 0)
+    return <span style={{ color: "#D1D5DB", fontSize: 11 }}>—</span>;
+
+  return (
+    <div style={{ display: "flex", gap: 5, alignItems: "center", flexWrap: "nowrap" }}>
+      {archivos.slice(0, 3).map((a) => {
+        const esImagen = a.categoria === "imagen-suaje-papel";
+        const esPDF    = a.nombre?.toLowerCase().endsWith(".pdf");
+
+        if (esImagen) {
+          return (
+            <a key={a.id_archivo} href={a.url} target="_blank" rel="noreferrer" title={a.nombre}
+              style={{ display: "block", flexShrink: 0 }}>
+              <img
+                src={a.url}
+                alt={a.nombre}
+                style={{ width: 42, height: 42, objectFit: "cover", borderRadius: 5, border: "1.5px solid #E5E7EB", background: "#F3F4F6", display: "block" }}
+                onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+              />
+            </a>
+          );
+        }
+
+        const isRendimiento = a.categoria === "rendimiento-suaje-papel";
+        const icon   = isRendimiento ? "📊" : esPDF ? "📄" : "📎";
+        const bg     = isRendimiento ? "#F0FDF4" : "#EFF6FF";
+        const border = isRendimiento ? "#BBF7D0" : "#BFDBFE";
+        const ext    = a.nombre?.split(".").pop()?.toUpperCase() ?? "";
+
+        return (
+          <a key={a.id_archivo} href={a.url} target="_blank" rel="noreferrer" title={a.nombre}
+            style={{
+              display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+              width: 42, height: 42, borderRadius: 5,
+              border: `1.5px solid ${border}`, background: bg,
+              textDecoration: "none", flexShrink: 0,
+            }}>
+            <span style={{ fontSize: 16, lineHeight: 1 }}>{icon}</span>
+            <span style={{ fontSize: 8, color: "#6B7280", marginTop: 2, maxWidth: 40, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textAlign: "center" }}>
+              {ext}
+            </span>
+          </a>
+        );
+      })}
     </div>
   );
 }
@@ -1063,18 +1013,24 @@ function TablaCatalogo({ productos, loading, onNuevo, onEditar, onEliminar }: {
   onEditar: (p: ProductoPapelListItem) => void;
   onEliminar: (id: number) => void;
 }) {
-  const [search, setSearch] = useState("");
+  const [search,     setSearch]     = useState("");
   const [expandedId, setExpandedId] = useState<number | null>(null);
-  const [deleteId, setDeleteId] = useState<number | null>(null);
+  const [deleteId,   setDeleteId]   = useState<number | null>(null);
 
-  const filtered = productos.filter(p =>
+  // 9 columnas: tipo · descripcion · medida · tipo_papel · gramaje · pliego · creado_por · archivos · acciones
+  const COLS = "1.2fr 1fr 0.8fr 1fr 0.7fr 0.75fr 0.9fr 140px auto";
+
+  const filtered = (productos as ProductoPapelListItemEx[]).filter(p =>
     p.tipo_producto.toLowerCase().includes(search.toLowerCase()) ||
     (p.medida ?? "").toLowerCase().includes(search.toLowerCase()) ||
-    ((p as any).descripcion_papel ?? "").toLowerCase().includes(search.toLowerCase())
+    ((p as any).descripcion_papel ?? "").toLowerCase().includes(search.toLowerCase()) ||
+    (p.primer_tipo_papel ?? "").toLowerCase().includes(search.toLowerCase())
   );
 
   return (
     <div style={{ maxWidth: "100%", margin: "0 auto", padding: "15px 5px 50px", fontFamily: "'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif", color: "#111827" }}>
+
+      {/* Modal confirmar eliminar */}
       {deleteId !== null && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.35)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
           <div style={{ background: "#fff", borderRadius: 12, padding: "24px 28px", maxWidth: 340, width: "90%", boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
@@ -1088,6 +1044,7 @@ function TablaCatalogo({ productos, loading, onNuevo, onEditar, onEliminar }: {
         </div>
       )}
 
+      {/* Header de página */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
         <div>
           <p style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: "#9CA3AF", margin: "0 0 2px", fontWeight: 600 }}>Alta de productos</p>
@@ -1096,47 +1053,101 @@ function TablaCatalogo({ productos, loading, onNuevo, onEditar, onEliminar }: {
         <button onClick={onNuevo} style={{ height: 38, padding: "0 18px", border: "none", borderRadius: 7, background: "#1D4ED8", color: "#fff", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>+ Registrar nuevo producto</button>
       </div>
 
+      {/* Buscador */}
       <div style={{ position: "relative", marginBottom: 12 }}>
         <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", fontSize: 13, color: "#9CA3AF" }}>&#128269;</span>
         <input type="text" value={search} onChange={e => setSearch(e.target.value)}
+          placeholder="Buscar por tipo, descripción o material..."
           style={{ width: "100%", height: 36, paddingLeft: 32, paddingRight: 12, border: "1px solid #D1D5DB", borderRadius: 7, fontSize: 12, color: "#111827", background: "#fff", outline: "none", boxSizing: "border-box" }} />
       </div>
 
       <div style={{ border: "1px solid #E5E7EB", borderRadius: 9, overflow: "hidden" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1.5fr 1.5fr 1fr 1fr 1fr auto", background: "#F9FAFB", borderBottom: "1px solid #E5E7EB", padding: "0 16px" }}>
-          {["Tipo de producto", "Descripción", "Medida", "Ancho x Fuelle", "Creado por", ""].map(h => (
-            <div key={h} style={{ padding: "8px 0", fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#6B7280" }}>{h}</div>
+
+        {/* Cabeceras */}
+        <div style={{ display: "grid", gridTemplateColumns: COLS, background: "#F9FAFB", borderBottom: "1px solid #E5E7EB", padding: "0 16px" }}>
+          {["Tipo de producto", "Descripción", "Medida", "Tipo de papel", "Gramaje", "Pliego", "Creado por", "Archivos", ""].map(h => (
+            <div key={h} style={{ padding: "8px 0 8px 4px", fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#6B7280" }}>{h}</div>
           ))}
         </div>
+
         {loading ? (
           <div style={{ padding: "36px 16px", textAlign: "center", color: "#9CA3AF", fontSize: 13 }}>Cargando...</div>
         ) : filtered.length === 0 ? (
-          <div style={{ padding: "36px 16px", textAlign: "center", color: "#9CA3AF", fontSize: 13 }}>{search ? "Sin resultados." : "No hay productos registrados."}</div>
-        ) : filtered.map((p, idx) => (
-          <div key={p.idproducto_papel}>
-            <div style={{ display: "grid", gridTemplateColumns: "1.5fr 1.5fr 1fr 1fr 1fr auto", padding: "0 16px", alignItems: "center", minHeight: 48, background: expandedId === p.idproducto_papel ? "#EFF6FF" : idx % 2 === 0 ? "#fff" : "#FAFAFA", borderBottom: expandedId === p.idproducto_papel ? "none" : "1px solid #F3F4F6" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <button onClick={() => setExpandedId(expandedId === p.idproducto_papel ? null : p.idproducto_papel)}
-                  style={{ width: 20, height: 20, borderRadius: 4, background: "#EFF6FF", border: "1px solid #BFDBFE", cursor: "pointer", fontSize: 11, color: "#1D4ED8", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                  {expandedId === p.idproducto_papel ? "^" : "v"}
-                </button>
-                <div>
-                  <p style={{ margin: 0, fontWeight: 600, fontSize: 12, color: "#111827" }}>{p.tipo_producto}</p>
-                  <p style={{ margin: 0, fontSize: 10, color: "#9CA3AF" }}>ID #{p.idproducto_papel}</p>
+          <div style={{ padding: "36px 16px", textAlign: "center", color: "#9CA3AF", fontSize: 13 }}>
+            {search ? "Sin resultados." : "No hay productos registrados."}
+          </div>
+        ) : filtered.map((p, idx) => {
+          const px = p as ProductoPapelListItemEx;
+          const isExpanded = expandedId === p.idproducto_papel;
+          const rowBg = isExpanded ? "#EFF6FF" : idx % 2 === 0 ? "#fff" : "#FAFAFA";
+
+          return (
+            <div key={p.idproducto_papel}>
+              <div style={{
+                display: "grid", gridTemplateColumns: COLS,
+                padding: "0 16px", alignItems: "center", minHeight: 58,
+                background: rowBg,
+                borderBottom: isExpanded ? "none" : "1px solid #F3F4F6",
+              }}>
+
+                {/* Tipo + expand */}
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <button
+                    onClick={() => setExpandedId(isExpanded ? null : p.idproducto_papel)}
+                    style={{ width: 20, height: 20, borderRadius: 4, background: "#EFF6FF", border: "1px solid #BFDBFE", cursor: "pointer", fontSize: 11, color: "#1D4ED8", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    {isExpanded ? "^" : "v"}
+                  </button>
+                  <div style={{ minWidth: 0 }}>
+                    <p style={{ margin: 0, fontWeight: 600, fontSize: 12, color: "#111827", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.tipo_producto}</p>
+                    <p style={{ margin: 0, fontSize: 10, color: "#9CA3AF" }}>ID #{p.idproducto_papel}</p>
+                  </div>
+                </div>
+
+                {/* Descripción */}
+                <span style={{ fontSize: 12, color: "#374151", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", paddingRight: 6 }}>
+                  {(p as any).descripcion_papel || "—"}
+                </span>
+
+                {/* Medida */}
+                <span style={{ fontSize: 12, color: "#374151" }}>{p.medida || "—"}</span>
+
+                {/* Tipo de papel */}
+                <span style={{ fontSize: 12, color: "#374151", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", paddingRight: 6 }}>
+                  {px.primer_tipo_papel || "—"}
+                </span>
+
+                {/* Gramaje / calibre — pill */}
+                <span>
+                  {px.primer_calibre
+                    ? <span style={{ display: "inline-block", background: "#F1F5F9", border: "1px solid #E2E8F0", borderRadius: 4, padding: "2px 6px", fontSize: 11, color: "#475569", fontWeight: 500, whiteSpace: "nowrap" }}>
+                        {px.primer_calibre}
+                      </span>
+                    : <span style={{ fontSize: 12, color: "#374151" }}>—</span>
+                  }
+                </span>
+
+                {/* Pliego */}
+                <span style={{ fontSize: 12, color: "#374151" }}>{px.primer_pliego || "—"}</span>
+
+                {/* Creado por */}
+                <span style={{ fontSize: 12, color: "#374151", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {p.creado_por || "—"}
+                </span>
+
+                {/* Archivos mini */}
+                <ArchivosMini archivos={px.archivos_preview} />
+
+                {/* Acciones */}
+                <div style={{ display: "flex", gap: 5, justifyContent: "flex-end" }}>
+                  <button onClick={() => onEditar(p)} style={{ height: 28, padding: "0 10px", background: "#F3F4F6", border: "1px solid #D1D5DB", borderRadius: 5, cursor: "pointer", fontSize: 11, fontWeight: 600, color: "#374151" }}>Editar</button>
+                  <button onClick={() => setDeleteId(p.idproducto_papel)} style={{ height: 28, padding: "0 8px", background: "#FEE2E2", border: "none", borderRadius: 5, cursor: "pointer", fontSize: 11, fontWeight: 600, color: "#DC2626" }}>x</button>
                 </div>
               </div>
-              <span style={{ fontSize: 12, color: "#374151" }}>{(p as any).descripcion_papel || "--"}</span>
-              <span style={{ fontSize: 12, color: "#374151" }}>{p.medida || "--"}</span>
-              <span style={{ fontSize: 12, color: "#374151" }}>{p.ancho && p.fuelle ? `${p.ancho} x ${p.fuelle}` : "--"}</span>
-              <span style={{ fontSize: 12, color: "#374151" }}>{p.creado_por || "--"}</span>
-              <div style={{ display: "flex", gap: 5, justifyContent: "flex-end" }}>
-                <button onClick={() => onEditar(p)} style={{ height: 28, padding: "0 10px", background: "#F3F4F6", border: "1px solid #D1D5DB", borderRadius: 5, cursor: "pointer", fontSize: 11, fontWeight: 600, color: "#374151" }}>Editar</button>
-                <button onClick={() => setDeleteId(p.idproducto_papel)} style={{ height: 28, padding: "0 8px", background: "#FEE2E2", border: "none", borderRadius: 5, cursor: "pointer", fontSize: 11, fontWeight: 600, color: "#DC2626" }}>x</button>
-              </div>
+
+              {isExpanded && <DetalleProducto id={p.idproducto_papel} />}
             </div>
-            {expandedId === p.idproducto_papel && <DetalleProducto id={p.idproducto_papel} />}
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       <div style={{ marginTop: 8, textAlign: "right", fontSize: 11, color: "#9CA3AF" }}>
@@ -1154,9 +1165,9 @@ type Vista = "tabla" | "nuevo" | "editar";
 export default function Papel() {
   useAuth();
   const { productos, loading, saving, crear, actualizar, eliminar } = useProductosPapel();
-  const [vista, setVista] = useState<Vista>("tabla");
+  const [vista,    setVista]    = useState<Vista>("tabla");
   const [editForm, setEditForm] = useState<ProductoPapelForm | undefined>(undefined);
-  const [editId, setEditId] = useState<number | undefined>(undefined);
+  const [editId,   setEditId]   = useState<number | undefined>(undefined);
 
   const handleEditar = async (p: ProductoPapelListItem) => {
     setEditId(p.idproducto_papel);
@@ -1167,90 +1178,92 @@ export default function Papel() {
       const form = newProductoForm();
       form.idcat_tipo_producto_papel = d.idcat_tipo_producto_papel;
       form.tipoProductoNombre = d.tipo_producto ?? "";
-      form.descripcion = d.descripcion_papel ?? "";
-      form.ancho = d.ancho ? String(d.ancho) : "";
+      form.descripcion        = d.descripcion_papel ?? "";
+      form.ancho  = d.ancho  ? String(d.ancho)  : "";
       form.fuelle = d.fuelle ? String(d.fuelle) : "";
       form.altura = d.altura ? String(d.altura) : "";
       form.medida = d.medida ?? "";
 
       form.grupos = (d.grupos ?? []).map((g: any, gi: number) => ({
         id: Date.now() + gi,
-        idgrupo_papel: g.idgrupo_papel,
+        idgrupo_papel:  g.idgrupo_papel,
         precioSugerido: g.precio_sugerido ? String(g.precio_sugerido) : "",
         draft: newMaterial(),
         materiales: (g.materiales ?? []).map((m: any, mi: number) => ({
           id: Date.now() + gi * 100 + mi,
           idcat_tipo_papel: m.idcat_tipo_papel,
-          idcat_calibre: m.idcat_calibre,
-          tipo: m.tipo_papel ?? "",
-          calibre: m.calibre ?? "",
-          pliego: m.pliego ?? "",
-          rendimiento: m.rendimiento ?? "",
-          corte: m.corte ?? "",
+          idcat_calibre:    m.idcat_calibre,
+          tipo:        m.tipo_papel   ?? "",
+          calibre:     m.calibre      ?? "",
+          pliego:      m.pliego       ?? "",
+          rendimiento: m.rendimiento  ?? "",
+          corte:       m.corte        ?? "",
           hojeado: {
-            bobina: m.hojeado?.bobina ?? "",
-            corte: m.hojeado?.corte ?? "",
+            bobina:      m.hojeado?.bobina      ?? "",
+            corte:       m.hojeado?.corte       ?? "",
             rendimiento: m.hojeado?.rendimiento ?? "",
-            guillotina: m.hojeado?.guillotina ?? "",
-            hilo: m.hojeado?.hilo ?? "",
+            guillotina:  m.hojeado?.guillotina  ?? "",
+            hilo:        m.hojeado?.hilo        ?? "",
           },
         })),
       }));
       if (form.grupos.length === 0) form.grupos = [newGrupo()];
 
       if (d.suaje) {
-        form.suaje.numero = d.suaje.numero ?? "";
-        form.suaje.pzs = d.suaje.pzs ? String(d.suaje.pzs) : "";
-        form.suaje.tamano = d.suaje.tamano ?? "";
-        form.suaje.corte1Tipo = d.suaje.corte1_tipo ?? "";
-        form.suaje.corte1Medida = d.suaje.corte1_medida ?? "";
-        form.suaje.dobles1Tipo = d.suaje.dobles1_tipo ?? "";
+        form.suaje.numero        = d.suaje.numero        ?? "";
+        form.suaje.pzs           = d.suaje.pzs ? String(d.suaje.pzs) : "";
+        form.suaje.tamano        = d.suaje.tamano        ?? "";
+        form.suaje.corte1Tipo    = d.suaje.corte1_tipo    ?? "";
+        form.suaje.corte1Medida  = d.suaje.corte1_medida  ?? "";
+        form.suaje.idcat_corte   = d.suaje.idcat_corte    ?? null;
+        form.suaje.dobles1Tipo   = d.suaje.dobles1_tipo   ?? "";
         form.suaje.dobles1Medida = d.suaje.dobles1_medida ?? "";
-        form.suaje.metros = d.suaje.metros ?? "";
-        form.suaje.idcat_matrix = d.suaje.idcat_matrix ?? null;
-        form.suaje.matrixNombre = d.suaje.matrix_nombre ?? "";
+        form.suaje.idcat_doble   = d.suaje.idcat_doble    ?? null;
+        form.suaje.metros        = d.suaje.metros          ?? "";
+        form.suaje.matrix        = d.suaje.matrix_nombre   ?? "";
+        form.suaje.idcat_matrix  = d.suaje.idcat_matrix    ?? null;
         form.suaje.tiempoArreglo = d.suaje.tiempo_arreglo ? String(d.suaje.tiempo_arreglo) : "";
-        form.suaje.idcat_sacabocados = d.suaje.idcat_sacabocados ?? null;
-        form.suaje.sacabocadoNombre = d.suaje.sacabocado_nombre
+        form.suaje.idcat_sacabocados  = d.suaje.idcat_sacabocados ?? null;
+        form.suaje.sacabocadoNombre   = d.suaje.sacabocado_nombre
           ? (d.suaje.sacabocado_medida ? `${d.suaje.sacabocado_nombre} -- ${d.suaje.sacabocado_medida}` : d.suaje.sacabocado_nombre)
           : "";
         form.suaje.cantidad_sacabocado = d.suaje.cantidad_sacabocado ? String(d.suaje.cantidad_sacabocado) : "";
-        form.suaje.idcat_perforado = d.suaje.idcat_perforado ?? null;
-        form.suaje.perforadoNombre = d.suaje.perforado_nombre
+        form.suaje.idcat_perforado     = d.suaje.idcat_perforado ?? null;
+        form.suaje.perforadoNombre     = d.suaje.perforado_nombre
           ? (d.suaje.perforado_medida ? `${d.suaje.perforado_nombre} -- ${d.suaje.perforado_medida}` : d.suaje.perforado_nombre)
           : "";
         form.suaje.cantidad_perforado = d.suaje.cantidad_perforado ? String(d.suaje.cantidad_perforado) : "";
       }
 
       if (d.acabados) {
-        form.acabados.idcat_tipo_pegado = d.acabados.idcat_tipo_pegado ?? null;
-        form.acabados.idcat_pegamento = d.acabados.idcat_pegamento ?? null;
-        form.acabados.laminados = (d.acabados.laminados ?? []).map((l: any) => l.id);
-        form.acabados.laminadosNombres = (d.acabados.laminados ?? []).map((l: any) => l.nombre);
+        form.acabados.idcat_tipo_pegado       = d.acabados.idcat_tipo_pegado       ?? null;
+        form.acabados.idcat_pegamento         = d.acabados.idcat_pegamento         ?? null;
+        form.acabados.laminados               = (d.acabados.laminados ?? []).map((l: any) => l.id);
+        form.acabados.laminadosNombres        = (d.acabados.laminados ?? []).map((l: any) => l.nombre);
         form.acabados.idcat_refuerzo_material = d.acabados.idcat_refuerzo_material ?? null;
-        form.acabados.idcat_refuerzo_medidas = d.acabados.idcat_refuerzo_medidas ?? null;
-        form.acabados.refuerzoMedidaNombre = d.acabados.refuerzo_medida ?? "";
-        form.acabados.idcat_base_material = d.acabados.idcat_base_material ?? null;
-        form.acabados.base_medida = d.acabados.base_medida ?? "";
-        form.acabados.idcat_empaque = d.acabados.idcat_empaque ?? null;
-        form.acabados.pzs_caja = d.acabados.pzs_caja ? String(d.acabados.pzs_caja) : "";
-        form.acabados.asas = (d.acabados.asas ?? []).map((a: any) => a.idcat_tipo_asa);
-        form.acabados.asasNombres = (d.acabados.asas ?? []).map((a: any) => a.tipo_asa);
+        form.acabados.idcat_refuerzo_medidas  = d.acabados.idcat_refuerzo_medidas  ?? null;
+        form.acabados.refuerzoMedidaNombre    = d.acabados.refuerzo_medida         ?? "";
+        form.acabados.idcat_base_material     = d.acabados.idcat_base_material     ?? null;
+        form.acabados.base_medida             = d.acabados.base_medida             ?? "";
+        form.acabados.idcat_empaque           = d.acabados.idcat_empaque           ?? null;
+        form.acabados.pzs_caja                = d.acabados.pzs_caja ? String(d.acabados.pzs_caja) : "";
+        form.acabados.asas                    = (d.acabados.asas ?? []).map((a: any) => a.idcat_tipo_asa);
+        form.acabados.asasNombres             = (d.acabados.asas ?? []).map((a: any) => a.tipo_asa);
       }
 
       if (d.maquinaria) {
-        const maq = d.maquinaria;
+        const maq  = d.maquinaria;
         const keys = ["hojeado_guillotina","impresora","hs_ar","suaje_maquina","uv","textura","empalme","armado","asas_maquina","desbarbe"];
         for (const key of keys) {
-          form.maquinaria[key]             = (maq[key] ?? []).map((i: any) => i.id);
+          form.maquinaria[key]              = (maq[key] ?? []).map((i: any) => i.id);
           form.maquinaria[`${key}_nombres`] = (maq[key] ?? []).map((i: any) => i.nombre);
         }
       }
 
       setEditForm({
         ...form,
-        idproducto_papel: p.idproducto_papel,
-        archivosIniciales: (d.archivos ?? []).map((a: any) => ({ ...a, pendiente: false })),
+        idproducto_papel:   p.idproducto_papel,
+        archivosIniciales:  (d.archivos ?? []).map((a: any) => ({ ...a, pendiente: false })),
       } as any);
     } catch {
       setEditForm(newProductoForm());
@@ -1259,19 +1272,15 @@ export default function Papel() {
 
   const handleSave = async (form: ProductoPapelForm, pendientes: ArchivoPendiente[]) => {
     let ok: number | boolean | null;
-
     if (vista === "editar" && editId) {
       ok = await actualizar(editId, form);
     } else {
       const idNuevo = await crear(form);
       if (idNuevo && pendientes.length > 0) {
-        await Promise.allSettled(
-          pendientes.map(p => subirArchivoPendiente(p, idNuevo))
-        );
+        await Promise.allSettled(pendientes.map(p => subirArchivoPendiente(p, idNuevo)));
       }
       ok = idNuevo;
     }
-
     if (ok) { setVista("tabla"); setEditForm(undefined); setEditId(undefined); }
   };
 

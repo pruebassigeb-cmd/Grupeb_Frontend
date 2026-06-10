@@ -10,16 +10,16 @@ const headers = () => ({
 // ═══════════════════════════════════════════════════════════════════════════
 // CATÁLOGOS
 // ═══════════════════════════════════════════════════════════════════════════
-
-const normalizarItems = (items: any[]): { id: number; nombre: string; medida?: string }[] =>
+const normalizarItems = (items: any[]): any[] =>
   items.map(item => {
-    // matrix usa idmatrix como PK, no sigue el patrón idcat_*
     const pkKey = Object.keys(item).find(k => k.startsWith("idcat_")) ?? "idmatrix";
     return {
       id:             item[pkKey] ?? item.id,
-      nombre:         item.nombre ?? item.medida_matrix,  // matrix usa medida_matrix
+      nombre:         item.nombre ?? item.medida_matrix,
       medida:         item.medida,
       numero_maquina: item.numero_maquina,
+      altura:         item.altura,    // ← cortes y dobles
+      puntos:         item.puntos,    // ← cortes y dobles
     };
   });
 
@@ -39,7 +39,7 @@ export const agregarItemCatalogo = async (
   nombre: string,
   medida?: string,
   numero_maquina?: string
-): Promise<{ id: number; nombre: string; medida?: string }> => {
+): Promise<any> => {
   const res = await fetch(`${BASE}/catalogos-papel/${catalogo}`, {
     method: "POST",
     headers: headers(),
@@ -49,9 +49,12 @@ export const agregarItemCatalogo = async (
   const raw = await res.json();
   const pkKey = Object.keys(raw).find(k => k.startsWith("idcat_")) ?? "idmatrix";
   return {
-    id:     raw[pkKey] ?? raw.id,
-    nombre: raw.nombre ?? raw.medida_matrix,
-    medida: raw.medida,
+    id:             raw[pkKey] ?? raw.id,
+    nombre:         raw.nombre ?? raw.medida_matrix,
+    medida:         raw.medida,
+    altura:         raw.altura,
+    puntos:         raw.puntos,
+    numero_maquina: raw.numero_maquina,
   };
 };
 
@@ -81,10 +84,7 @@ export const fetchCatalogosInactivos = async (): Promise<Catalogs> => {
   return normalizado as Catalogs;
 };
 
-export const reactivarItemCatalogo = async (
-  catalogo: CatKey,
-  id: number
-): Promise<void> => {
+export const reactivarItemCatalogo = async (catalogo: CatKey, id: number): Promise<void> => {
   const res = await fetch(`${BASE}/catalogos-papel/${catalogo}/${id}/reactivar`, {
     method: "PATCH",
     headers: headers(),
@@ -92,10 +92,7 @@ export const reactivarItemCatalogo = async (
   if (!res.ok) throw new Error("Error al reactivar item del catálogo");
 };
 
-export const eliminarItemCatalogo = async (
-  catalogo: CatKey,
-  id: number
-): Promise<void> => {
+export const eliminarItemCatalogo = async (catalogo: CatKey, id: number): Promise<void> => {
   const res = await fetch(`${BASE}/catalogos-papel/${catalogo}/${id}`, {
     method: "DELETE",
     headers: headers(),
@@ -106,7 +103,6 @@ export const eliminarItemCatalogo = async (
 // ═══════════════════════════════════════════════════════════════════════════
 // PRODUCTOS PAPEL
 // ═══════════════════════════════════════════════════════════════════════════
-
 export const fetchProductosPapel = async (): Promise<ProductoPapelListItem[]> => {
   const res = await fetch(`${BASE}/productos-papel`, { headers: headers() });
   if (!res.ok) throw new Error("Error al cargar productos de papel");
@@ -147,7 +143,7 @@ export const eliminarProductoPapel = async (id: number): Promise<void> => {
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
-// MAPPER — form → body que espera el backend
+// MAPPER
 // ═══════════════════════════════════════════════════════════════════════════
 const mapFormToApi = (form: ProductoPapelForm) => ({
   idcat_tipo_producto_papel: form.idcat_tipo_producto_papel,
@@ -176,20 +172,22 @@ const mapFormToApi = (form: ProductoPapelForm) => ({
   })),
 
   suaje: {
-    numero:          form.suaje.numero         || null,
-    pzs:             form.suaje.pzs            || null,
-    tamano:          form.suaje.tamano         || null,
-    corte1_tipo:     form.suaje.corte1Tipo     || null,
-    corte1_medida:   form.suaje.corte1Medida   || null,
-    dobles1_tipo:    form.suaje.dobles1Tipo    || null,
-    dobles1_medida:  form.suaje.dobles1Medida  || null,
-    metros:          form.suaje.metros         || null,
-    idcat_matrix:    form.suaje.idcat_matrix,           // ← FK en lugar de texto
-    tiempo_arreglo:  form.suaje.tiempoArreglo  ? parseInt(form.suaje.tiempoArreglo) : null,
+    numero:         form.suaje.numero        || null,
+    pzs:            form.suaje.pzs           || null,
+    tamano:         form.suaje.tamano        || null,
+    corte1_tipo:    form.suaje.corte1Tipo    || null,
+    corte1_medida:  form.suaje.corte1Medida  || null,
+    idcat_corte:    form.suaje.idcat_corte,            // ← nuevo
+    dobles1_tipo:   form.suaje.dobles1Tipo   || null,
+    dobles1_medida: form.suaje.dobles1Medida || null,
+    idcat_doble:    form.suaje.idcat_doble,            // ← nuevo
+    metros:         form.suaje.metros        || null,
+    idcat_matrix:   form.suaje.idcat_matrix,
+    tiempo_arreglo: form.suaje.tiempoArreglo ? parseInt(form.suaje.tiempoArreglo) : null,
     idcat_sacabocados:   form.suaje.idcat_sacabocados,
     cantidad_sacabocado: form.suaje.cantidad_sacabocado ? parseInt(form.suaje.cantidad_sacabocado) : null,
     idcat_perforado:     form.suaje.idcat_perforado,
-    cantidad_perforado:  form.suaje.cantidad_perforado  ? parseInt(form.suaje.cantidad_perforado)  : null,
+    cantidad_perforado:  form.suaje.cantidad_perforado ? parseInt(form.suaje.cantidad_perforado) : null,
   },
 
   acabados: {

@@ -1,7 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import type { GrupoPapel, MaterialEntry, CatKey } from "../../types/papel/papel.types";
 import  { newMaterial } from "../../types/papel/papel.types";
 import SelConAlta from "./SelConAlta";
+
+// ─── Helper: ordenar numéricamente ────────────────────────────────────────
+const sortByNum = (arr: string[]) =>
+  [...arr].sort((a, b) => (parseFloat(a) || 0) - (parseFloat(b) || 0));
 
 // ── Primitivos locales ─────────────────────────────────────────────────────
 function Inp({ value, onChange }: { value: string; onChange: (v: string) => void }) {
@@ -24,18 +28,19 @@ function CalibreInput({ value, onChange, options, onAdd }: {
   value: string; onChange: (v: string) => void;
   options: string[]; onAdd: (key: CatKey, nombre: string) => Promise<void>;
 }) {
-  const [open, setOpen]         = useState(false);
-  const [adding, setAdding]     = useState(false);
-  const [newVal, setNewVal]     = useState("");
+  const [open, setOpen]             = useState(false);
+  const [adding, setAdding]         = useState(false);
+  const [newVal, setNewVal]         = useState("");
   const [newValNum, setNewValNum]   = useState("");
   const [newValUnit, setNewValUnit] = useState<"pts" | "gms">("pts");
-  const [saving, setSaving]     = useState(false);
+  const [saving, setSaving]         = useState(false);
   const ref    = useRef<HTMLDivElement>(null);
   const addRef = useRef<HTMLInputElement>(null);
 
-  const calPts   = options.filter(c => c.endsWith("pts"));
-  const calGms   = options.filter(c => c.endsWith("gms"));
-  const calOtros = options.filter(c => !c.endsWith("pts") && !c.endsWith("gms"));
+  // Separar y ordenar numéricamente
+  const calPts   = sortByNum(options.filter(c => c.toLowerCase().endsWith("pts")));
+  const calGms   = sortByNum(options.filter(c => c.toLowerCase().endsWith("gms")));
+  const calOtros = sortByNum(options.filter(c => !c.toLowerCase().endsWith("pts") && !c.toLowerCase().endsWith("gms")));
 
   useEffect(() => {
     const h = (e: MouseEvent) => {
@@ -130,7 +135,7 @@ function CalibreInput({ value, onChange, options, onAdd }: {
 // ── Material Card ──────────────────────────────────────────────────────────
 function MaterialCard({ entry, index, onEdit, onRemove }: { entry: MaterialEntry; index: number; onEdit: () => void; onRemove: () => void }) {
   const chip = (lbl: string, val: string) => val ? <span key={lbl} style={{ fontSize: 11, color: "#374151" }}><span style={{ color: "#9CA3AF", fontSize: 10 }}>{lbl} </span>{val}</span> : null;
-  const hFields = [["Bob.", entry.hojeado.bobina], ["Corte", entry.hojeado.corte], ["Rend.", entry.hojeado.rendimiento], ["Guill.", entry.hojeado.guillotina], ["Hilo", entry.hojeado.hilo]].filter(([, v]) => v);
+  const hFields = [["Bob.", entry.hojeado.bobina], ["Desarrollo", entry.hojeado.corte], ["Rend.", entry.hojeado.rendimiento], ["Guill.", entry.hojeado.guillotina], ["Hilo", entry.hojeado.hilo]].filter(([, v]) => v);
   return (
     <div style={{ background: "#EFF6FF", border: "1px solid #BFDBFE", borderRadius: 6, padding: "7px 10px", display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 6 }}>
       <div style={{ width: 20, height: 20, borderRadius: "50%", background: "#1D4ED8", color: "#fff", fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 1 }}>{index + 1}</div>
@@ -207,7 +212,7 @@ function DraftForm({ entry, onChange, onConfirm, isEditing, catTipoPapel, catCal
         <span style={{ fontSize: 9, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.06em", whiteSpace: "nowrap" }}>Hojeado</span>
         {([
           ["bobina",      "Bob."  ],
-          ["corte",       "Corte" ],
+          ["corte",       "Desarrollo" ],
           ["rendimiento", "Rend." ],
           ["guillotina",  "Guill."],
           ["hilo",        "Hilo"  ],
@@ -237,8 +242,6 @@ interface GrupoBlockProps {
   onToggle:     () => void;
 }
 
-import { useRef } from "react";
-
 export default function GrupoBlock({ grupo, grupoIndex, totalGrupos, onUpdate, onRemove, catTipoPapel, catCalibre, catTipoPapelItems, catCalibreItems, onAdd, collapsed, onToggle }: GrupoBlockProps) {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editDraft, setEditDraft] = useState<MaterialEntry | null>(null);
@@ -258,10 +261,8 @@ export default function GrupoBlock({ grupo, grupoIndex, totalGrupos, onUpdate, o
     if (editingId === id) { setEditingId(null); setEditDraft(null); }
   };
 
-  const COLORS = ["#94A3B8","#94A3B8","#94A3B8","#94A3B8","#94A3B8","#94A3B8"];
-  const LIGHTS = ["#F8FAFC","#F8FAFC","#F8FAFC","#F8FAFC","#F8FAFC","#F8FAFC"];
-  const color = COLORS[grupoIndex % COLORS.length];
-  const light = LIGHTS[grupoIndex % LIGHTS.length];
+  const color = "#94A3B8";
+  const light = "#F8FAFC";
 
   return (
     <div style={{ border: `1.5px solid ${color}30`, borderLeft: `3px solid ${color}`, borderRadius: 8, marginBottom: 10, overflow: "visible", position: "relative" }}>
@@ -280,7 +281,7 @@ export default function GrupoBlock({ grupo, grupoIndex, totalGrupos, onUpdate, o
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }} onClick={e => e.stopPropagation()}>
           <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-            <span style={{ fontSize: 10, color: "#6B7280", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em" }}>Precio</span>
+            <span style={{ fontSize: 10, color: "#6B7280", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em" }}>Costo</span>
             <div style={{ position: "relative" }}>
               <span style={{ position: "absolute", left: 6, top: "50%", transform: "translateY(-50%)", fontSize: 11, color: "#6B7280", pointerEvents: "none" }}>$</span>
               <input type="text" inputMode="decimal" value={grupo.precioSugerido}
@@ -298,25 +299,25 @@ export default function GrupoBlock({ grupo, grupoIndex, totalGrupos, onUpdate, o
 
       {/* Materiales */}
       {!collapsed && (
-      <div style={{ padding: "10px 12px" }}>
-        {grupo.materiales.length > 0 && (
-          <div style={{ marginBottom: 8 }}>
-            {grupo.materiales.map((m, i) => editingId === m.id ? (
-              <div key={m.id} style={{ marginBottom: 6 }}>
-                <DraftForm entry={editDraft!} onChange={setEditDraft} onConfirm={saveEdit} isEditing catTipoPapel={catTipoPapel} catCalibre={catCalibre} catTipoPapelItems={catTipoPapelItems} catCalibreItems={catCalibreItems} onAdd={onAdd} />
-                <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 4 }}>
-                  <button onClick={() => { setEditingId(null); setEditDraft(null); }} style={{ fontSize: 11, color: "#6B7280", background: "none", border: "none", cursor: "pointer", padding: "2px 6px" }}>Cancelar</button>
+        <div style={{ padding: "10px 12px" }}>
+          {grupo.materiales.length > 0 && (
+            <div style={{ marginBottom: 8 }}>
+              {grupo.materiales.map((m, i) => editingId === m.id ? (
+                <div key={m.id} style={{ marginBottom: 6 }}>
+                  <DraftForm entry={editDraft!} onChange={setEditDraft} onConfirm={saveEdit} isEditing catTipoPapel={catTipoPapel} catCalibre={catCalibre} catTipoPapelItems={catTipoPapelItems} catCalibreItems={catCalibreItems} onAdd={onAdd} />
+                  <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 4 }}>
+                    <button onClick={() => { setEditingId(null); setEditDraft(null); }} style={{ fontSize: 11, color: "#6B7280", background: "none", border: "none", cursor: "pointer", padding: "2px 6px" }}>Cancelar</button>
+                  </div>
                 </div>
-              </div>
-            ) : (
-              <MaterialCard key={m.id} entry={m} index={i} onEdit={() => startEdit(m)} onRemove={() => removeMat(m.id)} />
-            ))}
-          </div>
-        )}
-        {editingId === null && (
-          <DraftForm entry={grupo.draft} onChange={(d) => onUpdate({ ...grupo, draft: d })} onConfirm={confirmar} catTipoPapel={catTipoPapel} catCalibre={catCalibre} catTipoPapelItems={catTipoPapelItems} catCalibreItems={catCalibreItems} onAdd={onAdd} />
-        )}
-      </div>
+              ) : (
+                <MaterialCard key={m.id} entry={m} index={i} onEdit={() => startEdit(m)} onRemove={() => removeMat(m.id)} />
+              ))}
+            </div>
+          )}
+          {editingId === null && (
+            <DraftForm entry={grupo.draft} onChange={(d) => onUpdate({ ...grupo, draft: d })} onConfirm={confirmar} catTipoPapel={catTipoPapel} catCalibre={catCalibre} catTipoPapelItems={catTipoPapelItems} catCalibreItems={catCalibreItems} onAdd={onAdd} />
+          )}
+        </div>
       )}
     </div>
   );

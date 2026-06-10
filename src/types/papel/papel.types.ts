@@ -6,6 +6,8 @@ export interface CatItem {
   nombre: string;
   medida?: string;
   numero_maquina?: string;
+  altura?: string;
+  puntos?: number;
 }
 
 export type CatKey =
@@ -31,7 +33,10 @@ export type CatKey =
   | "armado"
   | "asas_maquina"
   | "desbarbe"
-  | "matrix";
+  | "matrix"
+  | "cortes"
+  | "dobles"
+  | "puntos";
 
 export type Catalogs = Record<CatKey, CatItem[]>;
 
@@ -73,13 +78,17 @@ export interface Suaje {
   numero: string;
   pzs: string;
   tamano: string;
-  corte1Tipo: string;
-  corte1Medida: string;
-  dobles1Tipo: string;
-  dobles1Medida: string;
+  // corte
+  corte1Tipo: string;    // nombre del corte seleccionado
+  corte1Medida: string;  // altura autorrellena
+  idcat_corte: number | null;
+  // dobles
+  dobles1Tipo: string;   // nombre del doble seleccionado
+  dobles1Medida: string; // altura autorrellena
+  idcat_doble: number | null;
   metros: string;
+  matrix: string;
   idcat_matrix: number | null;
-  matrixNombre: string;
   tiempoArreglo: string;
   idcat_sacabocados: number | null;
   sacabocadoNombre: string;
@@ -109,7 +118,7 @@ export interface Acabados {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// MAQUINARIA — multiselect, cada campo es array de ids + array de nombres
+// MAQUINARIA
 // ═══════════════════════════════════════════════════════════════════════════
 export interface Maquinaria {
   hojeado_guillotina:         number[];
@@ -132,7 +141,7 @@ export interface Maquinaria {
   asas_maquina_nombres:       string[];
   desbarbe:                   number[];
   desbarbe_nombres:           string[];
-  [key: string]: number[] | string[]; // index signature para acceso dinámico
+  [key: string]: number[] | string[];
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -196,9 +205,11 @@ export const newGrupo = (): GrupoPapel => ({
 
 export const newSuaje = (): Suaje => ({
   numero: "", pzs: "", tamano: "",
-  corte1Tipo: "", corte1Medida: "",
-  dobles1Tipo: "", dobles1Medida: "",
-  metros: "", idcat_matrix: null, matrixNombre: "", tiempoArreglo: "",
+  corte1Tipo: "", corte1Medida: "", idcat_corte: null,
+  dobles1Tipo: "", dobles1Medida: "", idcat_doble: null,
+  metros: "",
+  matrix: "", idcat_matrix: null,
+  tiempoArreglo: "",
   idcat_sacabocados: null, sacabocadoNombre: "", cantidad_sacabocado: "",
   idcat_perforado: null, perforadoNombre: "", cantidad_perforado: "",
 });

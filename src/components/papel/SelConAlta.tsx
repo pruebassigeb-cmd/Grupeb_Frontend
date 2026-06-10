@@ -15,6 +15,10 @@ const MAQUINARIA_KEYS: CatKey[] = [
   "uv", "textura", "empalme", "armado", "asas_maquina", "desbarbe",
 ];
 
+// ─── Helper: ordenar numéricamente (10pts, 120gms, 5x5 cm, etc.) ─────────
+const sortByNum = (arr: string[]) =>
+  [...arr].sort((a, b) => (parseFloat(a) || 0) - (parseFloat(b) || 0));
+
 // ─── Input con sufijo fijo ────────────────────────────────────────────────
 function SufijoInput({ value, onChange, sufijo, placeholder, permitirDecimal = false, permitirX = false, inputRef }: {
   value: string; onChange: (v: string) => void; sufijo: string;
@@ -201,12 +205,14 @@ export default function SelConAlta({ catKey, options, value, onChange, onAdd, pl
     );
   }
 
-  // ── Modo select con agrupación pts/gms ───────────────────────────────
+  // ── Modo select con agrupación pts/gms ordenada numéricamente ────────
   const esCalibreKey = catKey === "calibre" || catKey === "refuerzo_material";
-  const optsPts   = esCalibreKey ? options.filter(o => o.toLowerCase().endsWith("pts")) : [];
-  const optsGms   = esCalibreKey ? options.filter(o => o.toLowerCase().endsWith("gms")) : [];
+
+  // sortByNum: ordena de menor a mayor usando el valor numérico del inicio del string
+  const optsPts   = esCalibreKey ? sortByNum(options.filter(o => o.toLowerCase().endsWith("pts"))) : [];
+  const optsGms   = esCalibreKey ? sortByNum(options.filter(o => o.toLowerCase().endsWith("gms"))) : [];
   const optsOtros = esCalibreKey
-    ? options.filter(o => !o.toLowerCase().endsWith("pts") && !o.toLowerCase().endsWith("gms"))
+    ? sortByNum(options.filter(o => !o.toLowerCase().endsWith("pts") && !o.toLowerCase().endsWith("gms")))
     : options;
 
   return (
@@ -219,12 +225,12 @@ export default function SelConAlta({ catKey, options, value, onChange, onAdd, pl
       style={{
         width: "100%", height: 34, padding: "0 8px",
         border: "1px solid #D1D5DB", borderRadius: 5,
-        fontSize: 13, color: "#111827",
+        fontSize: 13, color: value ? "#111827" : "#9CA3AF",
         background: "#fff", outline: "none",
         boxSizing: "border-box", cursor: "pointer",
       }}
     >
-      <option value="" disabled hidden></option>
+      <option value="" disabled hidden>{placeholder ?? ""}</option>
 
       {esCalibreKey ? (
         <>
