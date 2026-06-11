@@ -37,15 +37,17 @@ const CATEGORIA_A_SUBCARPETA: Record<string, string> = {
   "rendimiento-suaje-papel": "rendimiento",
 };
 
-const SEC_COLORS: Record<string, { border: string; headerBg: string; headerText: string; leftBar: string }> = {
-  tipo: { border: "#CBD5E1", headerBg: "#F1F5F9", headerText: "#334155", leftBar: "#64748B" },
-  papel: { border: "#CBD5E1", headerBg: "#F1F5F9", headerText: "#334155", leftBar: "#64748B" },
-  suaje: { border: "#CBD5E1", headerBg: "#F1F5F9", headerText: "#334155", leftBar: "#64748B" },
-  acabados: { border: "#CBD5E1", headerBg: "#F1F5F9", headerText: "#334155", leftBar: "#64748B" },
-  maquinaria: { border: "#E2E8F0", headerBg: "#F8FAFC", headerText: "#475569", leftBar: "#94A3B8" },
-  archivos: { border: "#E5E7EB", headerBg: "#F9FAFB", headerText: "#6B7280", leftBar: "#9CA3AF" },
-};
+const SEC_COLORS = {
+  // OSCURO
+  tipo:      { border: "#94A3B8", headerBg: "#CBD5E1", headerText: "#0F172A", leftBar: "#334155" },
+  suaje:     { border: "#94A3B8", headerBg: "#CBD5E1", headerText: "#0F172A", leftBar: "#334155" },
+  acabados:  { border: "#94A3B8", headerBg: "#CBD5E1", headerText: "#0F172A", leftBar: "#334155" },
+  maquinaria:{ border: "#94A3B8", headerBg: "#CBD5E1", headerText: "#0F172A", leftBar: "#334155" },
+  archivos:  { border: "#94A3B8", headerBg: "#CBD5E1", headerText: "#0F172A", leftBar: "#334155" },
 
+  // CLARO
+  papel:     { border: "#E2E8F0", headerBg: "#F8FAFC", headerText: "#475569", leftBar: "#94A3B8" },
+};
 // ═══════════════════════════════════════════════════════════════════════════
 // PRIMITIVOS UI
 // ═══════════════════════════════════════════════════════════════════════════
@@ -676,7 +678,7 @@ useEffect(() => {
           </FG>
         </Sec>
 
-        <Sec title="Tipo de papel" colorKey="papel" action={
+        <Sec title="Tipo de papel" colorKey="tipo" action={
           <button onClick={addGrupo} disabled={form.grupos[form.grupos.length - 1]?.materiales.length === 0}
             title={form.grupos[form.grupos.length - 1]?.materiales.length === 0 ? "Agrega al menos un material al grupo actual" : ""}
             style={{ padding: "0 12px", height: 28, background: form.grupos[form.grupos.length - 1]?.materiales.length === 0 ? "#E5E7EB" : "#1D4ED8", border: "none", borderRadius: 5, cursor: form.grupos[form.grupos.length - 1]?.materiales.length === 0 ? "not-allowed" : "pointer", color: form.grupos[form.grupos.length - 1]?.materiales.length === 0 ? "#9CA3AF" : "#fff", fontSize: 13, fontWeight: 600 }}>+ Grupo</button>
@@ -699,7 +701,7 @@ useEffect(() => {
           <Field label="Numero">  <Inp value={form.suaje.numero} onChange={v => updSuaje({ numero: v })} /></Field>
           <Field label="PZS">     <Inp value={form.suaje.pzs} onChange={v => updSuaje({ pzs: v })} /></Field>
           <Field label="Tamaño">  <Inp value={form.suaje.tamano} onChange={v => updSuaje({ tamano: v })} /></Field>
-          <Field label="Metros">  <Inp value={form.suaje.metros} onChange={v => updSuaje({ metros: v })} /></Field>
+          <Field label="mm (Corte y doblez)">  <Inp value={form.suaje.metros} onChange={v => updSuaje({ metros: v })} /></Field>
           <Field label="Matrix">
             <SelConAlta
               catKey="matrix"
@@ -896,7 +898,7 @@ useEffect(() => {
             ["textura", "Textura"],
             ["empalme", "Empalme"],
             ["armado", "Armado"],
-            ["asas_maquina", "Asas"],
+            ["asas_maquina", "Fabricacion de asas"],
             ["desbarbe", "Desbarbe"],
           ] as [string, string][]).map(([key, label]) => (
             <Field key={key} label={label}>
@@ -1201,7 +1203,7 @@ function TablaCatalogo({ productos, loading, onNuevo, onEditar, onEliminar }: {
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
         <div>
           <p style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: "#9CA3AF", margin: "0 0 2px", fontWeight: 600 }}>Alta de productos</p>
-          <h1 style={{ fontSize: 20, fontWeight: 700, margin: 0, color: "#111827" }}>Catalogo de papel</h1>
+          <h1 style={{ fontSize: 20, fontWeight: 700, margin: 0, color: "#111827" }}>Productos de papel</h1>
         </div>
         <button onClick={onNuevo} style={{ height: 38, padding: "0 18px", border: "none", borderRadius: 7, background: "#1D4ED8", color: "#fff", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>+ Registrar nuevo producto</button>
       </div>

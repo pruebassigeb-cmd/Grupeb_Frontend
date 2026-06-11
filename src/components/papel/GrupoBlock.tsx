@@ -37,7 +37,6 @@ function CalibreInput({ value, onChange, options, onAdd }: {
   const ref    = useRef<HTMLDivElement>(null);
   const addRef = useRef<HTMLInputElement>(null);
 
-  // Separar y ordenar numéricamente
   const calPts   = sortByNum(options.filter(c => c.toLowerCase().endsWith("pts")));
   const calGms   = sortByNum(options.filter(c => c.toLowerCase().endsWith("gms")));
   const calOtros = sortByNum(options.filter(c => !c.toLowerCase().endsWith("pts") && !c.toLowerCase().endsWith("gms")));
@@ -138,7 +137,7 @@ function MaterialCard({ entry, index, onEdit, onRemove }: { entry: MaterialEntry
   const hFields = [["Bob.", entry.hojeado.bobina], ["Desarrollo", entry.hojeado.corte], ["Rend.", entry.hojeado.rendimiento], ["Guill.", entry.hojeado.guillotina], ["Hilo", entry.hojeado.hilo]].filter(([, v]) => v);
   return (
     <div style={{ background: "#EFF6FF", border: "1px solid #BFDBFE", borderRadius: 6, padding: "7px 10px", display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 6 }}>
-      <div style={{ width: 20, height: 20, borderRadius: "50%", background: "#1D4ED8", color: "#fff", fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 1 }}>{index + 1}</div>
+      <div style={{ width: 20, height: 20, borderRadius: "50%", background: "#1E3A5F", color: "#fff", fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 1 }}>{index + 1}</div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: "flex", flexWrap: "wrap", gap: "2px 14px" }}>{chip("Tipo", entry.tipo)}{chip("Cal.", entry.calibre)}{chip("Pliego", entry.pliego)}{chip("Rend.", entry.rendimiento)}{chip("Corte", entry.corte)}</div>
         {hFields.length > 0 && (
@@ -178,7 +177,12 @@ function DraftForm({ entry, onChange, onConfirm, isEditing, catTipoPapel, catCal
   };
 
   return (
-    <div style={{ background: isEditing ? "#FFFBEB" : "#F9FAFB", border: `1px ${isEditing ? "solid #FCD34D" : "dashed #D1D5DB"}`, borderRadius: 6, padding: "10px 12px" }}>
+    <div style={{
+      background: isEditing ? "#FFFBEB" : "#F1F5F9",
+      border: `1px ${isEditing ? "solid #FCD34D" : "dashed #94A3B8"}`,
+      borderRadius: 6,
+      padding: "10px 12px",
+    }}>
       {isEditing && <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#D97706", margin: "0 0 8px" }}>Editando material</p>}
       <div style={{ display: "grid", gridTemplateColumns: "1.3fr 0.8fr 1fr 0.7fr 1fr auto", gap: "6px 8px", alignItems: "end", marginBottom: 8 }}>
         <Field label="Tipo de papel">
@@ -208,7 +212,7 @@ function DraftForm({ entry, onChange, onConfirm, isEditing, catTipoPapel, catCal
           </button>
         </div>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "auto repeat(5, 1fr)", gap: "4px 8px", alignItems: "center", borderTop: "1px dashed #E5E7EB", paddingTop: 8 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "auto repeat(5, 1fr)", gap: "4px 8px", alignItems: "center", borderTop: "1px dashed #CBD5E1", paddingTop: 8 }}>
         <span style={{ fontSize: 9, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.06em", whiteSpace: "nowrap" }}>Hojeado</span>
         {([
           ["bobina",      "Bob."  ],
@@ -261,45 +265,61 @@ export default function GrupoBlock({ grupo, grupoIndex, totalGrupos, onUpdate, o
     if (editingId === id) { setEditingId(null); setEditDraft(null); }
   };
 
-  const color = "#94A3B8";
-  const light = "#F8FAFC";
+  // ── Colores del grupo — oscuro para el header, claro para el body
+  const color      = "#334155";   // slate-700 — borde izquierdo y acento
+  const borderCol  = "#475569";   // slate-600 — borde general
+  const headerBg   = "#CBD5E1";   // slate-300 — header oscuro
+  const headerText = "#0F172A";   // slate-900 — texto header
+  const bodyBg     = "#F8FAFC";   // slate-50  — body claro
 
   return (
-    <div style={{ border: `1.5px solid ${color}30`, borderLeft: `3px solid ${color}`, borderRadius: 8, marginBottom: 10, overflow: "visible", position: "relative" }}>
+    <div style={{ border: `1.5px solid ${borderCol}40`, borderLeft: `3px solid ${color}`, borderRadius: 8, marginBottom: 10, overflow: "visible", position: "relative" }}>
       {/* Header del grupo */}
       <div onClick={onToggle}
-        style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "7px 12px", background: light, borderBottom: collapsed ? "none" : `1px solid ${color}20`, borderRadius: collapsed ? 6 : undefined, cursor: "pointer", userSelect: "none" }}>
+        style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          padding: "7px 12px",
+          background: headerBg,
+          borderBottom: collapsed ? "none" : `1px solid ${borderCol}30`,
+          borderRadius: collapsed ? 6 : undefined,
+          cursor: "pointer", userSelect: "none",
+        }}>
         <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
-          <div style={{ width: 20, height: 20, borderRadius: "50%", background: color, color: "#fff", fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>{grupoIndex + 1}</div>
-          <span style={{ fontSize: 11, fontWeight: 600, color }}>Grupo {grupoIndex + 1}</span>
-          <span style={{ fontSize: 10, color: "#9CA3AF" }}>— {grupo.materiales.length} mat.</span>
+          <div style={{
+            width: 20, height: 20, borderRadius: "50%",
+            background: color, color: "#fff",
+            fontSize: 10, fontWeight: 700,
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}>{grupoIndex + 1}</div>
+          <span style={{ fontSize: 11, fontWeight: 700, color: headerText }}>Grupo {grupoIndex + 1}</span>
+          <span style={{ fontSize: 10, color: "#475569" }}>— {grupo.materiales.length} mat.</span>
           {collapsed && grupo.materiales.length > 0 && (
-            <span style={{ fontSize: 10, color: "#6B7280", marginLeft: 4 }}>
+            <span style={{ fontSize: 10, color: "#334155", marginLeft: 4 }}>
               {grupo.materiales.map(m => [m.tipo, m.calibre].filter(Boolean).join(" ")).join(" · ")}
             </span>
           )}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }} onClick={e => e.stopPropagation()}>
           <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-            <span style={{ fontSize: 10, color: "#6B7280", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em" }}>Costo</span>
+            <span style={{ fontSize: 10, color: "#334155", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em" }}>Costo</span>
             <div style={{ position: "relative" }}>
-              <span style={{ position: "absolute", left: 6, top: "50%", transform: "translateY(-50%)", fontSize: 11, color: "#6B7280", pointerEvents: "none" }}>$</span>
+              <span style={{ position: "absolute", left: 6, top: "50%", transform: "translateY(-50%)", fontSize: 11, color: "#475569", pointerEvents: "none" }}>$</span>
               <input type="text" inputMode="decimal" value={grupo.precioSugerido}
                 onChange={(e) => onUpdate({ ...grupo, precioSugerido: e.target.value })}
-                style={{ width: 90, height: 28, paddingLeft: 16, paddingRight: 6, border: "1px solid #D1D5DB", borderRadius: 5, fontSize: 12, color: "#111827", background: "#fff", outline: "none", boxSizing: "border-box" }} />
+                style={{ width: 90, height: 28, paddingLeft: 16, paddingRight: 6, border: "1px solid #94A3B8", borderRadius: 5, fontSize: 12, color: "#111827", background: "#fff", outline: "none", boxSizing: "border-box" }} />
             </div>
-            <span style={{ fontSize: 10, color: "#9CA3AF" }}>MXN</span>
+            <span style={{ fontSize: 10, color: "#475569" }}>MXN</span>
           </div>
           {totalGrupos > 1 && (
             <button onClick={onRemove} style={{ padding: "1px 8px", height: 24, background: "#FEE2E2", border: "none", borderRadius: 4, cursor: "pointer", color: "#DC2626", fontSize: 11, fontWeight: 600 }}>Eliminar</button>
           )}
-          <span style={{ fontSize: 10, color: "#9CA3AF", marginLeft: 2 }}>{collapsed ? "▸" : "▾"}</span>
+          <span style={{ fontSize: 10, color: "#334155", marginLeft: 2 }}>{collapsed ? "▸" : "▾"}</span>
         </div>
       </div>
 
-      {/* Materiales */}
+      {/* Body del grupo — claro para contrastar con el header */}
       {!collapsed && (
-        <div style={{ padding: "10px 12px" }}>
+        <div style={{ padding: "10px 12px", background: bodyBg, borderBottomLeftRadius: 7, borderBottomRightRadius: 7 }}>
           {grupo.materiales.length > 0 && (
             <div style={{ marginBottom: 8 }}>
               {grupo.materiales.map((m, i) => editingId === m.id ? (
