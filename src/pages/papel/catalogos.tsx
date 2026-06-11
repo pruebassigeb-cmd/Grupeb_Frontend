@@ -22,40 +22,40 @@ const TAB_GROUPS: TabGroup[] = [
     groupLabel: "Producto",
     tabs: [
       { key: "tipo_producto", label: "Tipo de producto", hasMedida: false, icon: "📦" },
-      { key: "tipo_papel",    label: "Tipo de papel",    hasMedida: false, icon: "📄" },
-      { key: "calibre",       label: "Calibre",          hasMedida: false, icon: "📐" },
-      { key: "tipo_pegado",   label: "Tipo de pegado",   hasMedida: false, icon: "🔧" },
-      { key: "pegamento",     label: "Pegamento",        hasMedida: false, icon: "🧴" },
-      { key: "tipo_asa",      label: "Tipo de asa",      hasMedida: false, icon: "🪢" },
-      { key: "laminado",      label: "Laminado",         hasMedida: false, icon: "✨" },
-      { key: "refuerzoBase",  label: "Refuerzo y base",  hasMedida: false, icon: "🔩", combined: true },
-      { key: "empaque",       label: "Empaque",          hasMedida: false, icon: "📫" },
-      { key: "foil",          label: "Foil",             hasMedida: false, icon: "🌟" },
+      { key: "tipo_papel", label: "Tipo de papel", hasMedida: false, icon: "📄" },
+      { key: "calibre", label: "Calibre", hasMedida: false, icon: "📐" },
+      { key: "tipo_pegado", label: "Tipo de pegado", hasMedida: false, icon: "🔧" },
+      { key: "pegamento", label: "Pegamento", hasMedida: false, icon: "🧴" },
+      { key: "tipo_asa", label: "Tipo de asa", hasMedida: false, icon: "🪢" },
+      { key: "laminado", label: "Laminado", hasMedida: false, icon: "✨" },
+      { key: "refuerzoBase", label: "Refuerzo y base", hasMedida: false, icon: "🔩", combined: true },
+      { key: "empaque", label: "Empaque", hasMedida: false, icon: "📫" },
+      { key: "foil", label: "Foil", hasMedida: false, icon: "🌟" },
     ],
   },
   {
     groupLabel: "Especiales",
     tabs: [
-      { key: "sacabocados", label: "Sacabocados", hasMedida: true,  icon: "⭕" },
-      { key: "perforado",   label: "Perforado",   hasMedida: true,  icon: "🔵" },
-      { key: "matrix",      label: "Matrix",      hasMedida: false, icon: "🔲" },
-      { key: "cortes",      label: "Cortes",      hasMedida: false, icon: "✂️",  esCorte: true },
-      { key: "dobles",      label: "Dobles",      hasMedida: false, icon: "〰️", esDoble: true },
+      { key: "sacabocados", label: "Sacabocados", hasMedida: true, icon: "⭕" },
+      { key: "perforado", label: "Perforado", hasMedida: true, icon: "🔵" },
+      { key: "matrix", label: "Matrix", hasMedida: false, icon: "🔲" },
+      { key: "cortes", label: "Cortes", hasMedida: false, icon: "✂️", esCorte: true },
+      { key: "dobles", label: "Dobles", hasMedida: false, icon: "〰️", esDoble: true },
     ],
   },
   {
     groupLabel: "Maquinaria",
     tabs: [
-      { key: "hojeado_guillotina", label: "Hojeado / Guillotina", hasMedida: false, tieneNumMaquina: true, icon: "✂️"  },
-      { key: "impresora",          label: "Impresora",            hasMedida: false, tieneNumMaquina: true, icon: "🖨️" },
-      { key: "hs_ar",              label: "Hs y AR",              hasMedida: false, tieneNumMaquina: true, icon: "⚙️"  },
-      { key: "suaje_maquina",      label: "Suaje (máquina)",      hasMedida: false, tieneNumMaquina: true, icon: "🗜️" },
-      { key: "uv",                 label: "UV",                   hasMedida: false, tieneNumMaquina: true, icon: "🔆"  },
-      { key: "textura",            label: "Textura",              hasMedida: false, tieneNumMaquina: true, icon: "🟫"  },
-      { key: "empalme",            label: "Empalme",              hasMedida: false, tieneNumMaquina: true, icon: "🔗"  },
-      { key: "armado",             label: "Armado",               hasMedida: false, tieneNumMaquina: true, icon: "🏗️" },
-      { key: "asas_maquina",       label: "Asas (máquina)",       hasMedida: false, tieneNumMaquina: true, icon: "🔄"  },
-      { key: "desbarbe",           label: "Desbarbe",             hasMedida: false, tieneNumMaquina: true, icon: "🪚"  },
+      { key: "hojeado_guillotina", label: "Hojeado / Guillotina", hasMedida: false, tieneNumMaquina: true, icon: "✂️" },
+      { key: "impresora", label: "Impresora", hasMedida: false, tieneNumMaquina: true, icon: "🖨️" },
+      { key: "hs_ar", label: "Hs y AR", hasMedida: false, tieneNumMaquina: true, icon: "⚙️" },
+      { key: "suaje_maquina", label: "Suaje (máquina)", hasMedida: false, tieneNumMaquina: true, icon: "🗜️" },
+      { key: "uv", label: "UV", hasMedida: false, tieneNumMaquina: true, icon: "🔆" },
+      { key: "textura", label: "Textura", hasMedida: false, tieneNumMaquina: true, icon: "🟫" },
+      { key: "empalme", label: "Empalme", hasMedida: false, tieneNumMaquina: true, icon: "🔗" },
+      { key: "armado", label: "Armado", hasMedida: false, tieneNumMaquina: true, icon: "🏗️" },
+      { key: "asas_maquina", label: "Asas (máquina)", hasMedida: false, tieneNumMaquina: true, icon: "🔄" },
+      { key: "desbarbe", label: "Desbarbe", hasMedida: false, tieneNumMaquina: true, icon: "🪚" },
     ],
   },
 ];
@@ -84,10 +84,10 @@ function Btn({ children, onClick, variant = "primary", small }: {
   variant?: "primary" | "secondary" | "danger" | "ghost"; small?: boolean;
 }) {
   const styles: Record<string, React.CSSProperties> = {
-    primary:   { background: "#1D4ED8", color: "#fff",    border: "none" },
+    primary: { background: "#1D4ED8", color: "#fff", border: "none" },
     secondary: { background: "#F3F4F6", color: "#374151", border: "1px solid #D1D5DB" },
-    danger:    { background: "#FEE2E2", color: "#DC2626", border: "none" },
-    ghost:     { background: "none",   color: "#6B7280",  border: "1px solid #E5E7EB" },
+    danger: { background: "#FEE2E2", color: "#DC2626", border: "none" },
+    ghost: { background: "none", color: "#6B7280", border: "1px solid #E5E7EB" },
   };
   return (
     <button onClick={onClick} style={{ height: small ? 30 : 38, padding: small ? "0 12px" : "0 18px", borderRadius: 7, cursor: "pointer", fontSize: small ? 12 : 13, fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 6, whiteSpace: "nowrap", ...styles[variant] }}>
@@ -223,14 +223,14 @@ function CorteDoblePanel({ tab, items, onAdd, onEdit, onDelete, onReactivar, ver
   };
 
   const handleEdit = async () => {
-  if (editId === null || !onEdit || !editNombre.trim()) return;
-  setSaving(true);
-  try {
-    await onEdit(editId, editNombre.trim(), editAltura || undefined);
-    setEditId(null);
-  }
-  finally { setSaving(false); }
-};
+    if (editId === null || !onEdit || !editNombre.trim()) return;
+    setSaving(true);
+    try {
+      await onEdit(editId, editNombre.trim(), editAltura || undefined);
+      setEditId(null);
+    }
+    finally { setSaving(false); }
+  };
 
   const handleDelete = async () => {
     if (deleteId === null || !onDelete) return;
@@ -239,10 +239,10 @@ function CorteDoblePanel({ tab, items, onAdd, onEdit, onDelete, onReactivar, ver
   };
 
   const startEdit = (item: any) => {
-  setEditId(item.id);
-  setEditNombre(item.nombre);
-  setEditAltura(item.altura ?? "");
-};
+    setEditId(item.id);
+    setEditNombre(item.nombre);
+    setEditAltura(item.altura ?? "");
+  };
 
   return (
     <div>
@@ -362,8 +362,8 @@ function CatPanel({ tab, items, onAdd, onEdit, onDelete, onReactivar, verInactiv
       (it.numero_maquina ?? "").toLowerCase().includes(search.toLowerCase())
     );
     if (tab.key !== "calibre") return base;
-    const pts   = base.filter(it => it.nombre.toLowerCase().endsWith("pts")).sort((a, b) => parseInt(a.nombre) - parseInt(b.nombre));
-    const gms   = base.filter(it => it.nombre.toLowerCase().endsWith("gms")).sort((a, b) => parseInt(a.nombre) - parseInt(b.nombre));
+    const pts = base.filter(it => it.nombre.toLowerCase().endsWith("pts")).sort((a, b) => parseInt(a.nombre) - parseInt(b.nombre));
+    const gms = base.filter(it => it.nombre.toLowerCase().endsWith("gms")).sort((a, b) => parseInt(a.nombre) - parseInt(b.nombre));
     const otros = base.filter(it => !it.nombre.toLowerCase().endsWith("pts") && !it.nombre.toLowerCase().endsWith("gms"));
     return [...pts, ...gms, ...otros];
   })();
@@ -496,10 +496,10 @@ function RefuerzoBasePanel({ catalogs, addItem, editItem, deleteItem, reactivarI
   catalogs: any; addItem: any; editItem: any; deleteItem: any; reactivarItem: any; verInactivos?: boolean; loadingInactivos?: boolean;
 }) {
   const [activeSection, setActiveSection] = useState<"medidas" | "material">("medidas");
-  const medidasTab:  TabConfig & { key: CatKey } = { key: "refuerzo_medidas",  label: "Medidas",  hasMedida: false, icon: "📏" };
+  const medidasTab: TabConfig & { key: CatKey } = { key: "refuerzo_medidas", label: "Medidas", hasMedida: false, icon: "📏" };
   const materialTab: TabConfig & { key: CatKey } = { key: "refuerzo_material", label: "Material", hasMedida: false, icon: "🧱" };
   const sections = [
-    { key: "medidas"  as const, label: "Medidas",  icon: "📏", count: catalogs.refuerzo_medidas.length  },
+    { key: "medidas" as const, label: "Medidas", icon: "📏", count: catalogs.refuerzo_medidas.length },
     { key: "material" as const, label: "Material", icon: "🧱", count: catalogs.refuerzo_material.length },
   ];
   const activeKey: CatKey = activeSection === "medidas" ? "refuerzo_medidas" : "refuerzo_material";
@@ -507,13 +507,15 @@ function RefuerzoBasePanel({ catalogs, addItem, editItem, deleteItem, reactivarI
   return (
     <div>
       <div style={{ display: "flex", marginBottom: 20, border: "1px solid #E5E7EB", borderRadius: 8, overflow: "hidden" }}>
-        {sections.map(s => { const active = activeSection === s.key; return (
-          <button key={s.key} onClick={() => setActiveSection(s.key)}
-            style={{ flex: 1, height: 42, border: "none", cursor: "pointer", background: active ? "#1D4ED8" : "#F9FAFB", color: active ? "#fff" : "#6B7280", fontSize: 13, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", gap: 7, borderRight: s.key === "medidas" ? "1px solid #E5E7EB" : "none" }}>
-            <span style={{ fontSize: 15 }}>{s.icon}</span>{s.label}
-            <span style={{ fontSize: 11, fontWeight: 700, background: active ? "rgba(255,255,255,0.25)" : "#E5E7EB", color: active ? "#fff" : "#6B7280", borderRadius: 10, padding: "1px 7px" }}>{s.count}</span>
-          </button>
-        ); })}
+        {sections.map(s => {
+          const active = activeSection === s.key; return (
+            <button key={s.key} onClick={() => setActiveSection(s.key)}
+              style={{ flex: 1, height: 42, border: "none", cursor: "pointer", background: active ? "#1D4ED8" : "#F9FAFB", color: active ? "#fff" : "#6B7280", fontSize: 13, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", gap: 7, borderRight: s.key === "medidas" ? "1px solid #E5E7EB" : "none" }}>
+              <span style={{ fontSize: 15 }}>{s.icon}</span>{s.label}
+              <span style={{ fontSize: 11, fontWeight: 700, background: active ? "rgba(255,255,255,0.25)" : "#E5E7EB", color: active ? "#fff" : "#6B7280", borderRadius: 10, padding: "1px 7px" }}>{s.count}</span>
+            </button>
+          );
+        })}
       </div>
       <CatPanel key={activeSection + (verInactivos ? "-inactivos" : "")} tab={activeTab} items={catalogs[activeKey] ?? []}
         onAdd={verInactivos ? undefined : (nombre, medida) => addItem(activeKey, nombre, medida)}
@@ -540,8 +542,8 @@ export default function Catalogos() {
   };
 
   const refuerzoBaseCount = catalogs.refuerzo_medidas.length + catalogs.refuerzo_material.length;
-  const activeTabConfig   = ALL_TABS.find(t => t.key === activeTab);
-  const isCorteDoble      = activeTab === "cortes" || activeTab === "dobles";
+  const activeTabConfig = ALL_TABS.find(t => t.key === activeTab);
+  const isCorteDoble = activeTab === "cortes" || activeTab === "dobles";
 
   if (loading) return <Dashboard><div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "60vh", fontSize: 14, color: "#9CA3AF" }}>Cargando catálogos…</div></Dashboard>;
 
@@ -563,7 +565,7 @@ export default function Catalogos() {
                 </div>
                 {group.tabs.map(tab => {
                   const active = tab.key === activeTab;
-                  const count  = tab.combined ? refuerzoBaseCount : tab.key === "foil" ? 0 : (catalogs as any)[tab.key]?.length ?? 0;
+                  const count = tab.combined ? refuerzoBaseCount : tab.key === "foil" ? 0 : (catalogs as any)[tab.key]?.length ?? 0;
                   return (
                     <button key={tab.key} onClick={() => setActiveTab(tab.key as any)}
                       style={{ width: "100%", padding: "10px 14px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, border: "none", borderLeft: active ? "3px solid #1D4ED8" : "3px solid transparent", background: active ? "#EFF6FF" : "#fff", cursor: "pointer", borderBottom: "1px solid #F3F4F6", textAlign: "left" }}>
@@ -610,8 +612,8 @@ export default function Catalogos() {
               <CorteDoblePanel
                 tab={activeTabConfig as TabConfig & { key: CatKey }}
                 items={verInactivos ? (catalogsInactivos as any)[activeTab] ?? [] : (catalogs as any)[activeTab] ?? []}
-                onAdd={verInactivos ? undefined : (nombre, altura) => addItem(activeTab as CatKey, nombre, altura)}
-                onEdit={verInactivos ? undefined : (id, nombre, altura) => editItem(activeTab as CatKey, id, nombre, altura)}
+                onAdd={verInactivos ? undefined : (nombre, altura) => addItem(activeTab as CatKey, nombre, undefined, undefined, altura)}
+                onEdit={verInactivos ? undefined : (id, nombre, altura) => editItem(activeTab as CatKey, id, nombre, undefined, undefined, altura)}
                 onDelete={verInactivos ? undefined : (id) => deleteItem(activeTab as CatKey, id)}
                 onReactivar={verInactivos ? (id) => reactivarItem(activeTab as CatKey, id) : undefined}
                 verInactivos={verInactivos} loadingInactivos={loadingInactivos}

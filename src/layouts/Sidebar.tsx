@@ -1,4 +1,4 @@
-import { useState, useEffect, type ReactNode } from "react";
+import { useState, useEffect, useRef, type ReactNode } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import logo from "../assets/grupeblanco.png";
@@ -9,6 +9,7 @@ interface DashboardProps {
 
 interface MenuItem {
   name: string;
+  icon: string;
   path?: string;
   permiso?: string;
   permisoOr?: string[];
@@ -16,10 +17,18 @@ interface MenuItem {
   subItems: { name: string; path: string; permiso?: string }[];
 }
 
+interface FlyoutState {
+  name: string;
+  top: number;
+}
+
 export default function Dashboard({ children }: DashboardProps) {
-  const [open, setOpen] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
+  const [open, setOpen]             = useState(false);
+  const [isMobile, setIsMobile]     = useState(false);
+  const [collapsed, setCollapsed]   = useState(false);
   const [expandedMenus, setExpandedMenus] = useState<string[]>([]);
+  const [flyout, setFlyout]         = useState<FlyoutState | null>(null);
+  const flyoutRef                   = useRef<HTMLDivElement>(null);
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -41,21 +50,39 @@ export default function Dashboard({ children }: DashboardProps) {
     return () => window.removeEventListener("resize", checkMobile);
   }, []);
 
+  // Cerrar flyout al click fuera
+  useEffect(() => {
+    if (!flyout) return;
+    const handler = (e: MouseEvent) => {
+      if (flyoutRef.current && !flyoutRef.current.contains(e.target as Node)) {
+        setFlyout(null);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [flyout]);
+
+  // Cerrar flyout al navegar
+  useEffect(() => { setFlyout(null); }, [location.pathname]);
+
   const menuItems: MenuItem[] = [
     {
       name: "Usuarios",
+      icon: "👥",
       path: "/usuarios",
       permiso: "Crear/Editar/Eliminar Usuarios",
       subItems: [],
     },
     {
       name: "Clientes",
+      icon: "🏢",
       path: "/clientes",
       permiso: "Crear/Editar/Eliminar Clientes",
       subItems: [],
     },
     {
       name: "Dar alta productos",
+      icon: "📦",
       permiso: "Dar de alta productos",
       subItems: [
         { name: "Plástico", path: "/plastico", permiso: "Dar de alta productos" },
@@ -64,24 +91,28 @@ export default function Dashboard({ children }: DashboardProps) {
     },
     {
       name: "Cotización",
+      icon: "📋",
       path: "/cotizar",
       permiso: "Crear/Editar/Aprobar/Rechazar Cotizaciones",
       subItems: [],
     },
     {
       name: "Pedido",
+      icon: "🛒",
       path: "/pedido",
       permiso: "Crear/Editar/Eliminar Pedidos",
       subItems: [],
     },
     {
       name: "Diseño",
+      icon: "🎨",
       path: "/diseno",
       permisoOr: ["Editar Diseño", "Orden de Diseño"],
       subItems: [],
     },
     {
       name: "Seguimiento",
+      icon: "📊",
       path: "/seguimiento",
       permisoOr: [
         "Ver Seguimiento",
@@ -95,26 +126,29 @@ export default function Dashboard({ children }: DashboardProps) {
     },
     {
       name: "Envíos / Entregas",
+      icon: "🚚",
       path: "/envios",
       permiso: "Gestionar Envios",
       subItems: [],
     },
     {
       name: "Anticipo / Liquidación",
+      icon: "💰",
       path: "/anticipolicacion",
       permiso: "Editar Anticipo y Liquidación",
       subItems: [],
     },
     {
       name: "Precios productos",
+      icon: "🏷️",
       permiso: "Modificar Catalogo de precios",
       subItems: [
         { name: "Plástico", path: "/precioplastico", permiso: "Modificar Catalogo de precios" },
       ],
     },
-    
     {
       name: "Catálogos",
+      icon: "📚",
       permiso: "Dar de alta productos",
       subItems: [
         { name: "Gestión de catálogos", path: "/catalogos", permiso: "Dar de alta productos" },
@@ -122,18 +156,21 @@ export default function Dashboard({ children }: DashboardProps) {
     },
     {
       name: "Archivos",
+      icon: "🗂️",
       path: "/archivos",
       accesoTotal: true,
       subItems: [],
     },
     {
       name: "Backups BD",
+      icon: "💾",
       path: "/backups",
       accesoTotal: true,
       subItems: [],
     },
     {
       name: "Gestor proveedores",
+      icon: "🤝",
       path: "/proveedores",
       permiso: "Gestionar Proveedores",
       subItems: [],
@@ -171,8 +208,8 @@ export default function Dashboard({ children }: DashboardProps) {
     path && location.pathname.startsWith(path);
 
   const renderMenuItem = (item: MenuItem) => {
-    const hasSub = item.subItems.length > 0;
-    const expanded = expandedMenus.includes(item.name);
+    const hasSub       = item.subItems.length > 0;
+    const expanded     = expandedMenus.includes(item.name);
     const activeParent =
       (item.path && isActive(item.path)) ||
       item.subItems.some((s) => isActive(s.path));
@@ -182,6 +219,42 @@ export default function Dashboard({ children }: DashboardProps) {
       return tienePermiso(sub.permiso);
     });
 
+    // ── COLAPSADO ────────────────────────────────────────────────────────────
+    if (collapsed) {
+      const isFlyoutActive = flyout?.name === item.name;
+
+      return (
+        <div key={item.name}>
+          <button
+            title={!hasSub ? item.name : undefined}
+            onClick={(e) => {
+              if (hasSub) {
+                if (isFlyoutActive) {
+                  setFlyout(null);
+                } else {
+                  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                  setFlyout({ name: item.name, top: rect.top });
+                }
+              } else if (item.path) {
+                navigate(item.path);
+                setFlyout(null);
+              }
+            }}
+            className={`
+              w-full flex items-center justify-center py-2 rounded transition-colors
+              ${activeParent || isFlyoutActive
+                ? "bg-slate-700 text-white"
+                : "text-slate-300 hover:bg-slate-700 hover:text-white"
+              }
+            `}
+          >
+            <span className="text-lg leading-none">{item.icon}</span>
+          </button>
+        </div>
+      );
+    }
+
+    // ── EXPANDIDO: igual al diseño original ──────────────────────────────────
     return (
       <div key={item.name}>
         <button
@@ -251,24 +324,53 @@ export default function Dashboard({ children }: DashboardProps) {
 
   const UserFooter = () => (
     <div className="border-t border-slate-700 p-4 mt-auto space-y-2">
-      <div className="flex items-center gap-2 bg-slate-700 px-3 py-2 rounded text-white text-sm">
-        <UserAvatar size="md" />
-        <div className="min-w-0">
-          <p className="font-medium truncate">{user?.nombre} {user?.apellido}</p>
-          <p className="text-slate-400 text-xs truncate">{user?.rol}</p>
+      {!collapsed ? (
+        <>
+          <div className="flex items-center gap-2 bg-slate-700 px-3 py-2 rounded text-white text-sm">
+            <UserAvatar size="md" />
+            <div className="min-w-0">
+              <p className="font-medium truncate">{user?.nombre} {user?.apellido}</p>
+              <p className="text-slate-400 text-xs truncate">{user?.rol}</p>
+            </div>
+          </div>
+          <button
+            onClick={handleLogout}
+            className="w-full px-3 py-2 rounded bg-red-600/80 hover:bg-red-600 text-white text-sm font-medium transition"
+          >
+            Cerrar sesión
+          </button>
+        </>
+      ) : (
+        <div className="flex flex-col items-center gap-2">
+          <div title={`${user?.nombre} ${user?.apellido}`}>
+            <UserAvatar size="md" />
+          </div>
+          <button
+            onClick={handleLogout}
+            title="Cerrar sesión"
+            className="w-8 h-8 rounded bg-red-600/80 hover:bg-red-600 text-white text-sm transition flex items-center justify-center"
+          >
+            ⏻
+          </button>
         </div>
-      </div>
-      <button
-        onClick={handleLogout}
-        className="w-full px-3 py-2 rounded bg-red-600/80 hover:bg-red-600 text-white text-sm font-medium transition"
-      >
-        Cerrar sesión
-      </button>
+      )}
     </div>
   );
 
+  // Flyout activo — busca el item correspondiente
+  const flyoutItem = flyout
+    ? menuFiltrado.find((i) => i.name === flyout.name)
+    : null;
+  const flyoutSubs = flyoutItem
+    ? flyoutItem.subItems.filter((sub) => !sub.permiso || tienePermiso(sub.permiso))
+    : [];
+
+  const sidebarWidthPx = collapsed ? "56px" : "256px";
+
   return (
     <div className="min-h-screen flex">
+
+      {/* ── Overlay mobile ── */}
       {isMobile && (
         <div
           onClick={() => setOpen(false)}
@@ -277,6 +379,36 @@ export default function Dashboard({ children }: DashboardProps) {
         />
       )}
 
+      {/* ── Flyout portal — fixed, fuera del sidebar ── */}
+      {collapsed && flyout && flyoutItem && flyoutSubs.length > 0 && (
+        <div
+          ref={flyoutRef}
+          style={{ top: flyout.top, left: "64px" }}
+          className="fixed z-50 bg-slate-800 border border-slate-600 rounded-lg shadow-2xl py-1 min-w-max"
+        >
+          <p className="px-4 py-2 text-xs font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-700">
+            {flyoutItem.name}
+          </p>
+          {flyoutSubs.map((sub) => (
+            <button
+              key={sub.name}
+              onClick={() => {
+                navigate(sub.path);
+                setFlyout(null);
+              }}
+              className={`w-full text-left px-4 py-2 text-sm transition-colors
+                ${isActive(sub.path)
+                  ? "bg-slate-700 text-white"
+                  : "text-slate-300 hover:bg-slate-700 hover:text-white"
+                }`}
+            >
+              • {sub.name}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* ── Sidebar mobile ── */}
       {isMobile && (
         <aside
           className={`fixed inset-y-0 left-0 w-64 bg-slate-800 z-50
@@ -285,10 +417,14 @@ export default function Dashboard({ children }: DashboardProps) {
             flex flex-col`}
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="p-4 border-b border-slate-700 flex justify-between">
-            <img src={logo} alt="Grupeb" className="h-10 cursor-pointer"
-              onClick={() => { navigate("/home"); setOpen(false); }} />
-            <button onClick={() => setOpen(false)} className="text-white text-2xl">✕</button>
+          <div className="p-4 border-b border-slate-700 flex justify-between items-center">
+            <img
+              src={logo}
+              alt="GrupoEB"
+              className="h-10 cursor-pointer"
+              onClick={() => { navigate("/home"); setOpen(false); }}
+            />
+            <button onClick={() => setOpen(false)} className="text-white text-2xl leading-none">✕</button>
           </div>
           <nav className="flex-1 px-2 py-4 space-y-1 overflow-y-auto">
             {menuFiltrado.map(renderMenuItem)}
@@ -297,22 +433,58 @@ export default function Dashboard({ children }: DashboardProps) {
         </aside>
       )}
 
+      {/* ── Sidebar desktop ── */}
       {!isMobile && (
-        <aside className="fixed inset-y-0 left-0 w-64 bg-slate-800 z-30 flex flex-col h-screen">
-          <div className="p-4 border-b border-slate-700 cursor-pointer" onClick={() => navigate("/home")}>
-            <img src={logo} className="h-10 mx-auto" />
+        <aside
+          style={{ width: sidebarWidthPx, minWidth: sidebarWidthPx }}
+          className="sticky top-0 h-screen bg-slate-800 flex flex-col flex-shrink-0 transition-all duration-300 ease-in-out overflow-hidden"
+        >
+          {/* Header */}
+          <div
+            className={`border-b border-slate-700 flex items-center flex-shrink-0 transition-all duration-300
+              ${collapsed ? "flex-col justify-center gap-2 py-3 px-1" : "justify-between p-4"}`}
+          >
+            {/* Logo — grande expandido, pequeño colapsado */}
+            <img
+              src={logo}
+              alt="GrupoEB"
+              onClick={() => navigate("/home")}
+              className={`cursor-pointer object-contain transition-all duration-300
+                ${collapsed ? "h-6 w-auto" : "h-10 w-auto"}`}
+            />
+
+            {/* Botón colapsar / expandir */}
+            <button
+              onClick={() => setCollapsed((c) => !c)}
+              title={collapsed ? "Expandir menú" : "Colapsar menú"}
+              className="flex-shrink-0 text-slate-400 hover:text-white transition-colors p-1 rounded hover:bg-slate-700"
+            >
+              {collapsed ? (
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M13 5l7 7-7 7M6 5l7 7-7 7" />
+                </svg>
+              ) : (
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M11 19l-7-7 7-7M18 19l-7-7 7-7" />
+                </svg>
+              )}
+            </button>
           </div>
-          <nav className="flex-1 px-2 py-4 space-y-1 overflow-y-auto">
+
+          {/* Nav */}
+          <nav className={`flex-1 py-4 space-y-0.5 overflow-y-auto overflow-x-hidden ${collapsed ? "px-1" : "px-2"}`}>
             {menuFiltrado.map(renderMenuItem)}
           </nav>
+
           <UserFooter />
         </aside>
       )}
 
-      <main className="flex-1 overflow-auto ml-0 md:ml-64">
+      {/* ── Contenido principal ── */}
+      <main className="flex-1 min-w-0 overflow-auto">
         {isMobile && (
           <header className="sticky top-0 z-20 bg-white shadow">
-            <div className="flex justify-between px-4 py-3">
+            <div className="flex justify-between items-center px-4 py-3">
               <button onClick={() => setOpen(true)} className="text-xl">☰</button>
               <h1 onClick={() => navigate("/home")} className="font-bold cursor-pointer">GRUPEB</h1>
               <div className="flex items-center gap-2 bg-slate-200 px-3 py-2 rounded text-sm">
@@ -324,6 +496,7 @@ export default function Dashboard({ children }: DashboardProps) {
         )}
         <div className="p-4 md:p-6">{children}</div>
       </main>
+
     </div>
   );
 }

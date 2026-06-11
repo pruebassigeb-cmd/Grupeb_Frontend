@@ -18,8 +18,8 @@ const normalizarItems = (items: any[]): any[] =>
       nombre:         item.nombre ?? item.medida_matrix,
       medida:         item.medida,
       numero_maquina: item.numero_maquina,
-      altura:         item.altura,    // ← cortes y dobles
-      puntos:         item.puntos,    // ← cortes y dobles
+      altura:         item.altura,
+      puntos:         item.puntos,
     };
   });
 
@@ -38,12 +38,13 @@ export const agregarItemCatalogo = async (
   catalogo: CatKey,
   nombre: string,
   medida?: string,
-  numero_maquina?: string
+  numero_maquina?: string,
+  altura?: string,            // ← nuevo
 ): Promise<any> => {
   const res = await fetch(`${BASE}/catalogos-papel/${catalogo}`, {
     method: "POST",
     headers: headers(),
-    body: JSON.stringify({ nombre, medida, numero_maquina }),
+    body: JSON.stringify({ nombre, medida, numero_maquina, altura }),  // ← nuevo
   });
   if (!res.ok) throw new Error("Error al agregar item al catálogo");
   const raw = await res.json();
@@ -63,12 +64,13 @@ export const editarItemCatalogo = async (
   id: number,
   nombre: string,
   medida?: string,
-  numero_maquina?: string
+  numero_maquina?: string,
+  altura?: string,            // ← nuevo
 ): Promise<void> => {
   const res = await fetch(`${BASE}/catalogos-papel/${catalogo}/${id}`, {
     method: "PUT",
     headers: headers(),
-    body: JSON.stringify({ nombre, medida, numero_maquina }),
+    body: JSON.stringify({ nombre, medida, numero_maquina, altura }),  // ← nuevo
   });
   if (!res.ok) throw new Error("Error al editar item del catálogo");
 };
@@ -177,10 +179,10 @@ const mapFormToApi = (form: ProductoPapelForm) => ({
     tamano:         form.suaje.tamano        || null,
     corte1_tipo:    form.suaje.corte1Tipo    || null,
     corte1_medida:  form.suaje.corte1Medida  || null,
-    idcat_corte:    form.suaje.idcat_corte,            // ← nuevo
+    idcat_corte:    form.suaje.idcat_corte,
     dobles1_tipo:   form.suaje.dobles1Tipo   || null,
     dobles1_medida: form.suaje.dobles1Medida || null,
-    idcat_doble:    form.suaje.idcat_doble,            // ← nuevo
+    idcat_doble:    form.suaje.idcat_doble,
     metros:         form.suaje.metros        || null,
     idcat_matrix:   form.suaje.idcat_matrix,
     tiempo_arreglo: form.suaje.tiempoArreglo ? parseInt(form.suaje.tiempoArreglo) : null,

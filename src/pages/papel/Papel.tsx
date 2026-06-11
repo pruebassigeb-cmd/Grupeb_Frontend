@@ -27,23 +27,23 @@ const calcBase = (ancho: string, fuelle: string) => {
   return (!isNaN(a) && !isNaN(f)) ? `${(a - 0.5).toFixed(1)}x${(f - 0.5).toFixed(1)} cm` : "";
 };
 
-const ICON_PDF   = "\uD83D\uDCC4";
-const ICON_IMG   = "\uD83D\uDDBC\uFE0F";
+const ICON_PDF = "\uD83D\uDCC4";
+const ICON_IMG = "\uD83D\uDDBC\uFE0F";
 const ICON_CHART = "\uD83D\uDCCA";
 
 const CATEGORIA_A_SUBCARPETA: Record<string, string> = {
-  "catalogo-suaje-papel":    "catalogo",
-  "imagen-suaje-papel":      "imagen",
+  "catalogo-suaje-papel": "catalogo",
+  "imagen-suaje-papel": "imagen",
   "rendimiento-suaje-papel": "rendimiento",
 };
 
 const SEC_COLORS: Record<string, { border: string; headerBg: string; headerText: string; leftBar: string }> = {
-  tipo:       { border: "#CBD5E1", headerBg: "#F1F5F9", headerText: "#334155", leftBar: "#64748B" },
-  papel:      { border: "#CBD5E1", headerBg: "#F1F5F9", headerText: "#334155", leftBar: "#64748B" },
-  suaje:      { border: "#CBD5E1", headerBg: "#F1F5F9", headerText: "#334155", leftBar: "#64748B" },
-  acabados:   { border: "#CBD5E1", headerBg: "#F1F5F9", headerText: "#334155", leftBar: "#64748B" },
+  tipo: { border: "#CBD5E1", headerBg: "#F1F5F9", headerText: "#334155", leftBar: "#64748B" },
+  papel: { border: "#CBD5E1", headerBg: "#F1F5F9", headerText: "#334155", leftBar: "#64748B" },
+  suaje: { border: "#CBD5E1", headerBg: "#F1F5F9", headerText: "#334155", leftBar: "#64748B" },
+  acabados: { border: "#CBD5E1", headerBg: "#F1F5F9", headerText: "#334155", leftBar: "#64748B" },
   maquinaria: { border: "#E2E8F0", headerBg: "#F8FAFC", headerText: "#475569", leftBar: "#94A3B8" },
-  archivos:   { border: "#E5E7EB", headerBg: "#F9FAFB", headerText: "#6B7280", leftBar: "#9CA3AF" },
+  archivos: { border: "#E5E7EB", headerBg: "#F9FAFB", headerText: "#6B7280", leftBar: "#9CA3AF" },
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -62,7 +62,7 @@ function Inp({ value, onChange, style, readOnly }: {
 
 function Field({ label, children, style }: { label: string; children: React.ReactNode; style?: React.CSSProperties }) {
   return (
-    <div style={style}>
+    <div style={{ minWidth: 0, ...style }}>   {/* ← agregar minWidth: 0 */}
       <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#6B7280", marginBottom: 4, letterSpacing: "0.05em", textTransform: "uppercase" }}>{label}</label>
       {children}
     </div>
@@ -99,11 +99,11 @@ function AsaMultiSelect({ selectedIds, selectedNames, catItems, onChange, onAdd,
   onAdd: (key: CatKey, nombre: string) => Promise<void>;
   catKeyForAdd?: CatKey;
 }) {
-  const [open, setOpen]     = useState(false);
+  const [open, setOpen] = useState(false);
   const [adding, setAdding] = useState(false);
   const [newVal, setNewVal] = useState("");
   const [saving, setSaving] = useState(false);
-  const ref    = useRef<HTMLDivElement>(null);
+  const ref = useRef<HTMLDivElement>(null);
   const addRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -128,15 +128,60 @@ function AsaMultiSelect({ selectedIds, selectedNames, catItems, onChange, onAdd,
     finally { setSaving(false); }
   };
 
+  const todosSeleccionados = catItems.length > 0 && catItems.every(item => selectedIds.includes(item.id));
+
+  const handleToggleTodos = () => {
+    if (todosSeleccionados) {
+      onChange([], []);
+    } else {
+      onChange(catItems.map(i => i.id), catItems.map(i => i.nombre));
+    }
+  };
+
   return (
     <div ref={ref} style={{ position: "relative" }}>
-      <button type="button" onClick={() => { setOpen(!open); setAdding(false); }}
-        style={{ width: "100%", height: 34, padding: "0 8px", border: "1px solid #D1D5DB", borderRadius: 5, fontSize: 13, color: selectedIds.length ? "#111827" : "#9CA3AF", background: "#fff", outline: "none", cursor: "pointer", textAlign: "left", display: "flex", alignItems: "center", justifyContent: "space-between", boxSizing: "border-box" }}>
-        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{selectedIds.length === 0 ? "" : selectedNames.join(", ")}</span>
-        <span style={{ fontSize: 11, color: "#6B7280", flexShrink: 0, marginLeft: 4, userSelect: "none" }}>▾</span>
-      </button>
+      <div style={{ height: 34, overflow: "hidden", borderRadius: 5 }}>
+        <button type="button" onClick={() => { setOpen(!open); setAdding(false); }}
+          style={{
+            width: "100%",
+            height: 34,
+            padding: "0 8px",
+            border: "1px solid #D1D5DB",
+            borderRadius: 5,
+            fontSize: 13,
+            color: selectedIds.length ? "#111827" : "#9CA3AF",
+            background: "#fff",
+            outline: "none",
+            cursor: "pointer",
+            textAlign: "left",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            boxSizing: "border-box",
+            overflow: "hidden",
+          }}>
+          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, minWidth: 0 }}>
+            {selectedIds.length === 0 ? "" : selectedNames.join(", ")}
+          </span>
+          <span style={{ fontSize: 11, color: "#6B7280", flexShrink: 0, marginLeft: 4, userSelect: "none" }}>▾</span>
+        </button>
+      </div>
       {open && (
         <div style={{ position: "absolute", top: "calc(100% + 3px)", left: 0, right: 0, background: "#fff", border: "1px solid #D1D5DB", borderRadius: 6, zIndex: 50, boxShadow: "0 4px 12px rgba(0,0,0,0.1)", padding: "4px 0", maxHeight: 220, overflowY: "auto" }}>
+
+          {/* ── Seleccionar todo ── */}
+          {catItems.length > 0 && (
+            <div style={{ borderBottom: "1px solid #F3F4F6", padding: "3px 8px 5px" }}>
+              <button
+                type="button"
+                onClick={handleToggleTodos}
+                style={{ width: "100%", padding: "3px 4px", border: "none", background: "transparent", color: todosSeleccionados ? "#DC2626" : "#374151", fontSize: 12, cursor: "pointer", textAlign: "left", fontWeight: 600 }}
+              >
+                {todosSeleccionados ? "✕ Deseleccionar todo" : "✓ Seleccionar todo"}
+              </button>
+            </div>
+          )}
+
           {catItems.map(item => (
             <label key={item.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 12px", cursor: "pointer", fontSize: 13, color: "#111827", background: selectedIds.includes(item.id) ? "#EFF6FF" : "transparent" }}>
               <input type="checkbox" checked={selectedIds.includes(item.id)} onChange={() => toggle(item)} style={{ width: 14, height: 14, accentColor: "#1D4ED8", cursor: "pointer", flexShrink: 0 }} />
@@ -176,11 +221,11 @@ function MaquinariaMultiSelect({ catKey, selectedIds, selectedNames, catItems, o
   onChange: (ids: number[], nombres: string[]) => void;
   onAdd: (key: CatKey, nombre: string) => Promise<void>;
 }) {
-  const [open, setOpen]     = useState(false);
+  const [open, setOpen] = useState(false);
   const [adding, setAdding] = useState(false);
   const [newVal, setNewVal] = useState("");
   const [saving, setSaving] = useState(false);
-  const ref    = useRef<HTMLDivElement>(null);
+  const ref = useRef<HTMLDivElement>(null);
   const addRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -205,15 +250,60 @@ function MaquinariaMultiSelect({ catKey, selectedIds, selectedNames, catItems, o
     finally { setSaving(false); }
   };
 
+  const todosSeleccionados = catItems.length > 0 && catItems.every(item => selectedIds.includes(item.id));
+
+  const handleToggleTodos = () => {
+    if (todosSeleccionados) {
+      onChange([], []);
+    } else {
+      onChange(catItems.map(i => i.id), catItems.map(i => i.nombre));
+    }
+  };
+
   return (
-    <div ref={ref} style={{ position: "relative" }}>
-      <button type="button" onClick={() => { setOpen(!open); setAdding(false); }}
-        style={{ width: "100%", height: 34, padding: "0 8px", border: "1px solid #D1D5DB", borderRadius: 5, fontSize: 13, color: selectedIds.length ? "#111827" : "#9CA3AF", background: "#fff", outline: "none", cursor: "pointer", textAlign: "left", display: "flex", alignItems: "center", justifyContent: "space-between", boxSizing: "border-box" }}>
-        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{selectedIds.length === 0 ? "" : selectedNames.join(", ")}</span>
-        <span style={{ fontSize: 11, color: "#6B7280", flexShrink: 0, marginLeft: 4, userSelect: "none" }}>▾</span>
-      </button>
+    <div ref={ref} style={{ position: "relative", minWidth: 0, maxWidth: "100%" }}>
+      <div style={{ height: 34, overflow: "hidden", borderRadius: 5 }}>
+        <button type="button" onClick={() => { setOpen(!open); setAdding(false); }}
+          style={{
+            width: "100%",
+            height: 34,
+            padding: "0 8px",
+            border: "1px solid #D1D5DB",
+            borderRadius: 5,
+            fontSize: 13,
+            color: selectedIds.length ? "#111827" : "#9CA3AF",
+            background: "#fff",
+            outline: "none",
+            cursor: "pointer",
+            textAlign: "left",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            boxSizing: "border-box",
+            overflow: "hidden",
+          }}>
+          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, minWidth: 0 }}>
+            {selectedIds.length === 0 ? "" : selectedNames.join(", ")}
+          </span>
+          <span style={{ fontSize: 11, color: "#6B7280", flexShrink: 0, marginLeft: 4, userSelect: "none" }}>▾</span>
+        </button>
+      </div>
       {open && (
         <div style={{ position: "absolute", top: "calc(100% + 3px)", left: 0, right: 0, background: "#fff", border: "1px solid #D1D5DB", borderRadius: 6, zIndex: 50, boxShadow: "0 4px 12px rgba(0,0,0,0.1)", padding: "4px 0", maxHeight: 220, overflowY: "auto" }}>
+
+          {/* ── Seleccionar todo ── */}
+          {catItems.length > 0 && (
+            <div style={{ borderBottom: "1px solid #F3F4F6", padding: "3px 8px 5px" }}>
+              <button
+                type="button"
+                onClick={handleToggleTodos}
+                style={{ width: "100%", padding: "3px 4px", border: "none", background: "transparent", color: todosSeleccionados ? "#DC2626" : "#374151", fontSize: 12, cursor: "pointer", textAlign: "left", fontWeight: 600 }}
+              >
+                {todosSeleccionados ? "✕ Deseleccionar todo" : "✓ Seleccionar todo"}
+              </button>
+            </div>
+          )}
+
           {catItems.map(item => (
             <label key={item.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 12px", cursor: "pointer", fontSize: 13, color: "#111827", background: selectedIds.includes(item.id) ? "#F1F5F9" : "transparent" }}>
               <input type="checkbox" checked={selectedIds.includes(item.id)} onChange={() => toggle(item)} style={{ width: 14, height: 14, accentColor: "#64748B", cursor: "pointer", flexShrink: 0 }} />
@@ -273,8 +363,8 @@ const getTipoDeFile = (file: File): "pdf" | "image" | "document" => {
 };
 
 const ICONOS_CATEGORIA: Record<string, string> = {
-  "catalogo-suaje-papel":    ICON_PDF,
-  "imagen-suaje-papel":      ICON_IMG,
+  "catalogo-suaje-papel": ICON_PDF,
+  "imagen-suaje-papel": ICON_IMG,
   "rendimiento-suaje-papel": ICON_CHART,
 };
 
@@ -284,7 +374,7 @@ function SecArchivos({ idproducto, isEdit, archivosIniciales, onPendientesChange
   archivosIniciales: ArchivoGuardado[];
   onPendientesChange: (pendientes: ArchivoPendiente[]) => void;
 }) {
-  const [archivosGuardados,  setArchivosGuardados]  = useState<ArchivoGuardado[]>(archivosIniciales);
+  const [archivosGuardados, setArchivosGuardados] = useState<ArchivoGuardado[]>(archivosIniciales);
   const [archivosPendientes, setArchivosPendientes] = useState<ArchivoPendiente[]>([]);
   const [subiendo, setSubiendo] = useState(false);
 
@@ -296,7 +386,7 @@ function SecArchivos({ idproducto, isEdit, archivosIniciales, onPendientesChange
     })
       .then(r => r.json())
       .then(d => setArchivosGuardados((d.archivos ?? []).map((a: any) => ({ ...a, pendiente: false }))))
-      .catch(() => {});
+      .catch(() => { });
   }, [idproducto, isEdit]);
 
   useEffect(() => { onPendientesChange(archivosPendientes); }, [archivosPendientes]);
@@ -381,9 +471,9 @@ function SecArchivos({ idproducto, isEdit, archivosIniciales, onPendientesChange
         </p>
       )}
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: todosLosArchivos.length > 0 ? 12 : 0 }}>
-        <UploadBtn label="Catalogo"    categoria="catalogo-suaje-papel"    accept=".pdf,.doc,.docx,.xls,.xlsx" icon={ICON_PDF}   />
-        <UploadBtn label="Imagen"      categoria="imagen-suaje-papel"      accept="image/*"                    icon={ICON_IMG}   />
-        <UploadBtn label="Rendimiento" categoria="rendimiento-suaje-papel" accept=".pdf,.xlsx,.xls,image/*"    icon={ICON_CHART} />
+        <UploadBtn label="Catalogo" categoria="catalogo-suaje-papel" accept=".pdf,.doc,.docx,.xls,.xlsx" icon={ICON_PDF} />
+        <UploadBtn label="Imagen" categoria="imagen-suaje-papel" accept="image/*" icon={ICON_IMG} />
+        <UploadBtn label="Rendimiento" categoria="rendimiento-suaje-papel" accept=".pdf,.xlsx,.xls,image/*" icon={ICON_CHART} />
       </div>
       {todosLosArchivos.length > 0 && (
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
@@ -452,15 +542,37 @@ function FormularioProducto({ initial, onSave, onCancel, saving }: {
   const [expandedGrupoId, setExpandedGrupoId] = useState<number | null>(form.grupos[0]?.id ?? null);
   const pendientesRef = useRef<ArchivoPendiente[]>([]);
 
-  const upd        = (patch: Partial<ProductoPapelForm>) => setForm(prev => ({ ...prev, ...patch }));
-  const updSuaje   = (patch: any) => upd({ suaje:    { ...form.suaje,    ...patch } });
+  const upd = (patch: Partial<ProductoPapelForm>) => setForm(prev => ({ ...prev, ...patch }));
+  const updSuaje = (patch: any) => upd({ suaje: { ...form.suaje, ...patch } });
   const updAcabados = (patch: any) => upd({ acabados: { ...form.acabados, ...patch } });
-  const updMaq     = (patch: any) => upd({ maquinaria: { ...form.maquinaria, ...patch } });
+  const updMaq = (patch: any) => upd({ maquinaria: { ...form.maquinaria, ...patch } });
+
+  const contRef = useRef<HTMLDivElement>(null);
+const [btnLeft, setBtnLeft] = useState<number | null>(null);
+
+useEffect(() => {
+  const update = () => {
+    if (contRef.current) {
+      setBtnLeft(contRef.current.getBoundingClientRect().left + 16);
+    }
+  };
+  update();
+
+  // Detecta cambios de tamaño del contenedor (incluye colapsar/expandir el sidebar)
+  const ro = new ResizeObserver(update);
+  if (contRef.current) ro.observe(contRef.current);
+
+  window.addEventListener("resize", update);
+  return () => {
+    ro.disconnect();
+    window.removeEventListener("resize", update);
+  };
+}, []);
 
   useEffect(() => {
     const b = calcBase(form.ancho, form.fuelle);
     if (b) updAcabados({ base_medida: b });
-    const ancho  = form.ancho.trim();
+    const ancho = form.ancho.trim();
     const fuelle = form.fuelle.trim();
     const altura = form.altura.trim();
     let medida = "";
@@ -500,27 +612,50 @@ function FormularioProducto({ initial, onSave, onCancel, saving }: {
   const sublbl: React.CSSProperties = { display: "block", fontSize: 10, fontWeight: 700, color: "#9CA3AF", marginBottom: 6, letterSpacing: "0.08em", textTransform: "uppercase", paddingBottom: 4, borderBottom: "1px dashed #E5E7EB" };
 
   return (
-    <div style={{ maxWidth: "100%", margin: "0 auto", padding: "20px 16px 48px", fontFamily: "'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif", color: "#111827" }}>
-
+  <div ref={contRef} style={{
+    maxWidth: "100%", margin: "0 auto",
+    padding: "64px 16px 48px",
+    fontFamily: "'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif",
+    color: "#111827",
+  }}>
       {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-          <button onClick={onCancel} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 12, color: "#6B7280", display: "flex", alignItems: "center", gap: 3, padding: 0 }}>
-            {"<"} Regresar
-          </button>
-          <div>
-            <p style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: "#9CA3AF", margin: 0, fontWeight: 600 }}>{isEdit ? "Editar" : "Alta de producto"}</p>
-            <h1 style={{ fontSize: 18, fontWeight: 700, margin: 0, color: "#111827", lineHeight: 1.2 }}>Producto de papel</h1>
-          </div>
-        </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button onClick={onCancel} style={{ height: 36, padding: "0 16px", border: "1px solid #D1D5DB", borderRadius: 7, background: "#fff", color: "#374151", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>Cancelar</button>
-          <button onClick={handleSubmit} disabled={saving}
-            style={{ height: 36, padding: "0 20px", border: "none", borderRadius: 7, background: saving ? "#93C5FD" : "#1D4ED8", color: "#fff", fontSize: 12, fontWeight: 600, cursor: saving ? "wait" : "pointer" }}>
-            {saving ? "Guardando..." : isEdit ? "Guardar cambios" : "Registrar producto"}
-          </button>
-        </div>
-      </div>
+      <style>{`
+        @keyframes slideDown {
+          from { opacity: 0; transform: translateY(-8px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+        .btn-float-cancel:hover { background: #F9FAFB !important; border-color: #C4C9D4 !important; }
+        .btn-float-save:not(:disabled):hover  { background: #1E40AF !important; box-shadow: 0 6px 20px rgba(29,78,216,0.4) !important; transform: translateY(-1px); }
+        .btn-float-save:not(:disabled):active { transform: translateY(0); box-shadow: 0 2px 8px rgba(29,78,216,0.25) !important; }
+      `}</style>
+
+      {/* ── Botones (izquierda, siguen el scroll) ── */}
+{btnLeft !== null && (
+  <div style={{
+    position: "fixed", top: 16, left: btnLeft, zIndex: 200,
+    display: "flex", gap: 8,
+    animation: "slideDown 0.2s ease",
+  }}>
+    <button onClick={onCancel} className="btn-float-cancel" style={{
+      height: 36, padding: "0 16px", border: "1px solid #D1D5DB",
+      borderRadius: 7, background: "#fff", color: "#374151",
+      fontSize: 13, fontWeight: 500, cursor: "pointer",
+      transition: "all 0.15s ease",
+      boxShadow: "0 1px 4px rgba(0,0,0,0.09)",
+    }}>
+      Cancelar
+    </button>
+    <button onClick={handleSubmit} disabled={saving} className="btn-float-save" style={{
+      height: 36, padding: "0 20px", border: "none", borderRadius: 7,
+      background: saving ? "#93C5FD" : "#1D4ED8", color: "#fff",
+      fontSize: 13, fontWeight: 600, cursor: saving ? "wait" : "pointer",
+      boxShadow: saving ? "none" : "0 2px 10px rgba(29,78,216,0.3)",
+      transition: "all 0.15s ease",
+    }}>
+      {saving ? "Guardando..." : isEdit ? "Guardar cambios" : "Registrar producto"}
+    </button>
+  </div>
+)}
 
       {/* Tipo de producto + Grupos */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1.4fr", gap: 10, marginBottom: 10 }}>
@@ -534,7 +669,7 @@ function FormularioProducto({ initial, onSave, onCancel, saving }: {
             <Field label="Descripción" style={{ gridColumn: "span 2" }}>
               <Inp value={form.descripcion} onChange={v => upd({ descripcion: v })} />
             </Field>
-            <Field label="Ancho">  <Inp value={form.ancho}  onChange={v => upd({ ancho: v })}  /></Field>
+            <Field label="Ancho">  <Inp value={form.ancho} onChange={v => upd({ ancho: v })} /></Field>
             <Field label="Fuelle"> <Inp value={form.fuelle} onChange={v => upd({ fuelle: v })} /></Field>
             <Field label="Altura"> <Inp value={form.altura} onChange={v => upd({ altura: v })} /></Field>
             <Field label="Medida"> <Inp value={form.medida} readOnly /></Field>
@@ -562,8 +697,8 @@ function FormularioProducto({ initial, onSave, onCancel, saving }: {
       <Sec title="Suaje" colorKey="suaje">
         <FG cols={5} gap="6px 8px" style={{ marginBottom: 8 }}>
           <Field label="Numero">  <Inp value={form.suaje.numero} onChange={v => updSuaje({ numero: v })} /></Field>
-          <Field label="PZS">     <Inp value={form.suaje.pzs}    onChange={v => updSuaje({ pzs: v })}    /></Field>
-          <Field label="Tamano">  <Inp value={form.suaje.tamano} onChange={v => updSuaje({ tamano: v })} /></Field>
+          <Field label="PZS">     <Inp value={form.suaje.pzs} onChange={v => updSuaje({ pzs: v })} /></Field>
+          <Field label="Tamaño">  <Inp value={form.suaje.tamano} onChange={v => updSuaje({ tamano: v })} /></Field>
           <Field label="Metros">  <Inp value={form.suaje.metros} onChange={v => updSuaje({ metros: v })} /></Field>
           <Field label="Matrix">
             <SelConAlta
@@ -612,30 +747,49 @@ function FormularioProducto({ initial, onSave, onCancel, saving }: {
         </div>
 
         <div>
-          <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#6B7280", display: "block", marginBottom: 6 }}>Especiales</span>
-          <div style={{ display: "grid", gridTemplateColumns: "auto minmax(120px, 1fr) 64px auto minmax(120px, 1fr) 64px", gap: "0 8px", alignItems: "center" }}>
-            <span style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", whiteSpace: "nowrap" }}>Sacabocado</span>
-            <SelConAlta catKey="sacabocados" options={namesMedida("sacabocados")} value={form.suaje.sacabocadoNombre}
-              onChange={(v) => { const item = (catalogs.sacabocados as any[]).find((i: any) => labelConMedida(i) === v); updSuaje({ sacabocadoNombre: v, idcat_sacabocados: item?.id ?? null }); }}
-              onAdd={addItem} placeholder="" />
-            <input type="text" inputMode="numeric" value={form.suaje.cantidad_sacabocado}
-              onChange={e => updSuaje({ cantidad_sacabocado: e.target.value })}
-              style={{ height: 34, padding: "0 8px", border: "1px solid #D1D5DB", borderRadius: 5, fontSize: 13, color: "#111827", background: "#fff", outline: "none", boxSizing: "border-box" }} />
-            <span style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", whiteSpace: "nowrap", marginLeft: 8 }}>Perforado</span>
-            <SelConAlta catKey="perforado" options={namesMedida("perforado")} value={form.suaje.perforadoNombre}
-              onChange={(v) => { const item = (catalogs.perforado as any[]).find((i: any) => labelConMedida(i) === v); updSuaje({ perforadoNombre: v, idcat_perforado: item?.id ?? null }); }}
-              onAdd={addItem} placeholder="" />
-            <input type="text" inputMode="numeric" value={form.suaje.cantidad_perforado}
-              onChange={e => updSuaje({ cantidad_perforado: e.target.value })}
-              style={{ height: 34, padding: "0 8px", border: "1px solid #D1D5DB", borderRadius: 5, fontSize: 13, color: "#111827", background: "#fff", outline: "none", boxSizing: "border-box" }} />
-          </div>
-        </div>
+  <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#6B7280", display: "block", marginBottom: 6 }}>Especiales</span>
+  <div style={{ display: "grid", gridTemplateColumns: "auto minmax(120px, 1fr) 64px auto minmax(120px, 1fr) 64px", gap: "0 8px", alignItems: "end" }}>
+
+    <span style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", whiteSpace: "nowrap", paddingBottom: 10 }}>Sacabocado</span>
+
+    <div style={{ paddingBottom: 0 }}>
+      <SelConAlta catKey="sacabocados" options={namesMedida("sacabocados")} value={form.suaje.sacabocadoNombre}
+        onChange={(v) => { const item = (catalogs.sacabocados as any[]).find((i: any) => labelConMedida(i) === v); updSuaje({ sacabocadoNombre: v, idcat_sacabocados: item?.id ?? null }); }}
+        onAdd={addItem} placeholder="" />
+    </div>
+
+    {/* Cantidad sacabocado con etiqueta */}
+    <div>
+      <label style={{ display: "block", fontSize: 10, fontWeight: 700, color: "#9CA3AF", marginBottom: 3, letterSpacing: "0.05em", textTransform: "uppercase" }}>Cant.</label>
+      <input type="text" inputMode="numeric" value={form.suaje.cantidad_sacabocado}
+        onChange={e => updSuaje({ cantidad_sacabocado: e.target.value })}
+        style={{ width: "100%", height: 34, padding: "0 8px", border: "1px solid #D1D5DB", borderRadius: 5, fontSize: 13, color: "#111827", background: "#fff", outline: "none", boxSizing: "border-box" }} />
+    </div>
+
+    <span style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", whiteSpace: "nowrap", marginLeft: 8, paddingBottom: 10 }}>Perforado</span>
+
+    <div style={{ paddingBottom: 0 }}>
+      <SelConAlta catKey="perforado" options={namesMedida("perforado")} value={form.suaje.perforadoNombre}
+        onChange={(v) => { const item = (catalogs.perforado as any[]).find((i: any) => labelConMedida(i) === v); updSuaje({ perforadoNombre: v, idcat_perforado: item?.id ?? null }); }}
+        onAdd={addItem} placeholder="" />
+    </div>
+
+    {/* Cantidad perforado con etiqueta */}
+    <div>
+      <label style={{ display: "block", fontSize: 10, fontWeight: 700, color: "#9CA3AF", marginBottom: 3, letterSpacing: "0.05em", textTransform: "uppercase" }}>Cant.</label>
+      <input type="text" inputMode="numeric" value={form.suaje.cantidad_perforado}
+        onChange={e => updSuaje({ cantidad_perforado: e.target.value })}
+        style={{ width: "100%", height: 34, padding: "0 8px", border: "1px solid #D1D5DB", borderRadius: 5, fontSize: 13, color: "#111827", background: "#fff", outline: "none", boxSizing: "border-box" }} />
+    </div>
+
+  </div>
+</div>
       </Sec>
 
       {/* Pegado | Refuerzo+Base | Empaque */}
       <div style={{ display: "grid", gridTemplateColumns: "1.6fr 1.4fr 1fr", gap: 10, marginBottom: 10 }}>
         <Sec title="Pegado y acabados" colorKey="acabados">
-          <FG cols={2} gap="6px 8px">
+          <FG cols={2} gap="6px 8px" style={{ alignItems: "start" }}>
             <Field label="Tipo de pegado">
               <SelConAlta catKey="tipo_pegado" options={names("tipo_pegado")}
                 value={nombrePor("tipo_pegado", form.acabados.idcat_tipo_pegado)}
@@ -717,13 +871,13 @@ function FormularioProducto({ initial, onSave, onCancel, saving }: {
 
       {/* Maquinaria */}
       <Sec title="Maquinaria" colorKey="maquinaria">
-        <FG cols={5} gap="6px 10px" style={{ marginBottom: 8 }}>
+        <FG cols={5} gap="6px 10px" style={{ marginBottom: 8, alignItems: "start" }}>
           {([
             ["hojeado_guillotina", "Hojeado / Guill."],
-            ["impresora",          "Impresora"],
-            ["hs_ar",              "Hs y AR"],
-            ["suaje_maquina",      "Suaje"],
-            ["uv",                 "UV"],
+            ["impresora", "Impresora"],
+            ["hs_ar", "Hs y AR"],
+            ["suaje_maquina", "Suaje"],
+            ["uv", "UV"],
           ] as [string, string][]).map(([key, label]) => (
             <Field key={key} label={label}>
               <MaquinariaMultiSelect
@@ -737,13 +891,13 @@ function FormularioProducto({ initial, onSave, onCancel, saving }: {
             </Field>
           ))}
         </FG>
-        <FG cols={5} gap="6px 10px">
+        <FG cols={5} gap="6px 10px" style={{ alignItems: "start" }}>
           {([
-            ["textura",      "Textura"],
-            ["empalme",      "Empalme"],
-            ["armado",       "Armado"],
+            ["textura", "Textura"],
+            ["empalme", "Empalme"],
+            ["armado", "Armado"],
             ["asas_maquina", "Asas"],
-            ["desbarbe",     "Desbarbe"],
+            ["desbarbe", "Desbarbe"],
           ] as [string, string][]).map(([key, label]) => (
             <Field key={key} label={label}>
               <MaquinariaMultiSelect
@@ -799,29 +953,29 @@ function DetalleProducto({ id }: { id: number }) {
   return (
     <div style={{ padding: "14px 16px", background: "#F9FAFB", borderTop: "1px solid #E5E7EB" }}>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "3px 32px", marginBottom: 14 }}>
-        {row("Tipo",        detalle.tipo_producto)}
+        {row("Tipo", detalle.tipo_producto)}
         {row("Descripción", detalle.descripcion_papel)}
-        {row("Ancho",       detalle.ancho)}
-        {row("Fuelle",      detalle.fuelle)}
-        {row("Altura",      detalle.altura)}
-        {row("Medida",      detalle.medida)}
-        {row("Creado por",  detalle.creado_por_nombre)}
+        {row("Ancho", detalle.ancho)}
+        {row("Fuelle", detalle.fuelle)}
+        {row("Altura", detalle.altura)}
+        {row("Medida", detalle.medida)}
+        {row("Creado por", detalle.creado_por_nombre)}
       </div>
 
       {detalle.suaje && (
         <div style={{ marginBottom: 14 }}>
           <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#0F766E", margin: "0 0 6px" }}>Suaje</p>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "3px 32px" }}>
-            {row("Numero",     detalle.suaje.numero)}
-            {row("PZS",        detalle.suaje.pzs)}
-            {row("Tamano",     detalle.suaje.tamano)}
-            {row("Metros",     detalle.suaje.metros)}
-            {row("Matrix",     detalle.suaje.matrix_nombre)}
+            {row("Numero", detalle.suaje.numero)}
+            {row("PZS", detalle.suaje.pzs)}
+            {row("Tamano", detalle.suaje.tamano)}
+            {row("Metros", detalle.suaje.metros)}
+            {row("Matrix", detalle.suaje.matrix_nombre)}
             {row("T. arreglo", detalle.suaje.tiempo_arreglo ? `${detalle.suaje.tiempo_arreglo} min` : null)}
-            {row("Corte",  [detalle.suaje.corte1_tipo,  detalle.suaje.corte1_medida ].filter(Boolean).join(" / "))}
+            {row("Corte", [detalle.suaje.corte1_tipo, detalle.suaje.corte1_medida].filter(Boolean).join(" / "))}
             {row("Dobles", [detalle.suaje.dobles1_tipo, detalle.suaje.dobles1_medida].filter(Boolean).join(" / "))}
             {detalle.suaje.sacabocado_nombre && row("Sacabocado", `${detalle.suaje.sacabocado_nombre}${detalle.suaje.sacabocado_medida ? " -- " + detalle.suaje.sacabocado_medida : ""} x ${detalle.suaje.cantidad_sacabocado ?? "--"}`)}
-            {detalle.suaje.perforado_nombre  && row("Perforado",  `${detalle.suaje.perforado_nombre}${detalle.suaje.perforado_medida   ? " -- " + detalle.suaje.perforado_medida   : ""} x ${detalle.suaje.cantidad_perforado  ?? "--"}`)}
+            {detalle.suaje.perforado_nombre && row("Perforado", `${detalle.suaje.perforado_nombre}${detalle.suaje.perforado_medida ? " -- " + detalle.suaje.perforado_medida : ""} x ${detalle.suaje.cantidad_perforado ?? "--"}`)}
           </div>
         </div>
       )}
@@ -831,14 +985,14 @@ function DetalleProducto({ id }: { id: number }) {
           <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#92400E", margin: "0 0 6px" }}>Acabados</p>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "3px 32px" }}>
             {row("Tipo de pegado", detalle.acabados.tipo_pegado)}
-            {row("Pegamento",      detalle.acabados.pegamento)}
+            {row("Pegamento", detalle.acabados.pegamento)}
             {detalle.acabados.laminados?.length > 0 && row("Laminado", detalle.acabados.laminados.map((l: any) => l.nombre).join(", "))}
             {row("Refuerzo material", detalle.acabados.refuerzo_material)}
-            {row("Refuerzo medida",   detalle.acabados.refuerzo_medida)}
-            {row("Base material",     detalle.acabados.base_material)}
-            {row("Base medida",       detalle.acabados.base_medida)}
-            {row("Empaque",           detalle.acabados.empaque)}
-            {row("Pzs / caja",        detalle.acabados.pzs_caja)}
+            {row("Refuerzo medida", detalle.acabados.refuerzo_medida)}
+            {row("Base material", detalle.acabados.base_material)}
+            {row("Base medida", detalle.acabados.base_medida)}
+            {row("Empaque", detalle.acabados.empaque)}
+            {row("Pzs / caja", detalle.acabados.pzs_caja)}
             {detalle.acabados.asas?.length > 0 && row("Asas", detalle.acabados.asas.map((a: any) => a.tipo_asa).join(", "))}
           </div>
         </div>
@@ -850,15 +1004,15 @@ function DetalleProducto({ id }: { id: number }) {
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "3px 32px" }}>
             {([
               ["hojeado_guillotina", "Hojeado / Guill."],
-              ["impresora",          "Impresora"],
-              ["hs_ar",              "Hs y AR"],
-              ["suaje_maquina",      "Suaje"],
-              ["uv",                 "UV"],
-              ["textura",            "Textura"],
-              ["empalme",            "Empalme"],
-              ["armado",             "Armado"],
-              ["asas_maquina",       "Asas"],
-              ["desbarbe",           "Desbarbe"],
+              ["impresora", "Impresora"],
+              ["hs_ar", "Hs y AR"],
+              ["suaje_maquina", "Suaje"],
+              ["uv", "UV"],
+              ["textura", "Textura"],
+              ["empalme", "Empalme"],
+              ["armado", "Armado"],
+              ["asas_maquina", "Asas"],
+              ["desbarbe", "Desbarbe"],
             ] as [string, string][]).map(([key, label]) => {
               const items: { id: number; nombre: string }[] = detalle.maquinaria[key] ?? [];
               return items.length > 0 ? row(label, items.map((i: any) => i.nombre).join(", ")) : null;
@@ -946,9 +1100,9 @@ interface ArchivoPreview {
 
 interface ProductoPapelListItemEx extends ProductoPapelListItem {
   primer_tipo_papel?: string;
-  primer_calibre?:    string;
-  primer_pliego?:     string;
-  archivos_preview?:  ArchivoPreview[];
+  primer_calibre?: string;
+  primer_pliego?: string;
+  archivos_preview?: ArchivoPreview[];
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -962,7 +1116,7 @@ function ArchivosMini({ archivos }: { archivos?: ArchivoPreview[] }) {
     <div style={{ display: "flex", gap: 5, alignItems: "center", flexWrap: "nowrap" }}>
       {archivos.slice(0, 3).map((a) => {
         const esImagen = a.categoria === "imagen-suaje-papel";
-        const esPDF    = a.nombre?.toLowerCase().endsWith(".pdf");
+        const esPDF = a.nombre?.toLowerCase().endsWith(".pdf");
 
         if (esImagen) {
           return (
@@ -979,10 +1133,10 @@ function ArchivosMini({ archivos }: { archivos?: ArchivoPreview[] }) {
         }
 
         const isRendimiento = a.categoria === "rendimiento-suaje-papel";
-        const icon   = isRendimiento ? "📊" : esPDF ? "📄" : "📎";
-        const bg     = isRendimiento ? "#F0FDF4" : "#EFF6FF";
+        const icon = isRendimiento ? "📊" : esPDF ? "📄" : "📎";
+        const bg = isRendimiento ? "#F0FDF4" : "#EFF6FF";
         const border = isRendimiento ? "#BBF7D0" : "#BFDBFE";
-        const ext    = a.nombre?.split(".").pop()?.toUpperCase() ?? "";
+        const ext = a.nombre?.split(".").pop()?.toUpperCase() ?? "";
 
         return (
           <a key={a.id_archivo} href={a.url} target="_blank" rel="noreferrer" title={a.nombre}
@@ -1013,11 +1167,10 @@ function TablaCatalogo({ productos, loading, onNuevo, onEditar, onEliminar }: {
   onEditar: (p: ProductoPapelListItem) => void;
   onEliminar: (id: number) => void;
 }) {
-  const [search,     setSearch]     = useState("");
+  const [search, setSearch] = useState("");
   const [expandedId, setExpandedId] = useState<number | null>(null);
-  const [deleteId,   setDeleteId]   = useState<number | null>(null);
+  const [deleteId, setDeleteId] = useState<number | null>(null);
 
-  // 9 columnas: tipo · descripcion · medida · tipo_papel · gramaje · pliego · creado_por · archivos · acciones
   const COLS = "1.2fr 1fr 0.8fr 1fr 0.7fr 0.75fr 0.9fr 140px auto";
 
   const filtered = (productos as ProductoPapelListItemEx[]).filter(p =>
@@ -1116,12 +1269,12 @@ function TablaCatalogo({ productos, loading, onNuevo, onEditar, onEliminar }: {
                   {px.primer_tipo_papel || "—"}
                 </span>
 
-                {/* Gramaje / calibre — pill */}
+                {/* Gramaje / calibre */}
                 <span>
                   {px.primer_calibre
                     ? <span style={{ display: "inline-block", background: "#F1F5F9", border: "1px solid #E2E8F0", borderRadius: 4, padding: "2px 6px", fontSize: 11, color: "#475569", fontWeight: 500, whiteSpace: "nowrap" }}>
-                        {px.primer_calibre}
-                      </span>
+                      {px.primer_calibre}
+                    </span>
                     : <span style={{ fontSize: 12, color: "#374151" }}>—</span>
                   }
                 </span>
@@ -1165,9 +1318,9 @@ type Vista = "tabla" | "nuevo" | "editar";
 export default function Papel() {
   useAuth();
   const { productos, loading, saving, crear, actualizar, eliminar } = useProductosPapel();
-  const [vista,    setVista]    = useState<Vista>("tabla");
+  const [vista, setVista] = useState<Vista>("tabla");
   const [editForm, setEditForm] = useState<ProductoPapelForm | undefined>(undefined);
-  const [editId,   setEditId]   = useState<number | undefined>(undefined);
+  const [editId, setEditId] = useState<number | undefined>(undefined);
 
   const handleEditar = async (p: ProductoPapelListItem) => {
     setEditId(p.idproducto_papel);
@@ -1178,92 +1331,92 @@ export default function Papel() {
       const form = newProductoForm();
       form.idcat_tipo_producto_papel = d.idcat_tipo_producto_papel;
       form.tipoProductoNombre = d.tipo_producto ?? "";
-      form.descripcion        = d.descripcion_papel ?? "";
-      form.ancho  = d.ancho  ? String(d.ancho)  : "";
+      form.descripcion = d.descripcion_papel ?? "";
+      form.ancho = d.ancho ? String(d.ancho) : "";
       form.fuelle = d.fuelle ? String(d.fuelle) : "";
       form.altura = d.altura ? String(d.altura) : "";
       form.medida = d.medida ?? "";
 
       form.grupos = (d.grupos ?? []).map((g: any, gi: number) => ({
         id: Date.now() + gi,
-        idgrupo_papel:  g.idgrupo_papel,
+        idgrupo_papel: g.idgrupo_papel,
         precioSugerido: g.precio_sugerido ? String(g.precio_sugerido) : "",
         draft: newMaterial(),
         materiales: (g.materiales ?? []).map((m: any, mi: number) => ({
           id: Date.now() + gi * 100 + mi,
           idcat_tipo_papel: m.idcat_tipo_papel,
-          idcat_calibre:    m.idcat_calibre,
-          tipo:        m.tipo_papel   ?? "",
-          calibre:     m.calibre      ?? "",
-          pliego:      m.pliego       ?? "",
-          rendimiento: m.rendimiento  ?? "",
-          corte:       m.corte        ?? "",
+          idcat_calibre: m.idcat_calibre,
+          tipo: m.tipo_papel ?? "",
+          calibre: m.calibre ?? "",
+          pliego: m.pliego ?? "",
+          rendimiento: m.rendimiento ?? "",
+          corte: m.corte ?? "",
           hojeado: {
-            bobina:      m.hojeado?.bobina      ?? "",
-            corte:       m.hojeado?.corte       ?? "",
+            bobina: m.hojeado?.bobina ?? "",
+            corte: m.hojeado?.corte ?? "",
             rendimiento: m.hojeado?.rendimiento ?? "",
-            guillotina:  m.hojeado?.guillotina  ?? "",
-            hilo:        m.hojeado?.hilo        ?? "",
+            guillotina: m.hojeado?.guillotina ?? "",
+            hilo: m.hojeado?.hilo ?? "",
           },
         })),
       }));
       if (form.grupos.length === 0) form.grupos = [newGrupo()];
 
       if (d.suaje) {
-        form.suaje.numero        = d.suaje.numero        ?? "";
-        form.suaje.pzs           = d.suaje.pzs ? String(d.suaje.pzs) : "";
-        form.suaje.tamano        = d.suaje.tamano        ?? "";
-        form.suaje.corte1Tipo    = d.suaje.corte1_tipo    ?? "";
-        form.suaje.corte1Medida  = d.suaje.corte1_medida  ?? "";
-        form.suaje.idcat_corte   = d.suaje.idcat_corte    ?? null;
-        form.suaje.dobles1Tipo   = d.suaje.dobles1_tipo   ?? "";
+        form.suaje.numero = d.suaje.numero ?? "";
+        form.suaje.pzs = d.suaje.pzs ? String(d.suaje.pzs) : "";
+        form.suaje.tamano = d.suaje.tamano ?? "";
+        form.suaje.corte1Tipo = d.suaje.corte1_tipo ?? "";
+        form.suaje.corte1Medida = d.suaje.corte1_medida ?? "";
+        form.suaje.idcat_corte = d.suaje.idcat_corte ?? null;
+        form.suaje.dobles1Tipo = d.suaje.dobles1_tipo ?? "";
         form.suaje.dobles1Medida = d.suaje.dobles1_medida ?? "";
-        form.suaje.idcat_doble   = d.suaje.idcat_doble    ?? null;
-        form.suaje.metros        = d.suaje.metros          ?? "";
-        form.suaje.matrix        = d.suaje.matrix_nombre   ?? "";
-        form.suaje.idcat_matrix  = d.suaje.idcat_matrix    ?? null;
+        form.suaje.idcat_doble = d.suaje.idcat_doble ?? null;
+        form.suaje.metros = d.suaje.metros ?? "";
+        form.suaje.matrix = d.suaje.matrix_nombre ?? "";
+        form.suaje.idcat_matrix = d.suaje.idcat_matrix ?? null;
         form.suaje.tiempoArreglo = d.suaje.tiempo_arreglo ? String(d.suaje.tiempo_arreglo) : "";
-        form.suaje.idcat_sacabocados  = d.suaje.idcat_sacabocados ?? null;
-        form.suaje.sacabocadoNombre   = d.suaje.sacabocado_nombre
+        form.suaje.idcat_sacabocados = d.suaje.idcat_sacabocados ?? null;
+        form.suaje.sacabocadoNombre = d.suaje.sacabocado_nombre
           ? (d.suaje.sacabocado_medida ? `${d.suaje.sacabocado_nombre} -- ${d.suaje.sacabocado_medida}` : d.suaje.sacabocado_nombre)
           : "";
         form.suaje.cantidad_sacabocado = d.suaje.cantidad_sacabocado ? String(d.suaje.cantidad_sacabocado) : "";
-        form.suaje.idcat_perforado     = d.suaje.idcat_perforado ?? null;
-        form.suaje.perforadoNombre     = d.suaje.perforado_nombre
+        form.suaje.idcat_perforado = d.suaje.idcat_perforado ?? null;
+        form.suaje.perforadoNombre = d.suaje.perforado_nombre
           ? (d.suaje.perforado_medida ? `${d.suaje.perforado_nombre} -- ${d.suaje.perforado_medida}` : d.suaje.perforado_nombre)
           : "";
         form.suaje.cantidad_perforado = d.suaje.cantidad_perforado ? String(d.suaje.cantidad_perforado) : "";
       }
 
       if (d.acabados) {
-        form.acabados.idcat_tipo_pegado       = d.acabados.idcat_tipo_pegado       ?? null;
-        form.acabados.idcat_pegamento         = d.acabados.idcat_pegamento         ?? null;
-        form.acabados.laminados               = (d.acabados.laminados ?? []).map((l: any) => l.id);
-        form.acabados.laminadosNombres        = (d.acabados.laminados ?? []).map((l: any) => l.nombre);
+        form.acabados.idcat_tipo_pegado = d.acabados.idcat_tipo_pegado ?? null;
+        form.acabados.idcat_pegamento = d.acabados.idcat_pegamento ?? null;
+        form.acabados.laminados = (d.acabados.laminados ?? []).map((l: any) => l.id);
+        form.acabados.laminadosNombres = (d.acabados.laminados ?? []).map((l: any) => l.nombre);
         form.acabados.idcat_refuerzo_material = d.acabados.idcat_refuerzo_material ?? null;
-        form.acabados.idcat_refuerzo_medidas  = d.acabados.idcat_refuerzo_medidas  ?? null;
-        form.acabados.refuerzoMedidaNombre    = d.acabados.refuerzo_medida         ?? "";
-        form.acabados.idcat_base_material     = d.acabados.idcat_base_material     ?? null;
-        form.acabados.base_medida             = d.acabados.base_medida             ?? "";
-        form.acabados.idcat_empaque           = d.acabados.idcat_empaque           ?? null;
-        form.acabados.pzs_caja                = d.acabados.pzs_caja ? String(d.acabados.pzs_caja) : "";
-        form.acabados.asas                    = (d.acabados.asas ?? []).map((a: any) => a.idcat_tipo_asa);
-        form.acabados.asasNombres             = (d.acabados.asas ?? []).map((a: any) => a.tipo_asa);
+        form.acabados.idcat_refuerzo_medidas = d.acabados.idcat_refuerzo_medidas ?? null;
+        form.acabados.refuerzoMedidaNombre = d.acabados.refuerzo_medida ?? "";
+        form.acabados.idcat_base_material = d.acabados.idcat_base_material ?? null;
+        form.acabados.base_medida = d.acabados.base_medida ?? "";
+        form.acabados.idcat_empaque = d.acabados.idcat_empaque ?? null;
+        form.acabados.pzs_caja = d.acabados.pzs_caja ? String(d.acabados.pzs_caja) : "";
+        form.acabados.asas = (d.acabados.asas ?? []).map((a: any) => a.idcat_tipo_asa);
+        form.acabados.asasNombres = (d.acabados.asas ?? []).map((a: any) => a.tipo_asa);
       }
 
       if (d.maquinaria) {
-        const maq  = d.maquinaria;
-        const keys = ["hojeado_guillotina","impresora","hs_ar","suaje_maquina","uv","textura","empalme","armado","asas_maquina","desbarbe"];
+        const maq = d.maquinaria;
+        const keys = ["hojeado_guillotina", "impresora", "hs_ar", "suaje_maquina", "uv", "textura", "empalme", "armado", "asas_maquina", "desbarbe"];
         for (const key of keys) {
-          form.maquinaria[key]              = (maq[key] ?? []).map((i: any) => i.id);
+          form.maquinaria[key] = (maq[key] ?? []).map((i: any) => i.id);
           form.maquinaria[`${key}_nombres`] = (maq[key] ?? []).map((i: any) => i.nombre);
         }
       }
 
       setEditForm({
         ...form,
-        idproducto_papel:   p.idproducto_papel,
-        archivosIniciales:  (d.archivos ?? []).map((a: any) => ({ ...a, pendiente: false })),
+        idproducto_papel: p.idproducto_papel,
+        archivosIniciales: (d.archivos ?? []).map((a: any) => ({ ...a, pendiente: false })),
       } as any);
     } catch {
       setEditForm(newProductoForm());

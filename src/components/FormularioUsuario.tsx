@@ -289,9 +289,9 @@ const subirFotosINE = async (idusuario: number) => {
       e.telefono = "El teléfono debe tener 10 dígitos";
     if (!esEdicion) {
       if (!datos.codigo?.trim()) e.codigo = "El código es requerido";
-else if (!/^\d{4,5}$/.test(datos.codigo)) e.codigo = "El código debe tener entre 4 y 5 dígitos";
-   } else if (datos.codigo?.trim() && !/^\d{4,5}$/.test(datos.codigo)) {
-  e.codigo = "El código debe tener entre 4 y 5 dígitos";
+else if (!/^\d{4,8}$/.test(datos.codigo)) e.codigo = "El código debe tener entre 4 y 8 dígitos";
+   } else if (datos.codigo?.trim() && !/^\d{4,8}$/.test(datos.codigo)) {
+  e.codigo = "El código debe tener entre 4 y 8 dígitos";
     }
     if (!datos.roles_idroles || datos.roles_idroles === 0)
       e.roles_idroles = "Debe seleccionar un rol";
@@ -468,8 +468,8 @@ else if (!/^\d{4,5}$/.test(datos.codigo)) e.codigo = "El código debe tener entr
               {errores.telefono && <p className="mt-1 text-sm text-red-600">{errores.telefono}</p>}
             </div>
             <div>
-              <label className={label}>{esEdicion ? "Código (vacío = no cambiar)" : "Código (5 dígitos) *"}</label>
-              <input type="text" name="codigo" value={datos.codigo} maxLength={5}
+              <label className={label}>{esEdicion ? "Código (vacío = no cambiar)" : "Código (4-8 dígitos) *"}</label>
+              <input type="text" name="codigo" value={datos.codigo} maxLength={8}
                 onChange={e => set("codigo", e.target.value.replace(/\D/g, ""))}
                 className={input("codigo")} placeholder={esEdicion ? "Dejar vacío para no cambiar" : "12345"} />
               {errores.codigo && <p className="mt-1 text-sm text-red-600">{errores.codigo}</p>}

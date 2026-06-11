@@ -16,9 +16,9 @@ const EMPTY: Catalogs = {
   hojeado_guillotina: [], impresora: [], hs_ar: [], suaje_maquina: [],
   uv: [], textura: [], empalme: [], armado: [], asas_maquina: [], desbarbe: [],
   matrix: [],
-  cortes: [],   // ← nuevo
-  dobles: [],   // ← nuevo
-  puntos: [],   // ← nuevo
+  cortes: [],
+  dobles: [],
+  puntos: [],
 };
 
 export function useCatalogosPapel() {
@@ -56,17 +56,23 @@ export function useCatalogosPapel() {
     }
   }, []);
 
-  // defensivo contra undefined
   const names = (key: CatKey) => (catalogs[key] ?? []).map(i => i.nombre);
 
-  const addItem = async (key: CatKey, nombre: string, medida?: string, numeroMaquina?: string) => {
+  // ── addItem: ahora recibe altura para cortes/dobles ───────────────────
+  const addItem = async (
+    key: CatKey,
+    nombre: string,
+    medida?: string,
+    numeroMaquina?: string,
+    altura?: string,          // ← nuevo
+  ) => {
     const tempId = Date.now();
     setCatalogs(prev => ({
       ...prev,
-      [key]: [...(prev[key] ?? []), { id: tempId, nombre, medida, numero_maquina: numeroMaquina }],
+      [key]: [...(prev[key] ?? []), { id: tempId, nombre, medida, numero_maquina: numeroMaquina, altura }],
     }));
     try {
-      const created = await agregarItemCatalogo(key, nombre, medida, numeroMaquina);
+      const created = await agregarItemCatalogo(key, nombre, medida, numeroMaquina, altura);
       setCatalogs(prev => ({
         ...prev,
         [key]: (prev[key] ?? []).map(i => i.id === tempId ? created : i),
@@ -79,14 +85,24 @@ export function useCatalogosPapel() {
     }
   };
 
-  const editItem = async (key: CatKey, id: number, nombre: string, medida?: string, numeroMaquina?: string) => {
+  // ── editItem: ahora recibe altura para cortes/dobles ──────────────────
+  const editItem = async (
+    key: CatKey,
+    id: number,
+    nombre: string,
+    medida?: string,
+    numeroMaquina?: string,
+    altura?: string,          // ← nuevo
+  ) => {
     const backup = (catalogs[key] ?? []).find(i => i.id === id);
     setCatalogs(prev => ({
       ...prev,
-      [key]: (prev[key] ?? []).map(i => i.id === id ? { ...i, nombre, medida, numero_maquina: numeroMaquina } : i),
+      [key]: (prev[key] ?? []).map(i =>
+        i.id === id ? { ...i, nombre, medida, numero_maquina: numeroMaquina, altura } : i
+      ),
     }));
     try {
-      await editarItemCatalogo(key, id, nombre, medida, numeroMaquina);
+      await editarItemCatalogo(key, id, nombre, medida, numeroMaquina, altura);
     } catch {
       if (backup) {
         setCatalogs(prev => ({
