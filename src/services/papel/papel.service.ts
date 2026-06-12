@@ -10,18 +10,30 @@ const headers = () => ({
 // ═══════════════════════════════════════════════════════════════════════════
 // CATÁLOGOS
 // ═══════════════════════════════════════════════════════════════════════════
-const normalizarItems = (items: any[]): any[] =>
-  items.map(item => {
-    const pkKey = Object.keys(item).find(k => k.startsWith("idcat_")) ?? "idmatrix";
-    return {
-      id:             item[pkKey] ?? item.id,
-      nombre:         item.nombre ?? item.medida_matrix,
-      medida:         item.medida,
-      numero_maquina: item.numero_maquina,
-      altura:         item.altura,
-      puntos:         item.puntos,
-    };
-  });
+const normalizarItem = (item: any) => {
+  // Si el backend ya alias el PK como "id" (cortes, dobles), úsalo directo.
+  // Si no, detecta la primera columna idcat_* que NO sea idcat_punto
+  // (en cortes/dobles idcat_punto es FK, no PK). Para el catálogo de puntos,
+  // idcat_punto SÍ es el PK (fallback). Matrix usa idmatrix.
+  const pkKey = Object.keys(item).find(k => k.startsWith("idcat_") && k !== "idcat_punto");
+  const id =
+    item.id
+    ?? (pkKey ? item[pkKey] : undefined)
+    ?? item.idcat_punto
+    ?? item.idmatrix;
+
+  return {
+    id,
+    nombre:         item.nombre ?? item.medida_matrix ?? (item.puntos != null ? String(item.puntos) : ""),
+    medida:         item.medida,
+    numero_maquina: item.numero_maquina,
+    altura:         item.altura,
+    puntos:         item.puntos,
+    idcat_punto:    item.idcat_punto,
+  };
+};
+
+const normalizarItems = (items: any[]): any[] => items.map(normalizarItem);
 
 export const fetchCatalogosPapel = async (): Promise<Catalogs> => {
   const res = await fetch(`${BASE}/catalogos-papel`, { headers: headers() });
@@ -39,24 +51,17 @@ export const agregarItemCatalogo = async (
   nombre: string,
   medida?: string,
   numero_maquina?: string,
-  altura?: string,            // ← nuevo
+  altura?: string,
+  idcat_punto?: number | null,
 ): Promise<any> => {
   const res = await fetch(`${BASE}/catalogos-papel/${catalogo}`, {
     method: "POST",
     headers: headers(),
-    body: JSON.stringify({ nombre, medida, numero_maquina, altura }),  // ← nuevo
+    body: JSON.stringify({ nombre, medida, numero_maquina, altura, idcat_punto }),
   });
   if (!res.ok) throw new Error("Error al agregar item al catálogo");
   const raw = await res.json();
-  const pkKey = Object.keys(raw).find(k => k.startsWith("idcat_")) ?? "idmatrix";
-  return {
-    id:             raw[pkKey] ?? raw.id,
-    nombre:         raw.nombre ?? raw.medida_matrix,
-    medida:         raw.medida,
-    altura:         raw.altura,
-    puntos:         raw.puntos,
-    numero_maquina: raw.numero_maquina,
-  };
+  return normalizarItem(raw);
 };
 
 export const editarItemCatalogo = async (
@@ -65,12 +70,13 @@ export const editarItemCatalogo = async (
   nombre: string,
   medida?: string,
   numero_maquina?: string,
-  altura?: string,            // ← nuevo
+  altura?: string,
+  idcat_punto?: number | null,
 ): Promise<void> => {
   const res = await fetch(`${BASE}/catalogos-papel/${catalogo}/${id}`, {
     method: "PUT",
     headers: headers(),
-    body: JSON.stringify({ nombre, medida, numero_maquina, altura }),  // ← nuevo
+    body: JSON.stringify({ nombre, medida, numero_maquina, altura, idcat_punto }),
   });
   if (!res.ok) throw new Error("Error al editar item del catálogo");
 };
@@ -169,6 +175,7 @@ const mapFormToApi = (form: ProductoPapelForm) => ({
         rendimiento: m.hojeado.rendimiento || null,
         guillotina:  m.hojeado.guillotina  || null,
         hilo:        m.hojeado.hilo        || null,
+        bobina_extra: m.hojeado.bobinaExtra || null,
       },
     })),
   })),
@@ -179,10 +186,12 @@ const mapFormToApi = (form: ProductoPapelForm) => ({
     tamano:         form.suaje.tamano        || null,
     corte1_tipo:    form.suaje.corte1Tipo    || null,
     corte1_medida:  form.suaje.corte1Medida  || null,
-    idcat_corte:    form.suaje.idcat_corte,
+    idcat_corte:        form.suaje.idcat_corte,
+    idcat_punto_corte:  form.suaje.idcat_punto_corte,
     dobles1_tipo:   form.suaje.dobles1Tipo   || null,
     dobles1_medida: form.suaje.dobles1Medida || null,
-    idcat_doble:    form.suaje.idcat_doble,
+    idcat_doble:        form.suaje.idcat_doble,
+    idcat_punto_doble:  form.suaje.idcat_punto_doble,
     metros:         form.suaje.metros        || null,
     idcat_matrix:   form.suaje.idcat_matrix,
     tiempo_arreglo: form.suaje.tiempoArreglo ? parseInt(form.suaje.tiempoArreglo) : null,
@@ -190,6 +199,10 @@ const mapFormToApi = (form: ProductoPapelForm) => ({
     cantidad_sacabocado: form.suaje.cantidad_sacabocado ? parseInt(form.suaje.cantidad_sacabocado) : null,
     idcat_perforado:     form.suaje.idcat_perforado,
     cantidad_perforado:  form.suaje.cantidad_perforado ? parseInt(form.suaje.cantidad_perforado) : null,
+    herramental_desbarbe: !!form.suaje.herramentalDesbarbe,
+    no_desbarbe:          form.suaje.herramentalDesbarbe && form.suaje.noDesbarbe
+      ? parseInt(form.suaje.noDesbarbe)
+      : null,
   },
 
   acabados: {

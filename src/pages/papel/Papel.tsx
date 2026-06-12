@@ -27,6 +27,10 @@ const calcBase = (ancho: string, fuelle: string) => {
   return (!isNaN(a) && !isNaN(f)) ? `${(a - 0.5).toFixed(1)}x${(f - 0.5).toFixed(1)} cm` : "";
 };
 
+// Etiqueta "medida — altura" para cortes y dobles
+const labelCorteDoble = (i: { nombre: string; altura?: string }) =>
+  i.altura ? `${i.nombre} — ${i.altura}` : i.nombre;
+
 const ICON_PDF = "\uD83D\uDCC4";
 const ICON_IMG = "\uD83D\uDDBC\uFE0F";
 const ICON_CHART = "\uD83D\uDCCA";
@@ -87,6 +91,38 @@ function Sec({ title, children, action, colorKey = "archivos" }: {
       </div>
       <div style={{ padding: "12px 14px" }}>{children}</div>
     </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SELECT DE PUNTOS (junto a Corte y Dobles)
+// ═══════════════════════════════════════════════════════════════════════════
+function PuntosSelect({ idSel, items, onSel }: {
+  idSel: number | null;
+  items: { id: number; nombre: string; puntos?: number }[];
+  onSel: (id: number | null, txt: string) => void;
+}) {
+  return (
+    <select
+      value={idSel ?? ""}
+      onChange={e => {
+        const idP = e.target.value ? Number(e.target.value) : null;
+        const item = items.find(p => p.id === idP);
+        onSel(idP, item ? String(item.puntos ?? item.nombre) : "");
+      }}
+      style={{
+        width: "100%", height: 34, padding: "0 6px",
+        border: "1px solid #D1D5DB", borderRadius: 5,
+        fontSize: 13, color: idSel ? "#111827" : "#9CA3AF",
+        background: "#fff", outline: "none",
+        boxSizing: "border-box", cursor: "pointer",
+      }}
+    >
+      <option value=""></option>
+      {items.map(p => (
+        <option key={p.id} value={p.id} style={{ color: "#111827" }}>{p.puntos ?? p.nombre}</option>
+      ))}
+    </select>
   );
 }
 
@@ -611,6 +647,9 @@ useEffect(() => {
   const namesMedida = (key: CatKey) =>
     (catalogs[key] as any[]).map((i: any) => labelConMedida(i));
 
+  // Catálogo de puntos para los selects junto a Corte y Dobles
+  const puntosItems = ((catalogs as any).puntos ?? []) as { id: number; nombre: string; puntos?: number }[];
+
   const sublbl: React.CSSProperties = { display: "block", fontSize: 10, fontWeight: 700, color: "#9CA3AF", marginBottom: 6, letterSpacing: "0.08em", textTransform: "uppercase", paddingBottom: 4, borderBottom: "1px dashed #E5E7EB" };
 
   return (
@@ -681,7 +720,7 @@ useEffect(() => {
         <Sec title="Tipo de papel" colorKey="tipo" action={
           <button onClick={addGrupo} disabled={form.grupos[form.grupos.length - 1]?.materiales.length === 0}
             title={form.grupos[form.grupos.length - 1]?.materiales.length === 0 ? "Agrega al menos un material al grupo actual" : ""}
-            style={{ padding: "0 12px", height: 28, background: form.grupos[form.grupos.length - 1]?.materiales.length === 0 ? "#E5E7EB" : "#1D4ED8", border: "none", borderRadius: 5, cursor: form.grupos[form.grupos.length - 1]?.materiales.length === 0 ? "not-allowed" : "pointer", color: form.grupos[form.grupos.length - 1]?.materiales.length === 0 ? "#9CA3AF" : "#fff", fontSize: 13, fontWeight: 600 }}>+ Grupo</button>
+            style={{ padding: "0 12px", height: 28, background: form.grupos[form.grupos.length - 1]?.materiales.length === 0 ? "#E5E7EB" : "#1D4ED8", border: "none", borderRadius: 5, cursor: form.grupos[form.grupos.length - 1]?.materiales.length === 0 ? "not-allowed" : "pointer", color: form.grupos[form.grupos.length - 1]?.materiales.length === 0 ? "#9CA3AF" : "#fff", fontSize: 13, fontWeight: 600 }}>+ Opciones</button>
         }>
           {form.grupos.map((g, i) => (
             <GrupoBlock key={g.id} grupo={g} grupoIndex={i} totalGrupos={form.grupos.length}
@@ -716,33 +755,64 @@ useEffect(() => {
           </Field>
         </FG>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "0 10px", marginBottom: 10 }}>
+        {/* Corte + Puntos | Dobles + Puntos | T. arreglo */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 72px 1fr 72px 1fr", gap: "0 10px", marginBottom: 10 }}>
           <Field label="Corte">
             <SelConAlta
               catKey={"cortes" as CatKey}
-              options={(catalogs as any).cortes?.map((i: any) => i.nombre) ?? []}
-              value={form.suaje.corte1Tipo}
+              options={((catalogs as any).cortes ?? []).map((i: any) => labelCorteDoble(i))}
+              value={form.suaje.corte1Tipo ? labelCorteDoble({ nombre: form.suaje.corte1Tipo, altura: form.suaje.corte1Medida }) : ""}
               onChange={(v) => {
-                const item = (catalogs as any).cortes?.find((i: any) => i.nombre === v);
-                updSuaje({ corte1Tipo: v, corte1Medida: item?.altura ?? "", idcat_corte: item?.id ?? null });
+                const item = ((catalogs as any).cortes ?? []).find((i: any) => labelCorteDoble(i) === v);
+                const punto = item?.idcat_punto ? puntosItems.find(p => p.id === item.idcat_punto) : undefined;
+                updSuaje({
+                  corte1Tipo: item?.nombre ?? v,
+                  corte1Medida: item?.altura ?? "",
+                  idcat_corte: item?.id ?? null,
+                  idcat_punto_corte: punto?.id ?? null,
+                  puntosCorte: punto ? String(punto.puntos ?? punto.nombre) : "",
+                });
               }}
               onAdd={addItem}
               placeholder=""
             />
           </Field>
+          <Field label="Puntos">
+            <PuntosSelect
+              idSel={form.suaje.idcat_punto_corte}
+              items={puntosItems}
+              onSel={(idP, txt) => updSuaje({ idcat_punto_corte: idP, puntosCorte: txt })}
+            />
+          </Field>
+
           <Field label="Dobles">
             <SelConAlta
               catKey={"dobles" as CatKey}
-              options={(catalogs as any).dobles?.map((i: any) => i.nombre) ?? []}
-              value={form.suaje.dobles1Tipo}
+              options={((catalogs as any).dobles ?? []).map((i: any) => labelCorteDoble(i))}
+              value={form.suaje.dobles1Tipo ? labelCorteDoble({ nombre: form.suaje.dobles1Tipo, altura: form.suaje.dobles1Medida }) : ""}
               onChange={(v) => {
-                const item = (catalogs as any).dobles?.find((i: any) => i.nombre === v);
-                updSuaje({ dobles1Tipo: v, dobles1Medida: item?.altura ?? "", idcat_doble: item?.id ?? null });
+                const item = ((catalogs as any).dobles ?? []).find((i: any) => labelCorteDoble(i) === v);
+                const punto = item?.idcat_punto ? puntosItems.find(p => p.id === item.idcat_punto) : undefined;
+                updSuaje({
+                  dobles1Tipo: item?.nombre ?? v,
+                  dobles1Medida: item?.altura ?? "",
+                  idcat_doble: item?.id ?? null,
+                  idcat_punto_doble: punto?.id ?? null,
+                  puntosDoble: punto ? String(punto.puntos ?? punto.nombre) : "",
+                });
               }}
               onAdd={addItem}
               placeholder=""
             />
           </Field>
+          <Field label="Puntos">
+            <PuntosSelect
+              idSel={form.suaje.idcat_punto_doble}
+              items={puntosItems}
+              onSel={(idP, txt) => updSuaje({ idcat_punto_doble: idP, puntosDoble: txt })}
+            />
+          </Field>
+
           <Field label="T. arreglo (min)">
             <Inp value={form.suaje.tiempoArreglo} onChange={v => updSuaje({ tiempoArreglo: v })} />
           </Field>
@@ -785,6 +855,44 @@ useEffect(() => {
     </div>
 
   </div>
+</div>
+
+{/* Herramental desbarbe */}
+<div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", padding: "8px 12px", background: form.suaje.herramentalDesbarbe ? "#EFF6FF" : "#F9FAFB", border: `1px solid ${form.suaje.herramentalDesbarbe ? "#BFDBFE" : "#E5E7EB"}`, borderRadius: 6, transition: "all 0.15s ease" }}>
+  <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", userSelect: "none" }}>
+    <input
+      type="checkbox"
+      checked={form.suaje.herramentalDesbarbe}
+      onChange={e => updSuaje({
+        herramentalDesbarbe: e.target.checked,
+        // Si lo desmarca, limpia también el número para no guardar basura
+        noDesbarbe: e.target.checked ? form.suaje.noDesbarbe : "",
+      })}
+      style={{ width: 16, height: 16, accentColor: "#1D4ED8", cursor: "pointer", margin: 0 }}
+    />
+    <span style={{ fontSize: 12, fontWeight: 700, color: form.suaje.herramentalDesbarbe ? "#1D4ED8" : "#374151", letterSpacing: "0.05em", textTransform: "uppercase" }}>
+      Herramental desbarbe
+    </span>
+  </label>
+  {form.suaje.herramentalDesbarbe && (
+    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      <label style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", letterSpacing: "0.05em", textTransform: "uppercase", whiteSpace: "nowrap" }}>
+        No. desbarbe
+      </label>
+      <input
+        type="text"
+        inputMode="numeric"
+        value={form.suaje.noDesbarbe}
+        onChange={e => {
+          // Solo dígitos (entero)
+          const soloNum = e.target.value.replace(/[^0-9]/g, "");
+          updSuaje({ noDesbarbe: soloNum });
+        }}
+        placeholder=""
+        style={{ width: 120, height: 30, padding: "0 8px", border: "1px solid #BFDBFE", borderRadius: 5, fontSize: 13, color: "#111827", background: "#fff", outline: "none", boxSizing: "border-box" }}
+      />
+    </div>
+  )}
 </div>
       </Sec>
 
@@ -952,6 +1060,15 @@ function DetalleProducto({ id }: { id: number }) {
   const COLORS = ["#7C3AED", "#0891B2", "#059669", "#D97706", "#DC2626", "#DB2777"];
   const LIGHTS = ["#EDE9FE", "#CFFAFE", "#D1FAE5", "#FEF3C7", "#FEE2E2", "#FCE7F3"];
 
+  const corteTxt = detalle.suaje
+    ? [detalle.suaje.corte1_tipo, detalle.suaje.corte1_medida].filter(Boolean).join(" — ") +
+      (detalle.suaje.puntos_corte != null ? ` (${detalle.suaje.puntos_corte} pts)` : "")
+    : "";
+  const doblesTxt = detalle.suaje
+    ? [detalle.suaje.dobles1_tipo, detalle.suaje.dobles1_medida].filter(Boolean).join(" — ") +
+      (detalle.suaje.puntos_doble != null ? ` (${detalle.suaje.puntos_doble} pts)` : "")
+    : "";
+
   return (
     <div style={{ padding: "14px 16px", background: "#F9FAFB", borderTop: "1px solid #E5E7EB" }}>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "3px 32px", marginBottom: 14 }}>
@@ -974,10 +1091,11 @@ function DetalleProducto({ id }: { id: number }) {
             {row("Metros", detalle.suaje.metros)}
             {row("Matrix", detalle.suaje.matrix_nombre)}
             {row("T. arreglo", detalle.suaje.tiempo_arreglo ? `${detalle.suaje.tiempo_arreglo} min` : null)}
-            {row("Corte", [detalle.suaje.corte1_tipo, detalle.suaje.corte1_medida].filter(Boolean).join(" / "))}
-            {row("Dobles", [detalle.suaje.dobles1_tipo, detalle.suaje.dobles1_medida].filter(Boolean).join(" / "))}
+            {row("Corte", corteTxt)}
+            {row("Dobles", doblesTxt)}
             {detalle.suaje.sacabocado_nombre && row("Sacabocado", `${detalle.suaje.sacabocado_nombre}${detalle.suaje.sacabocado_medida ? " -- " + detalle.suaje.sacabocado_medida : ""} x ${detalle.suaje.cantidad_sacabocado ?? "--"}`)}
             {detalle.suaje.perforado_nombre && row("Perforado", `${detalle.suaje.perforado_nombre}${detalle.suaje.perforado_medida ? " -- " + detalle.suaje.perforado_medida : ""} x ${detalle.suaje.cantidad_perforado ?? "--"}`)}
+            {detalle.suaje.herramental_desbarbe === true && row("Herramental desbarbe", detalle.suaje.no_desbarbe != null ? `Sí — No. ${detalle.suaje.no_desbarbe}` : "Sí")}
           </div>
         </div>
       )}
@@ -1047,10 +1165,10 @@ function DetalleProducto({ id }: { id: number }) {
                             </span>
                           ))}
                         </div>
-                        {(m.hojeado?.bobina || m.hojeado?.corte || m.hojeado?.rendimiento || m.hojeado?.guillotina || m.hojeado?.hilo) && (
+                        {(m.hojeado?.bobina || m.hojeado?.corte || m.hojeado?.rendimiento || m.hojeado?.guillotina || m.hojeado?.hilo || m.hojeado?.bobina_extra) && (
                           <div style={{ display: "flex", flexWrap: "wrap", gap: "2px 12px", paddingTop: 3, paddingLeft: 20, borderTop: "1px dashed #F3F4F6" }}>
                             <span style={{ fontSize: 9, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase", alignSelf: "center" }}>Hojeado:</span>
-                            {[["Bob.", m.hojeado?.bobina], ["Corte", m.hojeado?.corte], ["Rend.", m.hojeado?.rendimiento], ["Guill.", m.hojeado?.guillotina], ["Hilo", m.hojeado?.hilo]].filter(([, v]) => v).map(([lbl, val]) => (
+                            {[["Bob.", m.hojeado?.bobina], ["Bob. extra", m.hojeado?.bobina_extra], ["Corte", m.hojeado?.corte], ["Rend.", m.hojeado?.rendimiento], ["Guill.", m.hojeado?.guillotina], ["Hilo", m.hojeado?.hilo]].filter(([, v]) => v).map(([lbl, val]) => (
                               <span key={lbl as string} style={{ fontSize: 11 }}>
                                 <span style={{ color: "#9CA3AF" }}>{lbl}: </span>
                                 <span style={{ color: "#111827", fontWeight: 500 }}>{val}</span>
@@ -1359,6 +1477,7 @@ export default function Papel() {
             rendimiento: m.hojeado?.rendimiento ?? "",
             guillotina: m.hojeado?.guillotina ?? "",
             hilo: m.hojeado?.hilo ?? "",
+            bobinaExtra: m.hojeado?.bobina_extra ?? "",
           },
         })),
       }));
@@ -1371,9 +1490,13 @@ export default function Papel() {
         form.suaje.corte1Tipo = d.suaje.corte1_tipo ?? "";
         form.suaje.corte1Medida = d.suaje.corte1_medida ?? "";
         form.suaje.idcat_corte = d.suaje.idcat_corte ?? null;
+        form.suaje.idcat_punto_corte = d.suaje.idcat_punto_corte ?? null;
+        form.suaje.puntosCorte = d.suaje.puntos_corte != null ? String(d.suaje.puntos_corte) : "";
         form.suaje.dobles1Tipo = d.suaje.dobles1_tipo ?? "";
         form.suaje.dobles1Medida = d.suaje.dobles1_medida ?? "";
         form.suaje.idcat_doble = d.suaje.idcat_doble ?? null;
+        form.suaje.idcat_punto_doble = d.suaje.idcat_punto_doble ?? null;
+        form.suaje.puntosDoble = d.suaje.puntos_doble != null ? String(d.suaje.puntos_doble) : "";
         form.suaje.metros = d.suaje.metros ?? "";
         form.suaje.matrix = d.suaje.matrix_nombre ?? "";
         form.suaje.idcat_matrix = d.suaje.idcat_matrix ?? null;
@@ -1388,6 +1511,8 @@ export default function Papel() {
           ? (d.suaje.perforado_medida ? `${d.suaje.perforado_nombre} -- ${d.suaje.perforado_medida}` : d.suaje.perforado_nombre)
           : "";
         form.suaje.cantidad_perforado = d.suaje.cantidad_perforado ? String(d.suaje.cantidad_perforado) : "";
+        form.suaje.herramentalDesbarbe = d.suaje.herramental_desbarbe === true;
+        form.suaje.noDesbarbe = d.suaje.no_desbarbe != null ? String(d.suaje.no_desbarbe) : "";
       }
 
       if (d.acabados) {

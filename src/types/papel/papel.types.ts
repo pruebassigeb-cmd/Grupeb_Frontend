@@ -8,6 +8,7 @@ export interface CatItem {
   numero_maquina?: string;
   altura?: string;
   puntos?: number;
+  idcat_punto?: number;
 }
 
 export type CatKey =
@@ -49,6 +50,7 @@ export interface Hojeado {
   rendimiento: string;
   guillotina: string;
   hilo: string;
+  bobinaExtra: string;  // opcional, despliega un campo extra al lado de "bobina"
 }
 
 export interface MaterialEntry {
@@ -82,10 +84,14 @@ export interface Suaje {
   corte1Tipo: string;    // nombre del corte seleccionado
   corte1Medida: string;  // altura autorrellena
   idcat_corte: number | null;
+  idcat_punto_corte: number | null;  // punto ligado al corte (autorrellena, editable)
+  puntosCorte: string;               // valor de puntos para mostrar
   // dobles
   dobles1Tipo: string;   // nombre del doble seleccionado
   dobles1Medida: string; // altura autorrellena
   idcat_doble: number | null;
+  idcat_punto_doble: number | null;  // punto ligado al doble (autorrellena, editable)
+  puntosDoble: string;               // valor de puntos para mostrar
   metros: string;
   matrix: string;
   idcat_matrix: number | null;
@@ -96,6 +102,9 @@ export interface Suaje {
   idcat_perforado: number | null;
   perforadoNombre: string;
   cantidad_perforado: string;
+  // herramental de desbarbe
+  herramentalDesbarbe: boolean;
+  noDesbarbe: string;  // entero como string en el form, se parsea al enviar
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -181,7 +190,7 @@ export interface ProductoPapelListItem {
 // HELPERS PARA INICIALIZAR
 // ═══════════════════════════════════════════════════════════════════════════
 export const newHojeado = (): Hojeado => ({
-  bobina: "", corte: "", rendimiento: "", guillotina: "", hilo: "",
+  bobina: "", corte: "", rendimiento: "", guillotina: "", hilo: "", bobinaExtra: "",
 });
 
 export const newMaterial = (): MaterialEntry => ({
@@ -206,12 +215,15 @@ export const newGrupo = (): GrupoPapel => ({
 export const newSuaje = (): Suaje => ({
   numero: "", pzs: "", tamano: "",
   corte1Tipo: "", corte1Medida: "", idcat_corte: null,
+  idcat_punto_corte: null, puntosCorte: "",
   dobles1Tipo: "", dobles1Medida: "", idcat_doble: null,
+  idcat_punto_doble: null, puntosDoble: "",
   metros: "",
   matrix: "", idcat_matrix: null,
   tiempoArreglo: "",
   idcat_sacabocados: null, sacabocadoNombre: "", cantidad_sacabocado: "",
   idcat_perforado: null, perforadoNombre: "", cantidad_perforado: "",
+  herramentalDesbarbe: false, noDesbarbe: "",
 });
 
 export const newAcabados = (): Acabados => ({

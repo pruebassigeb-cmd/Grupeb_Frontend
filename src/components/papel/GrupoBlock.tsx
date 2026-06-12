@@ -134,7 +134,14 @@ function CalibreInput({ value, onChange, options, onAdd }: {
 // ── Material Card ──────────────────────────────────────────────────────────
 function MaterialCard({ entry, index, onEdit, onRemove }: { entry: MaterialEntry; index: number; onEdit: () => void; onRemove: () => void }) {
   const chip = (lbl: string, val: string) => val ? <span key={lbl} style={{ fontSize: 11, color: "#374151" }}><span style={{ color: "#9CA3AF", fontSize: 10 }}>{lbl} </span>{val}</span> : null;
-  const hFields = [["Bob.", entry.hojeado.bobina], ["Desarrollo", entry.hojeado.corte], ["Rend.", entry.hojeado.rendimiento], ["Guill.", entry.hojeado.guillotina], ["Hilo", entry.hojeado.hilo]].filter(([, v]) => v);
+  const hFields: [string, string][] = [
+    ["Bob.",       entry.hojeado.bobina],
+    ["Bob. extra", entry.hojeado.bobinaExtra],
+    ["Desarrollo", entry.hojeado.corte],
+    ["Rend.",      entry.hojeado.rendimiento],
+    ["Guill.",     entry.hojeado.guillotina],
+    ["Hilo",       entry.hojeado.hilo],
+  ].filter(([, v]) => v) as [string, string][];
   return (
     <div style={{ background: "#EFF6FF", border: "1px solid #BFDBFE", borderRadius: 6, padding: "7px 10px", display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 6 }}>
       <div style={{ width: 20, height: 20, borderRadius: "50%", background: "#1E3A5F", color: "#fff", fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 1 }}>{index + 1}</div>
@@ -166,6 +173,24 @@ function DraftForm({ entry, onChange, onConfirm, isEditing, catTipoPapel, catCal
   const upd  = (k: keyof MaterialEntry, v: any) => onChange({ ...entry, [k]: v });
   const updH = (k: keyof MaterialEntry["hojeado"], v: string) => onChange({ ...entry, hojeado: { ...entry.hojeado, [k]: v } });
 
+  // ── Bobina extra: oculta por defecto, visible si tiene valor o si se despliega
+  const [mostrarBobExtra, setMostrarBobExtra] = useState<boolean>(!!entry.hojeado.bobinaExtra);
+
+  // Si el entry cambia (por edición) y trae bobinaExtra, asegurar visibilidad
+  useEffect(() => {
+    if (entry.hojeado.bobinaExtra) setMostrarBobExtra(true);
+  }, [entry.hojeado.bobinaExtra]);
+
+  const toggleBobExtra = () => {
+    if (mostrarBobExtra) {
+      // Al ocultar también limpiar el valor para no guardar basura
+      if (entry.hojeado.bobinaExtra) updH("bobinaExtra", "");
+      setMostrarBobExtra(false);
+    } else {
+      setMostrarBobExtra(true);
+    }
+  };
+
   const onTipoChange = (nombre: string) => {
     const item = catTipoPapelItems.find(i => i.nombre === nombre);
     onChange({ ...entry, tipo: nombre, idcat_tipo_papel: item?.id ?? null });
@@ -175,6 +200,13 @@ function DraftForm({ entry, onChange, onConfirm, isEditing, catTipoPapel, catCal
     const item = catCalibreItems.find(i => i.nombre === nombre);
     onChange({ ...entry, calibre: nombre, idcat_calibre: item?.id ?? null });
   };
+
+  // El grid del hojeado ajusta sus columnas según haya o no bobina extra:
+  //   sin extra → label + 5 campos + botón toggle
+  //   con extra → label + 6 campos + botón toggle
+  const hojeadoCols = mostrarBobExtra
+    ? "auto repeat(6, 1fr) auto"
+    : "auto repeat(5, 1fr) auto";
 
   return (
     <div style={{
@@ -212,19 +244,55 @@ function DraftForm({ entry, onChange, onConfirm, isEditing, catTipoPapel, catCal
           </button>
         </div>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "auto repeat(5, 1fr)", gap: "4px 8px", alignItems: "center", borderTop: "1px dashed #CBD5E1", paddingTop: 8 }}>
-        <span style={{ fontSize: 9, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.06em", whiteSpace: "nowrap" }}>Hojeado</span>
-        {([
-          ["bobina",      "Bob."  ],
-          ["corte",       "Desarrollo" ],
-          ["rendimiento", "Rend." ],
-          ["guillotina",  "Guill."],
-          ["hilo",        "Hilo"  ],
-        ] as [keyof MaterialEntry["hojeado"], string][]).map(([k, lbl]) => (
-          <Field key={k} label={lbl}>
-            <Inp value={entry.hojeado[k]} onChange={(v) => updH(k, v)} />
+      <div style={{ display: "grid", gridTemplateColumns: hojeadoCols, gap: "4px 8px", alignItems: "end", borderTop: "1px dashed #CBD5E1", paddingTop: 8 }}>
+        <span style={{ fontSize: 9, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.06em", whiteSpace: "nowrap", paddingBottom: 10 }}>Hojeado</span>
+
+        <Field label="Bob.">
+          <Inp value={entry.hojeado.bobina} onChange={(v) => updH("bobina", v)} />
+        </Field>
+
+        {mostrarBobExtra && (
+          <Field label="Bob. extra">
+            <Inp value={entry.hojeado.bobinaExtra} onChange={(v) => updH("bobinaExtra", v)} />
           </Field>
-        ))}
+        )}
+
+        <Field label="Desarrollo">
+          <Inp value={entry.hojeado.corte} onChange={(v) => updH("corte", v)} />
+        </Field>
+        <Field label="Rend.">
+          <Inp value={entry.hojeado.rendimiento} onChange={(v) => updH("rendimiento", v)} />
+        </Field>
+        <Field label="Guill.">
+          <Inp value={entry.hojeado.guillotina} onChange={(v) => updH("guillotina", v)} />
+        </Field>
+        <Field label="Hilo">
+          <Inp value={entry.hojeado.hilo} onChange={(v) => updH("hilo", v)} />
+        </Field>
+
+        {/* Botón toggle Bobina extra */}
+        <button
+          type="button"
+          onClick={toggleBobExtra}
+          title={mostrarBobExtra ? "Quitar bobina extra" : "Agregar bobina extra"}
+          style={{
+            width: 30, height: 34,
+            background: mostrarBobExtra ? "#FEE2E2" : "#EFF6FF",
+            border: `1px solid ${mostrarBobExtra ? "#FCA5A5" : "#BFDBFE"}`,
+            borderRadius: 5,
+            cursor: "pointer",
+            color: mostrarBobExtra ? "#DC2626" : "#1D4ED8",
+            fontSize: mostrarBobExtra ? 16 : 18,
+            fontWeight: 700,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 0,
+            lineHeight: 1,
+          }}
+        >
+          {mostrarBobExtra ? "×" : "+"}
+        </button>
       </div>
     </div>
   );
@@ -291,7 +359,7 @@ export default function GrupoBlock({ grupo, grupoIndex, totalGrupos, onUpdate, o
             fontSize: 10, fontWeight: 700,
             display: "flex", alignItems: "center", justifyContent: "center",
           }}>{grupoIndex + 1}</div>
-          <span style={{ fontSize: 11, fontWeight: 700, color: headerText }}>Grupo {grupoIndex + 1}</span>
+          <span style={{ fontSize: 11, fontWeight: 700, color: headerText }}>Opciones {grupoIndex + 1}</span>
           <span style={{ fontSize: 10, color: "#475569" }}>— {grupo.materiales.length} mat.</span>
           {collapsed && grupo.materiales.length > 0 && (
             <span style={{ fontSize: 10, color: "#334155", marginLeft: 4 }}>
