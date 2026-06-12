@@ -27,7 +27,6 @@ const calcBase = (ancho: string, fuelle: string) => {
   return (!isNaN(a) && !isNaN(f)) ? `${(a - 0.5).toFixed(1)}x${(f - 0.5).toFixed(1)} cm` : "";
 };
 
-// Etiqueta "medida — altura" para cortes y dobles
 const labelCorteDoble = (i: { nombre: string; altura?: string }) =>
   i.altura ? `${i.nombre} — ${i.altura}` : i.nombre;
 
@@ -42,16 +41,14 @@ const CATEGORIA_A_SUBCARPETA: Record<string, string> = {
 };
 
 const SEC_COLORS = {
-  // OSCURO
   tipo:      { border: "#94A3B8", headerBg: "#CBD5E1", headerText: "#0F172A", leftBar: "#334155" },
   suaje:     { border: "#94A3B8", headerBg: "#CBD5E1", headerText: "#0F172A", leftBar: "#334155" },
   acabados:  { border: "#94A3B8", headerBg: "#CBD5E1", headerText: "#0F172A", leftBar: "#334155" },
   maquinaria:{ border: "#94A3B8", headerBg: "#CBD5E1", headerText: "#0F172A", leftBar: "#334155" },
   archivos:  { border: "#94A3B8", headerBg: "#CBD5E1", headerText: "#0F172A", leftBar: "#334155" },
-
-  // CLARO
   papel:     { border: "#E2E8F0", headerBg: "#F8FAFC", headerText: "#475569", leftBar: "#94A3B8" },
 };
+
 // ═══════════════════════════════════════════════════════════════════════════
 // PRIMITIVOS UI
 // ═══════════════════════════════════════════════════════════════════════════
@@ -68,7 +65,7 @@ function Inp({ value, onChange, style, readOnly }: {
 
 function Field({ label, children, style }: { label: string; children: React.ReactNode; style?: React.CSSProperties }) {
   return (
-    <div style={{ minWidth: 0, ...style }}>   {/* ← agregar minWidth: 0 */}
+    <div style={{ minWidth: 0, ...style }}>
       <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#6B7280", marginBottom: 4, letterSpacing: "0.05em", textTransform: "uppercase" }}>{label}</label>
       {children}
     </div>
@@ -95,7 +92,7 @@ function Sec({ title, children, action, colorKey = "archivos" }: {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// SELECT DE PUNTOS (junto a Corte y Dobles)
+// SELECT DE PUNTOS
 // ═══════════════════════════════════════════════════════════════════════════
 function PuntosSelect({ idSel, items, onSel }: {
   idSel: number | null;
@@ -110,13 +107,7 @@ function PuntosSelect({ idSel, items, onSel }: {
         const item = items.find(p => p.id === idP);
         onSel(idP, item ? String(item.puntos ?? item.nombre) : "");
       }}
-      style={{
-        width: "100%", height: 34, padding: "0 6px",
-        border: "1px solid #D1D5DB", borderRadius: 5,
-        fontSize: 13, color: idSel ? "#111827" : "#9CA3AF",
-        background: "#fff", outline: "none",
-        boxSizing: "border-box", cursor: "pointer",
-      }}
+      style={{ width: "100%", height: 34, padding: "0 6px", border: "1px solid #D1D5DB", borderRadius: 5, fontSize: 13, color: idSel ? "#111827" : "#9CA3AF", background: "#fff", outline: "none", boxSizing: "border-box", cursor: "pointer" }}
     >
       <option value=""></option>
       {items.map(p => (
@@ -169,35 +160,15 @@ function AsaMultiSelect({ selectedIds, selectedNames, catItems, onChange, onAdd,
   const todosSeleccionados = catItems.length > 0 && catItems.every(item => selectedIds.includes(item.id));
 
   const handleToggleTodos = () => {
-    if (todosSeleccionados) {
-      onChange([], []);
-    } else {
-      onChange(catItems.map(i => i.id), catItems.map(i => i.nombre));
-    }
+    if (todosSeleccionados) onChange([], []);
+    else onChange(catItems.map(i => i.id), catItems.map(i => i.nombre));
   };
 
   return (
     <div ref={ref} style={{ position: "relative" }}>
       <div style={{ height: 34, overflow: "hidden", borderRadius: 5 }}>
         <button type="button" onClick={() => { setOpen(!open); setAdding(false); }}
-          style={{
-            width: "100%",
-            height: 34,
-            padding: "0 8px",
-            border: "1px solid #D1D5DB",
-            borderRadius: 5,
-            fontSize: 13,
-            color: selectedIds.length ? "#111827" : "#9CA3AF",
-            background: "#fff",
-            outline: "none",
-            cursor: "pointer",
-            textAlign: "left",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            boxSizing: "border-box",
-            overflow: "hidden",
-          }}>
+          style={{ width: "100%", height: 34, padding: "0 8px", border: "1px solid #D1D5DB", borderRadius: 5, fontSize: 13, color: selectedIds.length ? "#111827" : "#9CA3AF", background: "#fff", outline: "none", cursor: "pointer", textAlign: "left", display: "flex", alignItems: "center", justifyContent: "space-between", boxSizing: "border-box", overflow: "hidden" }}>
           <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, minWidth: 0 }}>
             {selectedIds.length === 0 ? "" : selectedNames.join(", ")}
           </span>
@@ -206,20 +177,14 @@ function AsaMultiSelect({ selectedIds, selectedNames, catItems, onChange, onAdd,
       </div>
       {open && (
         <div style={{ position: "absolute", top: "calc(100% + 3px)", left: 0, right: 0, background: "#fff", border: "1px solid #D1D5DB", borderRadius: 6, zIndex: 50, boxShadow: "0 4px 12px rgba(0,0,0,0.1)", padding: "4px 0", maxHeight: 220, overflowY: "auto" }}>
-
-          {/* ── Seleccionar todo ── */}
           {catItems.length > 0 && (
             <div style={{ borderBottom: "1px solid #F3F4F6", padding: "3px 8px 5px" }}>
-              <button
-                type="button"
-                onClick={handleToggleTodos}
-                style={{ width: "100%", padding: "3px 4px", border: "none", background: "transparent", color: todosSeleccionados ? "#DC2626" : "#374151", fontSize: 12, cursor: "pointer", textAlign: "left", fontWeight: 600 }}
-              >
+              <button type="button" onClick={handleToggleTodos}
+                style={{ width: "100%", padding: "3px 4px", border: "none", background: "transparent", color: todosSeleccionados ? "#DC2626" : "#374151", fontSize: 12, cursor: "pointer", textAlign: "left", fontWeight: 600 }}>
                 {todosSeleccionados ? "✕ Deseleccionar todo" : "✓ Seleccionar todo"}
               </button>
             </div>
           )}
-
           {catItems.map(item => (
             <label key={item.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 12px", cursor: "pointer", fontSize: 13, color: "#111827", background: selectedIds.includes(item.id) ? "#EFF6FF" : "transparent" }}>
               <input type="checkbox" checked={selectedIds.includes(item.id)} onChange={() => toggle(item)} style={{ width: 14, height: 14, accentColor: "#1D4ED8", cursor: "pointer", flexShrink: 0 }} />
@@ -291,35 +256,15 @@ function MaquinariaMultiSelect({ catKey, selectedIds, selectedNames, catItems, o
   const todosSeleccionados = catItems.length > 0 && catItems.every(item => selectedIds.includes(item.id));
 
   const handleToggleTodos = () => {
-    if (todosSeleccionados) {
-      onChange([], []);
-    } else {
-      onChange(catItems.map(i => i.id), catItems.map(i => i.nombre));
-    }
+    if (todosSeleccionados) onChange([], []);
+    else onChange(catItems.map(i => i.id), catItems.map(i => i.nombre));
   };
 
   return (
     <div ref={ref} style={{ position: "relative", minWidth: 0, maxWidth: "100%" }}>
       <div style={{ height: 34, overflow: "hidden", borderRadius: 5 }}>
         <button type="button" onClick={() => { setOpen(!open); setAdding(false); }}
-          style={{
-            width: "100%",
-            height: 34,
-            padding: "0 8px",
-            border: "1px solid #D1D5DB",
-            borderRadius: 5,
-            fontSize: 13,
-            color: selectedIds.length ? "#111827" : "#9CA3AF",
-            background: "#fff",
-            outline: "none",
-            cursor: "pointer",
-            textAlign: "left",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            boxSizing: "border-box",
-            overflow: "hidden",
-          }}>
+          style={{ width: "100%", height: 34, padding: "0 8px", border: "1px solid #D1D5DB", borderRadius: 5, fontSize: 13, color: selectedIds.length ? "#111827" : "#9CA3AF", background: "#fff", outline: "none", cursor: "pointer", textAlign: "left", display: "flex", alignItems: "center", justifyContent: "space-between", boxSizing: "border-box", overflow: "hidden" }}>
           <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, minWidth: 0 }}>
             {selectedIds.length === 0 ? "" : selectedNames.join(", ")}
           </span>
@@ -328,20 +273,14 @@ function MaquinariaMultiSelect({ catKey, selectedIds, selectedNames, catItems, o
       </div>
       {open && (
         <div style={{ position: "absolute", top: "calc(100% + 3px)", left: 0, right: 0, background: "#fff", border: "1px solid #D1D5DB", borderRadius: 6, zIndex: 50, boxShadow: "0 4px 12px rgba(0,0,0,0.1)", padding: "4px 0", maxHeight: 220, overflowY: "auto" }}>
-
-          {/* ── Seleccionar todo ── */}
           {catItems.length > 0 && (
             <div style={{ borderBottom: "1px solid #F3F4F6", padding: "3px 8px 5px" }}>
-              <button
-                type="button"
-                onClick={handleToggleTodos}
-                style={{ width: "100%", padding: "3px 4px", border: "none", background: "transparent", color: todosSeleccionados ? "#DC2626" : "#374151", fontSize: 12, cursor: "pointer", textAlign: "left", fontWeight: 600 }}
-              >
+              <button type="button" onClick={handleToggleTodos}
+                style={{ width: "100%", padding: "3px 4px", border: "none", background: "transparent", color: todosSeleccionados ? "#DC2626" : "#374151", fontSize: 12, cursor: "pointer", textAlign: "left", fontWeight: 600 }}>
                 {todosSeleccionados ? "✕ Deseleccionar todo" : "✓ Seleccionar todo"}
               </button>
             </div>
           )}
-
           {catItems.map(item => (
             <label key={item.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 12px", cursor: "pointer", fontSize: 13, color: "#111827", background: selectedIds.includes(item.id) ? "#F1F5F9" : "transparent" }}>
               <input type="checkbox" checked={selectedIds.includes(item.id)} onChange={() => toggle(item)} style={{ width: 14, height: 14, accentColor: "#64748B", cursor: "pointer", flexShrink: 0 }} />
@@ -586,26 +525,18 @@ function FormularioProducto({ initial, onSave, onCancel, saving }: {
   const updMaq = (patch: any) => upd({ maquinaria: { ...form.maquinaria, ...patch } });
 
   const contRef = useRef<HTMLDivElement>(null);
-const [btnLeft, setBtnLeft] = useState<number | null>(null);
+  const [btnLeft, setBtnLeft] = useState<number | null>(null);
 
-useEffect(() => {
-  const update = () => {
-    if (contRef.current) {
-      setBtnLeft(contRef.current.getBoundingClientRect().left + 16);
-    }
-  };
-  update();
-
-  // Detecta cambios de tamaño del contenedor (incluye colapsar/expandir el sidebar)
-  const ro = new ResizeObserver(update);
-  if (contRef.current) ro.observe(contRef.current);
-
-  window.addEventListener("resize", update);
-  return () => {
-    ro.disconnect();
-    window.removeEventListener("resize", update);
-  };
-}, []);
+  useEffect(() => {
+    const update = () => {
+      if (contRef.current) setBtnLeft(contRef.current.getBoundingClientRect().left + 16);
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    if (contRef.current) ro.observe(contRef.current);
+    window.addEventListener("resize", update);
+    return () => { ro.disconnect(); window.removeEventListener("resize", update); };
+  }, []);
 
   useEffect(() => {
     const b = calcBase(form.ancho, form.fuelle);
@@ -647,58 +578,30 @@ useEffect(() => {
   const namesMedida = (key: CatKey) =>
     (catalogs[key] as any[]).map((i: any) => labelConMedida(i));
 
-  // Catálogo de puntos para los selects junto a Corte y Dobles
   const puntosItems = ((catalogs as any).puntos ?? []) as { id: number; nombre: string; puntos?: number }[];
 
   const sublbl: React.CSSProperties = { display: "block", fontSize: 10, fontWeight: 700, color: "#9CA3AF", marginBottom: 6, letterSpacing: "0.08em", textTransform: "uppercase", paddingBottom: 4, borderBottom: "1px dashed #E5E7EB" };
 
   return (
-  <div ref={contRef} style={{
-    maxWidth: "100%", margin: "0 auto",
-    padding: "64px 16px 48px",
-    fontFamily: "'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif",
-    color: "#111827",
-  }}>
-      {/* Header */}
+    <div ref={contRef} style={{ maxWidth: "100%", margin: "0 auto", padding: "64px 16px 48px", fontFamily: "'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif", color: "#111827" }}>
       <style>{`
-        @keyframes slideDown {
-          from { opacity: 0; transform: translateY(-8px); }
-          to   { opacity: 1; transform: translateY(0); }
-        }
+        @keyframes slideDown { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
         .btn-float-cancel:hover { background: #F9FAFB !important; border-color: #C4C9D4 !important; }
         .btn-float-save:not(:disabled):hover  { background: #1E40AF !important; box-shadow: 0 6px 20px rgba(29,78,216,0.4) !important; transform: translateY(-1px); }
         .btn-float-save:not(:disabled):active { transform: translateY(0); box-shadow: 0 2px 8px rgba(29,78,216,0.25) !important; }
       `}</style>
 
-      {/* ── Botones (izquierda, siguen el scroll) ── */}
-{btnLeft !== null && (
-  <div style={{
-    position: "fixed", top: 16, left: btnLeft, zIndex: 200,
-    display: "flex", gap: 8,
-    animation: "slideDown 0.2s ease",
-  }}>
-    <button onClick={onCancel} className="btn-float-cancel" style={{
-      height: 36, padding: "0 16px", border: "1px solid #D1D5DB",
-      borderRadius: 7, background: "#fff", color: "#374151",
-      fontSize: 13, fontWeight: 500, cursor: "pointer",
-      transition: "all 0.15s ease",
-      boxShadow: "0 1px 4px rgba(0,0,0,0.09)",
-    }}>
-      Cancelar
-    </button>
-    <button onClick={handleSubmit} disabled={saving} className="btn-float-save" style={{
-      height: 36, padding: "0 20px", border: "none", borderRadius: 7,
-      background: saving ? "#93C5FD" : "#1D4ED8", color: "#fff",
-      fontSize: 13, fontWeight: 600, cursor: saving ? "wait" : "pointer",
-      boxShadow: saving ? "none" : "0 2px 10px rgba(29,78,216,0.3)",
-      transition: "all 0.15s ease",
-    }}>
-      {saving ? "Guardando..." : isEdit ? "Guardar cambios" : "Registrar producto"}
-    </button>
-  </div>
-)}
+      {btnLeft !== null && (
+        <div style={{ position: "fixed", top: 16, left: btnLeft, zIndex: 200, display: "flex", gap: 8, animation: "slideDown 0.2s ease" }}>
+          <button onClick={onCancel} className="btn-float-cancel" style={{ height: 36, padding: "0 16px", border: "1px solid #D1D5DB", borderRadius: 7, background: "#fff", color: "#374151", fontSize: 13, fontWeight: 500, cursor: "pointer", transition: "all 0.15s ease", boxShadow: "0 1px 4px rgba(0,0,0,0.09)" }}>
+            Cancelar
+          </button>
+          <button onClick={handleSubmit} disabled={saving} className="btn-float-save" style={{ height: 36, padding: "0 20px", border: "none", borderRadius: 7, background: saving ? "#93C5FD" : "#1D4ED8", color: "#fff", fontSize: 13, fontWeight: 600, cursor: saving ? "wait" : "pointer", boxShadow: saving ? "none" : "0 2px 10px rgba(29,78,216,0.3)", transition: "all 0.15s ease" }}>
+            {saving ? "Guardando..." : isEdit ? "Guardar cambios" : "Registrar producto"}
+          </button>
+        </div>
+      )}
 
-      {/* Tipo de producto + Grupos */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1.4fr", gap: 10, marginBottom: 10 }}>
         <Sec title="Tipo de producto" colorKey="tipo">
           <FG cols={2} gap="6px 8px">
@@ -734,7 +637,6 @@ useEffect(() => {
         </Sec>
       </div>
 
-      {/* Suaje */}
       <Sec title="Suaje" colorKey="suaje">
         <FG cols={5} gap="6px 8px" style={{ marginBottom: 8 }}>
           <Field label="Numero">  <Inp value={form.suaje.numero} onChange={v => updSuaje({ numero: v })} /></Field>
@@ -742,161 +644,98 @@ useEffect(() => {
           <Field label="Tamaño">  <Inp value={form.suaje.tamano} onChange={v => updSuaje({ tamano: v })} /></Field>
           <Field label="mm (Corte y doblez)">  <Inp value={form.suaje.metros} onChange={v => updSuaje({ metros: v })} /></Field>
           <Field label="Matrix">
-            <SelConAlta
-              catKey="matrix"
-              options={names("matrix")}
-              value={form.suaje.matrix}
-              onChange={(v) => {
-                const item = catalogs.matrix.find(i => i.nombre === v);
-                updSuaje({ matrix: v, idcat_matrix: item?.id ?? null });
-              }}
-              onAdd={addItem}
-            />
+            <SelConAlta catKey="matrix" options={names("matrix")} value={form.suaje.matrix}
+              onChange={(v) => { const item = catalogs.matrix.find(i => i.nombre === v); updSuaje({ matrix: v, idcat_matrix: item?.id ?? null }); }}
+              onAdd={addItem} />
           </Field>
         </FG>
 
-        {/* Corte + Puntos | Dobles + Puntos | T. arreglo */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 72px 1fr 72px 1fr", gap: "0 10px", marginBottom: 10 }}>
           <Field label="Corte">
-            <SelConAlta
-              catKey={"cortes" as CatKey}
+            <SelConAlta catKey={"cortes" as CatKey}
               options={((catalogs as any).cortes ?? []).map((i: any) => labelCorteDoble(i))}
               value={form.suaje.corte1Tipo ? labelCorteDoble({ nombre: form.suaje.corte1Tipo, altura: form.suaje.corte1Medida }) : ""}
               onChange={(v) => {
                 const item = ((catalogs as any).cortes ?? []).find((i: any) => labelCorteDoble(i) === v);
                 const punto = item?.idcat_punto ? puntosItems.find(p => p.id === item.idcat_punto) : undefined;
-                updSuaje({
-                  corte1Tipo: item?.nombre ?? v,
-                  corte1Medida: item?.altura ?? "",
-                  idcat_corte: item?.id ?? null,
-                  idcat_punto_corte: punto?.id ?? null,
-                  puntosCorte: punto ? String(punto.puntos ?? punto.nombre) : "",
-                });
+                updSuaje({ corte1Tipo: item?.nombre ?? v, corte1Medida: item?.altura ?? "", idcat_corte: item?.id ?? null, idcat_punto_corte: punto?.id ?? null, puntosCorte: punto ? String(punto.puntos ?? punto.nombre) : "" });
               }}
-              onAdd={addItem}
-              placeholder=""
-            />
+              onAdd={addItem} placeholder="" />
           </Field>
           <Field label="Puntos">
-            <PuntosSelect
-              idSel={form.suaje.idcat_punto_corte}
-              items={puntosItems}
-              onSel={(idP, txt) => updSuaje({ idcat_punto_corte: idP, puntosCorte: txt })}
-            />
+            <PuntosSelect idSel={form.suaje.idcat_punto_corte} items={puntosItems}
+              onSel={(idP, txt) => updSuaje({ idcat_punto_corte: idP, puntosCorte: txt })} />
           </Field>
-
           <Field label="Dobles">
-            <SelConAlta
-              catKey={"dobles" as CatKey}
+            <SelConAlta catKey={"dobles" as CatKey}
               options={((catalogs as any).dobles ?? []).map((i: any) => labelCorteDoble(i))}
               value={form.suaje.dobles1Tipo ? labelCorteDoble({ nombre: form.suaje.dobles1Tipo, altura: form.suaje.dobles1Medida }) : ""}
               onChange={(v) => {
                 const item = ((catalogs as any).dobles ?? []).find((i: any) => labelCorteDoble(i) === v);
                 const punto = item?.idcat_punto ? puntosItems.find(p => p.id === item.idcat_punto) : undefined;
-                updSuaje({
-                  dobles1Tipo: item?.nombre ?? v,
-                  dobles1Medida: item?.altura ?? "",
-                  idcat_doble: item?.id ?? null,
-                  idcat_punto_doble: punto?.id ?? null,
-                  puntosDoble: punto ? String(punto.puntos ?? punto.nombre) : "",
-                });
+                updSuaje({ dobles1Tipo: item?.nombre ?? v, dobles1Medida: item?.altura ?? "", idcat_doble: item?.id ?? null, idcat_punto_doble: punto?.id ?? null, puntosDoble: punto ? String(punto.puntos ?? punto.nombre) : "" });
               }}
-              onAdd={addItem}
-              placeholder=""
-            />
+              onAdd={addItem} placeholder="" />
           </Field>
           <Field label="Puntos">
-            <PuntosSelect
-              idSel={form.suaje.idcat_punto_doble}
-              items={puntosItems}
-              onSel={(idP, txt) => updSuaje({ idcat_punto_doble: idP, puntosDoble: txt })}
-            />
+            <PuntosSelect idSel={form.suaje.idcat_punto_doble} items={puntosItems}
+              onSel={(idP, txt) => updSuaje({ idcat_punto_doble: idP, puntosDoble: txt })} />
           </Field>
-
           <Field label="T. arreglo (min)">
             <Inp value={form.suaje.tiempoArreglo} onChange={v => updSuaje({ tiempoArreglo: v })} />
           </Field>
         </div>
 
         <div>
-  <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#6B7280", display: "block", marginBottom: 6 }}>Especiales</span>
-  <div style={{ display: "grid", gridTemplateColumns: "auto minmax(120px, 1fr) 64px auto minmax(120px, 1fr) 64px", gap: "0 8px", alignItems: "end" }}>
+          <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#6B7280", display: "block", marginBottom: 6 }}>Especiales</span>
+          <div style={{ display: "grid", gridTemplateColumns: "auto minmax(120px, 1fr) 64px auto minmax(120px, 1fr) 64px", gap: "0 8px", alignItems: "end" }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", whiteSpace: "nowrap", paddingBottom: 10 }}>Sacabocado</span>
+            <div style={{ paddingBottom: 0 }}>
+              <SelConAlta catKey="sacabocados" options={namesMedida("sacabocados")} value={form.suaje.sacabocadoNombre}
+                onChange={(v) => { const item = (catalogs.sacabocados as any[]).find((i: any) => labelConMedida(i) === v); updSuaje({ sacabocadoNombre: v, idcat_sacabocados: item?.id ?? null }); }}
+                onAdd={addItem} placeholder="" />
+            </div>
+            <div>
+              <label style={{ display: "block", fontSize: 10, fontWeight: 700, color: "#9CA3AF", marginBottom: 3, letterSpacing: "0.05em", textTransform: "uppercase" }}>Cant.</label>
+              <input type="text" inputMode="numeric" value={form.suaje.cantidad_sacabocado}
+                onChange={e => updSuaje({ cantidad_sacabocado: e.target.value })}
+                style={{ width: "100%", height: 34, padding: "0 8px", border: "1px solid #D1D5DB", borderRadius: 5, fontSize: 13, color: "#111827", background: "#fff", outline: "none", boxSizing: "border-box" }} />
+            </div>
+            <span style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", whiteSpace: "nowrap", marginLeft: 8, paddingBottom: 10 }}>Perforado</span>
+            <div style={{ paddingBottom: 0 }}>
+              <SelConAlta catKey="perforado" options={namesMedida("perforado")} value={form.suaje.perforadoNombre}
+                onChange={(v) => { const item = (catalogs.perforado as any[]).find((i: any) => labelConMedida(i) === v); updSuaje({ perforadoNombre: v, idcat_perforado: item?.id ?? null }); }}
+                onAdd={addItem} placeholder="" />
+            </div>
+            <div>
+              <label style={{ display: "block", fontSize: 10, fontWeight: 700, color: "#9CA3AF", marginBottom: 3, letterSpacing: "0.05em", textTransform: "uppercase" }}>Cant.</label>
+              <input type="text" inputMode="numeric" value={form.suaje.cantidad_perforado}
+                onChange={e => updSuaje({ cantidad_perforado: e.target.value })}
+                style={{ width: "100%", height: 34, padding: "0 8px", border: "1px solid #D1D5DB", borderRadius: 5, fontSize: 13, color: "#111827", background: "#fff", outline: "none", boxSizing: "border-box" }} />
+            </div>
+          </div>
+        </div>
 
-    <span style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", whiteSpace: "nowrap", paddingBottom: 10 }}>Sacabocado</span>
-
-    <div style={{ paddingBottom: 0 }}>
-      <SelConAlta catKey="sacabocados" options={namesMedida("sacabocados")} value={form.suaje.sacabocadoNombre}
-        onChange={(v) => { const item = (catalogs.sacabocados as any[]).find((i: any) => labelConMedida(i) === v); updSuaje({ sacabocadoNombre: v, idcat_sacabocados: item?.id ?? null }); }}
-        onAdd={addItem} placeholder="" />
-    </div>
-
-    {/* Cantidad sacabocado con etiqueta */}
-    <div>
-      <label style={{ display: "block", fontSize: 10, fontWeight: 700, color: "#9CA3AF", marginBottom: 3, letterSpacing: "0.05em", textTransform: "uppercase" }}>Cant.</label>
-      <input type="text" inputMode="numeric" value={form.suaje.cantidad_sacabocado}
-        onChange={e => updSuaje({ cantidad_sacabocado: e.target.value })}
-        style={{ width: "100%", height: 34, padding: "0 8px", border: "1px solid #D1D5DB", borderRadius: 5, fontSize: 13, color: "#111827", background: "#fff", outline: "none", boxSizing: "border-box" }} />
-    </div>
-
-    <span style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", whiteSpace: "nowrap", marginLeft: 8, paddingBottom: 10 }}>Perforado</span>
-
-    <div style={{ paddingBottom: 0 }}>
-      <SelConAlta catKey="perforado" options={namesMedida("perforado")} value={form.suaje.perforadoNombre}
-        onChange={(v) => { const item = (catalogs.perforado as any[]).find((i: any) => labelConMedida(i) === v); updSuaje({ perforadoNombre: v, idcat_perforado: item?.id ?? null }); }}
-        onAdd={addItem} placeholder="" />
-    </div>
-
-    {/* Cantidad perforado con etiqueta */}
-    <div>
-      <label style={{ display: "block", fontSize: 10, fontWeight: 700, color: "#9CA3AF", marginBottom: 3, letterSpacing: "0.05em", textTransform: "uppercase" }}>Cant.</label>
-      <input type="text" inputMode="numeric" value={form.suaje.cantidad_perforado}
-        onChange={e => updSuaje({ cantidad_perforado: e.target.value })}
-        style={{ width: "100%", height: 34, padding: "0 8px", border: "1px solid #D1D5DB", borderRadius: 5, fontSize: 13, color: "#111827", background: "#fff", outline: "none", boxSizing: "border-box" }} />
-    </div>
-
-  </div>
-</div>
-
-{/* Herramental desbarbe */}
-<div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", padding: "8px 12px", background: form.suaje.herramentalDesbarbe ? "#EFF6FF" : "#F9FAFB", border: `1px solid ${form.suaje.herramentalDesbarbe ? "#BFDBFE" : "#E5E7EB"}`, borderRadius: 6, transition: "all 0.15s ease" }}>
-  <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", userSelect: "none" }}>
-    <input
-      type="checkbox"
-      checked={form.suaje.herramentalDesbarbe}
-      onChange={e => updSuaje({
-        herramentalDesbarbe: e.target.checked,
-        // Si lo desmarca, limpia también el número para no guardar basura
-        noDesbarbe: e.target.checked ? form.suaje.noDesbarbe : "",
-      })}
-      style={{ width: 16, height: 16, accentColor: "#1D4ED8", cursor: "pointer", margin: 0 }}
-    />
-    <span style={{ fontSize: 12, fontWeight: 700, color: form.suaje.herramentalDesbarbe ? "#1D4ED8" : "#374151", letterSpacing: "0.05em", textTransform: "uppercase" }}>
-      Herramental desbarbe
-    </span>
-  </label>
-  {form.suaje.herramentalDesbarbe && (
-    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-      <label style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", letterSpacing: "0.05em", textTransform: "uppercase", whiteSpace: "nowrap" }}>
-        No. desbarbe
-      </label>
-      <input
-        type="text"
-        inputMode="numeric"
-        value={form.suaje.noDesbarbe}
-        onChange={e => {
-          // Solo dígitos (entero)
-          const soloNum = e.target.value.replace(/[^0-9]/g, "");
-          updSuaje({ noDesbarbe: soloNum });
-        }}
-        placeholder=""
-        style={{ width: 120, height: 30, padding: "0 8px", border: "1px solid #BFDBFE", borderRadius: 5, fontSize: 13, color: "#111827", background: "#fff", outline: "none", boxSizing: "border-box" }}
-      />
-    </div>
-  )}
-</div>
+        <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", padding: "8px 12px", background: form.suaje.herramentalDesbarbe ? "#EFF6FF" : "#F9FAFB", border: `1px solid ${form.suaje.herramentalDesbarbe ? "#BFDBFE" : "#E5E7EB"}`, borderRadius: 6, transition: "all 0.15s ease" }}>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", userSelect: "none" }}>
+            <input type="checkbox" checked={form.suaje.herramentalDesbarbe}
+              onChange={e => updSuaje({ herramentalDesbarbe: e.target.checked, noDesbarbe: e.target.checked ? form.suaje.noDesbarbe : "" })}
+              style={{ width: 16, height: 16, accentColor: "#1D4ED8", cursor: "pointer", margin: 0 }} />
+            <span style={{ fontSize: 12, fontWeight: 700, color: form.suaje.herramentalDesbarbe ? "#1D4ED8" : "#374151", letterSpacing: "0.05em", textTransform: "uppercase" }}>
+              Herramental desbarbe
+            </span>
+          </label>
+          {form.suaje.herramentalDesbarbe && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <label style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", letterSpacing: "0.05em", textTransform: "uppercase", whiteSpace: "nowrap" }}>No. desbarbe</label>
+              <input type="text" inputMode="numeric" value={form.suaje.noDesbarbe}
+                onChange={e => updSuaje({ noDesbarbe: e.target.value.replace(/[^0-9]/g, "") })}
+                style={{ width: 120, height: 30, padding: "0 8px", border: "1px solid #BFDBFE", borderRadius: 5, fontSize: 13, color: "#111827", background: "#fff", outline: "none", boxSizing: "border-box" }} />
+            </div>
+          )}
+        </div>
       </Sec>
 
-      {/* Pegado | Refuerzo+Base | Empaque */}
       <div style={{ display: "grid", gridTemplateColumns: "1.6fr 1.4fr 1fr", gap: 10, marginBottom: 10 }}>
         <Sec title="Pegado y acabados" colorKey="acabados">
           <FG cols={2} gap="6px 8px" style={{ alignItems: "start" }}>
@@ -913,19 +752,16 @@ useEffect(() => {
                 onAdd={addItem} />
             </Field>
             <Field label="Asa">
-              <AsaMultiSelect
-                selectedIds={form.acabados.asas} selectedNames={form.acabados.asasNombres}
+              <AsaMultiSelect selectedIds={form.acabados.asas} selectedNames={form.acabados.asasNombres}
                 catItems={catalogs.tipo_asa}
                 onChange={(ids, nombres) => updAcabados({ asas: ids, asasNombres: nombres })}
                 onAdd={addItem} />
             </Field>
             <Field label="Laminado">
-              <AsaMultiSelect
-                selectedIds={form.acabados.laminados} selectedNames={form.acabados.laminadosNombres}
+              <AsaMultiSelect selectedIds={form.acabados.laminados} selectedNames={form.acabados.laminadosNombres}
                 catItems={catalogs.laminado}
                 onChange={(ids, nombres) => updAcabados({ laminados: ids, laminadosNombres: nombres })}
-                onAdd={addItem}
-                catKeyForAdd={"laminado" as CatKey} />
+                onAdd={addItem} catKeyForAdd={"laminado" as CatKey} />
             </Field>
           </FG>
         </Sec>
@@ -957,9 +793,7 @@ useEffect(() => {
                   onChange={(v) => { const item = catalogs.refuerzo_material.find(i => i.nombre === v); updAcabados({ idcat_base_material: item?.id ?? null }); }}
                   onAdd={addItem} placeholder="" />
               </Field>
-              <Field label="Medida (auto)">
-                <Inp value={form.acabados.base_medida} readOnly />
-              </Field>
+              <Field label="Medida (auto)"><Inp value={form.acabados.base_medida} readOnly /></Field>
             </FG>
           </div>
         </Sec>
@@ -979,7 +813,6 @@ useEffect(() => {
         </Sec>
       </div>
 
-      {/* Maquinaria */}
       <Sec title="Maquinaria" colorKey="maquinaria">
         <FG cols={5} gap="6px 10px" style={{ marginBottom: 8, alignItems: "start" }}>
           {([
@@ -990,14 +823,12 @@ useEffect(() => {
             ["uv", "UV"],
           ] as [string, string][]).map(([key, label]) => (
             <Field key={key} label={label}>
-              <MaquinariaMultiSelect
-                catKey={key as CatKey}
+              <MaquinariaMultiSelect catKey={key as CatKey}
                 selectedIds={(form.maquinaria as any)[key] ?? []}
                 selectedNames={(form.maquinaria as any)[`${key}_nombres`] ?? []}
                 catItems={catalogs[key as CatKey] as { id: number; nombre: string }[]}
                 onChange={(ids, nombres) => updMaq({ [key]: ids, [`${key}_nombres`]: nombres })}
-                onAdd={addItem}
-              />
+                onAdd={addItem} />
             </Field>
           ))}
         </FG>
@@ -1010,14 +841,12 @@ useEffect(() => {
             ["desbarbe", "Desbarbe"],
           ] as [string, string][]).map(([key, label]) => (
             <Field key={key} label={label}>
-              <MaquinariaMultiSelect
-                catKey={key as CatKey}
+              <MaquinariaMultiSelect catKey={key as CatKey}
                 selectedIds={(form.maquinaria as any)[key] ?? []}
                 selectedNames={(form.maquinaria as any)[`${key}_nombres`] ?? []}
                 catItems={catalogs[key as CatKey] as { id: number; nombre: string }[]}
                 onChange={(ids, nombres) => updMaq({ [key]: ids, [`${key}_nombres`]: nombres })}
-                onAdd={addItem}
-              />
+                onAdd={addItem} />
             </Field>
           ))}
         </FG>
@@ -1057,8 +886,8 @@ function DetalleProducto({ id }: { id: number }) {
   if (loading) return <div style={{ padding: "16px", background: "#F9FAFB", borderTop: "1px solid #E5E7EB", fontSize: 12, color: "#9CA3AF" }}>Cargando detalle...</div>;
   if (!detalle) return <div style={{ padding: "16px", background: "#F9FAFB", borderTop: "1px solid #E5E7EB", fontSize: 12, color: "#DC2626" }}>Error al cargar el detalle.</div>;
 
-  const COLORS = ["#7C3AED", "#0891B2", "#059669", "#D97706", "#DC2626", "#DB2777"];
-  const LIGHTS = ["#EDE9FE", "#CFFAFE", "#D1FAE5", "#FEF3C7", "#FEE2E2", "#FCE7F3"];
+  const COLORS = ["#A08060", "#7A9BAE", "#7A9E88", "#9E8E7A", "#8A7AAE", "#9E7A8A"];
+  const LIGHTS = ["#FDF6EE", "#EEF3F7", "#EEF7F1", "#F7F3EE", "#F2EFF7", "#F7EEF2"];
 
   const corteTxt = detalle.suaje
     ? [detalle.suaje.corte1_tipo, detalle.suaje.corte1_medida].filter(Boolean).join(" — ") +
@@ -1143,35 +972,63 @@ function DetalleProducto({ id }: { id: number }) {
 
       {detalle.grupos?.length > 0 && (
         <div style={{ marginBottom: 14 }}>
-          <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#3730A3", margin: "0 0 8px" }}>Opciones de material</p>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#3730A3", margin: "0 0 6px" }}>Opciones de material</p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             {detalle.grupos.map((g: any, gi: number) => {
               const c = COLORS[gi % COLORS.length], l = LIGHTS[gi % LIGHTS.length];
+              const cols = Math.min(g.materiales.length, 4);
               return (
                 <div key={g.idgrupo_papel} style={{ border: `1px solid ${c}30`, borderLeft: `3px solid ${c}`, borderRadius: 6, overflow: "hidden" }}>
-                  <div style={{ background: l, padding: "6px 12px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <span style={{ fontSize: 11, fontWeight: 600, color: c }}>Grupo {gi + 1} -- {g.materiales.length} mat.</span>
-                    {g.precio_sugerido && <span style={{ fontSize: 12, fontWeight: 700, color: c }}>${parseFloat(g.precio_sugerido).toLocaleString("es-MX", { minimumFractionDigits: 2 })} MXN</span>}
+                  {/* Header del grupo */}
+                  <div style={{ background: l, padding: "4px 10px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span style={{ fontSize: 10, fontWeight: 700, color: c, letterSpacing: "0.05em", textTransform: "uppercase" }}>
+                      Grupo {gi + 1} — {g.materiales.length} mat.
+                    </span>
+                    {g.precio_sugerido && (
+                      <span style={{ fontSize: 11, fontWeight: 700, color: c }}>
+                        ${parseFloat(g.precio_sugerido).toLocaleString("es-MX", { minimumFractionDigits: 2 })} MXN
+                      </span>
+                    )}
                   </div>
-                  <div style={{ padding: "8px 12px" }}>
+                  {/* Grid de materiales en columnas */}
+                  <div style={{
+                    display: "grid",
+                    gridTemplateColumns: `repeat(${cols}, 1fr)`,
+                    gap: 0,
+                    padding: "6px 8px",
+                  }}>
                     {g.materiales.map((m: any, mi: number) => (
-                      <div key={m.iddetalle_material} style={{ paddingBottom: mi < g.materiales.length - 1 ? 8 : 0, marginBottom: mi < g.materiales.length - 1 ? 8 : 0, borderBottom: mi < g.materiales.length - 1 ? "1px dashed #E5E7EB" : "none" }}>
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: "2px 12px", marginBottom: 3 }}>
-                          <span style={{ fontSize: 10, fontWeight: 700, color: "#6B7280", minWidth: 14 }}>{mi + 1}.</span>
-                          {[["Tipo", m.tipo_papel], ["Cal.", m.calibre], ["Pliego", m.pliego], ["Rend.", m.rendimiento], ["Corte", m.corte]].filter(([, v]) => v).map(([lbl, val]) => (
-                            <span key={lbl as string} style={{ fontSize: 11 }}>
+                      <div key={m.iddetalle_material} style={{
+                        padding: "4px 6px",
+                        borderLeft: mi > 0 ? `1px dashed ${c}40` : "none",
+                      }}>
+                        {/* Número + tipo + calibre */}
+                        <div style={{ display: "flex", alignItems: "baseline", gap: 4, marginBottom: 2, flexWrap: "wrap" }}>
+                          <span style={{ fontSize: 9, fontWeight: 700, color: c, minWidth: 12 }}>{mi + 1}.</span>
+                          {m.tipo_papel && (
+                            <span style={{ fontSize: 11, fontWeight: 700, color: "#111827" }}>{m.tipo_papel}</span>
+                          )}
+                          {m.calibre && (
+                            <span style={{ fontSize: 10, background: `${c}18`, color: c, borderRadius: 3, padding: "0 4px", fontWeight: 600 }}>{m.calibre}</span>
+                          )}
+                        </div>
+                        {/* Pliego, Rend, Corte en línea */}
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: "1px 8px", marginBottom: 3 }}>
+                          {[["Pliego", m.pliego], ["Rend.", m.rendimiento], ["Corte", m.corte]].filter(([, v]) => v).map(([lbl, val]) => (
+                            <span key={lbl as string} style={{ fontSize: 10 }}>
                               <span style={{ color: "#9CA3AF" }}>{lbl}: </span>
-                              <span style={{ color: "#111827", fontWeight: 500 }}>{val}</span>
+                              <span style={{ color: "#374151", fontWeight: 500 }}>{val}</span>
                             </span>
                           ))}
                         </div>
+                        {/* Hojeado compacto */}
                         {(m.hojeado?.bobina || m.hojeado?.corte || m.hojeado?.rendimiento || m.hojeado?.guillotina || m.hojeado?.hilo || m.hojeado?.bobina_extra) && (
-                          <div style={{ display: "flex", flexWrap: "wrap", gap: "2px 12px", paddingTop: 3, paddingLeft: 20, borderTop: "1px dashed #F3F4F6" }}>
-                            <span style={{ fontSize: 9, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase", alignSelf: "center" }}>Hojeado:</span>
-                            {[["Bob.", m.hojeado?.bobina], ["Bob. extra", m.hojeado?.bobina_extra], ["Corte", m.hojeado?.corte], ["Rend.", m.hojeado?.rendimiento], ["Guill.", m.hojeado?.guillotina], ["Hilo", m.hojeado?.hilo]].filter(([, v]) => v).map(([lbl, val]) => (
-                              <span key={lbl as string} style={{ fontSize: 11 }}>
+                          <div style={{ borderTop: "1px dashed #F0F0F0", paddingTop: 3, marginTop: 1 }}>
+                            <span style={{ fontSize: 8, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase", marginRight: 4 }}>Hoj:</span>
+                            {[["Bob", m.hojeado?.bobina], ["B+", m.hojeado?.bobina_extra], ["Cte", m.hojeado?.corte], ["Rnd", m.hojeado?.rendimiento], ["Gll", m.hojeado?.guillotina], ["Hlo", m.hojeado?.hilo]].filter(([, v]) => v).map(([lbl, val]) => (
+                              <span key={lbl as string} style={{ fontSize: 10, marginRight: 6 }}>
                                 <span style={{ color: "#9CA3AF" }}>{lbl}: </span>
-                                <span style={{ color: "#111827", fontWeight: 500 }}>{val}</span>
+                                <span style={{ color: "#374151", fontWeight: 500 }}>{val}</span>
                               </span>
                             ))}
                           </div>
@@ -1241,13 +1098,11 @@ function ArchivosMini({ archivos }: { archivos?: ArchivoPreview[] }) {
         if (esImagen) {
           return (
             <a key={a.id_archivo} href={a.url} target="_blank" rel="noreferrer" title={a.nombre}
-              style={{ display: "block", flexShrink: 0 }}>
-              <img
-                src={a.url}
-                alt={a.nombre}
+              style={{ display: "block", flexShrink: 0 }}
+              onClick={e => e.stopPropagation()}>
+              <img src={a.url} alt={a.nombre}
                 style={{ width: 42, height: 42, objectFit: "cover", borderRadius: 5, border: "1.5px solid #E5E7EB", background: "#F3F4F6", display: "block" }}
-                onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-              />
+                onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
             </a>
           );
         }
@@ -1260,16 +1115,10 @@ function ArchivosMini({ archivos }: { archivos?: ArchivoPreview[] }) {
 
         return (
           <a key={a.id_archivo} href={a.url} target="_blank" rel="noreferrer" title={a.nombre}
-            style={{
-              display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-              width: 42, height: 42, borderRadius: 5,
-              border: `1.5px solid ${border}`, background: bg,
-              textDecoration: "none", flexShrink: 0,
-            }}>
+            onClick={e => e.stopPropagation()}
+            style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", width: 42, height: 42, borderRadius: 5, border: `1.5px solid ${border}`, background: bg, textDecoration: "none", flexShrink: 0 }}>
             <span style={{ fontSize: 16, lineHeight: 1 }}>{icon}</span>
-            <span style={{ fontSize: 8, color: "#6B7280", marginTop: 2, maxWidth: 40, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textAlign: "center" }}>
-              {ext}
-            </span>
+            <span style={{ fontSize: 8, color: "#6B7280", marginTop: 2, maxWidth: 40, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textAlign: "center" }}>{ext}</span>
           </a>
         );
       })}
@@ -1300,10 +1149,12 @@ function TablaCatalogo({ productos, loading, onNuevo, onEditar, onEliminar }: {
     (p.primer_tipo_papel ?? "").toLowerCase().includes(search.toLowerCase())
   );
 
+  const toggleExpanded = (id: number) =>
+    setExpandedId(prev => prev === id ? null : id);
+
   return (
     <div style={{ maxWidth: "100%", margin: "0 auto", padding: "15px 5px 50px", fontFamily: "'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif", color: "#111827" }}>
 
-      {/* Modal confirmar eliminar */}
       {deleteId !== null && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.35)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
           <div style={{ background: "#fff", borderRadius: 12, padding: "24px 28px", maxWidth: 340, width: "90%", boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
@@ -1317,7 +1168,6 @@ function TablaCatalogo({ productos, loading, onNuevo, onEditar, onEliminar }: {
         </div>
       )}
 
-      {/* Header de página */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
         <div>
           <p style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: "#9CA3AF", margin: "0 0 2px", fontWeight: 600 }}>Alta de productos</p>
@@ -1326,7 +1176,6 @@ function TablaCatalogo({ productos, loading, onNuevo, onEditar, onEliminar }: {
         <button onClick={onNuevo} style={{ height: 38, padding: "0 18px", border: "none", borderRadius: 7, background: "#1D4ED8", color: "#fff", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>+ Registrar nuevo producto</button>
       </div>
 
-      {/* Buscador */}
       <div style={{ position: "relative", marginBottom: 12 }}>
         <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", fontSize: 13, color: "#9CA3AF" }}>&#128269;</span>
         <input type="text" value={search} onChange={e => setSearch(e.target.value)}
@@ -1335,8 +1184,6 @@ function TablaCatalogo({ productos, loading, onNuevo, onEditar, onEliminar }: {
       </div>
 
       <div style={{ border: "1px solid #E5E7EB", borderRadius: 9, overflow: "hidden" }}>
-
-        {/* Cabeceras */}
         <div style={{ display: "grid", gridTemplateColumns: COLS, background: "#F9FAFB", borderBottom: "1px solid #E5E7EB", padding: "0 16px" }}>
           {["Tipo de producto", "Descripción", "Medida", "Tipo de papel", "Gramaje", "Pliego", "Creado por", "Archivos", ""].map(h => (
             <div key={h} style={{ padding: "8px 0 8px 4px", fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#6B7280" }}>{h}</div>
@@ -1356,17 +1203,22 @@ function TablaCatalogo({ productos, loading, onNuevo, onEditar, onEliminar }: {
 
           return (
             <div key={p.idproducto_papel}>
-              <div style={{
-                display: "grid", gridTemplateColumns: COLS,
-                padding: "0 16px", alignItems: "center", minHeight: 58,
-                background: rowBg,
-                borderBottom: isExpanded ? "none" : "1px solid #F3F4F6",
-              }}>
-
-                {/* Tipo + expand */}
+              {/* ── Fila clickeable completa ── */}
+              <div
+                onClick={() => toggleExpanded(p.idproducto_papel)}
+                style={{
+                  display: "grid", gridTemplateColumns: COLS,
+                  padding: "0 16px", alignItems: "center", minHeight: 58,
+                  background: rowBg,
+                  borderBottom: isExpanded ? "none" : "1px solid #F3F4F6",
+                  cursor: "pointer",
+                  userSelect: "none",
+                }}
+              >
+                {/* Tipo + botón indicador */}
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <button
-                    onClick={() => setExpandedId(isExpanded ? null : p.idproducto_papel)}
+                    onClick={e => { e.stopPropagation(); toggleExpanded(p.idproducto_papel); }}
                     style={{ width: 20, height: 20, borderRadius: 4, background: "#EFF6FF", border: "1px solid #BFDBFE", cursor: "pointer", fontSize: 11, color: "#1D4ED8", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                     {isExpanded ? "^" : "v"}
                   </button>
@@ -1384,7 +1236,7 @@ function TablaCatalogo({ productos, loading, onNuevo, onEditar, onEliminar }: {
                 {/* Medida */}
                 <span style={{ fontSize: 12, color: "#374151" }}>{p.medida || "—"}</span>
 
-                {/* Tipo de papel */}
+                {/* Tipo de papel (ahora muestra todos) */}
                 <span style={{ fontSize: 12, color: "#374151", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", paddingRight: 6 }}>
                   {px.primer_tipo_papel || "—"}
                 </span>
@@ -1407,11 +1259,14 @@ function TablaCatalogo({ productos, loading, onNuevo, onEditar, onEliminar }: {
                   {p.creado_por || "—"}
                 </span>
 
-                {/* Archivos mini */}
+                {/* Archivos mini — stopPropagation en los links está dentro del componente */}
                 <ArchivosMini archivos={px.archivos_preview} />
 
-                {/* Acciones */}
-                <div style={{ display: "flex", gap: 5, justifyContent: "flex-end" }}>
+                {/* Acciones — stopPropagation para no disparar el expand */}
+                <div
+                  style={{ display: "flex", gap: 5, justifyContent: "flex-end" }}
+                  onClick={e => e.stopPropagation()}
+                >
                   <button onClick={() => onEditar(p)} style={{ height: 28, padding: "0 10px", background: "#F3F4F6", border: "1px solid #D1D5DB", borderRadius: 5, cursor: "pointer", fontSize: 11, fontWeight: 600, color: "#374151" }}>Editar</button>
                   <button onClick={() => setDeleteId(p.idproducto_papel)} style={{ height: 28, padding: "0 8px", background: "#FEE2E2", border: "none", borderRadius: 5, cursor: "pointer", fontSize: 11, fontWeight: 600, color: "#DC2626" }}>x</button>
                 </div>
