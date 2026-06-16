@@ -200,8 +200,10 @@ const mapFormToApi = (form: ProductoPapelForm) => ({
     idcat_perforado:     form.suaje.idcat_perforado,
     cantidad_perforado:  form.suaje.cantidad_perforado ? parseInt(form.suaje.cantidad_perforado) : null,
     herramental_desbarbe: !!form.suaje.herramentalDesbarbe,
-    no_desbarbe:          form.suaje.herramentalDesbarbe && form.suaje.noDesbarbe
-      ? parseInt(form.suaje.noDesbarbe)
+    // no_desbarbe ahora es VARCHAR: se manda como string para conservar valores
+    // alfanuméricos como "001A". No usar parseInt (rompería la letra).
+    no_desbarbe:          form.suaje.herramentalDesbarbe && form.suaje.noDesbarbe.trim()
+      ? form.suaje.noDesbarbe.trim()
       : null,
   },
 

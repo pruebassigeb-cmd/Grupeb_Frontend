@@ -104,7 +104,7 @@ export interface Suaje {
   cantidad_perforado: string;
   // herramental de desbarbe
   herramentalDesbarbe: boolean;
-  noDesbarbe: string;  // entero como string en el form, se parsea al enviar
+  noDesbarbe: string;  
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

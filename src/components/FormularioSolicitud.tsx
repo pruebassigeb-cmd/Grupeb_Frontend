@@ -1,4 +1,3 @@
-// src/components/FormularioSolicitud.tsx
 import { useState, useEffect, useRef, useMemo } from "react";
 import SelectorProducto, { CONFIG_PRODUCTOS } from "./ConfigurarProducto";
 import type { DatosProducto, MedidaKey } from "../types/productos-plastico.types";
@@ -18,10 +17,12 @@ import { showAlert } from "./CustomAlert";
 import type { Producto, DatosCotizacion, FormularioCotizacionProps, OpcionCP } from "../types/formulario-solicitud.types";
 import { ESTADO_INICIAL_PRODUCTO_MEDIDAS } from "../constants/formulario-solicitud.constants";
 import FormularioCliente from "./FormularioCliente";
-import { buscarInsumos, getTiposInsumo  } from "../services/proveedoresService";
+import { buscarInsumos, getTiposInsumo } from "../services/proveedoresService";
 import type { ProductoProveedor } from "../services/proveedoresService";
 import ModalRegistrarInsumo from "./ModalRegistrarInsumo";
 import ComboboxInsumo from "./ComboboxInsumo";
+import FormularioProductoPapel from "../components/papel/FormularioProductoPapel";
+import type { ProductoPapelCotizacion } from "../components/papel/FormularioProductoPapel";
 
 
 export default function FormularioSolicitud({
@@ -48,6 +49,10 @@ export default function FormularioSolicitud({
   });
 
   const isMounted = useRef(false);
+
+  // ── Selector de material (plástico / papel) ───────────────────────────────
+  const [tipoMaterial, setTipoMaterial] = useState<"plastico" | "papel">("plastico");
+  const [editandoPapelIndex, setEditandoPapelIndex] = useState<number | null>(null);
 
   // ── Catálogos ────────────────────────────────────────────────────────────
   const [caras, setCaras] = useState<Cara[]>([]);
@@ -90,14 +95,14 @@ export default function FormularioSolicitud({
   const [modoColor, setModoColor] = useState<"pantones" | null>("pantones");
   const [inputsPantones, setInputsPantones] = useState<string[]>(Array(1).fill(""));
   const [idTipoPigmento, setIdTipoPigmento] = useState<number | null>(null);
-  const [idTipoPanton,  setIdTipoPanton]  = useState<number | null>(null);
+  const [idTipoPanton, setIdTipoPanton] = useState<number | null>(null);
 
-    const [modalInsumo, setModalInsumo] = useState<{
-      abierto: boolean;
-      tipoId:  number;
-      nombre:  string;
-      indice:  number | null;   // null = es pigmento, número = índice del pantón
-    }>({ abierto: false, tipoId: 0, nombre: "", indice: null });
+  const [modalInsumo, setModalInsumo] = useState<{
+    abierto: boolean;
+    tipoId: number;
+    nombre: string;
+    indice: number | null;
+  }>({ abierto: false, tipoId: 0, nombre: "", indice: null });
 
   // ── Cantidad ─────────────────────────────────────────────────────────────
   const [modoCantidad, setModoCantidad] = useState<"unidad" | "kilo">("unidad");
@@ -140,21 +145,17 @@ export default function FormularioSolicitud({
   );
 
   const cantidadesEstables = useMemo(
-  () => cantidadesEnBolsas,
-  // Solo cambia cuando los valores numéricos realmente cambian
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  [cantidadesEnBolsas[0], cantidadesEnBolsas[1], cantidadesEnBolsas[2]]
-);
+    () => cantidadesEnBolsas,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [cantidadesEnBolsas[0], cantidadesEnBolsas[1], cantidadesEnBolsas[2]]
+  );
 
   const { resultados, loading: calculandoPrecios, error: errorCalculo } = usePreciosBatch({
-      cantidades: cantidadesEstables,
-    //cantidades: cantidadesEnBolsas,
+    cantidades: cantidadesEstables,
     porKilo: productoActual.porKilo,
     tintasId: productoActual.tintasId,
     enabled: cantidadesEnBolsas.some(c => c > 0) && !!productoActual.porKilo,
   });
-
-    
 
   // ═══════════════════════════════════════════════════════════════════════
   // EFFECTS
@@ -229,19 +230,15 @@ export default function FormularioSolicitud({
     setProductoActual(prev => ({ ...prev, precios: [0, 0, 0] }));
   }, [productoActual.tintasId]);
 
- 
-
   useEffect(() => {
-      getTiposInsumo().then(tipos => {
-          console.log("Tipos insumo:", tipos.map(t => `"${t.nombre}"`));  // 👈
-        const panton   = tipos.find(t => t.nombre === "Pantón");
-        const pigmento = tipos.find(t => t.nombre === "Pigmento");
-        if (panton)   setIdTipoPanton(panton.idtipo_insumo);
-        if (pigmento) setIdTipoPigmento(pigmento.idtipo_insumo);
-      }).catch(() => {});
-    }, []);
-
-    
+    getTiposInsumo().then(tipos => {
+      console.log("Tipos insumo:", tipos.map(t => `"${t.nombre}"`));
+      const panton = tipos.find(t => t.nombre === "Pantón");
+      const pigmento = tipos.find(t => t.nombre === "Pigmento");
+      if (panton) setIdTipoPanton(panton.idtipo_insumo);
+      if (pigmento) setIdTipoPigmento(pigmento.idtipo_insumo);
+    }).catch(() => { });
+  }, []);
 
   // ═══════════════════════════════════════════════════════════════════════
   // HANDLERS — CATÁLOGOS
@@ -340,7 +337,7 @@ export default function FormularioSolicitud({
   };
 
   // ═══════════════════════════════════════════════════════════════════════
-  // HANDLERS — PRODUCTOS
+  // HANDLERS — PRODUCTOS PLÁSTICO
   // ═══════════════════════════════════════════════════════════════════════
 
   const cargarProductos = async (query?: string) => {
@@ -531,42 +528,40 @@ export default function FormularioSolicitud({
   const handlePigmentoChange = (value: string) => {
     setProductoActual(prev => ({ ...prev, pigmentos: sanitizarTexto(value) || null }));
   };
+
   const handlePantoneChange = (index: number, value: string) => {
-  const sanitizado = sanitizarTexto(value);
-  const nuevos = [...inputsPantones];
-  nuevos[index] = sanitizado;
-  setInputsPantones(nuevos);
-  setProductoActual(prev => ({
-    ...prev,
-    pantones: nuevos.join(", ").replace(/^[\s,]+|[\s,]+$/g, "") || null,
-  }));
-};
- 
-const abrirModalInsumo = (tipoId: number, nombre: string, indice: number | null) => {
-  setModalInsumo({ abierto: true, tipoId, nombre, indice });
-};
- 
-const handleInsumoRegistrado = (item: ProductoProveedor) => {
-  const texto = item.codigo ? `${item.nombre} (${item.codigo})` : item.nombre;
-  
-  if (modalInsumo.indice !== null) {
-    const indice = modalInsumo.indice; // 👈 captura antes de cerrar
-    
-    setInputsPantones(prev => {        // 👈 setter funcional, no closure
-      const nuevos = [...prev];
-      nuevos[indice] = texto;
-      setProductoActual(p => ({
-        ...p,
-        pantones: nuevos.join(", ").replace(/^[\s,]+|[\s,]+$/g, "") || null,
-      }));
-      return nuevos;
-    });
-  } else {
-    setProductoActual(prev => ({ ...prev, pigmentos: texto }));
-  }
-  
-  setModalInsumo({ abierto: false, tipoId: 0, nombre: "", indice: null });
-};
+    const sanitizado = sanitizarTexto(value);
+    const nuevos = [...inputsPantones];
+    nuevos[index] = sanitizado;
+    setInputsPantones(nuevos);
+    setProductoActual(prev => ({
+      ...prev,
+      pantones: nuevos.join(", ").replace(/^[\s,]+|[\s,]+$/g, "") || null,
+    }));
+  };
+
+  const abrirModalInsumo = (tipoId: number, nombre: string, indice: number | null) => {
+    setModalInsumo({ abierto: true, tipoId, nombre, indice });
+  };
+
+  const handleInsumoRegistrado = (item: ProductoProveedor) => {
+    const texto = item.codigo ? `${item.nombre} (${item.codigo})` : item.nombre;
+    if (modalInsumo.indice !== null) {
+      const indice = modalInsumo.indice;
+      setInputsPantones(prev => {
+        const nuevos = [...prev];
+        nuevos[indice] = texto;
+        setProductoActual(p => ({
+          ...p,
+          pantones: nuevos.join(", ").replace(/^[\s,]+|[\s,]+$/g, "") || null,
+        }));
+        return nuevos;
+      });
+    } else {
+      setProductoActual(prev => ({ ...prev, pigmentos: texto }));
+    }
+    setModalInsumo({ abierto: false, tipoId: 0, nombre: "", indice: null });
+  };
 
   // ── Herramental ───────────────────────────────────────────────────────────
   const herramentalTieneData = !!herramentalDescripcion.trim() || (herramentalPrecioTexto !== "" && parseFloat(herramentalPrecioTexto) > 0);
@@ -681,7 +676,7 @@ const handleInsumoRegistrado = (item: ProductoProveedor) => {
 
   const labelCantidad = modoCantidad === "kilo" ? "kg" : "bolsas";
 
-  // ── Agregar / Editar producto ─────────────────────────────────────────────
+  // ── Agregar / Editar producto PLÁSTICO ───────────────────────────────────
   const handleAgregarProducto = async () => {
     const { bolsas: cantsBolsas, kgs: catsKgs } = calcularDesdeInput(cantidadesTexto, modoCantidad, productoActual.porKilo);
     const tieneValoresValidos = cantsBolsas.some((cant, i) => cant > 0 && productoActual.precios[i] > 0);
@@ -714,9 +709,33 @@ const handleInsumoRegistrado = (item: ProductoProveedor) => {
     resetearFormularioProducto();
   };
 
+  // ── Agregar / Editar producto PAPEL ──────────────────────────────────────
+  const handleAgregarProductoPapel = (prod: ProductoPapelCotizacion) => {
+    if (editandoPapelIndex !== null) {
+      setDatos(prev => ({
+        ...prev,
+        productos: prev.productos.map((p, i) => i === editandoPapelIndex ? (prod as any) : p),
+      }));
+      setEditandoPapelIndex(null);
+    } else {
+      setDatos(prev => ({ ...prev, productos: [...prev.productos, prod as any] }));
+    }
+  };
+
   const handleEditarProducto = (index: number) => {
-    const prod = datos.productos[index];
+    const prod = datos.productos[index] as any;
+
+    // Si es papel, abre el formulario de papel
+    if (prod.tipoCotizacion === "papel") {
+      setEditandoPapelIndex(index);
+      setTipoMaterial("papel");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+
+    // Si es plástico, flujo normal
     setEditandoProductoIndex(index);
+    setTipoMaterial("plastico");
     setModoProducto("registrado");
     setProductoActual({ ...prod });
     setCantidadesTexto([
@@ -732,7 +751,7 @@ const handleInsumoRegistrado = (item: ProductoProveedor) => {
     ]);
     setPreciosEditadosManualmente([prod.precios[0] > 0, prod.precios[1] > 0, prod.precios[2] > 0]);
     setModoColor("pantones");
-    setInputsPantones(prod.pantones ? prod.pantones.split(", ").map(s => s.trim()) : Array(prod.tintas).fill(""));
+    setInputsPantones(prod.pantones ? prod.pantones.split(", ").map((s: string) => s.trim()) : Array(prod.tintas).fill(""));
     setHerramentalDescripcion(prod.herramental_descripcion || "");
     setHerramentalPrecioTexto(prod.herramental_precio != null ? String(prod.herramental_precio) : "");
     setHerramentalExpandido(!!(prod.herramental_descripcion || prod.herramental_precio));
@@ -776,22 +795,31 @@ const handleInsumoRegistrado = (item: ProductoProveedor) => {
   // ── Totales ───────────────────────────────────────────────────────────────
   const calcularTotal = () =>
     datos.productos.reduce((total, prod) => {
-      const pk = Number(prod.porKilo || 1);
-      const subtotalProducto = prod.cantidades.reduce((sum, cant, i) => {
+      const p = prod as any;
+      // Productos de papel — solo piezas × precio
+      if (p.tipoCotizacion === "papel") {
+        return total + p.cantidades.reduce((sum: number, cant: number, i: number) => {
+          if (!cant || cant <= 0) return sum;
+          return sum + Math.round(cant * p.precios[i] * 100) / 100;
+        }, 0);
+      }
+      // Productos de plástico — lógica existente
+      const pk = Number(p.porKilo || 1);
+      const subtotalProducto = p.cantidades.reduce((sum: number, cant: number, i: number) => {
         if (!cant || cant <= 0) return sum;
-        if (prod.modoCantidad === "kilo") {
-          const precioKg = Math.round(prod.precios[i] * pk * 100) / 100;
-          return sum + Math.round(prod.kilogramos[i] * precioKg * 100) / 100;
+        if (p.modoCantidad === "kilo") {
+          const precioKg = Math.round(p.precios[i] * pk * 100) / 100;
+          return sum + Math.round(p.kilogramos[i] * precioKg * 100) / 100;
         }
-        return sum + Math.round(cant * prod.precios[i] * 100) / 100;
+        return sum + Math.round(cant * p.precios[i] * 100) / 100;
       }, 0);
-      return total + subtotalProducto + (prod.herramental_precio ?? 0);
+      return total + subtotalProducto + (p.herramental_precio ?? 0);
     }, 0);
 
   // ── Navegación pasos ──────────────────────────────────────────────────────
   const handleAvanzarConClienteExistente = () => { if (datos.clienteId) setPaso(2); };
   const handleAtras = () => { if (paso === 2) setPaso(1); };
-  // DESPUÉS
+
   const [enviando, setEnviando] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -816,31 +844,11 @@ const handleInsumoRegistrado = (item: ProductoProveedor) => {
 
   const inputClass = "w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white placeholder-gray-400";
 
-  // ── Helper para mostrar badge de densidad ─────────────────────────────────
   const getDensidadBadge = (material: string) => {
     const m = material.toLowerCase();
-
-    if (m.includes("alta densidad")) {
-      return {
-        texto: "Alta densidad",
-        className: "bg-emerald-100 text-emerald-700 border border-emerald-300",
-      };
-    }
-
-    if (m.includes("baja densidad")) {
-      return {
-        texto: "Baja densidad",
-        className: "bg-amber-100 text-amber-700 border border-amber-300",
-      };
-    }
-
-    if (m.includes("bopp") || m.includes("celofán") || m.includes("celofan")) {
-      return {
-        texto: "BOPP",
-        className: "bg-gray-200 text-gray-700 border border-gray-300",
-      };
-    }
-
+    if (m.includes("alta densidad")) return { texto: "Alta densidad", className: "bg-emerald-100 text-emerald-700 border border-emerald-300" };
+    if (m.includes("baja densidad")) return { texto: "Baja densidad", className: "bg-amber-100 text-amber-700 border border-amber-300" };
+    if (m.includes("bopp") || m.includes("celofán") || m.includes("celofan")) return { texto: "BOPP", className: "bg-gray-200 text-gray-700 border border-gray-300" };
     return null;
   };
 
@@ -870,26 +878,16 @@ const handleInsumoRegistrado = (item: ProductoProveedor) => {
             </div>
             <div className="overflow-y-auto max-h-96">
               {loadingClientes ? (
-                <div className="p-8 text-center">
-                  <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-purple-500 border-t-transparent"></div>
-                  <p className="mt-4 text-gray-600">Cargando...</p>
-                </div>
+                <div className="p-8 text-center"><div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-purple-500 border-t-transparent"></div><p className="mt-4 text-gray-600">Cargando...</p></div>
               ) : errorClientes ? (
-                <div className="p-8 text-center">
-                  <p className="text-gray-700">{errorClientes}</p>
-                  <button onClick={() => cargarClientes(busquedaCliente)} className="mt-4 px-4 py-2 bg-purple-600 text-white rounded-lg">Reintentar</button>
-                </div>
+                <div className="p-8 text-center"><p className="text-gray-700">{errorClientes}</p><button onClick={() => cargarClientes(busquedaCliente)} className="mt-4 px-4 py-2 bg-purple-600 text-white rounded-lg">Reintentar</button></div>
               ) : clientesCargados.length > 0 ? (
                 <div className="divide-y divide-gray-200">
                   {clientesCargados.map(c => (
                     <div key={c.idclientes} onClick={() => seleccionarCliente(c)} className="p-4 hover:bg-purple-50 cursor-pointer transition-colors">
                       <div className="flex items-center justify-between gap-2">
                         <h4 className="font-semibold text-gray-900">{c.atencion || "Sin nombre"}</h4>
-                        {c.identificar && (
-                          <span className="flex-shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-700 tracking-wide">
-                            {c.identificar}
-                          </span>
-                        )}
+                        {c.identificar && <span className="flex-shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-700 tracking-wide">{c.identificar}</span>}
                       </div>
                       {c.empresa && <p className="text-sm text-gray-600 mt-1">{c.empresa}</p>}
                       <div className="flex gap-4 mt-2 text-sm text-gray-500">
@@ -907,7 +905,7 @@ const handleInsumoRegistrado = (item: ProductoProveedor) => {
         </div>
       )}
 
-      {/* ── MODAL PRODUCTOS ── */}
+      {/* ── MODAL PRODUCTOS PLÁSTICO ── */}
       {mostrarModalProductos && (
         <div className="fixed inset-0 flex items-center justify-center z-50 bg-opacity-50">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[80vh] overflow-hidden">
@@ -935,15 +933,9 @@ const handleInsumoRegistrado = (item: ProductoProveedor) => {
                   {productosCargados.map(p => (
                     <div key={p.id} onClick={() => seleccionarProducto(p)} className="p-4 hover:bg-blue-50 cursor-pointer transition-colors">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <h4 className="font-semibold text-gray-900">
-                          {p.tipo_producto} {p.medida} {p.material.toLowerCase()}
-                        </h4>
-
+                        <h4 className="font-semibold text-gray-900">{p.tipo_producto} {p.medida} {p.material.toLowerCase()}</h4>
                         {getDensidadBadge(p.material) && (
-                          <span
-                            className={`px-2 py-0.5 rounded-full text-xs font-semibold ${getDensidadBadge(p.material)!.className
-                              }`}
-                          >
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${getDensidadBadge(p.material)!.className}`}>
                             {getDensidadBadge(p.material)!.texto}
                           </span>
                         )}
@@ -980,7 +972,6 @@ const handleInsumoRegistrado = (item: ProductoProveedor) => {
       ══════════════════════════════════════════════════════════════════ */}
       <div className={paso === 1 ? "block" : "hidden"}>
         {datos.clienteId ? (
-          // ── Cliente ya seleccionado ──
           <div className="space-y-4">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-gray-900">Cliente seleccionado</h3>
@@ -993,11 +984,7 @@ const handleInsumoRegistrado = (item: ProductoProveedor) => {
             <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
               <div className="flex items-center justify-between gap-2 mb-1">
                 <p className="font-semibold text-gray-900">{datos.cliente || datos.empresa || "Sin nombre"}</p>
-                {datos.identificar && (
-                  <span className="flex-shrink-0 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-purple-200 text-purple-800 tracking-wide">
-                    {datos.identificar}
-                  </span>
-                )}
+                {datos.identificar && <span className="flex-shrink-0 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-purple-200 text-purple-800 tracking-wide">{datos.identificar}</span>}
               </div>
               {datos.empresa && datos.cliente && <p className="text-sm text-gray-600 mt-1">{datos.empresa}</p>}
               <div className="flex gap-4 mt-2 text-sm text-gray-500">
@@ -1011,7 +998,6 @@ const handleInsumoRegistrado = (item: ProductoProveedor) => {
             </div>
           </div>
         ) : (
-          // ── Cliente nuevo — usa FormularioCliente directamente ──
           <div>
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-lg font-semibold text-gray-900">Nuevo Cliente</h3>
@@ -1023,10 +1009,7 @@ const handleInsumoRegistrado = (item: ProductoProveedor) => {
                 Cliente Existente
               </button>
             </div>
-            <FormularioCliente
-              onSubmit={handleSubmitClienteNuevo}
-              onCancel={onCancel}
-            />
+            <FormularioCliente onSubmit={handleSubmitClienteNuevo} onCancel={onCancel} />
           </div>
         )}
       </div>
@@ -1035,26 +1018,56 @@ const handleInsumoRegistrado = (item: ProductoProveedor) => {
           PASO 2 — PRODUCTOS
       ══════════════════════════════════════════════════════════════════ */}
       <div className={paso === 2 ? "block" : "hidden"}>
-        <h3 className="text-lg font-semibold text-gray-900 mb-6">Agregar Productos</h3>
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Agregar Productos</h3>
 
-        <div className="mb-6 flex gap-4 bg-gray-100 p-1 rounded-lg w-fit">
-          <button type="button" onClick={() => { setModoProducto("registrado"); setAdvertenciaDuplicado(null); }}
-            className={`px-6 py-2 rounded-md font-medium transition-all ${modoProducto === "registrado" ? "bg-white text-blue-600 shadow" : "text-gray-600 hover:text-gray-900"}`}>
-            Producto Registrado
+        {/* ── Selector Plástico / Papel ── */}
+        <div className="mb-4 flex gap-3 bg-gray-100 p-1 rounded-lg w-fit">
+          <button
+            type="button"
+            onClick={() => {
+              setTipoMaterial("plastico");
+              setEditandoPapelIndex(null);
+            }}
+            className={`flex items-center gap-2 px-5 py-2 rounded-md font-medium text-sm transition-all ${tipoMaterial === "plastico" ? "bg-white text-blue-600 shadow" : "text-gray-600 hover:text-gray-900"
+              }`}
+          >
+            🧴 Plástico
           </button>
-          <button type="button" onClick={() => { setModoProducto("nuevo"); setAdvertenciaDuplicado(null); }}
-            className={`px-6 py-2 rounded-md font-medium transition-all ${modoProducto === "nuevo" ? "bg-white text-blue-600 shadow" : "text-gray-600 hover:text-gray-900"}`}>
-            Producto Nuevo
+          <button
+            type="button"
+            onClick={() => {
+              setTipoMaterial("papel");
+              setEditandoProductoIndex(null);
+              resetearFormularioProducto();
+            }}
+            className={`flex items-center gap-2 px-5 py-2 rounded-md font-medium text-sm transition-all ${tipoMaterial === "papel" ? "bg-white text-amber-600 shadow" : "text-gray-600 hover:text-gray-900"
+              }`}
+          >
+            📄 Papel
           </button>
         </div>
 
-        {/* Banner edición */}
-        {editandoProductoIndex !== null && (
+        {/* ── Sub-tabs solo para Plástico ── */}
+        {tipoMaterial === "plastico" && (
+          <div className="mb-6 flex gap-4 bg-gray-100 p-1 rounded-lg w-fit">
+            <button type="button" onClick={() => { setModoProducto("registrado"); setAdvertenciaDuplicado(null); }}
+              className={`px-6 py-2 rounded-md font-medium transition-all text-sm ${modoProducto === "registrado" ? "bg-white text-blue-600 shadow" : "text-gray-600 hover:text-gray-900"}`}>
+              Producto Registrado
+            </button>
+            <button type="button" onClick={() => { setModoProducto("nuevo"); setAdvertenciaDuplicado(null); }}
+              className={`px-6 py-2 rounded-md font-medium transition-all text-sm ${modoProducto === "nuevo" ? "bg-white text-blue-600 shadow" : "text-gray-600 hover:text-gray-900"}`}>
+              Producto Nuevo
+            </button>
+          </div>
+        )}
+
+        {/* ── Banner edición plástico ── */}
+        {tipoMaterial === "plastico" && editandoProductoIndex !== null && (
           <div className="mb-4 flex items-center justify-between px-4 py-3 bg-blue-50 border border-blue-200 rounded-lg">
             <div className="flex items-center gap-2">
               <span className="text-blue-600">✏️</span>
               <span className="text-sm font-semibold text-blue-800">
-                Editando producto {editandoProductoIndex + 1}: {datos.productos[editandoProductoIndex]?.nombre}
+                Editando producto {editandoProductoIndex + 1}: {(datos.productos[editandoProductoIndex] as any)?.nombre}
               </span>
             </div>
             <button type="button" onClick={() => { setEditandoProductoIndex(null); resetearFormularioProducto(); }}
@@ -1064,662 +1077,684 @@ const handleInsumoRegistrado = (item: ProductoProveedor) => {
           </div>
         )}
 
-        <div className="bg-gray-50 p-6 rounded-lg mb-4">
+        {/* ══════════════════════════════════════════════════════════════
+            FORMULARIO PAPEL
+        ══════════════════════════════════════════════════════════════ */}
+        {tipoMaterial === "papel" && (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-6 mb-4">
+            <FormularioProductoPapel
+              modo={modo}
+              onAgregar={handleAgregarProductoPapel}
+              productoEditando={
+                editandoPapelIndex !== null
+                  ? (datos.productos[editandoPapelIndex] as any as ProductoPapelCotizacion)
+                  : null
+              }
+              onCancelarEdicion={() => setEditandoPapelIndex(null)}
+              tintas={tintas}
+              caras={caras}
+              idTipoPanton={idTipoPanton}
+            />
+          </div>
+        )}
 
-          {modoProducto === "registrado" && (
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Buscar Producto</label>
-                <button type="button" onClick={() => setMostrarModalProductos(true)}
-                  className="w-full px-4 py-3 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-blue-500 hover:text-blue-600 flex items-center justify-center gap-2">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
-                  Click para buscar producto registrado
-                </button>
-              </div>
-              {productoActual.nombre && (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <p className="font-semibold text-gray-900 mb-2">{productoActual.nombre}</p>
-                  <div className="grid grid-cols-2 gap-2 text-sm text-gray-700">
-                    <p><span className="font-semibold">Material:</span> {productoActual.material}</p>
-                    <p><span className="font-semibold">Calibre:</span>  {productoActual.calibre}</p>
-                    <p><span className="font-semibold">Medidas:</span>  {productoActual.medidasFormateadas}</p>
-                    <p><span className="font-semibold">Por kilo:</span> {productoActual.porKilo}</p>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
+        {/* ══════════════════════════════════════════════════════════════
+            FORMULARIO PLÁSTICO (sin cambios)
+        ══════════════════════════════════════════════════════════════ */}
+        {tipoMaterial === "plastico" && (
+          <div className="bg-gray-50 p-6 rounded-lg mb-4">
 
-          {modoProducto === "nuevo" && (
-            <div className="space-y-4">
-              {!productoNuevoListo && (
-                <SelectorProducto catalogos={catalogos} onProductoChange={handleProductoNuevoChange} mostrarFigura={false} />
-              )}
-              {!productoNuevoListo && datosProductoNuevo.tipoProducto && CONFIG_PRODUCTOS[datosProductoNuevo.tipoProducto] && (
-                <div className="bg-white p-4 rounded-lg border border-gray-200">
-                  <div className="relative w-full flex items-center justify-center"
-                    style={{ minHeight: "460px", paddingLeft: "160px", paddingRight: "160px", paddingTop: "48px", paddingBottom: "48px" }}>
-                    <img src={CONFIG_PRODUCTOS[datosProductoNuevo.tipoProducto].imagen} alt={datosProductoNuevo.tipoProducto}
-                      className="max-w-[220px] max-h-[340px] object-contain" />
-                    {CONFIG_PRODUCTOS[datosProductoNuevo.tipoProducto].medidas.map(m => {
-                      const esLateral = m.key === "fuelleLateral1" || m.key === "fuelleLateral2";
-                      const esFondoORefuerzo = m.key === "fuelleFondo" || m.key === "refuerzo";
-                      const bloqueado = (esLateral && tieneFondoORefuerzo) || (esFondoORefuerzo && tieneLateral);
-                      return (
-                        <div key={m.key} className={`absolute flex items-center gap-1
-                          ${m.position === "top" ? "top-4 left-1/2 -translate-x-1/2 flex-col" : ""}
-                          ${m.position === "left" ? "left-6 top-1/2 -translate-y-1/2 flex-row" : ""}
-                          ${m.position === "bottom" ? "bottom-4 left-1/2 -translate-x-1/2 flex-col-reverse" : ""}
-                          ${m.position === "right" ? "right-6 top-1/2 -translate-y-1/2 flex-row-reverse" : ""}
-                          ${m.position === "right-top" ? "right-6 top-16 flex-row-reverse" : ""}
-                          ${m.position === "left-bottom" ? "left-6 bottom-16 flex-row" : ""}
-                          ${m.position === "top-inside" ? "top-16 right-6 flex-col" : ""}`}>
-                          <label className={`text-xs font-medium whitespace-nowrap ${bloqueado ? "text-gray-300" : "text-gray-700"}`}>
-                            {m.label}
-                            {esLateral && !bloqueado && <span className="ml-1 text-blue-400 text-xs" title="Se sincroniza con el otro fuelle lateral">⇄</span>}
-                          </label>
-                          <input type="text" inputMode="decimal"
-                            value={(datosProductoNuevo.medidas as Record<MedidaKey, string>)[m.key]}
-                            onChange={e => !bloqueado && setMedidaInline(m.key, e.target.value)}
-                            disabled={bloqueado}
-                            className={`w-16 px-2 py-1 text-sm text-center border-2 rounded focus:outline-none ${bloqueado ? "border-gray-200 bg-gray-50 text-gray-300 cursor-not-allowed" : "border-gray-300 focus:border-blue-500"}`}
-                            placeholder="0" />
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-              {productoNuevoListo && advertenciaDuplicado && (
-                <div className="flex items-start gap-3 bg-amber-50 border border-amber-300 rounded-lg px-4 py-3 mb-2">
-                  <svg className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-                  </svg>
-                  <div className="flex-1">
-                    <p className="text-sm font-semibold text-amber-800">Producto ya registrado en el catálogo</p>
-                    <p className="text-xs text-amber-700 mt-0.5">{advertenciaDuplicado}</p>
-                    <p className="text-xs text-amber-600 mt-1 italic">Puedes continuar — se usará el producto existente.</p>
-                  </div>
-                  <button type="button" onClick={() => setAdvertenciaDuplicado(null)} className="flex-shrink-0 text-amber-400 hover:text-amber-600">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+            {modoProducto === "registrado" && (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Buscar Producto</label>
+                  <button type="button" onClick={() => setMostrarModalProductos(true)}
+                    className="w-full px-4 py-3 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-blue-500 hover:text-blue-600 flex items-center justify-center gap-2">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+                    Click para buscar producto registrado
                   </button>
                 </div>
-              )}
-              {productoNuevoListo && (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-start justify-between gap-3">
-                  <div>
-                    <p className="font-semibold text-gray-900 text-sm">{productoActual.nombre || datosProductoNuevo.tipoProducto}</p>
-                    <div className="flex flex-wrap gap-x-4 mt-1 text-xs text-gray-600">
-                      <span>Material: {datosProductoNuevo.material}</span>
-                      <span>Calibre: {datosProductoNuevo.calibre}</span>
-                      <span>Medidas: {productoActual.medidasFormateadas || datosProductoNuevo.medidasFormateadas || "—"}</span>
-                      {productoActual.porKilo && <span>Por kilo: {productoActual.porKilo}</span>}
+                {productoActual.nombre && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <p className="font-semibold text-gray-900 mb-2">{productoActual.nombre}</p>
+                    <div className="grid grid-cols-2 gap-2 text-sm text-gray-700">
+                      <p><span className="font-semibold">Material:</span> {productoActual.material}</p>
+                      <p><span className="font-semibold">Calibre:</span>  {productoActual.calibre}</p>
+                      <p><span className="font-semibold">Medidas:</span>  {productoActual.medidasFormateadas}</p>
+                      <p><span className="font-semibold">Por kilo:</span> {productoActual.porKilo}</p>
                     </div>
-                  </div>
-                  <button type="button" onClick={() => { setProductoNuevoListo(false); setAdvertenciaDuplicado(null); }}
-                    className="flex-shrink-0 text-xs text-blue-600 hover:text-blue-800 underline whitespace-nowrap">← Editar</button>
-                </div>
-              )}
-            </div>
-          )}
-
-          {hayProductoSeleccionado && (
-            <div className="mt-6 space-y-4 border-t pt-4">
-
-              {/* Herramental */}
-              <div className="border border-gray-200 rounded-lg overflow-hidden">
-                <button type="button" onClick={handleHerramentalToggle}
-                  className={`w-full flex items-center justify-between px-4 py-3 transition-colors text-left ${herramentalTieneData ? "bg-orange-50 hover:bg-orange-100" : "bg-gray-100 hover:bg-gray-200"}`}>
-                  <div className="flex items-center gap-2">
-                    <span className="text-base">🔧</span>
-                    <span className={`text-sm font-semibold ${herramentalTieneData ? "text-orange-800" : "text-gray-600"}`}>Herramental</span>
-                    <span className="text-xs font-normal text-gray-400">(opcional)</span>
-                    {herramentalTieneData && (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-200 text-orange-800">
-                        ${parseFloat(herramentalPrecioTexto || "0").toFixed(2)}
-                      </span>
-                    )}
-                  </div>
-                  <svg className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${herramentalExpandido ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </button>
-                {herramentalExpandido && (
-                  <div className="p-4 bg-white space-y-3 border-t border-gray-200">
-                    <p className="text-xs text-gray-400">Indica el herramental requerido para este producto. Se sumará al total.</p>
-                    <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1">Descripción / Características</label>
-                      <textarea value={herramentalDescripcion} onChange={e => handleHerramentalDescripcionChange(e.target.value)} rows={2}
-                        placeholder="Ej: Suaje nuevo para troquel 40x30..."
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-orange-400 focus:border-orange-400 resize-none" />
-                    </div>
-                    <div className="flex items-end gap-3">
-                      <div className="flex-1">
-                        <label className="block text-xs font-medium text-gray-600 mb-1">Precio <span className="text-red-500">*</span></label>
-                        <div className="relative">
-                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm font-medium">$</span>
-                          <input type="text" inputMode="decimal" value={herramentalPrecioTexto} onChange={e => handleHerramentalPrecioChange(e.target.value)} placeholder="0.00"
-                            className="w-full pl-7 pr-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-orange-400 focus:border-orange-400" />
-                        </div>
-                      </div>
-                      {herramentalTieneData && (
-                        <button type="button" onClick={handleHerramentalLimpiar} className="px-3 py-2 text-xs text-red-500 hover:text-red-700 hover:bg-red-50 border border-red-200 rounded-lg transition-colors">Limpiar</button>
-                      )}
-                    </div>
-                    {herramentalTieneData && (
-                      <p className="text-xs text-orange-600 font-medium">✓ Herramental de ${parseFloat(herramentalPrecioTexto || "0").toFixed(2)} incluido en el total</p>
-                    )}
                   </div>
                 )}
               </div>
+            )}
 
-              {/* Tintas y Caras */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="relative">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Tintas</label>
-                  <div className="flex gap-2">
-                    <input type="text" value={`${productoActual.tintas} tinta${productoActual.tintas > 1 ? "s" : ""}`} readOnly
-                      className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white cursor-pointer"
-                      onClick={() => setMostrarDropdownTintas(!mostrarDropdownTintas)} />
-                    <button type="button" onClick={() => setMostrarDropdownTintas(!mostrarDropdownTintas)} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-                      <svg className={`w-5 h-5 transition-transform ${mostrarDropdownTintas ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
-                    </button>
-                  </div>
-                  {mostrarDropdownTintas && (
-                    <ul className="absolute w-full bg-white border border-gray-300 mt-1 rounded-lg shadow-lg z-20">
-                      {tintas.map(t => (
-                        <li key={t.id} onClick={() => {
-                          setProductoActual(p => ({ ...p, tintas: t.cantidad, tintasId: t.id, pantones: null, pigmentos: null }));
-                          setInputsPantones(Array(t.cantidad).fill(""));
-                          setModoColor("pantones");
-                          setMostrarDropdownTintas(false);
-                        }} className="px-4 py-2 hover:bg-blue-100 cursor-pointer text-gray-900">
-                          {t.cantidad} tinta{t.cantidad > 1 ? "s" : ""}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-                <div className="relative">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Caras</label>
-                  <div className="flex gap-2">
-                    <input type="text" value={`${productoActual.caras} cara${productoActual.caras > 1 ? "s" : ""}`} readOnly
-                      className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white cursor-pointer"
-                      onClick={() => setMostrarDropdownCaras(!mostrarDropdownCaras)} />
-                    <button type="button" onClick={() => setMostrarDropdownCaras(!mostrarDropdownCaras)} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-                      <svg className={`w-5 h-5 transition-transform ${mostrarDropdownCaras ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
-                    </button>
-                  </div>
-                  {mostrarDropdownCaras && (
-                    <ul className="absolute w-full bg-white border border-gray-300 mt-1 rounded-lg shadow-lg z-20">
-                      {caras.map(c => (
-                        <li key={c.id} onClick={() => { setProductoActual(p => ({ ...p, caras: c.cantidad, carasId: c.id })); setMostrarDropdownCaras(false); }}
-                          className="px-4 py-2 hover:bg-blue-100 cursor-pointer text-gray-900">
-                          {c.cantidad} cara{c.cantidad > 1 ? "s" : ""}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              </div>
-
-              
-  {/* Modal registrar insumo nuevo */}
-{modalInsumo.abierto && (
-  <ModalRegistrarInsumo
-    tipoInsumoInicial={modalInsumo.tipoId}
-    nombreInicial={modalInsumo.nombre}
-    onRegistrado={handleInsumoRegistrado}
-    onCancelar={() => setModalInsumo({ abierto: false, tipoId: 0, nombre: "", indice: null })}
-  />
-)}
- 
-{/* Color / Pantones */}
-<div className="space-y-4">
-  <label className="block text-sm font-medium text-gray-700">
-    Color / Tintas{" "}
-    <span className="ml-2 text-xs text-gray-400 font-normal">(opcional)</span>
-  </label>
- 
-  {/* ── Pigmento ── */}
-  <div className="space-y-1">
-    <div className="flex items-center gap-2">
-      <span className="text-sm font-medium text-gray-600">Pigmento</span>
-      {esBopp && (
-        <span className="text-xs text-gray-400 italic">No aplica (BOPP/Celofán)</span>
-      )}
-    </div>
-    <ComboboxInsumo
-      tipoId={idTipoPigmento}
-      placeholder="Buscar pigmento..."
-      value={productoActual.pigmentos || ""}
-      onChange={(val) => setProductoActual((p) => ({ ...p, pigmentos: sanitizarTexto(val) || null }))}
-      onSeleccionar={(item) => {
-        const texto = item.codigo ? `${item.nombre} (${item.codigo})` : item.nombre;
-        setProductoActual((p) => ({ ...p, pigmentos: texto }));
-      }}
-      onRegistrarNuevo={(nombre) =>
-        abrirModalInsumo(idTipoPigmento!, nombre, null)
-      }
-      disabled={esBopp}
-    />
-  </div>
- 
-  {/* ── Pantones — uno por tinta ── */}
-  <div className="space-y-2">
-    <p className="text-sm font-medium text-gray-600">
-      Pantones{" "}
-      <span className="text-xs text-gray-400 font-normal">
-        ({productoActual.tintas} tinta{productoActual.tintas > 1 ? "s" : ""})
-      </span>
-    </p>
- 
-    <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 space-y-3">
-      <div className="grid grid-cols-2 gap-3">
-        {inputsPantones.map((valor, i) => (
-          <div key={i} className="flex items-start gap-2">
-            <span className="flex-shrink-0 w-6 h-6 mt-2 rounded-full bg-purple-200 text-purple-800 text-xs font-bold flex items-center justify-center">
-              {i + 1}
-            </span>
-            <ComboboxInsumo
-              tipoId={idTipoPanton}
-              placeholder={`Tinta ${i + 1}...`}
-              value={valor}
-              onChange={(val) => handlePantoneChange(i, val)}
-              onSeleccionar={(item) => {
-                const texto = item.codigo
-                  ? `${item.nombre} (${item.codigo})`
-                  : item.nombre;
-                const nuevos = [...inputsPantones];
-                nuevos[i] = texto;
-                setInputsPantones(nuevos);
-                setProductoActual((prev) => ({
-                  ...prev,
-                  pantones:
-                    nuevos.join(", ").replace(/^[\s,]+|[\s,]+$/g, "") || null,
-                }));
-              }}
-              onRegistrarNuevo={(nombre) =>
-                abrirModalInsumo(idTipoPanton!, nombre, i)
-              }
-              className="flex-1"
-            />
-          </div>
-        ))}
-      </div>
- 
-      {productoActual.pantones && (
-        <p className="text-xs text-purple-500">
-          Guardado:{" "}
-          <span className="font-medium">{productoActual.pantones}</span>
-        </p>
-      )}
-    </div>
-  </div>
-</div>
- 
-
-
-              {/* Suaje */}
-              {(() => {
-                const esAsaFlexible = getEsAsaFlexible();
-                return (
-                  <div className="relative">
-                    <div className="flex items-center gap-2 mb-2">
-                      <label className={`block text-sm font-medium ${esAsaFlexible ? "text-gray-700" : "text-gray-300"}`}>
-                        Suaje / Asa <span className="ml-2 text-xs font-normal">(opcional)</span>
-                      </label>
-                      {!esAsaFlexible && <span className="text-xs text-gray-400 italic">No aplica para este tipo de producto</span>}
+            {modoProducto === "nuevo" && (
+              <div className="space-y-4">
+                {!productoNuevoListo && (
+                  <SelectorProducto catalogos={catalogos} onProductoChange={handleProductoNuevoChange} mostrarFigura={false} />
+                )}
+                {!productoNuevoListo && datosProductoNuevo.tipoProducto && CONFIG_PRODUCTOS[datosProductoNuevo.tipoProducto] && (
+                  <div className="bg-white p-4 rounded-lg border border-gray-200">
+                    <div className="relative w-full flex items-center justify-center"
+                      style={{ minHeight: "460px", paddingLeft: "160px", paddingRight: "160px", paddingTop: "48px", paddingBottom: "48px" }}>
+                      <img src={CONFIG_PRODUCTOS[datosProductoNuevo.tipoProducto].imagen} alt={datosProductoNuevo.tipoProducto}
+                        className="max-w-[220px] max-h-[340px] object-contain" />
+                      {CONFIG_PRODUCTOS[datosProductoNuevo.tipoProducto].medidas.map(m => {
+                        const esLateral = m.key === "fuelleLateral1" || m.key === "fuelleLateral2";
+                        const esFondoORefuerzo = m.key === "fuelleFondo" || m.key === "refuerzo";
+                        const bloqueado = (esLateral && tieneFondoORefuerzo) || (esFondoORefuerzo && tieneLateral);
+                        return (
+                          <div key={m.key} className={`absolute flex items-center gap-1
+                            ${m.position === "top" ? "top-4 left-1/2 -translate-x-1/2 flex-col" : ""}
+                            ${m.position === "left" ? "left-6 top-1/2 -translate-y-1/2 flex-row" : ""}
+                            ${m.position === "bottom" ? "bottom-4 left-1/2 -translate-x-1/2 flex-col-reverse" : ""}
+                            ${m.position === "right" ? "right-6 top-1/2 -translate-y-1/2 flex-row-reverse" : ""}
+                            ${m.position === "right-top" ? "right-6 top-16 flex-row-reverse" : ""}
+                            ${m.position === "left-bottom" ? "left-6 bottom-16 flex-row" : ""}
+                            ${m.position === "top-inside" ? "top-16 right-6 flex-col" : ""}`}>
+                            <label className={`text-xs font-medium whitespace-nowrap ${bloqueado ? "text-gray-300" : "text-gray-700"}`}>
+                              {m.label}
+                              {esLateral && !bloqueado && <span className="ml-1 text-blue-400 text-xs" title="Se sincroniza con el otro fuelle lateral">⇄</span>}
+                            </label>
+                            <input type="text" inputMode="decimal"
+                              value={(datosProductoNuevo.medidas as Record<MedidaKey, string>)[m.key]}
+                              onChange={e => !bloqueado && setMedidaInline(m.key, e.target.value)}
+                              disabled={bloqueado}
+                              className={`w-16 px-2 py-1 text-sm text-center border-2 rounded focus:outline-none ${bloqueado ? "border-gray-200 bg-gray-50 text-gray-300 cursor-not-allowed" : "border-gray-300 focus:border-blue-500"}`}
+                              placeholder="0" />
+                          </div>
+                        );
+                      })}
                     </div>
-                    <div className="flex gap-2">
-                      <input type="text" value={productoActual.suajeTipo || "Sin suaje"} readOnly disabled={!esAsaFlexible}
-                        className={`flex-1 px-4 py-2 border rounded-lg ${!esAsaFlexible ? "border-gray-200 bg-gray-50 text-gray-300 cursor-not-allowed" : productoActual.idsuaje ? "border-blue-400 bg-blue-50 text-gray-900 cursor-pointer" : "border-gray-300 text-gray-900 bg-white cursor-pointer"}`}
-                        onClick={() => esAsaFlexible && setMostrarDropdownSuaje(!mostrarDropdownSuaje)} />
-                      <button type="button" disabled={!esAsaFlexible} onClick={() => esAsaFlexible && setMostrarDropdownSuaje(!mostrarDropdownSuaje)}
-                        className={`px-4 py-2 rounded-lg ${esAsaFlexible ? "bg-blue-600 text-white hover:bg-blue-700" : "bg-gray-200 text-gray-300 cursor-not-allowed"}`}>
-                        <svg className={`w-5 h-5 transition-transform ${mostrarDropdownSuaje ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
-                      </button>
-                      {productoActual.idsuaje && esAsaFlexible && (
-                        <button type="button" onClick={() => setProductoActual(p => ({ ...p, idsuaje: null, suajeTipo: null, colorAsaId: null, colorAsaNombre: null }))}
-                          className="px-3 py-2 bg-gray-200 text-gray-600 rounded-lg hover:bg-red-100 hover:text-red-600 text-sm font-bold">✕</button>
+                  </div>
+                )}
+                {productoNuevoListo && advertenciaDuplicado && (
+                  <div className="flex items-start gap-3 bg-amber-50 border border-amber-300 rounded-lg px-4 py-3 mb-2">
+                    <svg className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                    </svg>
+                    <div className="flex-1">
+                      <p className="text-sm font-semibold text-amber-800">Producto ya registrado en el catálogo</p>
+                      <p className="text-xs text-amber-700 mt-0.5">{advertenciaDuplicado}</p>
+                      <p className="text-xs text-amber-600 mt-1 italic">Puedes continuar — se usará el producto existente.</p>
+                    </div>
+                    <button type="button" onClick={() => setAdvertenciaDuplicado(null)} className="flex-shrink-0 text-amber-400 hover:text-amber-600">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
+                  </div>
+                )}
+                {productoNuevoListo && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-semibold text-gray-900 text-sm">{productoActual.nombre || datosProductoNuevo.tipoProducto}</p>
+                      <div className="flex flex-wrap gap-x-4 mt-1 text-xs text-gray-600">
+                        <span>Material: {datosProductoNuevo.material}</span>
+                        <span>Calibre: {datosProductoNuevo.calibre}</span>
+                        <span>Medidas: {productoActual.medidasFormateadas || datosProductoNuevo.medidasFormateadas || "—"}</span>
+                        {productoActual.porKilo && <span>Por kilo: {productoActual.porKilo}</span>}
+                      </div>
+                    </div>
+                    <button type="button" onClick={() => { setProductoNuevoListo(false); setAdvertenciaDuplicado(null); }}
+                      className="flex-shrink-0 text-xs text-blue-600 hover:text-blue-800 underline whitespace-nowrap">← Editar</button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {hayProductoSeleccionado && (
+              <div className="mt-6 space-y-4 border-t pt-4">
+
+                {/* Herramental */}
+                <div className="border border-gray-200 rounded-lg overflow-hidden">
+                  <button type="button" onClick={handleHerramentalToggle}
+                    className={`w-full flex items-center justify-between px-4 py-3 transition-colors text-left ${herramentalTieneData ? "bg-orange-50 hover:bg-orange-100" : "bg-gray-100 hover:bg-gray-200"}`}>
+                    <div className="flex items-center gap-2">
+                      <span className="text-base">🔧</span>
+                      <span className={`text-sm font-semibold ${herramentalTieneData ? "text-orange-800" : "text-gray-600"}`}>Herramental</span>
+                      <span className="text-xs font-normal text-gray-400">(opcional)</span>
+                      {herramentalTieneData && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-200 text-orange-800">
+                          ${parseFloat(herramentalPrecioTexto || "0").toFixed(2)}
+                        </span>
                       )}
                     </div>
-                    {mostrarDropdownSuaje && esAsaFlexible && (
-                      <ul className="absolute w-full bg-white border border-gray-300 mt-1 rounded-lg shadow-lg z-20 max-h-48 overflow-y-auto">
-                        <li onClick={() => { setProductoActual(p => ({ ...p, idsuaje: null, suajeTipo: null, colorAsaId: null, colorAsaNombre: null })); setMostrarDropdownSuaje(false); }}
-                          className="px-4 py-2 hover:bg-gray-100 cursor-pointer text-gray-400 italic border-b border-gray-200 text-sm">Sin suaje</li>
-                        {suajes.map(s => (
-                          <li key={s.idsuaje} onClick={() => { setProductoActual(p => ({ ...p, idsuaje: s.idsuaje, suajeTipo: s.tipo, colorAsaId: null, colorAsaNombre: null })); setMostrarDropdownSuaje(false); }}
-                            className={`px-4 py-2 hover:bg-blue-100 cursor-pointer text-gray-900 ${productoActual.idsuaje === s.idsuaje ? "bg-blue-50 font-semibold text-blue-700" : ""}`}>
-                            {s.tipo}
+                    <svg className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${herramentalExpandido ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                  {herramentalExpandido && (
+                    <div className="p-4 bg-white space-y-3 border-t border-gray-200">
+                      <p className="text-xs text-gray-400">Indica el herramental requerido para este producto. Se sumará al total.</p>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Descripción / Características</label>
+                        <textarea value={herramentalDescripcion} onChange={e => handleHerramentalDescripcionChange(e.target.value)} rows={2}
+                          placeholder="Ej: Suaje nuevo para troquel 40x30..."
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-orange-400 focus:border-orange-400 resize-none" />
+                      </div>
+                      <div className="flex items-end gap-3">
+                        <div className="flex-1">
+                          <label className="block text-xs font-medium text-gray-600 mb-1">Precio <span className="text-red-500">*</span></label>
+                          <div className="relative">
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm font-medium">$</span>
+                            <input type="text" inputMode="decimal" value={herramentalPrecioTexto} onChange={e => handleHerramentalPrecioChange(e.target.value)} placeholder="0.00"
+                              className="w-full pl-7 pr-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-orange-400 focus:border-orange-400" />
+                          </div>
+                        </div>
+                        {herramentalTieneData && (
+                          <button type="button" onClick={handleHerramentalLimpiar} className="px-3 py-2 text-xs text-red-500 hover:text-red-700 hover:bg-red-50 border border-red-200 rounded-lg transition-colors">Limpiar</button>
+                        )}
+                      </div>
+                      {herramentalTieneData && (
+                        <p className="text-xs text-orange-600 font-medium">✓ Herramental de ${parseFloat(herramentalPrecioTexto || "0").toFixed(2)} incluido en el total</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Tintas y Caras */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="relative">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Tintas</label>
+                    <div className="flex gap-2">
+                      <input type="text" value={`${productoActual.tintas} tinta${productoActual.tintas > 1 ? "s" : ""}`} readOnly
+                        className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white cursor-pointer"
+                        onClick={() => setMostrarDropdownTintas(!mostrarDropdownTintas)} />
+                      <button type="button" onClick={() => setMostrarDropdownTintas(!mostrarDropdownTintas)} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                        <svg className={`w-5 h-5 transition-transform ${mostrarDropdownTintas ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                      </button>
+                    </div>
+                    {mostrarDropdownTintas && (
+                      <ul className="absolute w-full bg-white border border-gray-300 mt-1 rounded-lg shadow-lg z-20">
+                        {tintas.map(t => (
+                          <li key={t.id} onClick={() => {
+                            setProductoActual(p => ({ ...p, tintas: t.cantidad, tintasId: t.id, pantones: null, pigmentos: null }));
+                            setInputsPantones(Array(t.cantidad).fill(""));
+                            setModoColor("pantones");
+                            setMostrarDropdownTintas(false);
+                          }} className="px-4 py-2 hover:bg-blue-100 cursor-pointer text-gray-900">
+                            {t.cantidad} tinta{t.cantidad > 1 ? "s" : ""}
                           </li>
                         ))}
                       </ul>
                     )}
-                    {productoActual.idsuaje && esAsaFlexible && <p className="mt-1 text-xs text-blue-600 font-medium">✓ {productoActual.suajeTipo}</p>}
                   </div>
-                );
-              })()}
-
-              {/* Color del Asa */}
-              {getEsAsaFlexible() && productoActual.idsuaje && (
-                <div className="relative">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Color del Asa <span className="ml-2 text-xs text-gray-400 font-normal">(opcional)</span></label>
-                  <div className="flex gap-2">
-                    <input type="text" value={productoActual.colorAsaNombre || "Seleccionar color..."} readOnly
-                      className={`flex-1 px-4 py-2 border rounded-lg cursor-pointer text-gray-900 bg-white capitalize ${productoActual.colorAsaId ? "border-teal-400 bg-teal-50" : "border-gray-300"}`}
-                      onClick={() => setMostrarDropdownColorAsa(!mostrarDropdownColorAsa)} />
-                    <button type="button" onClick={() => setMostrarDropdownColorAsa(!mostrarDropdownColorAsa)} className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700">
-                      <svg className={`w-5 h-5 transition-transform ${mostrarDropdownColorAsa ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
-                    </button>
-                    {productoActual.colorAsaId && (
-                      <button type="button" onClick={() => setProductoActual(p => ({ ...p, colorAsaId: null, colorAsaNombre: null }))}
-                        className="px-3 py-2 bg-gray-200 text-gray-600 rounded-lg hover:bg-red-100 hover:text-red-600 text-sm font-bold">✕</button>
-                    )}
-                  </div>
-                  {mostrarDropdownColorAsa && (
-                    <ul className="absolute w-full bg-white border border-gray-300 mt-1 rounded-lg shadow-lg z-20 max-h-48 overflow-y-auto">
-                      {coloresAsa.map(c => (
-                        <li key={c.id_color} onClick={() => { setProductoActual(p => ({ ...p, colorAsaId: c.id_color, colorAsaNombre: c.color })); setMostrarDropdownColorAsa(false); }}
-                          className={`px-4 py-2 hover:bg-teal-100 cursor-pointer text-gray-900 capitalize ${productoActual.colorAsaId === c.id_color ? "bg-teal-50 font-semibold text-teal-700" : ""}`}>
-                          {c.color}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                  {productoActual.colorAsaId && <p className="mt-1 text-xs text-teal-600 font-medium capitalize">✓ {productoActual.colorAsaNombre}</p>}
-                </div>
-              )}
-
-              {/* Medida del Troquel */}
-              {getEsTroquel() && (
-                <div className="relative">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Medida del Troquel <span className="ml-2 text-xs text-gray-400 font-normal">(opcional)</span></label>
-                  <div className="flex gap-2">
-                    <input type="text" value={productoActual.medidaTroquelTexto || "Seleccionar medida..."} readOnly
-                      className={`flex-1 px-4 py-2 border rounded-lg cursor-pointer text-gray-900 bg-white ${productoActual.idMedidaTroquel ? "border-violet-400 bg-violet-50" : "border-gray-300"}`}
-                      onClick={() => setMostrarDropdownTroquel(!mostrarDropdownTroquel)} />
-                    <button type="button" onClick={() => setMostrarDropdownTroquel(!mostrarDropdownTroquel)} className="px-4 py-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700">
-                      <svg className={`w-5 h-5 transition-transform ${mostrarDropdownTroquel ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
-                    </button>
-                    {productoActual.idMedidaTroquel && (
-                      <button type="button" onClick={() => setProductoActual(p => ({ ...p, idMedidaTroquel: null, medidaTroquelTexto: null }))}
-                        className="px-3 py-2 bg-gray-200 text-gray-600 rounded-lg hover:bg-red-100 hover:text-red-600 text-sm font-bold">✕</button>
-                    )}
-                  </div>
-                  {mostrarDropdownTroquel && (
-                    <ul className="absolute w-full bg-white border border-gray-300 mt-1 rounded-lg shadow-lg z-20 max-h-48 overflow-y-auto">
-                      {medidasTroquel.map(m => (
-                        <li key={m.id_medidatro} onClick={() => { setProductoActual(p => ({ ...p, idMedidaTroquel: m.id_medidatro, medidaTroquelTexto: m.medida })); setMostrarDropdownTroquel(false); }}
-                          className={`px-4 py-2 hover:bg-violet-100 cursor-pointer text-gray-900 ${productoActual.idMedidaTroquel === m.id_medidatro ? "bg-violet-50 font-semibold text-violet-700" : ""}`}>
-                          {m.medida}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                  {productoActual.idMedidaTroquel && <p className="mt-1 text-xs text-violet-600 font-medium">✓ {productoActual.medidaTroquelTexto}</p>}
-                </div>
-              )}
-
-              {/* Modo cantidad */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Modo de cotización</label>
-                <div className="flex gap-2 bg-gray-100 p-1 rounded-lg w-fit">
-                  <button type="button" onClick={() => setModoCantidad("unidad")}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-md font-medium text-sm transition-all ${modoCantidad === "unidad" ? "bg-white text-blue-600 shadow" : "text-gray-600 hover:text-gray-900"}`}>
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>
-                    Por bolsas
-                  </button>
-                  <button type="button" onClick={() => setModoCantidad("kilo")} disabled={!productoActual.porKilo || Number(productoActual.porKilo) <= 0}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-md font-medium text-sm transition-all ${!productoActual.porKilo || Number(productoActual.porKilo) <= 0 ? "text-gray-300 cursor-not-allowed" : modoCantidad === "kilo" ? "bg-white text-emerald-600 shadow" : "text-gray-600 hover:text-gray-900"}`}>
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" /></svg>
-                    Por kilos
-                  </button>
-                </div>
-                {modoCantidad === "kilo" && productoActual.porKilo && (
-                  <p className="mt-1 text-xs text-emerald-600 font-medium">✓ Factor: {productoActual.porKilo} bolsas/kg</p>
-                )}
-              </div>
-
-              {/* Cantidades */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  {modo === "pedido"
-                    ? <>Cantidad <span className="text-xs text-gray-400 font-normal">(en {labelCantidad})</span></>
-                    : <>Cantidades <span className="text-xs text-gray-400 font-normal">(en {labelCantidad} — hasta 3 opciones)</span></>}
-                </label>
-                {modo === "pedido" ? (
-                  <div className="space-y-1 max-w-xs">
-                    <input type="text" inputMode="numeric" value={cantidadesTexto[0]} onChange={e => handleCantidadChange(0, e.target.value)}
-                      className={`w-full px-4 py-2 border rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-2 ${getErrorKg(0) ? "border-red-400 focus:ring-red-400" : modoCantidad === "kilo" ? "border-emerald-300 focus:ring-emerald-400" : "border-gray-300 focus:ring-blue-500"}`}
-                      placeholder={modoCantidad === "kilo" ? "Ingresa los kilos" : "Ingresa la cantidad"} />
-                    {getEquivalente(0) && !getErrorKg(0) && <p className="text-xs text-gray-400">{getEquivalente(0)}</p>}
-                    {getErrorKg(0) && <p className="text-xs text-red-500 font-medium">⚠ {getErrorKg(0)}</p>}
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-3 gap-3">
-                    {cantidadesTexto.map((valor, index) => (
-                      <div key={index} className="space-y-1">
-                        <input type="text" inputMode="numeric" value={valor} onChange={e => handleCantidadChange(index, e.target.value)}
-                          className={`w-full px-4 py-2 border rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-2 ${getErrorKg(index) ? "border-red-400 focus:ring-red-400" : modoCantidad === "kilo" ? "border-emerald-300 focus:ring-emerald-400" : "border-gray-300 focus:ring-blue-500"}`}
-                          placeholder={modoCantidad === "kilo" ? `Kilos ${index + 1}` : `Cantidad ${index + 1}`} />
-                        {getEquivalente(index) && !getErrorKg(index) && <p className="text-xs text-gray-400">{getEquivalente(index)}</p>}
-                        {getErrorKg(index) && <p className="text-xs text-red-500 font-medium">⚠ {getErrorKg(index)}</p>}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Precios */}
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="block text-sm font-medium text-gray-700">
-                    {modo === "pedido" ? "Precio" : "Precios"}{" "}
-                    <span className="text-xs text-gray-400 font-normal">({modoCantidad === "kilo" ? "por kg" : "por bolsa"})</span>
-                  </label>
-                  {preciosEditadosManualmente.some(Boolean) && (
-                    <button type="button" onClick={() => { setPreciosEditadosManualmente([false, false, false]); setPreciosTexto(["", "", ""]); }}
-                      className="text-xs text-blue-600 hover:text-blue-800 underline">↺ Restaurar todos</button>
-                  )}
-                </div>
-                {errorCalculo && <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-lg"><p className="text-red-700 text-sm">⚠️ {errorCalculo}</p></div>}
-                {modo === "pedido" ? (
-                  <div className="space-y-1 max-w-xs">
-                    <div className="relative">
-                      <input type="text" inputMode="decimal" value={preciosTexto[0]}
-                        onChange={e => handlePrecioChange(0, e.target.value)} onBlur={() => handlePrecioBlur(0)}
-                        className={`w-full px-4 py-2 border rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-2 ${preciosEditadosManualmente[0] ? "border-orange-400 ring-1 ring-orange-300" : "border-gray-300 focus:ring-blue-500"}`}
-                        placeholder={calculandoPrecios && !preciosEditadosManualmente[0] ? "Calculando..." : "0.0000"} />
-                      {calculandoPrecios && !preciosEditadosManualmente[0] && cantidadesEnBolsas[0] > 0 && (
-                        <div className="absolute right-2 top-1/2 -translate-y-1/2"><div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-500 border-t-transparent"></div></div>
-                      )}
-                      {preciosEditadosManualmente[0] && <div className="absolute right-2 top-1/2 -translate-y-1/2 text-sm text-orange-500" title="Editado manualmente">✏️</div>}
+                  <div className="relative">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Caras</label>
+                    <div className="flex gap-2">
+                      <input type="text" value={`${productoActual.caras} cara${productoActual.caras > 1 ? "s" : ""}`} readOnly
+                        className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white cursor-pointer"
+                        onClick={() => setMostrarDropdownCaras(!mostrarDropdownCaras)} />
+                      <button type="button" onClick={() => setMostrarDropdownCaras(!mostrarDropdownCaras)} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                        <svg className={`w-5 h-5 transition-transform ${mostrarDropdownCaras ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                      </button>
                     </div>
-                    {productoActual.precios[0] > 0 && productoActual.porKilo && Number(productoActual.porKilo) > 0 && (
-                      <p className="text-xs text-gray-400">{modoCantidad === "kilo" ? `≈ $${productoActual.precios[0].toFixed(4)}/bolsa` : `≈ $${(productoActual.precios[0] * Number(productoActual.porKilo)).toFixed(4)}/kg`}</p>
+                    {mostrarDropdownCaras && (
+                      <ul className="absolute w-full bg-white border border-gray-300 mt-1 rounded-lg shadow-lg z-20">
+                        {caras.map(c => (
+                          <li key={c.id} onClick={() => { setProductoActual(p => ({ ...p, caras: c.cantidad, carasId: c.id })); setMostrarDropdownCaras(false); }}
+                            className="px-4 py-2 hover:bg-blue-100 cursor-pointer text-gray-900">
+                            {c.cantidad} cara{c.cantidad > 1 ? "s" : ""}
+                          </li>
+                        ))}
+                      </ul>
                     )}
-                    {preciosEditadosManualmente[0] && <button type="button" onClick={() => handleRestaurarPrecioAuto(0)} className="text-xs text-blue-500 hover:text-blue-700 underline">↺ Usar automático</button>}
                   </div>
-                ) : (
-                  <div className="grid grid-cols-3 gap-3">
-                    {productoActual.precios.map((_, index) => (
-                      <div key={index} className="space-y-1">
-                        <div className="relative">
-                          <input type="text" inputMode="decimal" value={preciosTexto[index]}
-                            onChange={e => handlePrecioChange(index, e.target.value)} onBlur={() => handlePrecioBlur(index)}
-                            className={`w-full px-4 py-2 border rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-2 ${preciosEditadosManualmente[index] ? "border-orange-400 ring-1 ring-orange-300" : "border-gray-300 focus:ring-blue-500"}`}
-                            placeholder={calculandoPrecios && !preciosEditadosManualmente[index] ? "Calculando..." : "0.0000"} />
-                          {calculandoPrecios && !preciosEditadosManualmente[index] && cantidadesEnBolsas[index] > 0 && (
-                            <div className="absolute right-2 top-1/2 -translate-y-1/2"><div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-500 border-t-transparent"></div></div>
-                          )}
-                          {preciosEditadosManualmente[index] && <div className="absolute right-2 top-1/2 -translate-y-1/2 text-sm text-orange-500" title="Editado manualmente">✏️</div>}
-                        </div>
-                        {productoActual.precios[index] > 0 && productoActual.porKilo && Number(productoActual.porKilo) > 0 && (
-                          <p className="text-xs text-gray-400">{modoCantidad === "kilo" ? `≈ $${productoActual.precios[index].toFixed(4)}/bolsa` : `≈ $${(productoActual.precios[index] * Number(productoActual.porKilo)).toFixed(4)}/kg`}</p>
-                        )}
-                        {preciosEditadosManualmente[index] && <button type="button" onClick={() => handleRestaurarPrecioAuto(index)} className="text-xs text-blue-500 hover:text-blue-700 underline">↺ Usar automático</button>}
+                </div>
+
+                {/* Modal registrar insumo nuevo */}
+                {modalInsumo.abierto && (
+                  <ModalRegistrarInsumo
+                    tipoInsumoInicial={modalInsumo.tipoId}
+                    nombreInicial={modalInsumo.nombre}
+                    onRegistrado={handleInsumoRegistrado}
+                    onCancelar={() => setModalInsumo({ abierto: false, tipoId: 0, nombre: "", indice: null })}
+                  />
+                )}
+
+                {/* Color / Pantones */}
+                <div className="space-y-4">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Color / Tintas{" "}<span className="ml-2 text-xs text-gray-400 font-normal">(opcional)</span>
+                  </label>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-gray-600">Pigmento</span>
+                      {esBopp && <span className="text-xs text-gray-400 italic">No aplica (BOPP/Celofán)</span>}
+                    </div>
+                    <ComboboxInsumo
+                      tipoId={idTipoPigmento}
+                      placeholder="Buscar pigmento..."
+                      value={productoActual.pigmentos || ""}
+                      onChange={(val) => setProductoActual((p) => ({ ...p, pigmentos: sanitizarTexto(val) || null }))}
+                      onSeleccionar={(item) => {
+                        const texto = item.codigo ? `${item.nombre} (${item.codigo})` : item.nombre;
+                        setProductoActual((p) => ({ ...p, pigmentos: texto }));
+                      }}
+                      onRegistrarNuevo={(nombre) => abrirModalInsumo(idTipoPigmento!, nombre, null)}
+                      disabled={esBopp}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium text-gray-600">
+                      Pantones{" "}<span className="text-xs text-gray-400 font-normal">({productoActual.tintas} tinta{productoActual.tintas > 1 ? "s" : ""})</span>
+                    </p>
+                    <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 space-y-3">
+                      <div className="grid grid-cols-2 gap-3">
+                        {inputsPantones.map((valor, i) => (
+                          <div key={i} className="flex items-start gap-2">
+                            <span className="flex-shrink-0 w-6 h-6 mt-2 rounded-full bg-purple-200 text-purple-800 text-xs font-bold flex items-center justify-center">{i + 1}</span>
+                            <ComboboxInsumo
+                              tipoId={idTipoPanton}
+                              placeholder={`Tinta ${i + 1}...`}
+                              value={valor}
+                              onChange={(val) => handlePantoneChange(i, val)}
+                              onSeleccionar={(item) => {
+                                const texto = item.codigo ? `${item.nombre} (${item.codigo})` : item.nombre;
+                                const nuevos = [...inputsPantones];
+                                nuevos[i] = texto;
+                                setInputsPantones(nuevos);
+                                setProductoActual((prev) => ({ ...prev, pantones: nuevos.join(", ").replace(/^[\s,]+|[\s,]+$/g, "") || null }));
+                              }}
+                              onRegistrarNuevo={(nombre) => abrirModalInsumo(idTipoPanton!, nombre, i)}
+                              className="flex-1"
+                            />
+                          </div>
+                        ))}
                       </div>
-                    ))}
+                      {productoActual.pantones && (
+                        <p className="text-xs text-purple-500">Guardado: <span className="font-medium">{productoActual.pantones}</span></p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Suaje */}
+                {(() => {
+                  const esAsaFlexible = getEsAsaFlexible();
+                  return (
+                    <div className="relative">
+                      <div className="flex items-center gap-2 mb-2">
+                        <label className={`block text-sm font-medium ${esAsaFlexible ? "text-gray-700" : "text-gray-300"}`}>
+                          Suaje / Asa <span className="ml-2 text-xs font-normal">(opcional)</span>
+                        </label>
+                        {!esAsaFlexible && <span className="text-xs text-gray-400 italic">No aplica para este tipo de producto</span>}
+                      </div>
+                      <div className="flex gap-2">
+                        <input type="text" value={productoActual.suajeTipo || "Sin suaje"} readOnly disabled={!esAsaFlexible}
+                          className={`flex-1 px-4 py-2 border rounded-lg ${!esAsaFlexible ? "border-gray-200 bg-gray-50 text-gray-300 cursor-not-allowed" : productoActual.idsuaje ? "border-blue-400 bg-blue-50 text-gray-900 cursor-pointer" : "border-gray-300 text-gray-900 bg-white cursor-pointer"}`}
+                          onClick={() => esAsaFlexible && setMostrarDropdownSuaje(!mostrarDropdownSuaje)} />
+                        <button type="button" disabled={!esAsaFlexible} onClick={() => esAsaFlexible && setMostrarDropdownSuaje(!mostrarDropdownSuaje)}
+                          className={`px-4 py-2 rounded-lg ${esAsaFlexible ? "bg-blue-600 text-white hover:bg-blue-700" : "bg-gray-200 text-gray-300 cursor-not-allowed"}`}>
+                          <svg className={`w-5 h-5 transition-transform ${mostrarDropdownSuaje ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                        </button>
+                        {productoActual.idsuaje && esAsaFlexible && (
+                          <button type="button" onClick={() => setProductoActual(p => ({ ...p, idsuaje: null, suajeTipo: null, colorAsaId: null, colorAsaNombre: null }))}
+                            className="px-3 py-2 bg-gray-200 text-gray-600 rounded-lg hover:bg-red-100 hover:text-red-600 text-sm font-bold">✕</button>
+                        )}
+                      </div>
+                      {mostrarDropdownSuaje && esAsaFlexible && (
+                        <ul className="absolute w-full bg-white border border-gray-300 mt-1 rounded-lg shadow-lg z-20 max-h-48 overflow-y-auto">
+                          <li onClick={() => { setProductoActual(p => ({ ...p, idsuaje: null, suajeTipo: null, colorAsaId: null, colorAsaNombre: null })); setMostrarDropdownSuaje(false); }}
+                            className="px-4 py-2 hover:bg-gray-100 cursor-pointer text-gray-400 italic border-b border-gray-200 text-sm">Sin suaje</li>
+                          {suajes.map(s => (
+                            <li key={s.idsuaje} onClick={() => { setProductoActual(p => ({ ...p, idsuaje: s.idsuaje, suajeTipo: s.tipo, colorAsaId: null, colorAsaNombre: null })); setMostrarDropdownSuaje(false); }}
+                              className={`px-4 py-2 hover:bg-blue-100 cursor-pointer text-gray-900 ${productoActual.idsuaje === s.idsuaje ? "bg-blue-50 font-semibold text-blue-700" : ""}`}>
+                              {s.tipo}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                      {productoActual.idsuaje && esAsaFlexible && <p className="mt-1 text-xs text-blue-600 font-medium">✓ {productoActual.suajeTipo}</p>}
+                    </div>
+                  );
+                })()}
+
+                {/* Color del Asa */}
+                {getEsAsaFlexible() && productoActual.idsuaje && (
+                  <div className="relative">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Color del Asa <span className="ml-2 text-xs text-gray-400 font-normal">(opcional)</span></label>
+                    <div className="flex gap-2">
+                      <input type="text" value={productoActual.colorAsaNombre || "Seleccionar color..."} readOnly
+                        className={`flex-1 px-4 py-2 border rounded-lg cursor-pointer text-gray-900 bg-white capitalize ${productoActual.colorAsaId ? "border-teal-400 bg-teal-50" : "border-gray-300"}`}
+                        onClick={() => setMostrarDropdownColorAsa(!mostrarDropdownColorAsa)} />
+                      <button type="button" onClick={() => setMostrarDropdownColorAsa(!mostrarDropdownColorAsa)} className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700">
+                        <svg className={`w-5 h-5 transition-transform ${mostrarDropdownColorAsa ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                      </button>
+                      {productoActual.colorAsaId && (
+                        <button type="button" onClick={() => setProductoActual(p => ({ ...p, colorAsaId: null, colorAsaNombre: null }))}
+                          className="px-3 py-2 bg-gray-200 text-gray-600 rounded-lg hover:bg-red-100 hover:text-red-600 text-sm font-bold">✕</button>
+                      )}
+                    </div>
+                    {mostrarDropdownColorAsa && (
+                      <ul className="absolute w-full bg-white border border-gray-300 mt-1 rounded-lg shadow-lg z-20 max-h-48 overflow-y-auto">
+                        {coloresAsa.map(c => (
+                          <li key={c.id_color} onClick={() => { setProductoActual(p => ({ ...p, colorAsaId: c.id_color, colorAsaNombre: c.color })); setMostrarDropdownColorAsa(false); }}
+                            className={`px-4 py-2 hover:bg-teal-100 cursor-pointer text-gray-900 capitalize ${productoActual.colorAsaId === c.id_color ? "bg-teal-50 font-semibold text-teal-700" : ""}`}>
+                            {c.color}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    {productoActual.colorAsaId && <p className="mt-1 text-xs text-teal-600 font-medium capitalize">✓ {productoActual.colorAsaNombre}</p>}
                   </div>
                 )}
-                {calculandoPrecios && (
-                  <div className="text-sm text-blue-600 mt-2 flex items-center gap-2">
-                    <div className="animate-spin rounded-full h-3 w-3 border-2 border-blue-600 border-t-transparent"></div>
-                    Calculando precio automático...
+
+                {/* Medida del Troquel */}
+                {getEsTroquel() && (
+                  <div className="relative">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Medida del Troquel <span className="ml-2 text-xs text-gray-400 font-normal">(opcional)</span></label>
+                    <div className="flex gap-2">
+                      <input type="text" value={productoActual.medidaTroquelTexto || "Seleccionar medida..."} readOnly
+                        className={`flex-1 px-4 py-2 border rounded-lg cursor-pointer text-gray-900 bg-white ${productoActual.idMedidaTroquel ? "border-violet-400 bg-violet-50" : "border-gray-300"}`}
+                        onClick={() => setMostrarDropdownTroquel(!mostrarDropdownTroquel)} />
+                      <button type="button" onClick={() => setMostrarDropdownTroquel(!mostrarDropdownTroquel)} className="px-4 py-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700">
+                        <svg className={`w-5 h-5 transition-transform ${mostrarDropdownTroquel ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                      </button>
+                      {productoActual.idMedidaTroquel && (
+                        <button type="button" onClick={() => setProductoActual(p => ({ ...p, idMedidaTroquel: null, medidaTroquelTexto: null }))}
+                          className="px-3 py-2 bg-gray-200 text-gray-600 rounded-lg hover:bg-red-100 hover:text-red-600 text-sm font-bold">✕</button>
+                      )}
+                    </div>
+                    {mostrarDropdownTroquel && (
+                      <ul className="absolute w-full bg-white border border-gray-300 mt-1 rounded-lg shadow-lg z-20 max-h-48 overflow-y-auto">
+                        {medidasTroquel.map(m => (
+                          <li key={m.id_medidatro} onClick={() => { setProductoActual(p => ({ ...p, idMedidaTroquel: m.id_medidatro, medidaTroquelTexto: m.medida })); setMostrarDropdownTroquel(false); }}
+                            className={`px-4 py-2 hover:bg-violet-100 cursor-pointer text-gray-900 ${productoActual.idMedidaTroquel === m.id_medidatro ? "bg-violet-50 font-semibold text-violet-700" : ""}`}>
+                            {m.medida}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    {productoActual.idMedidaTroquel && <p className="mt-1 text-xs text-violet-600 font-medium">✓ {productoActual.medidaTroquelTexto}</p>}
                   </div>
                 )}
-              </div>
 
-              {/* Descripción del producto */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Descripción{" "}
-                  <span className="text-xs text-gray-400 font-normal">
-                    (opcional — ej: 1er Grado, Talla M, Color Rojo...)
-                  </span>
-                </label>
-                <input
-                  type="text"
-                  value={productoActual.descripcion || ""}
-                  onChange={e => setProductoActual(prev => ({ ...prev, descripcion: e.target.value || null }))}
-                  className={inputClass}
-                  placeholder="Ej: 1er Grado, Talla M, Color Rojo, Variante A..."
-                  maxLength={150}
-                />
-                {productoActual.descripcion && (
-                  <p className="mt-1 text-xs text-blue-600 font-medium">✓ Se mostrará como etiqueta identificadora del producto</p>
-                )}
-              </div>
+                {/* Modo cantidad */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Modo de cotización</label>
+                  <div className="flex gap-2 bg-gray-100 p-1 rounded-lg w-fit">
+                    <button type="button" onClick={() => setModoCantidad("unidad")}
+                      className={`flex items-center gap-2 px-4 py-2 rounded-md font-medium text-sm transition-all ${modoCantidad === "unidad" ? "bg-white text-blue-600 shadow" : "text-gray-600 hover:text-gray-900"}`}>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>
+                      Por bolsas
+                    </button>
+                    <button type="button" onClick={() => setModoCantidad("kilo")} disabled={!productoActual.porKilo || Number(productoActual.porKilo) <= 0}
+                      className={`flex items-center gap-2 px-4 py-2 rounded-md font-medium text-sm transition-all ${!productoActual.porKilo || Number(productoActual.porKilo) <= 0 ? "text-gray-300 cursor-not-allowed" : modoCantidad === "kilo" ? "bg-white text-emerald-600 shadow" : "text-gray-600 hover:text-gray-900"}`}>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" /></svg>
+                      Por kilos
+                    </button>
+                  </div>
+                  {modoCantidad === "kilo" && productoActual.porKilo && (
+                    <p className="mt-1 text-xs text-emerald-600 font-medium">✓ Factor: {productoActual.porKilo} bolsas/kg</p>
+                  )}
+                </div>
 
-              {/* Perforación — bolsa plana, bolsa de envío y celofán */}
-              {(() => {
-                const nombreTipo = (modoProducto === "nuevo" ? datosProductoNuevo.tipoProducto : productoActual.nombre).toLowerCase();
-                const puedePerforar =
-                  nombreTipo.includes("bolsa plana") ||
-                  nombreTipo.includes("bolsa envio") ||
-                  nombreTipo.includes("bolsa envío") ||
-                  nombreTipo.includes("celofan") ||
-                  nombreTipo.includes("celofán");
-                if (!puedePerforar) return null;
-                return (
-                  <div className="flex items-center gap-3 py-3 px-4 bg-sky-50 border border-sky-200 rounded-lg">
-                    <input type="checkbox" id="chk-perforacion" checked={productoActual.perforacion ?? false}
-                      onChange={e => setProductoActual(prev => ({ ...prev, perforacion: e.target.checked }))}
-                      className="w-5 h-5 rounded border-sky-400 text-sky-600 focus:ring-sky-400 cursor-pointer" />
-                    <label htmlFor="chk-perforacion" className="flex items-center gap-2 cursor-pointer select-none">
-                      <span className="text-sky-700 font-semibold text-sm">Perforación</span>
-                      <span className="text-sky-500 text-xs">(con perforación)</span>
+                {/* Cantidades */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    {modo === "pedido"
+                      ? <>Cantidad <span className="text-xs text-gray-400 font-normal">(en {labelCantidad})</span></>
+                      : <>Cantidades <span className="text-xs text-gray-400 font-normal">(en {labelCantidad} — hasta 3 opciones)</span></>}
+                  </label>
+                  {modo === "pedido" ? (
+                    <div className="space-y-1 max-w-xs">
+                      <input type="text" inputMode="numeric" value={cantidadesTexto[0]} onChange={e => handleCantidadChange(0, e.target.value)}
+                        className={`w-full px-4 py-2 border rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-2 ${getErrorKg(0) ? "border-red-400 focus:ring-red-400" : modoCantidad === "kilo" ? "border-emerald-300 focus:ring-emerald-400" : "border-gray-300 focus:ring-blue-500"}`}
+                        placeholder={modoCantidad === "kilo" ? "Ingresa los kilos" : "Ingresa la cantidad"} />
+                      {getEquivalente(0) && !getErrorKg(0) && <p className="text-xs text-gray-400">{getEquivalente(0)}</p>}
+                      {getErrorKg(0) && <p className="text-xs text-red-500 font-medium">⚠ {getErrorKg(0)}</p>}
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-3 gap-3">
+                      {cantidadesTexto.map((valor, index) => (
+                        <div key={index} className="space-y-1">
+                          <input type="text" inputMode="numeric" value={valor} onChange={e => handleCantidadChange(index, e.target.value)}
+                            className={`w-full px-4 py-2 border rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-2 ${getErrorKg(index) ? "border-red-400 focus:ring-red-400" : modoCantidad === "kilo" ? "border-emerald-300 focus:ring-emerald-400" : "border-gray-300 focus:ring-blue-500"}`}
+                            placeholder={modoCantidad === "kilo" ? `Kilos ${index + 1}` : `Cantidad ${index + 1}`} />
+                          {getEquivalente(index) && !getErrorKg(index) && <p className="text-xs text-gray-400">{getEquivalente(index)}</p>}
+                          {getErrorKg(index) && <p className="text-xs text-red-500 font-medium">⚠ {getErrorKg(index)}</p>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Precios */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-sm font-medium text-gray-700">
+                      {modo === "pedido" ? "Precio" : "Precios"}{" "}
+                      <span className="text-xs text-gray-400 font-normal">({modoCantidad === "kilo" ? "por kg" : "por bolsa"})</span>
                     </label>
-                    {productoActual.perforacion && (
-                      <span className="ml-auto inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-sky-200 text-sky-800">✓ Con perforación</span>
+                    {preciosEditadosManualmente.some(Boolean) && (
+                      <button type="button" onClick={() => { setPreciosEditadosManualmente([false, false, false]); setPreciosTexto(["", "", ""]); }}
+                        className="text-xs text-blue-600 hover:text-blue-800 underline">↺ Restaurar todos</button>
                     )}
                   </div>
-                );
-              })()}
+                  {errorCalculo && <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-lg"><p className="text-red-700 text-sm">⚠️ {errorCalculo}</p></div>}
+                  {modo === "pedido" ? (
+                    <div className="space-y-1 max-w-xs">
+                      <div className="relative">
+                        <input type="text" inputMode="decimal" value={preciosTexto[0]}
+                          onChange={e => handlePrecioChange(0, e.target.value)} onBlur={() => handlePrecioBlur(0)}
+                          className={`w-full px-4 py-2 border rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-2 ${preciosEditadosManualmente[0] ? "border-orange-400 ring-1 ring-orange-300" : "border-gray-300 focus:ring-blue-500"}`}
+                          placeholder={calculandoPrecios && !preciosEditadosManualmente[0] ? "Calculando..." : "0.0000"} />
+                        {calculandoPrecios && !preciosEditadosManualmente[0] && cantidadesEnBolsas[0] > 0 && (
+                          <div className="absolute right-2 top-1/2 -translate-y-1/2"><div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-500 border-t-transparent"></div></div>
+                        )}
+                        {preciosEditadosManualmente[0] && <div className="absolute right-2 top-1/2 -translate-y-1/2 text-sm text-orange-500" title="Editado manualmente">✏️</div>}
+                      </div>
+                      {productoActual.precios[0] > 0 && productoActual.porKilo && Number(productoActual.porKilo) > 0 && (
+                        <p className="text-xs text-gray-400">{modoCantidad === "kilo" ? `≈ $${productoActual.precios[0].toFixed(4)}/bolsa` : `≈ $${(productoActual.precios[0] * Number(productoActual.porKilo)).toFixed(4)}/kg`}</p>
+                      )}
+                      {preciosEditadosManualmente[0] && <button type="button" onClick={() => handleRestaurarPrecioAuto(0)} className="text-xs text-blue-500 hover:text-blue-700 underline">↺ Usar automático</button>}
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-3 gap-3">
+                      {productoActual.precios.map((_, index) => (
+                        <div key={index} className="space-y-1">
+                          <div className="relative">
+                            <input type="text" inputMode="decimal" value={preciosTexto[index]}
+                              onChange={e => handlePrecioChange(index, e.target.value)} onBlur={() => handlePrecioBlur(index)}
+                              className={`w-full px-4 py-2 border rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-2 ${preciosEditadosManualmente[index] ? "border-orange-400 ring-1 ring-orange-300" : "border-gray-300 focus:ring-blue-500"}`}
+                              placeholder={calculandoPrecios && !preciosEditadosManualmente[index] ? "Calculando..." : "0.0000"} />
+                            {calculandoPrecios && !preciosEditadosManualmente[index] && cantidadesEnBolsas[index] > 0 && (
+                              <div className="absolute right-2 top-1/2 -translate-y-1/2"><div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-500 border-t-transparent"></div></div>
+                            )}
+                            {preciosEditadosManualmente[index] && <div className="absolute right-2 top-1/2 -translate-y-1/2 text-sm text-orange-500" title="Editado manualmente">✏️</div>}
+                          </div>
+                          {productoActual.precios[index] > 0 && productoActual.porKilo && Number(productoActual.porKilo) > 0 && (
+                            <p className="text-xs text-gray-400">{modoCantidad === "kilo" ? `≈ $${productoActual.precios[index].toFixed(4)}/bolsa` : `≈ $${(productoActual.precios[index] * Number(productoActual.porKilo)).toFixed(4)}/kg`}</p>
+                          )}
+                          {preciosEditadosManualmente[index] && <button type="button" onClick={() => handleRestaurarPrecioAuto(index)} className="text-xs text-blue-500 hover:text-blue-700 underline">↺ Usar automático</button>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {calculandoPrecios && (
+                    <div className="text-sm text-blue-600 mt-2 flex items-center gap-2">
+                      <div className="animate-spin rounded-full h-3 w-3 border-2 border-blue-600 border-t-transparent"></div>
+                      Calculando precio automático...
+                    </div>
+                  )}
+                </div>
 
-              {/* Observaciones */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Observaciones del producto <span className="text-xs text-gray-400 font-normal">(Opcional)</span>
-                </label>
-                <textarea
-                  value={productoActual.observacion || ""}
-                  onChange={e => setProductoActual(prev => ({ ...prev, observacion: e.target.value }))}
-                  rows={3}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white"
-                  placeholder="Ej: Impresión a 2 colores, acabado mate, etc."
-                />
+                {/* Descripción */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Descripción{" "}<span className="text-xs text-gray-400 font-normal">(opcional — ej: 1er Grado, Talla M, Color Rojo...)</span>
+                  </label>
+                  <input type="text" value={productoActual.descripcion || ""}
+                    onChange={e => setProductoActual(prev => ({ ...prev, descripcion: e.target.value || null }))}
+                    className={inputClass} placeholder="Ej: 1er Grado, Talla M, Color Rojo, Variante A..." maxLength={150} />
+                  {productoActual.descripcion && <p className="mt-1 text-xs text-blue-600 font-medium">✓ Se mostrará como etiqueta identificadora del producto</p>}
+                </div>
+
+                {/* Perforación */}
+                {(() => {
+                  const nombreTipo = (modoProducto === "nuevo" ? datosProductoNuevo.tipoProducto : productoActual.nombre).toLowerCase();
+                  const puedePerforar = nombreTipo.includes("bolsa plana") || nombreTipo.includes("bolsa envio") || nombreTipo.includes("bolsa envío") || nombreTipo.includes("celofan") || nombreTipo.includes("celofán");
+                  if (!puedePerforar) return null;
+                  return (
+                    <div className="flex items-center gap-3 py-3 px-4 bg-sky-50 border border-sky-200 rounded-lg">
+                      <input type="checkbox" id="chk-perforacion" checked={productoActual.perforacion ?? false}
+                        onChange={e => setProductoActual(prev => ({ ...prev, perforacion: e.target.checked }))}
+                        className="w-5 h-5 rounded border-sky-400 text-sky-600 focus:ring-sky-400 cursor-pointer" />
+                      <label htmlFor="chk-perforacion" className="flex items-center gap-2 cursor-pointer select-none">
+                        <span className="text-sky-700 font-semibold text-sm">Perforación</span>
+                        <span className="text-sky-500 text-xs">(con perforación)</span>
+                      </label>
+                      {productoActual.perforacion && <span className="ml-auto inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-sky-200 text-sky-800">✓ Con perforación</span>}
+                    </div>
+                  );
+                })()}
+
+                {/* Observaciones */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Observaciones del producto <span className="text-xs text-gray-400 font-normal">(Opcional)</span>
+                  </label>
+                  <textarea value={productoActual.observacion || ""}
+                    onChange={e => setProductoActual(prev => ({ ...prev, observacion: e.target.value }))}
+                    rows={3} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white"
+                    placeholder="Ej: Impresión a 2 colores, acabado mate, etc." />
+                </div>
+
+                <button type="button" onClick={handleAgregarProducto} disabled={guardandoProducto || hayErrorKg}
+                  className={`w-full px-6 py-3 rounded-lg font-semibold flex items-center justify-center gap-2 ${guardandoProducto || hayErrorKg ? "bg-gray-400 cursor-not-allowed text-white" : editandoProductoIndex !== null ? "bg-blue-600 text-white hover:bg-blue-700" : "bg-green-600 text-white hover:bg-green-700"}`}>
+                  {guardandoProducto
+                    ? <><div className="inline-block animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>Guardando...</>
+                    : hayErrorKg ? "⚠ Corrige las cantidades (mín. 30 kg)"
+                      : editandoProductoIndex !== null ? "💾 Guardar cambios del producto"
+                        : "+ Agregar Producto"}
+                </button>
               </div>
-
-              <button type="button" onClick={handleAgregarProducto} disabled={guardandoProducto || hayErrorKg}
-                className={`w-full px-6 py-3 rounded-lg font-semibold flex items-center justify-center gap-2 ${guardandoProducto || hayErrorKg ? "bg-gray-400 cursor-not-allowed text-white" : editandoProductoIndex !== null ? "bg-blue-600 text-white hover:bg-blue-700" : "bg-green-600 text-white hover:bg-green-700"}`}>
-                {guardandoProducto
-                  ? <><div className="inline-block animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>Guardando...</>
-                  : hayErrorKg ? "⚠ Corrige las cantidades (mín. 30 kg)"
-                    : editandoProductoIndex !== null ? "💾 Guardar cambios del producto"
-                      : "+ Agregar Producto"}
-              </button>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        )}
 
         {/* Lista productos agregados */}
         {datos.productos.length > 0 && (
           <div className="mb-6">
             <h4 className="text-sm font-semibold text-gray-700 mb-3">Productos agregados:</h4>
             <div className="space-y-3">
-              {datos.productos.map((prod, index) => (
-                <div key={index} className="flex items-start justify-between bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1 flex-wrap">
-                      <p className="font-semibold text-gray-900">{prod.nombre}</p>
-                      {prod.descripcion && (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800 border border-purple-200">
-                          {prod.descripcion}
-                        </span>
-                      )}
-                      {prod.modoCantidad === "kilo" && (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700 border border-emerald-200">Por kilo</span>
-                      )}
-                      {prod.perforacion && (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-sky-100 text-sky-700 border border-sky-200">Perforada</span>
-                      )}
-                    </div>
-                    <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-600">
-                      <span>Material: {prod.material}</span>
-                      <span>Calibre: {prod.calibre}</span>
-                      <span>Tintas: {prod.tintas}</span>
-                      <span>Caras: {prod.caras}</span>
-                      {prod.suajeTipo && <span className="text-blue-600 font-medium">Suaje: {prod.suajeTipo}</span>}
-                      {prod.colorAsaNombre && <span className="text-teal-600 font-medium capitalize">🎨 Asa: {prod.colorAsaNombre}</span>}
-                      {prod.medidaTroquelTexto && <span className="text-violet-600 font-medium">📐 Troquel: {prod.medidaTroquelTexto}</span>}
-                      {prod.pantones && <span className="text-purple-600 font-medium">🎨 {prod.pantones}</span>}
-                      {prod.pigmentos && <span className="text-orange-600 font-medium">🧪 {prod.pigmentos}</span>}
-                    </div>
-                    <div className="mt-2 space-y-1">
-                      {(modo === "pedido" ? [0] : [0, 1, 2]).map(i => {
-                        const cant = prod.cantidades[i];
-                        if (!cant || cant <= 0) return null;
-                        const pk = Number(prod.porKilo || 1);
-                        if (prod.modoCantidad === "kilo") {
-                          const kgs = prod.kilogramos[i];
-                          const precioKg = Math.round(prod.precios[i] * pk * 100) / 100;
-                          const importe = Math.round(kgs * precioKg * 100) / 100;
-                          return <p key={i} className="text-sm text-gray-700">{kgs} kg ({cant.toLocaleString()} bolsas) × ${precioKg.toFixed(2)}/kg = ${importe.toFixed(2)}</p>;
-                        }
-                        const importe = Math.round(cant * prod.precios[i] * 100) / 100;
-                        return <p key={i} className="text-sm text-gray-700">{cant.toLocaleString()} bolsas × ${prod.precios[i].toFixed(4)}/bolsa = ${importe.toFixed(2)}</p>;
-                      })}
-                    </div>
-                    {(prod.herramental_descripcion || prod.herramental_precio != null) && (
-                      <div className="mt-2 flex items-center gap-2 px-3 py-1.5 bg-orange-50 border border-orange-200 rounded-lg">
-                        <span className="text-sm">🔧</span>
-                        <div className="flex-1 min-w-0">
-                          <span className="text-xs font-semibold text-orange-800">Herramental</span>
-                          {prod.herramental_descripcion && <span className="text-xs text-orange-700 ml-1">— {prod.herramental_descripcion}</span>}
+              {datos.productos.map((prod, index) => {
+                const p = prod as any;
+                const esPapel = p.tipoCotizacion === "papel";
+                return (
+                  <div key={index} className={`flex items-start justify-between p-4 rounded-lg border shadow-sm ${esPapel ? "bg-amber-50 border-amber-200" : "bg-white border-gray-200"}`}>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1 flex-wrap">
+                        {esPapel && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-200 text-amber-800 border border-amber-300">
+                            📄 Papel
+                          </span>
+                        )}
+                        <p className="font-semibold text-gray-900">{p.nombre}</p>
+                        {p.descripcion && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800 border border-purple-200">{p.descripcion}</span>
+                        )}
+                        {!esPapel && p.modoCantidad === "kilo" && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700 border border-emerald-200">Por kilo</span>
+                        )}
+                        {!esPapel && p.perforacion && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-sky-100 text-sky-700 border border-sky-200">Perforada</span>
+                        )}
+                      </div>
+
+                      {esPapel ? (
+                        // Info de producto de papel
+                        <div>
+                          <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-600 mt-1">
+                            {p.medida && <span>Medida: {p.medida}</span>}
+                            {p.grupo_descripcion && <span>Material: {p.grupo_descripcion}</span>}
+                            {p.tintas > 0 && <span>Tintas: {p.tintas}</span>}
+                            {p.tintasDentro > 0 && <span>Tintas dentro: {p.tintasDentro}</span>}
+                            {p.caras > 0 && <span>Caras: {p.caras}</span>}
+                            {p.uv && <span className="text-amber-600 font-medium">🔆 UV</span>}
+                            {p.alto_relieve && <span className="text-amber-600 font-medium">🔳 Alto relieve</span>}
+                            {p.foil_nombre && <span className="text-amber-600 font-medium">✨ Foil: {p.foil_nombre}</span>}
+                            {p.textura_nombre && <span className="text-amber-600 font-medium">🪨 Textura: {p.textura_nombre}</span>}
+                            {p.asa_nombre && <span className="text-gray-700 font-medium">Asa: {p.asa_nombre}</span>}
+                            {p.laminado_nombre && <span className="text-gray-700 font-medium">Laminado: {p.laminado_nombre}</span>}
+                            {p.pantones && <span className="text-purple-600 font-medium">🎨 {p.pantones}</span>}
+                            {p.pantonesDentro && <span className="text-purple-600 font-medium">🎨 interior: {p.pantonesDentro}</span>}
+                          </div>
+                          <div className="mt-2 space-y-1">
+                            {(modo === "pedido" ? [0] : [0, 1, 2]).map((i: number) => {
+                              const cant = p.cantidades[i];
+                              if (!cant || cant <= 0) return null;
+                              const importe = Math.round(cant * p.precios[i] * 100) / 100;
+                              return <p key={i} className="text-sm text-gray-700">{cant.toLocaleString()} pzs × ${p.precios[i].toFixed(4)}/pz = ${importe.toFixed(2)}</p>;
+                            })}
+                          </div>
+                          {p.observacion && (
+                            <div className="mt-2 p-2 bg-amber-100 border border-amber-200 rounded text-sm">
+                              <span className="font-semibold text-amber-900">Obs:</span>
+                              <span className="text-amber-800 ml-1">{p.observacion}</span>
+                            </div>
+                          )}
                         </div>
-                        {prod.herramental_precio != null && <span className="text-xs font-bold text-orange-800 flex-shrink-0">+${prod.herramental_precio.toFixed(2)}</span>}
-                      </div>
-                    )}
-                    {prod.observacion && (
-                      <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded text-sm">
-                        <span className="font-semibold text-blue-900">Obs:</span>
-                        <span className="text-blue-800 ml-1">{prod.observacion}</span>
-                      </div>
-                    )}
+                      ) : (
+                        // Info de producto de plástico (igual que antes)
+                        <div>
+                          <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-600">
+                            <span>Material: {p.material}</span>
+                            <span>Calibre: {p.calibre}</span>
+                            <span>Tintas: {p.tintas}</span>
+                            <span>Caras: {p.caras}</span>
+                            {p.suajeTipo && <span className="text-blue-600 font-medium">Suaje: {p.suajeTipo}</span>}
+                            {p.colorAsaNombre && <span className="text-teal-600 font-medium capitalize">🎨 Asa: {p.colorAsaNombre}</span>}
+                            {p.medidaTroquelTexto && <span className="text-violet-600 font-medium">📐 Troquel: {p.medidaTroquelTexto}</span>}
+                            {p.pantones && <span className="text-purple-600 font-medium">🎨 {p.pantones}</span>}
+                            {p.pigmentos && <span className="text-orange-600 font-medium">🧪 {p.pigmentos}</span>}
+                          </div>
+                          <div className="mt-2 space-y-1">
+                            {(modo === "pedido" ? [0] : [0, 1, 2]).map((i: number) => {
+                              const cant = p.cantidades[i];
+                              if (!cant || cant <= 0) return null;
+                              const pk = Number(p.porKilo || 1);
+                              if (p.modoCantidad === "kilo") {
+                                const kgs = p.kilogramos[i];
+                                const precioKg = Math.round(p.precios[i] * pk * 100) / 100;
+                                const importe = Math.round(kgs * precioKg * 100) / 100;
+                                return <p key={i} className="text-sm text-gray-700">{kgs} kg ({cant.toLocaleString()} bolsas) × ${precioKg.toFixed(2)}/kg = ${importe.toFixed(2)}</p>;
+                              }
+                              const importe = Math.round(cant * p.precios[i] * 100) / 100;
+                              return <p key={i} className="text-sm text-gray-700">{cant.toLocaleString()} bolsas × ${p.precios[i].toFixed(4)}/bolsa = ${importe.toFixed(2)}</p>;
+                            })}
+                          </div>
+                          {(p.herramental_descripcion || p.herramental_precio != null) && (
+                            <div className="mt-2 flex items-center gap-2 px-3 py-1.5 bg-orange-50 border border-orange-200 rounded-lg">
+                              <span className="text-sm">🔧</span>
+                              <div className="flex-1 min-w-0">
+                                <span className="text-xs font-semibold text-orange-800">Herramental</span>
+                                {p.herramental_descripcion && <span className="text-xs text-orange-700 ml-1">— {p.herramental_descripcion}</span>}
+                              </div>
+                              {p.herramental_precio != null && <span className="text-xs font-bold text-orange-800 flex-shrink-0">+${p.herramental_precio.toFixed(2)}</span>}
+                            </div>
+                          )}
+                          {p.observacion && (
+                            <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded text-sm">
+                              <span className="font-semibold text-blue-900">Obs:</span>
+                              <span className="text-blue-800 ml-1">{p.observacion}</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    <div className="ml-4 flex items-center gap-2 flex-shrink-0">
+                      <button type="button" onClick={() => handleEditarProducto(index)} className="text-blue-500 hover:text-blue-700 text-lg" title="Editar producto">✏️</button>
+                      <button type="button" onClick={() => handleEliminarProducto(index)} className="text-red-600 hover:text-red-800 font-bold text-xl" title="Eliminar producto">✕</button>
+                    </div>
                   </div>
-                  <div className="ml-4 flex items-center gap-2 flex-shrink-0">
-                    <button type="button" onClick={() => handleEditarProducto(index)} className="text-blue-500 hover:text-blue-700 text-lg" title="Editar producto">✏️</button>
-                    <button type="button" onClick={() => handleEliminarProducto(index)} className="text-red-600 hover:text-red-800 font-bold text-xl" title="Eliminar producto">✕</button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
             <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
               <p className="text-xl font-bold text-gray-900">Total: ${calcularTotal().toFixed(2)}</p>
-              {datos.productos.some(p => p.herramental_precio != null && p.herramental_precio > 0) && (
-                <p className="text-xs text-orange-600 mt-1">Incluye herramental: +${datos.productos.reduce((s, p) => s + (p.herramental_precio ?? 0), 0).toFixed(2)}</p>
+              {datos.productos.some((p: any) => p.herramental_precio != null && p.herramental_precio > 0) && (
+                <p className="text-xs text-orange-600 mt-1">Incluye herramental: +${datos.productos.reduce((s: number, p: any) => s + (p.herramental_precio ?? 0), 0).toFixed(2)}</p>
               )}
             </div>
           </div>
@@ -1751,27 +1786,17 @@ const handleInsumoRegistrado = (item: ProductoProveedor) => {
 
         <div className="flex justify-end gap-3">
           <button type="button" onClick={handleAtras} className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">Atrás</button>
-          {!productoNuevoListo && datosProductoNuevo.tipoProducto && datosProductoNuevo.material && datosProductoNuevo.calibre && (
+          {tipoMaterial === "plastico" && !productoNuevoListo && datosProductoNuevo.tipoProducto && datosProductoNuevo.material && datosProductoNuevo.calibre && (
             <button type="button" onClick={verificarDuplicadoAntesDeConfirmar} disabled={verificandoDuplicado}
               className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium flex items-center gap-2 disabled:bg-blue-400">
               {verificandoDuplicado ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Verificando...</> : "Confirmar producto →"}
             </button>
           )}
           {datos.productos.length > 0 && (
-            <button
-              type="button"
-              onClick={handleSubmit}
-              disabled={enviando}
-              className={`px-6 py-2 rounded-lg font-semibold transition flex items-center gap-2 ${enviando
-                ? "bg-gray-400 text-white cursor-not-allowed"
-                : "bg-green-600 hover:bg-green-700 text-white"
-                }`}
-            >
+            <button type="button" onClick={handleSubmit} disabled={enviando}
+              className={`px-6 py-2 rounded-lg font-semibold transition flex items-center gap-2 ${enviando ? "bg-gray-400 text-white cursor-not-allowed" : "bg-green-600 hover:bg-green-700 text-white"}`}>
               {enviando ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  Guardando...
-                </>
+                <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Guardando...</>
               ) : (
                 modo === "pedido" ? "Crear Pedido" : "Crear Cotización"
               )}

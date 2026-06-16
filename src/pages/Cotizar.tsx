@@ -20,6 +20,10 @@ import { showConfirm } from '../components/CustomConfirm';
 
 const ITEMS_POR_PAGINA = 7;
 
+// Identifica si una línea es de papel (viene de getCotizaciones / del form)
+const esLineaPapel = (p: any): boolean =>
+  p?.tipo_material === "papel" || p?.tipoCotizacion === "papel";
+
 export default function Cotizaciones() {
   const [cotizaciones, setCotizaciones] = useState<Cotizacion[]>([]);
   const [loadingCots, setLoadingCots] = useState(false);
@@ -102,36 +106,85 @@ export default function Cotizaciones() {
     return cb2 && cb2 !== "0" ? cb2 : "";
   };
 
-  const buildProductosPdf = (productos: any[]) =>
-    productos.map((p: any) => ({
+  // Mapea una línea de PAPEL al shape que entiende el PDF (best-effort sobre los
+  // campos existentes; los específicos de papel se acomodan donde calzan).
+  // Mapea una línea de PAPEL al shape ProductoPdf (compatible con la plantilla).
+  // Los atributos propios de papel se doblan en la observación, que el PDF ya pinta.
+  const buildPapelPdf = (p: any) => {
+    const extras: string[] = [];
+    if (p.foil_nombre)      extras.push(`Foil: ${p.foil_nombre}`);
+    if (p.laminado_nombre)  extras.push(`Laminado: ${p.laminado_nombre}`);
+    if (p.textura_nombre)   extras.push(`Textura: ${p.textura_nombre}`);
+    if (p.asa_nombre)       extras.push(`Asa: ${p.asa_nombre}`);
+    if (p.tintasDentro > 0) extras.push(`Tintas dentro: ${p.tintasDentro}`);
+    if (p.pantonesDentro)   extras.push(`Pantones int: ${p.pantonesDentro}`);
+    if (p.alto_relieve)     extras.push(`Alto relieve`);
+    const obs = [p.observacion, extras.join("  ·  ")].filter(Boolean).join("  —  ");
+
+    return {
       nombre: p.nombre,
-      material: p.material || "",
-      calibre: resolverCalibre(p),
-      tintas: p.tintas,
-      caras: p.caras,
-      medidasFormateadas: p.medidasFormateadas || "",
-      medidas: p.medidas || {},
-      bk: p.bk || null,
-      foil: p.foil || null,
-      laminado: p.laminado || null,
-      uvBr: (p.uv_br ?? p.uvBr) || null,
-      pigmentos: p.pigmentos || null,
+      material: p.grupo_descripcion || "",   // opción / materiales del papel
+      calibre: "",                            // el calibre va dentro de la opción
+      tintas: p.tintas ?? 0,
+      caras: p.caras ?? 0,
+      medidasFormateadas: p.medida || "",
+      medidas: {},
+      bk: null,
+      foil: p.foil_nombre ? true : null,      // flag (SÍ/—); el nombre va en Obs
+      laminado: p.laminado_nombre ? true : null,
+      uvBr: p.uv ? true : null,
+      pigmentos: null,
       pantones: p.pantones || null,
-      asa_suaje: p.asa_suaje || null,
-      observacion: p.observacion || null,
+      asa_suaje: p.asa_nombre || null,
+      observacion: obs || null,
       descripcion: p.descripcion || null,
-      perforacion: p.perforacion ?? false,
-      por_kilo: p.por_kilo || null,
-      herramental_descripcion: p.herramental_descripcion ?? null,
-      herramental_precio: p.herramental_precio != null ? Number(p.herramental_precio) : null,
-      herramental_aprobado: p.herramental_aprobado ?? null,
+      perforacion: false,
+      por_kilo: null,
+      herramental_descripcion: null,
+      herramental_precio: null,
+      herramental_aprobado: null,
       detalles: (p.detalles || []).map((d: any) => ({
         cantidad: d.cantidad,
         precio_total: d.precio_total,
-        kilogramos: d.kilogramos ?? null,
-        modo_cantidad: d.modo_cantidad || "unidad",
+        kilogramos: null,
+        modo_cantidad: "unidad",
       })),
-    }));
+    };
+  };
+
+  const buildProductosPdf = (productos: any[]) =>
+    productos.map((p: any) => {
+      if (esLineaPapel(p)) return buildPapelPdf(p);
+      return {
+        nombre: p.nombre,
+        material: p.material || "",
+        calibre: resolverCalibre(p),
+        tintas: p.tintas,
+        caras: p.caras,
+        medidasFormateadas: p.medidasFormateadas || "",
+        medidas: p.medidas || {},
+        bk: p.bk || null,
+        foil: p.foil || null,
+        laminado: p.laminado || null,
+        uvBr: (p.uv_br ?? p.uvBr) || null,
+        pigmentos: p.pigmentos || null,
+        pantones: p.pantones || null,
+        asa_suaje: p.asa_suaje || null,
+        observacion: p.observacion || null,
+        descripcion: p.descripcion || null,
+        perforacion: p.perforacion ?? false,
+        por_kilo: p.por_kilo || null,
+        herramental_descripcion: p.herramental_descripcion ?? null,
+        herramental_precio: p.herramental_precio != null ? Number(p.herramental_precio) : null,
+        herramental_aprobado: p.herramental_aprobado ?? null,
+        detalles: (p.detalles || []).map((d: any) => ({
+          cantidad: d.cantidad,
+          precio_total: d.precio_total,
+          kilogramos: d.kilogramos ?? null,
+          modo_cantidad: d.modo_cantidad || "unidad",
+        })),
+      };
+    });
 
   const handleSubmit = async (datos: any) => {
     setGuardando(true);
@@ -142,6 +195,24 @@ export default function Cotizaciones() {
       setModalOpen(false);
 
       const productosPdf = datos.productos.map((prod: any) => {
+        // ── PAPEL: detalles desde cantidades/precios + mapeo de papel ──
+        if (esLineaPapel(prod)) {
+          const base = buildPapelPdf(prod);
+          base.detalles = prod.cantidades
+            .map((cant: number, i: number) => {
+              if (cant <= 0 || prod.precios[i] <= 0) return null;
+              return {
+                cantidad: cant,
+                precio_total: Math.round(cant * prod.precios[i] * 100) / 100,
+                kilogramos: null,
+                modo_cantidad: "unidad",
+              };
+            })
+            .filter(Boolean) as any[];
+          return base;
+        }
+
+        // ── PLÁSTICO ──
         const modo = prod.modoCantidad || "unidad";
         return {
           nombre: prod.nombre || `Producto #${prod.productoId}`,
@@ -460,23 +531,54 @@ export default function Cotizaciones() {
                               ? p.detalles.filter((d: any) => d.aprobado === true)
                               : p.detalles;
                             if (detallesMostrar.length === 0) return null;
+                            const papel = esLineaPapel(p);
                             return (
                               <div key={i} className="flex items-start gap-4 bg-white rounded-lg px-4 py-3 shadow-sm border border-gray-100">
-                                <span className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-100 text-blue-700 text-xs font-bold flex items-center justify-center mt-0.5">{i + 1}</span>
+                                <span className={`flex-shrink-0 w-6 h-6 rounded-full text-xs font-bold flex items-center justify-center mt-0.5 ${papel ? "bg-amber-100 text-amber-700" : "bg-blue-100 text-blue-700"}`}>{i + 1}</span>
                                 <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-2">
+                                  <div className="flex items-center gap-2 flex-wrap">
                                     <p className="text-sm font-medium text-gray-800 truncate">{p.nombre}</p>
-                                    {productoTieneKilos(p) && (
+                                    {papel && (
+                                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-700 border border-amber-200">📄 Papel</span>
+                                    )}
+                                    {!papel && productoTieneKilos(p) && (
                                       <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-emerald-100 text-emerald-700">Incluye kg</span>
                                     )}
                                   </div>
-                                  {p.medidasFormateadas && <p className="text-xs text-gray-400 mt-0.5">Medidas: {p.medidasFormateadas}</p>}
-                                  {p.pantones && <p className="text-xs text-purple-600 mt-0.5">🎨 {Array.isArray(p.pantones) ? p.pantones.join(", ") : p.pantones}</p>}
-                                  {p.pigmentos && <p className="text-xs text-orange-600 mt-0.5">🧪 {p.pigmentos}</p>}
-                                  {p.herramental_precio != null && p.herramental_precio > 0 && (
-                                    <p className="text-xs text-amber-700 mt-0.5">
-                                      🔧 Herramental{p.herramental_descripcion ? `: ${p.herramental_descripcion}` : ""} — ${Number(p.herramental_precio).toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                                    </p>
+
+                                  {papel ? (
+                                    // ── Detalle de PAPEL ──
+                                    <div className="mt-0.5 space-y-0.5">
+                                      <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-gray-500">
+                                        {p.grupo_descripcion && <span>Material: {p.grupo_descripcion}</span>}
+                                        {p.medida && <span>Medida: {p.medida}</span>}
+                                        {p.tintas > 0 && <span>Tintas: {p.tintas}</span>}
+                                        {p.tintasDentro > 0 && <span>Tintas dentro: {p.tintasDentro}</span>}
+                                        {p.caras > 0 && <span>Caras: {p.caras}</span>}
+                                      </div>
+                                      <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs">
+                                        {p.asa_nombre && <span className="text-gray-600">Asa: {p.asa_nombre}</span>}
+                                        {p.laminado_nombre && <span className="text-gray-600">Laminado: {p.laminado_nombre}</span>}
+                                        {p.foil_nombre && <span className="text-amber-600">✨ Foil: {p.foil_nombre}</span>}
+                                        {p.textura_nombre && <span className="text-amber-600">🪨 {p.textura_nombre}</span>}
+                                        {p.uv && <span className="text-amber-600">🔆 UV</span>}
+                                        {p.alto_relieve && <span className="text-amber-600">🔳 Alto relieve</span>}
+                                      </div>
+                                      {p.pantones && <p className="text-xs text-purple-600">🎨 {p.pantones}</p>}
+                                      {p.pantonesDentro && <p className="text-xs text-purple-600">🎨 interior: {p.pantonesDentro}</p>}
+                                    </div>
+                                  ) : (
+                                    // ── Detalle de PLÁSTICO (igual que antes) ──
+                                    <>
+                                      {p.medidasFormateadas && <p className="text-xs text-gray-400 mt-0.5">Medidas: {p.medidasFormateadas}</p>}
+                                      {p.pantones && <p className="text-xs text-purple-600 mt-0.5">🎨 {Array.isArray(p.pantones) ? p.pantones.join(", ") : p.pantones}</p>}
+                                      {p.pigmentos && <p className="text-xs text-orange-600 mt-0.5">🧪 {p.pigmentos}</p>}
+                                      {p.herramental_precio != null && p.herramental_precio > 0 && (
+                                        <p className="text-xs text-amber-700 mt-0.5">
+                                          🔧 Herramental{p.herramental_descripcion ? `: ${p.herramental_descripcion}` : ""} — ${Number(p.herramental_precio).toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                                        </p>
+                                      )}
+                                    </>
                                   )}
                                 </div>
                                 <div className="flex flex-wrap gap-2 flex-shrink-0">

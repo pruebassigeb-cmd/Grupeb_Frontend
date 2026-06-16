@@ -32,14 +32,18 @@ function CalibreInput({ value, onChange, options, onAdd }: {
   const [adding, setAdding]         = useState(false);
   const [newVal, setNewVal]         = useState("");
   const [newValNum, setNewValNum]   = useState("");
-  const [newValUnit, setNewValUnit] = useState<"pts" | "gms">("pts");
+  const [newValUnit, setNewValUnit] = useState<"pts" | "gms" | "ect">("pts");
   const [saving, setSaving]         = useState(false);
   const ref    = useRef<HTMLDivElement>(null);
   const addRef = useRef<HTMLInputElement>(null);
 
   const calPts   = sortByNum(options.filter(c => c.toLowerCase().endsWith("pts")));
   const calGms   = sortByNum(options.filter(c => c.toLowerCase().endsWith("gms")));
-  const calOtros = sortByNum(options.filter(c => !c.toLowerCase().endsWith("pts") && !c.toLowerCase().endsWith("gms")));
+  const calEct   = sortByNum(options.filter(c => c.toLowerCase().endsWith("ect")));
+  const calOtros = sortByNum(options.filter(c => {
+    const l = c.toLowerCase();
+    return !l.endsWith("pts") && !l.endsWith("gms") && !l.endsWith("ect");
+  }));
 
   useEffect(() => {
     const h = (e: MouseEvent) => {
@@ -81,6 +85,7 @@ function CalibreInput({ value, onChange, options, onAdd }: {
         <div style={{ position: "fixed", top: "auto", left: "auto", background: "#fff", border: "1px solid #D1D5DB", borderRadius: 6, zIndex: 9999, boxShadow: "0 4px 12px rgba(0,0,0,0.1)", padding: "4px 0", maxHeight: 220, overflowY: "auto" }}>
           {calPts.length > 0   && <><div style={{ padding: "4px 10px 2px", fontSize: 9, fontWeight: 700, color: "#9CA3AF", letterSpacing: "0.08em", textTransform: "uppercase" }}>Puntos</div>{calPts.map(optBtn)}</>}
           {calGms.length > 0   && <><div style={{ padding: "6px 10px 2px", fontSize: 9, fontWeight: 700, color: "#9CA3AF", letterSpacing: "0.08em", textTransform: "uppercase", borderTop: "1px solid #F3F4F6", marginTop: 2 }}>Gramaje</div>{calGms.map(optBtn)}</>}
+          {calEct.length > 0   && <><div style={{ padding: "6px 10px 2px", fontSize: 9, fontWeight: 700, color: "#9CA3AF", letterSpacing: "0.08em", textTransform: "uppercase", borderTop: "1px solid #F3F4F6", marginTop: 2 }}>ECT</div>{calEct.map(optBtn)}</>}
           {calOtros.length > 0 && <><div style={{ padding: "6px 10px 2px", fontSize: 9, fontWeight: 700, color: "#9CA3AF", letterSpacing: "0.08em", textTransform: "uppercase", borderTop: "1px solid #F3F4F6", marginTop: 2 }}>Otros</div>{calOtros.map(optBtn)}</>}
           <div style={{ borderTop: "1px solid #F3F4F6", marginTop: 2, paddingTop: 2 }}>
             {adding ? (
@@ -105,7 +110,7 @@ function CalibreInput({ value, onChange, options, onAdd }: {
                   <select
                     value={newValUnit}
                     onChange={e => {
-                      const u = e.target.value as "pts" | "gms";
+                      const u = e.target.value as "pts" | "gms" | "ect";
                       setNewValUnit(u);
                       setNewVal(newValNum ? `${newValNum}${u}` : "");
                     }}
@@ -113,6 +118,7 @@ function CalibreInput({ value, onChange, options, onAdd }: {
                   >
                     <option value="pts">pts</option>
                     <option value="gms">gms</option>
+                    <option value="ect">ect</option>
                   </select>
                 </div>
                 <button onClick={handleAdd} disabled={saving} style={{ height: 28, padding: "0 8px", background: "#1D4ED8", border: "none", borderRadius: 4, cursor: saving ? "wait" : "pointer", color: "#fff", fontSize: 12, fontWeight: 700 }}>{saving ? "…" : "✓"}</button>

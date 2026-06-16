@@ -21,6 +21,7 @@ import GestorBackups from "./components/GestorBackups.tsx";
 import ProveedoresPage from "./pages/ProveedoresPage";
 import Papel from "./pages/papel/Papel";
 import Catalogos from "./pages/papel/catalogos.tsx";
+import Expo from "./pages/expo/Expo.tsx";
 
 const PERMISOS = {
   usuarios: "Crear/Editar/Eliminar Usuarios",
@@ -139,6 +140,10 @@ function App() {
 
           <Route path="/papel" element={
             <ProtectedRoute><Papel /></ProtectedRoute>
+          } />
+
+          <Route path="/expo" element={
+            <ProtectedRoute><Expo /></ProtectedRoute>
           } />
 
           <Route path="/catalogos" element={

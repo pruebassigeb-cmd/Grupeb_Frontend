@@ -48,20 +48,20 @@ function SufijoInput({ value, onChange, sufijo, placeholder, permitirDecimal = f
   );
 }
 
-// ─── Input calibre / refuerzo_material: número + selector pts/gms ─────────
+// ─── Input calibre / refuerzo_material: número + selector pts/gms/ect ─────
 function CalibreAddInput({ value, onChange, inputRef }: {
   value: string; onChange: (v: string) => void;
   inputRef?: React.RefObject<HTMLInputElement | null>;
 }) {
   const parseVal = (v: string) => {
-    const m = v.match(/^(\d*)(\s*(gms|pts))?$/i);
-    return { num: m?.[1] ?? "", unit: (m?.[3]?.toLowerCase() ?? "pts") as "pts" | "gms" };
+    const m = v.match(/^(\d*)(\s*(gms|pts|ect))?$/i);
+    return { num: m?.[1] ?? "", unit: (m?.[3]?.toLowerCase() ?? "pts") as "pts" | "gms" | "ect" };
   };
   const p = parseVal(value);
   const [num,  setNum]  = useState(p.num);
-  const [unit, setUnit] = useState<"pts" | "gms">(p.unit);
+  const [unit, setUnit] = useState<"pts" | "gms" | "ect">(p.unit);
 
-  const update = (n: string, u: "pts" | "gms") => onChange(n ? `${n}${u}` : "");
+  const update = (n: string, u: "pts" | "gms" | "ect") => onChange(n ? `${n}${u}` : "");
 
   return (
     <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
@@ -74,11 +74,12 @@ function CalibreAddInput({ value, onChange, inputRef }: {
       />
       <select
         value={unit}
-        onChange={e => { const u = e.target.value as "pts" | "gms"; setUnit(u); update(num, u); }}
+        onChange={e => { const u = e.target.value as "pts" | "gms" | "ect"; setUnit(u); update(num, u); }}
         style={{ border: "none", borderLeft: "1px solid #BFDBFE", background: "#DBEAFE", fontSize: 12, fontWeight: 700, color: "#1D4ED8", cursor: "pointer", outline: "none", padding: "0 6px" }}
       >
         <option value="pts">pts</option>
         <option value="gms">gms</option>
+        <option value="ect">ect</option>
       </select>
     </div>
   );
@@ -205,14 +206,18 @@ export default function SelConAlta({ catKey, options, value, onChange, onAdd, pl
     );
   }
 
-  // ── Modo select con agrupación pts/gms ordenada numéricamente ────────
+  // ── Modo select con agrupación pts/gms/ect ordenada numéricamente ────
   const esCalibreKey = catKey === "calibre" || catKey === "refuerzo_material";
 
   // sortByNum: ordena de menor a mayor usando el valor numérico del inicio del string
   const optsPts   = esCalibreKey ? sortByNum(options.filter(o => o.toLowerCase().endsWith("pts"))) : [];
   const optsGms   = esCalibreKey ? sortByNum(options.filter(o => o.toLowerCase().endsWith("gms"))) : [];
+  const optsEct   = esCalibreKey ? sortByNum(options.filter(o => o.toLowerCase().endsWith("ect"))) : [];
   const optsOtros = esCalibreKey
-    ? sortByNum(options.filter(o => !o.toLowerCase().endsWith("pts") && !o.toLowerCase().endsWith("gms")))
+    ? sortByNum(options.filter(o => {
+        const l = o.toLowerCase();
+        return !l.endsWith("pts") && !l.endsWith("gms") && !l.endsWith("ect");
+      }))
     : options;
 
   return (
@@ -242,6 +247,11 @@ export default function SelConAlta({ catKey, options, value, onChange, onAdd, pl
           {optsGms.length > 0 && (
             <optgroup label="Gramaje">
               {optsGms.map(o => <option key={o} value={o} style={{ color: "#111827" }}>{o}</option>)}
+            </optgroup>
+          )}
+          {optsEct.length > 0 && (
+            <optgroup label="ECT">
+              {optsEct.map(o => <option key={o} value={o} style={{ color: "#111827" }}>{o}</option>)}
             </optgroup>
           )}
           {optsOtros.length > 0 && (

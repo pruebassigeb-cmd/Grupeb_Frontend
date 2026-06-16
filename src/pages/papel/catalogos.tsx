@@ -137,20 +137,21 @@ function PerforadoInput({ value, onChange }: { value: string; onChange: (v: stri
 }
 
 function CalibreInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const parseVal = (v: string) => { const m = v.match(/^([\d.,]*)(\s*(gms|pts))?$/i); return { num: m?.[1] ?? "", unit: (m?.[3]?.toLowerCase() ?? "pts") as "pts" | "gms" }; };
+  const parseVal = (v: string) => { const m = v.match(/^([\d.,]*)(\s*(gms|pts|ect))?$/i); return { num: m?.[1] ?? "", unit: (m?.[3]?.toLowerCase() ?? "pts") as "pts" | "gms" | "ect" }; };
   const parsed = parseVal(value);
   const [num, setNum] = useState(parsed.num);
-  const [unit, setUnit] = useState<"pts" | "gms">(parsed.unit);
-  const update = (n: string, u: "pts" | "gms") => onChange(n ? `${n}${u}` : "");
+  const [unit, setUnit] = useState<"pts" | "gms" | "ect">(parsed.unit);
+  const update = (n: string, u: "pts" | "gms" | "ect") => onChange(n ? `${n}${u}` : "");
   return (
     <div style={{ display: "flex", height: 38, border: "1px solid #D1D5DB", borderRadius: 7, overflow: "hidden", background: "#fff" }}>
       <input type="text" inputMode="numeric" placeholder="ej: 14" value={num}
         onChange={e => { const val = e.target.value.replace(/[^0-9]/g, ""); setNum(val); update(val, unit); }}
         style={{ flex: 1, height: "100%", padding: "0 10px", border: "none", fontSize: 13, color: "#111827", outline: "none", background: "transparent" } as React.CSSProperties} />
-      <select value={unit} onChange={e => { const u = e.target.value as "pts" | "gms"; setUnit(u); update(num, u); }}
+      <select value={unit} onChange={e => { const u = e.target.value as "pts" | "gms" | "ect"; setUnit(u); update(num, u); }}
         style={{ height: "100%", padding: "0 8px", border: "none", borderLeft: "1px solid #D1D5DB", background: "#F3F4F6", fontSize: 13, fontWeight: 600, color: "#374151", cursor: "pointer", outline: "none" }}>
         <option value="pts">pts</option>
         <option value="gms">gms</option>
+        <option value="ect">ect</option>
       </select>
     </div>
   );
@@ -364,8 +365,12 @@ function CatPanel({ tab, items, onAdd, onEdit, onDelete, onReactivar, verInactiv
     if (tab.key !== "calibre") return base;
     const pts = base.filter(it => it.nombre.toLowerCase().endsWith("pts")).sort((a, b) => parseInt(a.nombre) - parseInt(b.nombre));
     const gms = base.filter(it => it.nombre.toLowerCase().endsWith("gms")).sort((a, b) => parseInt(a.nombre) - parseInt(b.nombre));
-    const otros = base.filter(it => !it.nombre.toLowerCase().endsWith("pts") && !it.nombre.toLowerCase().endsWith("gms"));
-    return [...pts, ...gms, ...otros];
+    const ect = base.filter(it => it.nombre.toLowerCase().endsWith("ect")).sort((a, b) => parseInt(a.nombre) - parseInt(b.nombre));
+    const otros = base.filter(it => {
+      const l = it.nombre.toLowerCase();
+      return !l.endsWith("pts") && !l.endsWith("gms") && !l.endsWith("ect");
+    });
+    return [...pts, ...gms, ...ect, ...otros];
   })();
 
   const handleAdd = async () => {

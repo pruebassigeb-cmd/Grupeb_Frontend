@@ -10,33 +10,41 @@ export const crearCotizacion = async (datos: {
   clienteId?: number;
   tipo?:      "cotizacion" | "pedido";
   sin_iva?:   boolean;
-  productos: {
-    productoId?:              number;
-    cantidades:               [number, number, number];
-    kilogramos:               [number, number, number];
-    precios:                  [number, number, number];
-    tintasId:                 number;
-    carasId:                  number;
-    idsuaje?:                 number | null;
-    colorAsaId?:              number | null;
-    observacion?:             string;
-    descripcion?:             string;
-    perforacion?:             boolean;
-    pantones?:                string | null;
-    pigmentos?:               string | null;
-    modoCantidad?:            "unidad" | "kilo";
-    porKilo?:                 string | null;
-    herramental_descripcion?: string | null;
-    herramental_precio?:      number | null;
-    [key: string]: any;
-  }[];
+  productos: any[];
   [key: string]: any;
 }): Promise<RespuestaCrearCotizacion> => {
   if (!datos.clienteId) {
     throw new Error("Se requiere clienteId para crear la cotización");
   }
 
-  const productos = datos.productos.map((prod) => {
+  const productos = datos.productos.map((prod: any) => {
+    // ── PAPEL: pasa intacto, no lleva productoId ni detalles de plástico ──
+    if (prod.tipoCotizacion === "papel") {
+      return {
+        tipoCotizacion:    "papel",
+        idproducto_papel:  prod.idproducto_papel,
+        nombre:            prod.nombre,
+        idgrupo_papel:     prod.idgrupo_papel ?? null,
+        grupo_descripcion: prod.grupo_descripcion ?? null,
+        tintasId:          prod.tintasId ?? null,
+        pantones:          prod.pantones || null,
+        tintasDentroId:    prod.tintasDentroId ?? null,
+        pantonesDentro:    prod.pantonesDentro || null,
+        carasId:           prod.carasId ?? null,
+        id_asa:            prod.id_asa ?? null,
+        idcat_laminado:    prod.idcat_laminado ?? null,
+        idfoil:            prod.idfoil ?? null,
+        idcat_textura:     prod.idcat_textura ?? null,
+        uv:                prod.uv ?? false,
+        alto_relieve:      prod.alto_relieve ?? false,
+        observacion:       prod.observacion || null,
+        descripcion:       prod.descripcion ?? null,
+        cantidades:        prod.cantidades,
+        precios:           prod.precios,
+      };
+    }
+
+    // ── PLÁSTICO ──
     if (!prod.productoId) {
       throw new Error(`El producto "${prod.nombre}" no tiene ID asignado`);
     }
@@ -44,7 +52,7 @@ export const crearCotizacion = async (datos: {
     const modo = prod.modoCantidad ?? "unidad";
 
     const detalles = prod.cantidades
-      .map((cantidad, i) => {
+      .map((cantidad: number, i: number) => {
         if (cantidad <= 0 || prod.precios[i] <= 0) return null;
 
         let precio_total: number;
@@ -95,7 +103,7 @@ export const crearCotizacion = async (datos: {
     clienteId: datos.clienteId,
     tipo:      datos.tipo      ?? "cotizacion",
     prioridad: datos.prioridad ?? false,
-    sin_iva:   datos.sin_iva   ?? false,   // ← FIX: enviar sin_iva al backend
+    sin_iva:   datos.sin_iva   ?? false,
     productos,
   });
 
