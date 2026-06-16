@@ -729,7 +729,7 @@ function FormularioProducto({ initial, onSave, onCancel, saving }: {
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <label style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", letterSpacing: "0.05em", textTransform: "uppercase", whiteSpace: "nowrap" }}>No. desbarbe</label>
               <input type="text" inputMode="text" value={form.suaje.noDesbarbe}
-                onChange={e => updSuaje({ noDesbarbe: e.target.value.replace(/[^0-9]/g, "") })}
+                onChange={e => updSuaje({ noDesbarbe: e.target.value})}
                 style={{ width: 120, height: 30, padding: "0 8px", border: "1px solid #BFDBFE", borderRadius: 5, fontSize: 13, color: "#111827", background: "#fff", outline: "none", boxSizing: "border-box" }} />
             </div>
           )}
