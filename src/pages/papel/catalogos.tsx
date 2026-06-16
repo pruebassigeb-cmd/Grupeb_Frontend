@@ -210,6 +210,7 @@ function CorteDoblePanel({ tab, items, onAdd, onEdit, onDelete, onReactivar, ver
   const [editAltura, setEditAltura] = useState("");
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
+  
 
   const filtered = items.filter(it =>
     it.nombre.toLowerCase().includes(search.toLowerCase()) ||
@@ -355,6 +356,7 @@ function CatPanel({ tab, items, onAdd, onEdit, onDelete, onReactivar, verInactiv
   const [editNumMaquina, setEditNumMaquina] = useState("");
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
+  const [addKey, setAddKey] = useState(0); // ← NUEVO
 
   const filtered = (() => {
     const base = items.filter(it =>
@@ -380,16 +382,24 @@ function CatPanel({ tab, items, onAdd, onEdit, onDelete, onReactivar, verInactiv
       if (!newNombre.trim()) return;
       const nombreFinal = tab.key === "sacabocados" ? "Sacabocado" : "Perforación";
       setSaving(true);
-      try { await onAdd(nombreFinal, newNombre.trim()); setNewNombre(""); }
-      finally { setSaving(false); }
+      try {
+        await onAdd(nombreFinal, newNombre.trim());
+        setNewNombre(""); setNewMedida(""); setNewNumMaquina("");
+        setAddKey(k => k + 1); // ← NUEVO
+      } finally { setSaving(false); }
       return;
     }
     const nombreFinal = newNombre.trim();
     if (!nombreFinal) return;
     setSaving(true);
     try {
-      await onAdd(nombreFinal, tab.hasMedida ? newMedida.trim() : undefined, tab.tieneNumMaquina ? newNumMaquina.trim() : undefined);
+      await onAdd(
+        nombreFinal,
+        tab.hasMedida ? newMedida.trim() : undefined,
+        tab.tieneNumMaquina ? newNumMaquina.trim() : undefined
+      );
       setNewNombre(""); setNewMedida(""); setNewNumMaquina("");
+      setAddKey(k => k + 1); // ← NUEVO
     } finally { setSaving(false); }
   };
 
@@ -435,7 +445,7 @@ function CatPanel({ tab, items, onAdd, onEdit, onDelete, onReactivar, verInactiv
       {deleteId !== null && <ConfirmModal message="¿Eliminar este registro? Esta acción no se puede deshacer." onConfirm={handleDelete} onCancel={() => setDeleteId(null)} />}
 
       {!verInactivos && (
-        <div style={{ background: "#F9FAFB", border: "1px dashed #D1D5DB", borderRadius: 9, padding: "16px 18px", marginBottom: 20 }}>
+        <div key={addKey} style={{ background: "#F9FAFB", border: "1px dashed #D1D5DB", borderRadius: 9, padding: "16px 18px", marginBottom: 20 }}> {/* ← key AQUÍ */}
           <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#6B7280", margin: "0 0 12px" }}>Agregar nuevo</p>
           <div style={{ display: "grid", gridTemplateColumns: esFijoTab ? "1fr auto" : tab.tieneNumMaquina ? "1fr 120px auto" : tab.hasMedida ? "1fr 1fr auto" : "1fr auto", gap: "0 10px", alignItems: "end" }}>
             {!esFijoTab && (
