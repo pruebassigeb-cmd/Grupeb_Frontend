@@ -41,6 +41,12 @@ export const crearCotizacion = async (datos: {
         descripcion:       prod.descripcion ?? null,
         cantidades:        prod.cantidades,
         precios:           prod.precios,
+        // ── Herramental ──────────────────────────────────────────────────
+        herramental_descripcion: prod.herramental_descripcion ?? null,
+        herramental_precio:      prod.herramental_precio ?? null,
+        // ── Cargo adicional (nuevo, exclusivo de papel) ────────────────────
+        cargo_adicional_descripcion: prod.cargo_adicional_descripcion ?? null,
+        cargo_adicional_precio:      prod.cargo_adicional_precio ?? null,
       };
     }
 

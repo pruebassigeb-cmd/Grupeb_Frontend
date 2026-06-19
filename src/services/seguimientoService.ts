@@ -34,11 +34,6 @@ export interface OrdenProduccionProducto {
   medidas: Record<string, string>;
   tintas: number | null;
   caras: number | null;
-  bk: boolean | null;
-  foil: boolean | null;
-  alto_rel: boolean | null;
-  laminado: boolean | null;
-  uv_br: boolean | null;
   pigmentos: string | null;
   pantones: string[] | null;
   asa_suaje: string | null;
@@ -85,7 +80,9 @@ export interface OrdenProduccionRespuesta {
   url_master?: string | null;
 }
 
-export const getOrdenProduccion = async (noPedido: string): Promise<OrdenProduccionRespuesta> => {
+export const getOrdenProduccion = async (
+  noPedido: string
+): Promise<OrdenProduccionRespuesta> => {
   const response = await api.get(`/seguimiento/${noPedido}/orden-produccion`);
   return response.data;
 };
@@ -126,7 +123,9 @@ export interface ProcesosOrdenRespuesta {
   procesos: ProcesoRegistro[];
 }
 
-export const getProcesosOrden = async (idproduccion: number): Promise<ProcesosOrdenRespuesta> => {
+export const getProcesosOrden = async (
+  idproduccion: number
+): Promise<ProcesosOrdenRespuesta> => {
   const response = await api.get(`/procesos/${idproduccion}`);
   return response.data;
 };
@@ -139,7 +138,10 @@ export const iniciarProceso = async (
   return response.data;
 };
 
-export const finalizarProceso = async (idproduccion: number, datos: Record<string, any>) => {
+export const finalizarProceso = async (
+  idproduccion: number,
+  datos: Record<string, any>
+) => {
   const response = await api.put(`/procesos/${idproduccion}/finalizar`, datos);
   return response.data;
 };
@@ -222,7 +224,9 @@ export interface BultoBatchRespuesta {
   total_unidades_agregadas: number;
 }
 
-export const getBultos = async (idproduccion: number): Promise<BultosRespuesta> => {
+export const getBultos = async (
+  idproduccion: number
+): Promise<BultosRespuesta> => {
   const { data } = await api.get(`/seguimiento/${idproduccion}/bultos`);
   return data;
 };
@@ -250,7 +254,9 @@ export const eliminarBulto = async (
   await api.delete(`/seguimiento/${idproduccion}/bultos/${idbulto}`);
 };
 
-export const finalizarBultos = async (idproduccion: number): Promise<void> => {
+export const finalizarBultos = async (
+  idproduccion: number
+): Promise<void> => {
   await api.patch(`/seguimiento/${idproduccion}/bultos/finalizar`);
 };
 
@@ -300,7 +306,7 @@ export interface EtiquetaData {
   poblacion: string;
   estado: string;
   nombre_producto: string;
-  descripcion: string | null;   // ← NUEVO: identificador diferenciador del producto
+  descripcion: string | null;
   medida: string;
   material: string;
   cantidad_total: number | null;
@@ -317,14 +323,18 @@ export const getBultosEtiqueta = async (
   idproduccion: number,
   numeroParcialidad?: number
 ): Promise<EtiquetaData> => {
-  const url = numeroParcialidad != null
-    ? `/seguimiento/${idproduccion}/bultos/etiqueta?parcialidad=${numeroParcialidad}`
-    : `/seguimiento/${idproduccion}/bultos/etiqueta`;
+  const url =
+    numeroParcialidad != null
+      ? `/seguimiento/${idproduccion}/bultos/etiqueta?parcialidad=${numeroParcialidad}`
+      : `/seguimiento/${idproduccion}/bultos/etiqueta`;
+
   const { data } = await api.get(url);
   return data;
 };
 
-export async function getEtiquetasEnvio(idenvio: number): Promise<EtiquetaData> {
+export async function getEtiquetasEnvio(
+  idenvio: number
+): Promise<EtiquetaData> {
   const { data } = await axios.get(`/api/envios/${idenvio}/etiquetas`);
   return data;
 }

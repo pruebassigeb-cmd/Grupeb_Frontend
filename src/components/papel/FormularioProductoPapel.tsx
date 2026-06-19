@@ -8,6 +8,7 @@ import {
   getFoils,
   getTexturas,
 } from "../../services/papel/papelCotizacionService";
+import { crearProductoPapel } from "../../services/papel/papel.service";
 import type {
   ProductoPapelBusqueda,
   GrupoOpcion,
@@ -18,11 +19,12 @@ import type {
   MaquinariaProducto,
   ProductoPapelCotizacion,
 } from "../../types/papel/cotizacion-papel.types";
+import FormularioProductoPapelAlta from "./FormularioProductoPapelAlta";
+import type { ArchivoPendiente } from "./FormularioProductoPapelAlta";
+import type { ProductoPapelForm } from "../../types/papel/papel.types";
 
-// Re-export para no romper imports existentes (FormularioSolicitud importa de aquí)
 export type { ProductoPapelCotizacion };
 
-// Etiquetas legibles para la maquinaria del producto (solo display)
 const MAQ_LABELS: Record<string, string> = {
   hojeado_guillotina: "Hojeado / Guillotina",
   impresora: "Impresora",
@@ -75,10 +77,15 @@ export default function FormularioProductoPapel({
   modo, onAgregar, productoEditando, onCancelarEdicion,
   tintas = [], caras = [], idTipoPanton = null, onRegistrarPanton,
 }: Props) {
+  const [modoProductoPapel, setModoProductoPapel] = useState<"registrado" | "nuevo">("registrado");
+
   const [mostrarModal, setMostrarModal] = useState(false);
   const [busqueda, setBusqueda] = useState("");
   const [productos, setProductos] = useState<ProductoPapelBusqueda[]>([]);
   const [loadingProductos, setLoadingProductos] = useState(false);
+
+  const [mostrarModalNuevo, setMostrarModalNuevo] = useState(false);
+  const [savingNuevo, setSavingNuevo] = useState(false);
 
   const [productoSel, setProductoSel] = useState<ProductoPapelBusqueda | null>(null);
   const [grupos, setGrupos] = useState<GrupoOpcion[]>([]);
@@ -95,8 +102,15 @@ export default function FormularioProductoPapel({
   const [inputsPantonesDentro, setInputsPantonesDentro] = useState<string[]>([]);
   const [cantidadesTexto, setCantidadesTexto] = useState<[string, string, string]>(["", "", ""]);
   const [preciosTexto, setPreciosTexto] = useState<[string, string, string]>(["", "", ""]);
-  const [modoProductoPapel, setModoProductoPapel] =
-    useState<"registrado" | "nuevo">("registrado");
+
+  // ── Herramental ──────────────────────────────────────────────────────────
+  const [herramentalExpandido,   setHerramentalExpandido]   = useState(false);
+  const [herramentalDescripcion, setHerramentalDescripcion] = useState("");
+  const [herramentalPrecioTexto, setHerramentalPrecioTexto] = useState("");
+
+  const herramentalTieneData =
+    !!herramentalDescripcion.trim() ||
+    (herramentalPrecioTexto !== "" && parseFloat(herramentalPrecioTexto) > 0);
 
   const indices = modo === "pedido" ? [0] : [0, 1, 2];
 
@@ -162,8 +176,33 @@ export default function FormularioProductoPapel({
       productoEditando.precios[1] > 0 ? productoEditando.precios[1].toFixed(4) : "",
       productoEditando.precios[2] > 0 ? productoEditando.precios[2].toFixed(4) : "",
     ]);
+    // Herramental al editar
+    setHerramentalDescripcion((productoEditando as any).herramental_descripcion || "");
+    setHerramentalPrecioTexto(
+      (productoEditando as any).herramental_precio != null
+        ? String((productoEditando as any).herramental_precio)
+        : ""
+    );
+    setHerramentalExpandido(
+      !!(productoEditando as any).herramental_descripcion ||
+      (productoEditando as any).herramental_precio != null
+    );
     cargarDetalleProducto(productoEditando.idproducto_papel);
   }, [productoEditando]);
+
+  const resetForm = () => {
+    setProductoSel(null);
+    setGrupos([]); setAsas([]); setLaminados([]); setMaquinaria({});
+    setSpecs(nuevoSpecs());
+    setInputsPantones([]);
+    setUsaTintasDentro(false);
+    setInputsPantonesDentro([]);
+    setCantidadesTexto(["", "", ""]);
+    setPreciosTexto(["", "", ""]);
+    setHerramentalExpandido(false);
+    setHerramentalDescripcion("");
+    setHerramentalPrecioTexto("");
+  };
 
   const cargarProductos = async (q = "") => {
     setLoadingProductos(true);
@@ -228,6 +267,65 @@ export default function FormularioProductoPapel({
     }
   };
 
+  const handleGuardarNuevo = async (form: ProductoPapelForm, pendientes: ArchivoPendiente[]) => {
+    setSavingNuevo(true);
+    try {
+      const creado = await crearProductoPapel(form);
+
+      if (pendientes.length > 0) {
+        const BASE = (import.meta as any).env.VITE_API_URL;
+        const CATEGORIA_A_SUBCARPETA: Record<string, string> = {
+          "catalogo-suaje-papel": "catalogo",
+          "imagen-suaje-papel": "imagen",
+          "rendimiento-suaje-papel": "rendimiento",
+        };
+        await Promise.allSettled(
+          pendientes.map(async (p) => {
+            const subcarpeta = CATEGORIA_A_SUBCARPETA[p.categoria] ?? "catalogo";
+            const fd = new FormData();
+            fd.append("archivo", p.file);
+            fd.append("carpeta", "suaje");
+            fd.append("subcarpeta", subcarpeta);
+            fd.append("categoria", p.categoria);
+            fd.append("idproducto_papel", String(creado.idproducto_papel));
+            await fetch(`${BASE}/archivos/upload`, {
+              method: "POST",
+              headers: { Authorization: `Bearer ${localStorage.getItem("token") ?? ""}` },
+              body: fd,
+            });
+          })
+        );
+      }
+
+      const productoBase: ProductoPapelBusqueda = {
+        idproducto_papel: creado.idproducto_papel,
+        tipo_producto: form.tipoProductoNombre,
+        descripcion_papel: form.descripcion || null,
+        medida: form.medida || null,
+      };
+      setProductoSel(productoBase);
+      setMostrarModalNuevo(false);
+      setModoProductoPapel("registrado");
+      setSpecs(nuevoSpecs());
+      setInputsPantones([]);
+      setUsaTintasDentro(false);
+      setInputsPantonesDentro([]);
+      setCantidadesTexto(["", "", ""]);
+      setPreciosTexto(["", "", ""]);
+
+      const gruposParsed = await cargarDetalleProducto(creado.idproducto_papel);
+      if (gruposParsed.length > 0) {
+        const g = gruposParsed[0];
+        setSpecs(prev => ({ ...prev, idgrupo_papel: g.idgrupo_papel, grupo_descripcion: g.etiqueta, precio_sugerido: g.precio_sugerido }));
+        aplicarSugerido(g.precio_sugerido);
+      }
+    } catch (e: any) {
+      alert(e.message ?? "Error al registrar el producto");
+    } finally {
+      setSavingNuevo(false);
+    }
+  };
+
   const handleGrupo = (idStr: string) => {
     const g = grupos.find(x => x.idgrupo_papel === Number(idStr));
     if (!g) return;
@@ -289,59 +387,56 @@ export default function FormularioProductoPapel({
     const tieneValido = indices.some(i => specs.cantidades[i] > 0 && specs.precios[i] > 0);
     if (!tieneValido) { alert("Ingresa al menos una cantidad y precio válidos"); return; }
 
-    const asaSel = asas.find(a => a.idcat_tipo_asa === specs.id_asa);
-    const lamSel = laminados.find(l => l.idcat_laminado === specs.idcat_laminado);
-    const foilSel = foils.find(f => f.idfoil === specs.idfoil);
-    const texSel = texturas.find(t => t.idcat_textura === specs.idcat_textura);
+    const asaSel     = asas.find(a => a.idcat_tipo_asa === specs.id_asa);
+    const lamSel     = laminados.find(l => l.idcat_laminado === specs.idcat_laminado);
+    const foilSel    = foils.find(f => f.idfoil === specs.idfoil);
+    const texSel     = texturas.find(t => t.idcat_textura === specs.idcat_textura);
+
+    const herramentalPrecioFinal =
+      herramentalPrecioTexto !== "" ? parseFloat(herramentalPrecioTexto) || null : null;
+    const herramentalDescFinal = herramentalDescripcion.trim() || null;
 
     const producto: ProductoPapelCotizacion = {
-      tipoCotizacion: "papel",
-      idproducto_papel: productoSel.idproducto_papel,
-      nombre: productoSel.tipo_producto,
+      tipoCotizacion:    "papel",
+      idproducto_papel:  productoSel.idproducto_papel,
+      nombre:            productoSel.tipo_producto,
       descripcion_papel: productoSel.descripcion_papel,
-      medida: productoSel.medida,
-      idgrupo_papel: specs.idgrupo_papel,
+      medida:            productoSel.medida,
+      idgrupo_papel:     specs.idgrupo_papel,
       grupo_descripcion: specs.grupo_descripcion,
-      precio_sugerido: specs.precio_sugerido,
-      tintasId: specs.tintasId,
-      tintas: specs.tintas,
-      pantones: specs.pantones,
-      tintasDentroId: specs.tintasDentroId,
-      tintasDentro: specs.tintasDentro,
-      pantonesDentro: specs.pantonesDentro,
-      carasId: specs.carasId,
-      caras: specs.caras,
-      id_asa: specs.id_asa, asa_nombre: asaSel?.nombre ?? null,
-      idcat_laminado: specs.idcat_laminado, laminado_nombre: lamSel?.nombre ?? null,
-      idfoil: specs.idfoil, foil_nombre: foilSel ? `${foilSel.colorfoil}${foilSel.codigofoil ? " " + foilSel.codigofoil : ""}` : null,
-      idcat_textura: specs.idcat_textura, textura_nombre: texSel?.nombre ?? null,
-      uv: specs.uv,
-      alto_relieve: specs.alto_relieve,
-      observacion: specs.observacion,
-      descripcion: specs.descripcion,
-      cantidades: specs.cantidades,
-      precios: specs.precios,
-    };
+      precio_sugerido:   specs.precio_sugerido,
+      tintasId:          specs.tintasId,
+      tintas:            specs.tintas,
+      pantones:          specs.pantones,
+      tintasDentroId:    specs.tintasDentroId,
+      tintasDentro:      specs.tintasDentro,
+      pantonesDentro:    specs.pantonesDentro,
+      carasId:           specs.carasId,
+      caras:             specs.caras,
+      id_asa:            specs.id_asa,         asa_nombre:      asaSel?.nombre ?? null,
+      idcat_laminado:    specs.idcat_laminado,  laminado_nombre: lamSel?.nombre ?? null,
+      idfoil:            specs.idfoil,          foil_nombre:     foilSel ? `${foilSel.colorfoil}${foilSel.codigofoil ? " " + foilSel.codigofoil : ""}` : null,
+      idcat_textura:     specs.idcat_textura,   textura_nombre:  texSel?.nombre ?? null,
+      uv:                specs.uv,
+      alto_relieve:      specs.alto_relieve,
+      observacion:       specs.observacion,
+      descripcion:       specs.descripcion,
+      cantidades:        specs.cantidades,
+      precios:           specs.precios,
+      // ── Herramental ──────────────────────────────────────────────────
+      herramental_descripcion: herramentalDescFinal,
+      herramental_precio:      herramentalPrecioFinal,
+    } as any;
 
     onAgregar(producto);
-
-    setProductoSel(null);
-    setGrupos([]); setAsas([]); setLaminados([]); setMaquinaria({});
-    setSpecs(nuevoSpecs());
-    setInputsPantones([]);
-    setUsaTintasDentro(false);
-    setInputsPantonesDentro([]);
-    setCantidadesTexto(["", "", ""]);
-    setPreciosTexto(["", "", ""]);
+    resetForm();
   };
 
   const hayProducto = !!productoSel;
-  const inputCls = "w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-amber-400 focus:border-amber-400";
+  const inputCls  = "w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-amber-400 focus:border-amber-400";
   const selectCls = inputCls + " cursor-pointer";
-  const checkCls = "w-4 h-4 rounded border-gray-400 text-amber-600 focus:ring-amber-400 cursor-pointer";
-  const hayMaquinaria = Object.values(maquinaria).some(arr => arr && arr.length > 0);
+  const checkCls  = "w-4 h-4 rounded border-gray-400 text-amber-600 focus:ring-amber-400 cursor-pointer";
 
-  // Celdas de pantone — una por fila (full width) para que el buscador respire
   const celdasPantone = (lista: string[], onChange: (i: number, v: string) => void) => (
     <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 space-y-2">
       {lista.map((valor, i) => (
@@ -363,8 +458,8 @@ export default function FormularioProductoPapel({
   );
 
   return (
-    <div>
-      {/* ── Modal búsqueda ── */}
+    <div className="h-[calc(100vh-160px)] min-h-0 flex flex-col overflow-hidden">
+      {/* ── Modal búsqueda existente ── */}
       {mostrarModal && (
         <div className="fixed inset-0 flex items-center justify-center z-50 bg-black/40">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[80vh] overflow-hidden">
@@ -399,8 +494,8 @@ export default function FormularioProductoPapel({
                       </div>
                       <div className="flex flex-wrap gap-x-4 text-xs text-gray-500">
                         {p.medida && <span>Medida: {p.medida}</span>}
-                        {p.primer_tipo_papel && <span>Material: {p.primer_tipo_papel}</span>}
-                        {p.primer_calibre && <span>Calibre: {p.primer_calibre}</span>}
+                        {(p as any).primer_tipo_papel && <span>Material: {(p as any).primer_tipo_papel}</span>}
+                        {(p as any).primer_calibre && <span>Calibre: {(p as any).primer_calibre}</span>}
                       </div>
                     </div>
                   ))}
@@ -413,6 +508,53 @@ export default function FormularioProductoPapel({
         </div>
       )}
 
+      {/* ── Modal alta de nuevo producto ── */}
+      {mostrarModalNuevo && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-start justify-center overflow-hidden p-6">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl mx-4 relative max-h-[calc(100vh-3rem)] flex flex-col overflow-hidden">
+            <div className="flex-none flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-white z-10 rounded-t-xl">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Registrar nuevo producto de papel</h3>
+                <p className="text-xs text-gray-400 mt-0.5">Todos los campos son opcionales — guarda lo que tengas disponible</p>
+              </div>
+              <button type="button" onClick={() => setMostrarModalNuevo(false)} className="text-gray-400 hover:text-gray-600 p-1">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <div className="flex-1 min-h-0 overflow-hidden">
+              <FormularioProductoPapelAlta
+                onSave={handleGuardarNuevo}
+                onCancel={() => setMostrarModalNuevo(false)}
+                saving={savingNuevo}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Barra de acción fija del formulario */}
+      <div className="flex-none bg-white border-b border-gray-200 pb-3 mb-4 flex items-center justify-start gap-3">
+        {productoEditando && (
+          <button
+            type="button"
+            onClick={onCancelarEdicion}
+            className="h-10 px-4 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-colors"
+          >
+            Cancelar
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={handleAgregar}
+          disabled={!hayProducto}
+          className={`h-10 px-5 rounded-lg font-semibold text-white transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed ${productoEditando ? "bg-blue-600 hover:bg-blue-700" : "bg-amber-600 hover:bg-amber-700"}`}
+        >
+          {productoEditando ? "Guardar cambios" : "+ Agregar Producto de Papel"}
+        </button>
+      </div>
+
+      <div className="flex-1 min-h-0 overflow-y-auto pr-1">
+
       {/* ── Banner edición ── */}
       {productoEditando && (
         <div className="mb-4 flex items-center justify-between px-4 py-3 bg-amber-50 border border-amber-200 rounded-lg">
@@ -424,44 +566,34 @@ export default function FormularioProductoPapel({
         </div>
       )}
 
-      <div className="flex gap-2 mb-3">
-        <button
-          type="button"
-          onClick={() => setModoProductoPapel("registrado")}
-          className={`px-3 py-2 rounded-lg ${modoProductoPapel === "registrado"
-              ? "bg-amber-500 text-white"
-              : "bg-gray-100"
-            }`}
-        >
-          Existente
+      {/* ── Tabs Existente / Nuevo ── */}
+      <div className="mb-4 flex gap-3 bg-gray-100 p-1 rounded-lg w-fit">
+        <button type="button" onClick={() => setModoProductoPapel("registrado")}
+          className={`flex items-center gap-2 px-5 py-2 rounded-md font-medium text-sm transition-all ${modoProductoPapel === "registrado" ? "bg-white text-amber-600 shadow" : "text-gray-600 hover:text-gray-900"}`}>
+          📄 Existente
         </button>
-
-        <button
-          type="button"
-          onClick={() => setModoProductoPapel("nuevo")}
-          className={`px-3 py-2 rounded-lg ${modoProductoPapel === "nuevo"
-              ? "bg-green-500 text-white"
-              : "bg-gray-100"
-            }`}
-        >
-          Nuevo
+        <button type="button" onClick={() => setModoProductoPapel("nuevo")}
+          className={`flex items-center gap-2 px-5 py-2 rounded-md font-medium text-sm transition-all ${modoProductoPapel === "nuevo" ? "bg-white text-green-600 shadow" : "text-gray-600 hover:text-gray-900"}`}>
+          ✚ Nuevo
         </button>
       </div>
 
       {/* ── Selector de producto ── */}
       <div className="mb-4">
-        <label className="block text-sm font-medium text-gray-700 mb-2">Producto de Papel</label>
-        <button type="button" onClick={() => {
-          if (modoProductoPapel === "registrado") {
-            setMostrarModal(true);
-          } else {
-            // abrir modal de alta de producto papel
-          }
-        }}
-          className="w-full px-4 py-3 border-2 border-dashed border-amber-300 rounded-lg text-gray-600 hover:border-amber-500 hover:text-amber-700 flex items-center justify-center gap-2 transition-colors">
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
-          {productoSel ? "Cambiar producto" : "Click para buscar producto de papel"}
-        </button>
+        {modoProductoPapel === "registrado" ? (
+          <button type="button" onClick={() => setMostrarModal(true)}
+            className="w-full px-4 py-3 border-2 border-dashed border-amber-300 rounded-lg text-gray-600 hover:border-amber-500 hover:text-amber-700 flex items-center justify-center gap-2 transition-colors">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+            {productoSel ? "Cambiar producto" : "Click para buscar producto de papel"}
+          </button>
+        ) : (
+          <button type="button" onClick={() => setMostrarModalNuevo(true)}
+            className="w-full px-4 py-3 border-2 border-dashed border-green-300 rounded-lg text-gray-600 hover:border-green-500 hover:text-green-700 flex items-center justify-center gap-2 transition-colors">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+            {productoSel ? "Registrar otro producto nuevo" : "Click para registrar producto nuevo"}
+          </button>
+        )}
+
         {productoSel && (
           <div className="mt-2 bg-amber-50 border border-amber-200 rounded-lg p-4">
             <div className="flex items-start justify-between gap-2">
@@ -480,7 +612,7 @@ export default function FormularioProductoPapel({
       {hayProducto && (
         <div className="space-y-4 border-t border-gray-200 pt-4">
 
-          {/* Opción / grupo de materiales */}
+          {/* Grupo / material */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Tipo de papel / Opción <span className="text-xs text-gray-400 font-normal">(materiales registrados)</span>
@@ -497,32 +629,9 @@ export default function FormularioProductoPapel({
               <p className="text-xs text-gray-400 italic">Este producto no tiene opciones de material registradas.</p>
             )}
             {specs.precio_sugerido != null && (
-              <p className="text-xs text-amber-600 mt-1">💡 Precio sugerido aplicado: <strong>${specs.precio_sugerido.toFixed(2)}</strong> (puedes editarlo abajo)</p>
+              <p className="text-xs text-amber-600 mt-1">💡 Precio sugerido aplicado: <strong>${specs.precio_sugerido.toFixed(2)}</strong></p>
             )}
           </div>
-
-          {/* Maquinaria del producto (solo informativo) */}
-          {hayMaquinaria && (
-            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-              <p className="text-sm font-medium text-gray-700 mb-2">
-                🛠️ Maquinaria del producto <span className="text-xs text-gray-400 font-normal">(registrada previamente)</span>
-              </p>
-              <div className="space-y-1.5">
-                {Object.entries(MAQ_LABELS).map(([key, label]) => {
-                  const items = maquinaria[key] ?? [];
-                  if (items.length === 0) return null;
-                  return (
-                    <div key={key} className="flex flex-wrap items-center gap-1.5">
-                      <span className="text-xs font-semibold text-gray-500 w-36 flex-shrink-0">{label}:</span>
-                      {items.map(it => (
-                        <span key={it.id} className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-white border border-gray-300 text-gray-700">{it.nombre}</span>
-                      ))}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
 
           {/* Cantidades y precios */}
           <div>
@@ -594,7 +703,6 @@ export default function FormularioProductoPapel({
                 }} className={checkCls} />
               <span className="text-sm font-medium text-gray-700">¿Tintas por dentro?</span>
             </label>
-
             {usaTintasDentro && (
               <div className="mt-3 space-y-3 pl-4 border-l-2 border-amber-200">
                 <div className="max-w-xs">
@@ -637,7 +745,7 @@ export default function FormularioProductoPapel({
             </div>
           </div>
 
-          {/* Foil y Texturizado */}
+          {/* Foil y Textura */}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Foil <span className="text-xs text-gray-400 font-normal">(opcional)</span></label>
@@ -673,11 +781,11 @@ export default function FormularioProductoPapel({
           {/* Descripción */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Descripción <span className="text-xs text-gray-400 font-normal">(opcional — ej: 1er Grado, Talla M...)</span>
+              Descripción <span className="text-xs text-gray-400 font-normal">(opcional)</span>
             </label>
             <input type="text" value={specs.descripcion ?? ""}
               onChange={e => setSpecs(prev => ({ ...prev, descripcion: e.target.value || null }))}
-              placeholder="Identificador del producto" className={inputCls} maxLength={150} />
+              placeholder="Ej: 1er Grado..." className={inputCls} maxLength={150} />
           </div>
 
           {/* Observaciones */}
@@ -687,16 +795,102 @@ export default function FormularioProductoPapel({
             </label>
             <textarea value={specs.observacion}
               onChange={e => setSpecs(prev => ({ ...prev, observacion: e.target.value }))}
-              rows={2} placeholder="Detalles adicionales del producto..." className={`${inputCls} resize-none`} />
+              rows={2} placeholder="Detalles adicionales..." className={`${inputCls} resize-none`} />
           </div>
 
-          {/* Botón agregar */}
-          <button type="button" onClick={handleAgregar}
-            className={`w-full py-3 rounded-lg font-semibold text-white transition-colors ${productoEditando ? "bg-blue-600 hover:bg-blue-700" : "bg-amber-600 hover:bg-amber-700"}`}>
-            {productoEditando ? "💾 Guardar cambios" : "+ Agregar Producto de Papel"}
-          </button>
+          {/* ── Herramental ─────────────────────────────────────────────────── */}
+          <div className="border border-gray-200 rounded-lg overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setHerramentalExpandido(prev => !prev)}
+              className={`w-full flex items-center justify-between px-4 py-3 transition-colors text-left
+                ${herramentalTieneData ? "bg-orange-50 hover:bg-orange-100" : "bg-gray-100 hover:bg-gray-200"}`}
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-base">🔧</span>
+                <span className={`text-sm font-semibold ${herramentalTieneData ? "text-orange-800" : "text-gray-600"}`}>
+                  Herramental
+                </span>
+                <span className="text-xs font-normal text-gray-400">(opcional)</span>
+                {herramentalTieneData && (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-200 text-orange-800">
+                    ${parseFloat(herramentalPrecioTexto || "0").toFixed(2)}
+                  </span>
+                )}
+              </div>
+              <svg
+                className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${herramentalExpandido ? "rotate-180" : ""}`}
+                fill="none" stroke="currentColor" viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+
+            {herramentalExpandido && (
+              <div className="p-4 bg-white space-y-3 border-t border-gray-200">
+                <p className="text-xs text-gray-400">
+                  Indica el herramental requerido para este producto. Se sumará al total.
+                </p>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                    Descripción / Características
+                  </label>
+                  <textarea
+                    value={herramentalDescripcion}
+                    onChange={e => setHerramentalDescripcion(e.target.value)}
+                    rows={2}
+                    placeholder="Ej: Suaje nuevo para troquel 40x30..."
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900
+                               bg-white focus:ring-2 focus:ring-orange-400 focus:border-orange-400 resize-none"
+                  />
+                </div>
+                <div className="flex items-end gap-3">
+                  <div className="flex-1">
+                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                      Precio <span className="text-red-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm font-medium">$</span>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={herramentalPrecioTexto}
+                        onChange={e => {
+                          if (!/^\d*\.?\d{0,2}$/.test(e.target.value)) return;
+                          setHerramentalPrecioTexto(e.target.value);
+                        }}
+                        placeholder="0.00"
+                        className="w-full pl-7 pr-3 py-2 border border-gray-300 rounded-lg text-sm
+                                   text-gray-900 bg-white focus:ring-2 focus:ring-orange-400 focus:border-orange-400"
+                      />
+                    </div>
+                  </div>
+                  {herramentalTieneData && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setHerramentalDescripcion("");
+                        setHerramentalPrecioTexto("");
+                        setHerramentalExpandido(false);
+                      }}
+                      className="px-3 py-2 text-xs text-red-500 hover:text-red-700 hover:bg-red-50
+                                 border border-red-200 rounded-lg transition-colors"
+                    >
+                      Limpiar
+                    </button>
+                  )}
+                </div>
+                {herramentalTieneData && (
+                  <p className="text-xs text-orange-600 font-medium">
+                    ✓ Herramental de ${parseFloat(herramentalPrecioTexto || "0").toFixed(2)} incluido en el total
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       )}
+      </div>
     </div>
   );
 }

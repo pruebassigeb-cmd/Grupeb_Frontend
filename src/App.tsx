@@ -21,7 +21,8 @@ import GestorBackups from "./components/GestorBackups.tsx";
 import ProveedoresPage from "./pages/ProveedoresPage";
 import Papel from "./pages/papel/Papel";
 import Catalogos from "./pages/papel/catalogos.tsx";
-// import Expo from "./pages/expo/Expo.tsx";
+import Expo from "./pages/expo/expo.tsx";
+import EditarPedidoPapel from "./pages/EditarPedidoPapel.tsx";
 
 const PERMISOS = {
   usuarios: "Crear/Editar/Eliminar Usuarios",
@@ -99,6 +100,13 @@ function App() {
             </ProtectedRoute>
           } />
 
+          {/* Pedidos de papel — editar */}
+          <Route path="/pedido/:noPedido/editar-papel" element={
+            <ProtectedRoute permiso={PERMISOS.pedido}>
+              <EditarPedidoPapel />
+            </ProtectedRoute>
+          } />
+
           {/* Diseño */}
           <Route path="/diseno" element={
             <ProtectedRoute permisoOr={["Editar Diseño", "Orden de Diseño"]}>
@@ -142,9 +150,9 @@ function App() {
             <ProtectedRoute><Papel /></ProtectedRoute>
           } />
 
-          {/* <Route path="/expo" element={
+          <Route path="/expo" element={
             <ProtectedRoute><Expo /></ProtectedRoute>
-          } /> */}
+          } />
 
           <Route path="/catalogos" element={
             <ProtectedRoute permiso={PERMISOS.plastico}>

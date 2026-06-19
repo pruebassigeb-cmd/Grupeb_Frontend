@@ -12,6 +12,8 @@ dist
 dist-ssr
 *.local
 
+actualizar_catalogos.xlsm
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

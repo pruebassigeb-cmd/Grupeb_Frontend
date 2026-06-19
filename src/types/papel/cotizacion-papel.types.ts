@@ -85,4 +85,7 @@ export interface ProductoPapelCotizacion {
 
   cantidades: [number, number, number];
   precios: [number, number, number];
+
+  herramental_descripcion?: string | null;
+  herramental_precio?: number | null;
 }
