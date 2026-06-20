@@ -22,7 +22,7 @@ import ProveedoresPage from "./pages/ProveedoresPage";
 import Papel from "./pages/papel/Papel";
 import Catalogos from "./pages/papel/catalogos.tsx";
 // import Expo from "./pages/expo/expo.tsx";
-import EditarPedidoPapel from "./pages/EditarPedidoPapel.tsx";
+//import EditarPedidoPapel from "./pages/EditarPedidoPapel.tsx";
 
 const PERMISOS = {
   usuarios: "Crear/Editar/Eliminar Usuarios",
@@ -137,14 +137,14 @@ function App() {
           />
 
           {/* Pedidos de papel — editar */}
-          <Route
+          {/*<Route
             path="/pedido/:noPedido/editar-papel"
             element={
               <ProtectedRoute permiso={PERMISOS.pedido}>
                 <EditarPedidoPapel />
               </ProtectedRoute>
             }
-          />
+          />*/}
 
           {/* Diseño */}
           <Route
