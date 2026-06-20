@@ -127,8 +127,6 @@ function TarjetaProducto({ pedido }: { pedido: PedidoSeguimiento }) {
         {pedido.asa_suaje && <span><span className="text-gray-400">Asa / Suaje </span>{pedido.asa_suaje}</span>}
         {pedido.pigmentos && <span><span className="text-gray-400">Pigmento </span>{pedido.pigmentos}</span>}
         {pedido.pantones && <span><span className="text-gray-400">Pantones </span>{pedido.pantones}</span>}
-        {pedido.bk && <span className="px-1.5 py-0.5 bg-gray-800 text-white rounded text-xs">BK</span>}
-        {pedido.foil && <span className="px-1.5 py-0.5 bg-yellow-500 text-white rounded text-xs">FOIL</span>}
       </div>
       {pedido.observacion && (
         <p className="text-sm text-gray-500 italic leading-tight border-t border-gray-200 pt-1.5">

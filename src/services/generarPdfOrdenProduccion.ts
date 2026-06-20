@@ -34,11 +34,6 @@ export interface OrdenProduccionData {
   medidas: Record<MedidaKey, string>;
   tintas: number | null;
   caras: number | null;
-  bk: boolean | null;
-  foil: boolean | null;
-  alto_rel: boolean | null;
-  laminado: boolean | null;
-  uv_br: boolean | null;
   pigmentos: string | null;
   pantones: string[] | null;
   asa_suaje: string | null;

@@ -61,6 +61,8 @@ export interface OrdenProduccionProducto {
   kilos_extruir: number | null;
   metros_extruir: number | null;
   es_parcialidad: boolean;
+  url_render?: string | null;
+  url_master?: string | null;
 }
 
 export interface OrdenProduccionRespuesta {
