@@ -19,7 +19,7 @@ import {
   eliminarProductoCatalogo as eliminarProductoCatalogoAPI,
   crearCotizacionExpo, getCotizacionesExpo, aprobarCotizacionExpo, eliminarCotizacionExpo,
   mapearProductoAPayload,
-  registrarProductoEnBlanco,   // ← CAMBIO 1
+  registrarProductoEnBlanco,
 } from "../../services/expo/expoService";
 
 import { useCatalogosPapel } from "../../hooks/papel/useCatalogosPapel";
@@ -34,7 +34,7 @@ const TODAY_NOW = () =>
   new Date().toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" });
 
 export default function Expo() {
-  const navigate = useNavigate(); // ← CAMBIO 2
+  const navigate = useNavigate();
 
   const [filas,    setFilas]    = useState<FilaProducto[]>([]);
   const [vista,    setVista]    = useState<"registro" | "cotizacion">("registro");
@@ -75,10 +75,11 @@ export default function Expo() {
 
   const { catalogs } = useCatalogosPapel();
   const { user } = useAuth();
-  const [foils,    setFoils]    = useState<FoilOpcion[]>([]);
-  const [texturas, setTexturas] = useState<TexturaOpcion[]>([]);
-  const [pigmentosDB,    setPigmentosDB]    = useState<PigmentoDB[]>([]);
-  const [coloresAsa,     setColoresAsa]     = useState<{id: number; nombre: string}[]>([]);
+  const [foils,         setFoils]         = useState<FoilOpcion[]>([]);
+  const [texturas,      setTexturas]      = useState<TexturaOpcion[]>([]);
+  const [pigmentosDB,   setPigmentosDB]   = useState<PigmentoDB[]>([]);
+  const [coloresAsa,    setColoresAsa]    = useState<{ id: number; nombre: string }[]>([]);
+  const [suajesPlast,   setSuajesPlast]   = useState<{ id: number; tipo: string }[]>([]);
   const [catalogosPlast, setCatalogosPlast] = useState<CatalogosPlastico>({
     tiposProducto: [], materiales: [], calibres: [],
   });
@@ -152,7 +153,8 @@ export default function Expo() {
         ...sistema.plastico.map(mapearPlasticoSistemaAProducto),
         ...sistema.papel.map(mapearPapelSistemaAProducto),
       ]);
-      if (sistema.coloresAsa) setColoresAsa(sistema.coloresAsa);
+      if (sistema.coloresAsa)  setColoresAsa(sistema.coloresAsa);
+      if (sistema.suajesPlast) setSuajesPlast(sistema.suajesPlast);
     } catch (err) {
       console.error("Error al cargar catálogo expo:", err);
     } finally {
@@ -318,12 +320,11 @@ export default function Expo() {
 
   const limpiar = () => { setFilas([]); setCliente(""); setComent(""); setFolioActual(null); };
 
-  // ─── CAMBIO 2: función prepararFilas ─────────────────────────────────────
+  // ── prepararFilas ─────────────────────────────────────────────────────────
   const prepararFilas = async (filasActuales: FilaProducto[]): Promise<FilaProducto[]> => {
     const resultado: FilaProducto[] = [];
     for (const fila of filasActuales) {
       const p = fila.producto;
-      // Producto en blanco: creado en BuscadorProductoModal tiene fuente = undefined
       const esEnBlanco = !p.fuente;
       if (esEnBlanco) {
         try {
@@ -331,7 +332,7 @@ export default function Expo() {
           resultado.push({ ...fila, producto: { ...p, id: idcatalogo, fuente: "expo" } });
         } catch (err) {
           console.error(`[EXPO] No se pudo registrar "${p.nombre}" en catálogo:`, err);
-          resultado.push(fila); // lo mandamos igual, el controller lo guarda como expo genérico
+          resultado.push(fila);
         }
       } else {
         resultado.push(fila);
@@ -341,7 +342,6 @@ export default function Expo() {
   };
 
   // ── Cotizaciones ──────────────────────────────────────────────────────────
-  // CAMBIO 3 — guardarCotizacion
   const guardarCotizacion = async () => {
     if (filas.length === 0) { alert("Agrega al menos un producto."); return; }
     if (!cliente.trim())    { alert("Falta el nombre del cliente."); return; }
@@ -372,7 +372,6 @@ export default function Expo() {
     }
   };
 
-  // CAMBIO 4 — guardarEImprimir
   const guardarEImprimir = async () => {
     if (filas.length === 0) { alert("Agrega al menos un producto."); return; }
     if (!cliente.trim())    { alert("Falta el nombre del cliente."); return; }
@@ -394,7 +393,6 @@ export default function Expo() {
       };
       setCotizaciones(prev => [...prev, nueva]);
 
-      // Generar PDF inmediatamente con los precios ajustados y cantidades reales
       generarPdfCotizacionExpo({
         folio:       resultado.no_cotizacion,
         cliente:     cliente.trim(),
@@ -402,7 +400,7 @@ export default function Expo() {
         fecha:       TODAY_NOW(),
         comentarios: coment,
         productos: filasListas.map(f => {
-          const parseP  = (s: string) => parseFloat(s.replace(/[^0-9.]/g, "")) || 0;
+          const parseP   = (s: string) => parseFloat(s.replace(/[^0-9.]/g, "")) || 0;
           const extraNum = f.modoExtra === "precio" ? parseP(f.extra || "0") : 0;
           const p1 = parseP(f.precio1) + extraNum;
           const p2 = parseP(f.precio2) + extraNum;
@@ -489,7 +487,7 @@ export default function Expo() {
   const propsHoja = {
     filas, cliente, coment, folio: folioActual || folioPreview, cant1, cant2, cant3,
     mob, tab, desk, over, catalogoPropio: catalogo,
-    catalogs, foils, texturas, pigmentosDB, coloresAsa,
+    catalogs, foils, texturas, pigmentosDB, coloresAsa, suajesPlast,
     setCliente, setComent, setCant1, setCant2, setCant3, setOver,
     onDrop, onEdit: editFila, onDel: delFila, onEditNombre: editNombreProducto,
     onAbrirDrawer: () => setDrawerOpen(true), onAgregarProducto: addProd,
@@ -500,19 +498,9 @@ export default function Expo() {
   // ── Sub-componentes UI ────────────────────────────────────────────────────
   const BotonesAccion = () => (
     <div className="no-print" style={{ display: "flex", gap: 10, width: "100%", maxWidth: desk ? 1100 : undefined, justifyContent: "flex-end" }}>
-      {/* ← CAMBIO 3: botón SIGEB */}
       <button
         onClick={() => navigate("/home")}
-        style={{
-          background: "transparent",
-          border: "1px solid #444",
-          color: "#666",
-          fontSize: 11,
-          fontWeight: 600,
-          padding: "7px 9px",
-          borderRadius: 6,
-          cursor: "pointer",
-        }}
+        style={{ background: "transparent", border: "1px solid #444", color: "#666", fontSize: 11, fontWeight: 600, padding: "7px 9px", borderRadius: 6, cursor: "pointer" }}
         title="Regresar a SIGEB"
       >
         🏠 SIGEB
@@ -600,23 +588,7 @@ export default function Expo() {
                 </div>
               </div>
               <div style={{ display: "flex", gap: 6 }}>
-                {/* ← CAMBIO 3: botón SIGEB */}
-                <button
-                  onClick={() => navigate("/home")}
-                  style={{
-                    background: "transparent",
-                    border: "1px solid #444",
-                    color: "#666",
-                    fontSize: 11,
-                    fontWeight: 600,
-                    padding: "7px 9px",
-                    borderRadius: 6,
-                    cursor: "pointer",
-                  }}
-                  title="Regresar a SIGEB"
-                >
-                  🏠 SIGEB
-                </button>
+                <button onClick={() => navigate("/home")} style={{ background: "transparent", border: "1px solid #444", color: "#666", fontSize: 11, fontWeight: 600, padding: "7px 9px", borderRadius: 6, cursor: "pointer" }} title="Regresar a SIGEB">🏠 SIGEB</button>
                 <button onClick={() => setVista("registro")} style={{ background: "transparent", border: "1px solid #333", color: "#888", fontSize: 11, fontWeight: 600, padding: "7px 9px", borderRadius: 6, cursor: "pointer" }}>← Cliente</button>
                 <button onClick={limpiar} style={{ background: "transparent", border: "1px solid #444", color: "#AAA", fontSize: 11, fontWeight: 600, padding: "7px 9px", borderRadius: 6, cursor: "pointer" }}>Limpiar</button>
                 <button onClick={guardarCotizacion} disabled={guardando} style={{ background: "transparent", border: "1px solid #C9922A", color: "#C9922A", fontSize: 11, fontWeight: 700, padding: "7px 9px", borderRadius: 6, cursor: "pointer", opacity: guardando ? .7 : 1 }}>{guardando ? "..." : "💾"}</button>
@@ -650,23 +622,7 @@ export default function Expo() {
                 </div>
               </div>
               <div style={{ display: "flex", gap: 10 }}>
-                {/* ← CAMBIO 3: botón SIGEB */}
-                <button
-                  onClick={() => navigate("/home")}
-                  style={{
-                    background: "transparent",
-                    border: "1px solid #444",
-                    color: "#666",
-                    fontSize: 11,
-                    fontWeight: 600,
-                    padding: "7px 9px",
-                    borderRadius: 6,
-                    cursor: "pointer",
-                  }}
-                  title="Regresar a SIGEB"
-                >
-                  🏠 SIGEB
-                </button>
+                <button onClick={() => navigate("/home")} style={{ background: "transparent", border: "1px solid #444", color: "#666", fontSize: 11, fontWeight: 600, padding: "7px 9px", borderRadius: 6, cursor: "pointer" }} title="Regresar a SIGEB">🏠 SIGEB</button>
                 <button onClick={() => setVista("registro")} style={{ background: "transparent", border: "1px solid #333", color: "#888", fontSize: 12, fontWeight: 600, padding: "8px 14px", borderRadius: 6, cursor: "pointer" }}>← Cliente</button>
                 <button onClick={limpiar} style={{ background: "transparent", border: "1px solid #555", color: "#AAA", fontSize: 12, fontWeight: 600, padding: "8px 16px", borderRadius: 6, cursor: "pointer" }}>Limpiar</button>
                 <button onClick={guardarCotizacion} disabled={guardando} style={{ background: "transparent", border: "1px solid #C9922A", color: "#C9922A", fontSize: 12, fontWeight: 700, padding: "8px 16px", borderRadius: 6, cursor: "pointer", opacity: guardando ? .7 : 1 }}>{guardando ? "Guardando..." : "💾 Guardar"}</button>

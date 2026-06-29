@@ -81,7 +81,7 @@ interface BuscadorProps {
   catalogoPropio: Producto[];
   onElegir: (p: Producto) => void;
   onClose: () => void;
-  catalogs: Catalogs;  // ← para los tipos de producto papel/cartón
+  catalogs: Catalogs;
 }
 export function BuscadorProductoModal({ catalogoPropio, onElegir, onClose, catalogs }: BuscadorProps) {
   const [busq,           setBusq]           = useState("");
@@ -99,13 +99,11 @@ export function BuscadorProductoModal({ catalogoPropio, onElegir, onClose, catal
         p.material.toLowerCase().includes(busq.toLowerCase()))
     : todos;
 
-  // Al pulsar un botón de categoría solo cambia la categoría seleccionada (no crea nada aún)
   const seleccionarCat = (cat: "papel" | "plastico" | "carton") => {
     setCatSeleccionada(cat);
     setTipoSeleccionado("");
   };
 
-  // Confirmar creación — requiere nombre
   const confirmarNuevo = () => {
     if (!nombreNuevo.trim()) return;
     const vacio: Producto = {
@@ -117,13 +115,11 @@ export function BuscadorProductoModal({ catalogoPropio, onElegir, onClose, catal
       medida: "", material: "", calibre: "", tintas: "",
       laminacion: false, hs: false, ar: false, textura: false, uv: false, asa: false, otro: "",
       precio500: "", precio1000: "", precio3000: "", imagen: "",
-      // fuente undefined a propósito → prepararFilas lo detecta y lo registra en catálogo
     };
     onElegir(vacio);
     onClose();
   };
 
-  // Color de la categoría seleccionada
   const catColor = CATS.find(c => c.key === catSeleccionada)?.color ?? "#C9922A";
 
   return (
@@ -132,7 +128,6 @@ export function BuscadorProductoModal({ catalogoPropio, onElegir, onClose, catal
       <div style={{ background: "#1A1A1A", border: "1px solid #333", borderRadius: 12, width: "100%", maxWidth: 520, maxHeight: "80vh", display: "flex", flexDirection: "column", overflow: "hidden", boxShadow: "0 20px 60px rgba(0,0,0,.8)" }}
         onClick={e => e.stopPropagation()}>
 
-        {/* Header */}
         <div style={{ padding: "14px 16px", borderBottom: "2px solid #C9922A", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div>
             <div style={{ color: "#C9922A", fontSize: 13, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase" }}>Elegir producto</div>
@@ -141,11 +136,8 @@ export function BuscadorProductoModal({ catalogoPropio, onElegir, onClose, catal
           <button onClick={onClose} style={{ background: "#2A2A2A", border: "none", color: "#AAA", width: 26, height: 26, borderRadius: "50%", cursor: "pointer", fontSize: 15 }}>✕</button>
         </div>
 
-        {/* Sección "crear desde cero" */}
         <div style={{ padding: "12px 16px 10px", borderBottom: "1px solid #2A2A2A" }}>
           <div style={{ color: "#666", fontSize: 9, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", marginBottom: 8 }}>O crear desde cero</div>
-
-          {/* Botones de categoría */}
           <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
             {CATS.map(c => (
               <button key={c.key} onClick={() => seleccionarCat(c.key as "papel" | "plastico" | "carton")}
@@ -160,10 +152,7 @@ export function BuscadorProductoModal({ catalogoPropio, onElegir, onClose, catal
               </button>
             ))}
           </div>
-
-          {/* Nombre + Tipo + Botón confirmar — en la misma fila */}
           <div style={{ display: "flex", gap: 8, alignItems: "stretch" }}>
-            {/* Nombre */}
             <input
               value={nombreNuevo}
               onChange={e => setNombreNuevo(e.target.value)}
@@ -175,8 +164,6 @@ export function BuscadorProductoModal({ catalogoPropio, onElegir, onClose, catal
                 outline: "none", fontFamily: "'Inter',sans-serif", transition: "border-color .15s",
               }}
             />
-
-            {/* Tipo — papel/cartón usan tipo_producto del catálogo, plástico lista fija */}
             <select
               value={tipoSeleccionado}
               onChange={e => setTipoSeleccionado(e.target.value)}
@@ -191,8 +178,6 @@ export function BuscadorProductoModal({ catalogoPropio, onElegir, onClose, catal
                 : catalogs.tipo_producto.map(item => <option key={item.id} value={item.nombre}>{item.nombre}</option>)
               }
             </select>
-
-            {/* Botón confirmar */}
             <button
               onClick={confirmarNuevo}
               disabled={!nombreNuevo.trim()}
@@ -209,13 +194,11 @@ export function BuscadorProductoModal({ catalogoPropio, onElegir, onClose, catal
           </div>
         </div>
 
-        {/* Buscador */}
         <div style={{ padding: "10px 16px 0" }}>
           <input ref={inputRef} value={busq} onChange={e => setBusq(e.target.value)} placeholder="Buscar producto..."
             style={{ width: "100%", background: "#111", border: "1px solid #333", borderRadius: 7, padding: "9px 12px", color: "#EEE", fontSize: 13, outline: "none", fontFamily: "'Inter',sans-serif" }} />
         </div>
 
-        {/* Lista de productos */}
         <div style={{ flex: 1, overflowY: "auto", padding: "10px 10px 10px" }}>
           {CATS.map(cat => {
             const ps = filtrados.filter(p => p.categoria === cat.key);
@@ -541,7 +524,7 @@ export function ExtraOPigmentoCell({ id, esPlastico, modo, setModo, extra, setEx
 interface FilaVaciaProps {
   onElegir: (p: Producto) => void;
   catalogoPropio: Producto[];
-  catalogs: Catalogs;  // ← para pasar al BuscadorProductoModal
+  catalogs: Catalogs;
 }
 export function FilaVacia({ onElegir, catalogoPropio, catalogs }: FilaVaciaProps) {
   const [open, setOpen] = useState(false);
@@ -551,7 +534,6 @@ export function FilaVacia({ onElegir, catalogoPropio, catalogs }: FilaVaciaProps
       medida: "", material: "", calibre: "", tintas: "",
       laminacion: false, hs: false, ar: false, textura: false, uv: false, asa: false, otro: "",
       precio500: "", precio1000: "", precio3000: "",
-      // Preservar tipo si viene de "crear desde cero"
       tipo:         p.tipo,
       tipoProducto: p.tipoProducto,
     };
@@ -593,12 +575,13 @@ interface FilaProps {
   texturas:       TexturaOpcion[];
   catalogosPlast: CatalogosPlastico;
   pigmentosDB:    PigmentoDB[];
-  coloresAsa:     { id: number; nombre: string }[];  // ← para plástico
+  coloresAsa:     { id: number; nombre: string }[];
+  suajesPlast:    { id: number; tipo: string }[];  // tipos de asa para plástico (idproductos=1)
 }
 
 export const FilaTabla = memo(function FilaTabla({
   fila, rowIdx, onDel, onEdit, onEditNombre,
-  catalogs, foils, texturas, catalogosPlast, pigmentosDB, coloresAsa,
+  catalogs, foils, texturas, catalogosPlast, pigmentosDB, coloresAsa, suajesPlast,
 }: FilaProps) {
   const { uid, producto: p } = fila;
   const pre = `r${rowIdx}`;
@@ -621,6 +604,7 @@ export const FilaTabla = memo(function FilaTabla({
   const [uv,         setUv]         = useState(fila.uv);
   const [asa,        setAsa]        = useState(fila.asa);
   const [tipoAsa,    setTipoAsa]    = useState(fila.tipoAsa);
+  const [idSuaje,    setIdSuaje]    = useState<number | null>(fila.idSuaje ?? null);
   const [modoExtra,  setModoExtra]  = useState<"precio" | "pigmento">(fila.modoExtra || "precio");
   const [pigmento,   setPigmento]   = useState(fila.pigmento || "");
 
@@ -665,7 +649,13 @@ export const FilaTabla = memo(function FilaTabla({
   const arPrint      = !esPlastico && ar ? "✓" : "—";
   const texturaPrint = !esPlastico && textura ? tipoTex : "—";
   const uvPrint      = !esPlastico && uv ? "✓" : "—";
-  const asaPrint     = asa ? tipoAsa : "—";
+  const asaSuajePrint = esPlastico && idSuaje
+    ? (suajesPlast.find(s => s.id === idSuaje)?.tipo || "—")
+    : "—";
+  const asaColorPrint = esPlastico && tipoAsa ? tipoAsa : "";
+  const asaPrint = esPlastico
+    ? (asaSuajePrint !== "—" ? `${asaSuajePrint}${asaColorPrint ? " · " + asaColorPrint : ""}` : "—")
+    : (asa ? tipoAsa : "—");
   const extraPrint   = modoExtra === "pigmento" ? (pigmento || "—") : (extraNum > 0 ? `+$${extraNum}` : "—");
 
   const precio1ConExtra = extraNum > 0 && modoExtra === "precio" ? conExtra(precio1, extraNum) : precio1;
@@ -828,27 +818,60 @@ export const FilaTabla = memo(function FilaTabla({
         </>
       )}
 
-      {/* Asa — plástico usa colores, papel usa tipos */}
+      {/* Asa — plástico: tipo (idsuaje) + color; papel: tipo de asa */}
       <td style={{ ...TD, fontSize: 8 }}>
-        <select className="no-print-show" style={iSel} value={asa ? tipoAsa : ""}
-          onChange={e => {
-            const v = e.target.value;
-            setAsa(v !== ""); setTipoAsa(v);
-            propagar("asa", v !== ""); propagar("tipoAsa", v);
-            if (esPlastico) {
-              // Para plástico: tipoAsa = nombre del color, idAsa = null (no aplica)
-              propagar("idAsa", null);
-            } else {
+        {esPlastico ? (
+          <div className="no-print-show" style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            {/* Select 1: tipo de asa (flexible / rígida) */}
+            <select style={{ ...iSel, fontSize: 7.5 }} value={idSuaje ?? ""}
+              onChange={e => {
+                const v = e.target.value;
+                const id = v !== "" ? Number(v) : null;
+                setIdSuaje(id);
+                setAsa(id !== null);
+                propagar("idSuaje", id);
+                propagar("asa", id !== null);
+                // limpiar color al cambiar tipo
+                setTipoAsa("");
+                propagar("tipoAsa", "");
+                propagar("idAsa", null);
+              }}>
+              <option value="">Sin asa</option>
+              {suajesPlast.map(s => (
+                <option key={s.id} value={s.id}>{s.tipo}</option>
+              ))}
+            </select>
+            {/* Select 2: color (solo si hay tipo elegido) */}
+            {idSuaje !== null && (
+              <select style={{ ...iSel, fontSize: 7.5 }} value={tipoAsa}
+                onChange={e => {
+                  const v = e.target.value;
+                  const colorItem = coloresAsa.find(c => c.nombre === v);
+                  setTipoAsa(v);
+                  propagar("tipoAsa", v);
+                  propagar("idAsa", colorItem?.id ?? null);
+                }}>
+                <option value="">Color (opc.)</option>
+                {coloresAsa.map(o => (
+                  <option key={o.id} value={o.nombre}>{o.nombre}</option>
+                ))}
+              </select>
+            )}
+          </div>
+        ) : (
+          <select className="no-print-show" style={iSel} value={asa ? tipoAsa : ""}
+            onChange={e => {
+              const v = e.target.value;
               const item = asaOpts.find(x => x.nombre === v);
+              setAsa(v !== ""); setTipoAsa(v);
+              propagar("asa", v !== ""); propagar("tipoAsa", v);
               propagar("idAsa", item?.id ?? null);
-            }
-          }}>
-          <option value="">Sin asa</option>
-          {esPlastico
-            ? coloresAsa.map(o => <option key={o.id} value={o.nombre}>{o.nombre}</option>)
-            : asaOpts.map(o => <option key={o.id} value={o.nombre}>{o.nombre}</option>)
-          }
-        </select>
+              propagar("idSuaje", null);
+            }}>
+            <option value="">Sin asa</option>
+            {asaOpts.map(o => <option key={o.id} value={o.nombre}>{o.nombre}</option>)}
+          </select>
+        )}
         <span className="print-only">{asaPrint}</span>
       </td>
 

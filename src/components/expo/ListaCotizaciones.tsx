@@ -1,17 +1,19 @@
 import { useState, useEffect } from "react";
 import { generarPdfCotizacionExpo, cotizacionBackDataAPdfParams } from "../../utils/expo/generarPdfCotizacionExpo";
+import { generarPdfPedido } from "../../services/generarPdfPedido";
+import { getVentaByPedido } from "../../services/ventasservice";
 import type { CotizacionGuardada, ItemPedidoAprobado } from "../../types/expo/expo.types";
 import { folioAPedido } from "../../types/expo/expo.types";
 
 interface Props {
   cotizaciones: CotizacionGuardada[];
-  loading:      boolean;
-  aprobando:    boolean;
-  onAprobar:    (id: string, items: ItemPedidoAprobado[]) => Promise<void>;
-  onEliminar:   (folio: string) => Promise<void>;
-  onClose:      () => void;
-  onRefresh:    () => void;
-  asesor:       string;
+  loading: boolean;
+  aprobando: boolean;
+  onAprobar: (id: string, items: ItemPedidoAprobado[]) => Promise<void>;
+  onEliminar: (folio: string) => Promise<void>;
+  onClose: () => void;
+  onRefresh: () => void;
+  asesor: string;
 }
 
 const LS: React.CSSProperties = { color: "#555", fontSize: 8.5, textTransform: "uppercase", letterSpacing: .5, marginBottom: 1 };
@@ -42,9 +44,9 @@ function Badge({ label, color }: { label: string; color?: string }) {
 }
 
 interface SelectorCantidadProps {
-  detalles:    { idsolicitud_detalle: number; cantidad: number; precio_unitario: number | null; precio_total: number }[];
-  seleccion:   number | null;
-  onChange:    (id: number | null) => void;
+  detalles: { idsolicitud_detalle: number; cantidad: number; precio_unitario: number | null; precio_total: number }[];
+  seleccion: number | null;
+  onChange: (id: number | null) => void;
   soloLectura?: boolean;
 }
 
@@ -80,10 +82,10 @@ function SelectorCantidad({ detalles, seleccion, onChange, soloLectura }: Select
 }
 
 interface DetalleProductoProps {
-  prod:       any;
+  prod: any;
   seleccion?: number | null;
-  onChange?:  (id: number | null) => void;
-  esPedido:   boolean;
+  onChange?: (id: number | null) => void;
+  esPedido: boolean;
 }
 
 function DetalleProducto({ prod, seleccion, onChange, esPedido }: DetalleProductoProps) {
@@ -91,11 +93,17 @@ function DetalleProducto({ prod, seleccion, onChange, esPedido }: DetalleProduct
 
   const acabados: { label: string; color?: string }[] = [];
   if (prod.laminado_nombre) acabados.push({ label: `Lam: ${prod.laminado_nombre}` });
-  if (prod.foil_nombre)     acabados.push({ label: `Foil: ${prod.foil_nombre}`, color: "#A855F7" });
-  if (prod.asa_nombre)      acabados.push({ label: `Asa: ${prod.asa_nombre}` });
-  if (prod.textura_nombre)  acabados.push({ label: `Tex: ${prod.textura_nombre}` });
-  if (prod.uv)              acabados.push({ label: "UV", color: "#EAB308" });
-  if (prod.alto_relieve)    acabados.push({ label: "AR", color: "#3B82F6" });
+  if (prod.foil_nombre) acabados.push({ label: `Foil: ${prod.foil_nombre}`, color: "#A855F7" });
+  if (prod.asa_nombre) acabados.push({ label: `Asa: ${prod.asa_nombre}` });
+  if (prod.suaje_tipo) {
+    const asaLabel = prod.color_asa_nombre
+      ? `Asa: ${prod.suaje_tipo} · ${prod.color_asa_nombre}`
+      : `Asa: ${prod.suaje_tipo}`;
+    acabados.push({ label: asaLabel, color: "#5C8FA0" });
+  }
+  if (prod.textura_nombre) acabados.push({ label: `Tex: ${prod.textura_nombre}` });
+  if (prod.uv) acabados.push({ label: "UV", color: "#EAB308" });
+  if (prod.alto_relieve) acabados.push({ label: "AR", color: "#3B82F6" });
 
   const tintasLabel = prod.tintas != null ? `${prod.tintas} tintas` : null;
   const pigmento = prod.pigmento || prod.pigmentos || null;
@@ -125,13 +133,14 @@ function DetalleProducto({ prod, seleccion, onChange, esPedido }: DetalleProduct
       <div style={{ display: "grid", gridTemplateColumns: esPedido ? "1fr 1fr" : "1fr 1fr 1fr", gap: 10, alignItems: "start" }}>
         <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            {prod.medida   && <Dato label="Medida"   value={prod.medida} />}
+            {prod.medida && <Dato label="Medida" value={prod.medida} />}
             {prod.material && <Dato label="Material" value={prod.material} />}
-            {prod.calibre  && <Dato label="Calibre"  value={String(prod.calibre)} />}
+            {prod.grupo_descripcion && <Dato label="Material" value={prod.grupo_descripcion} />}
+            {prod.calibre && <Dato label="Calibre" value={String(prod.calibre)} />}
           </div>
           {prod.descripcion && <Dato label="Descripción" value={prod.descripcion} />}
-          {prod.observacion && <Dato label="Obs"          value={prod.observacion} />}
-          {pigmento         && <Dato label="Pigmento"     value={pigmento} />}
+          {prod.observacion && <Dato label="Obs" value={prod.observacion} />}
+          {pigmento && <Dato label="Pigmento" value={pigmento} />}
         </div>
 
         <div>
@@ -197,14 +206,12 @@ export default function ListaCotizaciones({
   onAprobar, onEliminar, onClose, onRefresh, asesor,
 }: Props) {
   const [expandidoId, setExpandidoId] = useState<string | null>(null);
-  const [filtro,      setFiltro]      = useState<"todas" | "cotizacion" | "pedido">("todas");
-  const [eliminando,  setEliminando]  = useState<string | null>(null);
+  const [filtro, setFiltro] = useState<"todas" | "cotizacion" | "pedido">("todas");
+  const [eliminando, setEliminando] = useState<string | null>(null);
   const [selecciones, setSelecciones] = useState<Record<string, Record<number, number | null>>>({});
+  const [generandoPdf, setGenerandoPdf] = useState<string | null>(null);
 
-  // ── Auto-refresh al abrir el modal ────────────────────────────────────────
-  useEffect(() => {
-    onRefresh();
-  }, []);
+  useEffect(() => { onRefresh(); }, []);
 
   const filtradas = cotizaciones.filter(c => filtro === "todas" || c.estado === filtro);
   const ordenadas = [...filtradas].sort((a, b) => b.id.localeCompare(a.id));
@@ -225,17 +232,16 @@ export default function ListaCotizaciones({
     const items: ItemPedidoAprobado[] = Object.entries(sel)
       .filter(([, detalleId]) => detalleId !== null)
       .map(([prodId, detalleId]) => ({
-        filaUid:              prodId,
-        cantidadElegida:      "precio1" as const,
+        filaUid: prodId,
+        cantidadElegida: "precio1" as const,
         idsolicitud_producto: Number(prodId),
-        idsolicitud_detalle:  detalleId as number,
+        idsolicitud_detalle: detalleId as number,
       }));
     if (items.length === 0) {
       alert("Selecciona al menos una cantidad en algún producto para aprobar el pedido.");
       return;
     }
     await onAprobar(cot.id, items);
-    // ── Auto-refresh y colapsar tras aprobar ─────────────────────────────────
     setExpandidoId(null);
     onRefresh();
   };
@@ -246,7 +252,6 @@ export default function ListaCotizaciones({
     setEliminando(cot.id);
     try {
       await onEliminar(cot.folio);
-      // ── Auto-refresh tras eliminar ───────────────────────────────────────
       onRefresh();
     } finally {
       setEliminando(null);
@@ -258,6 +263,129 @@ export default function ListaCotizaciones({
     if (!backData) return;
     const params = cotizacionBackDataAPdfParams(backData, cot.folio, cot.fecha, asesor);
     generarPdfCotizacionExpo(params);
+  };
+
+  const handleGenerarPdfPedido = async (cot: CotizacionGuardada) => {
+    const backData = (cot as any)._backData;
+    if (!backData) return;
+    const folioPedido = cot.folioPedido || folioAPedido(cot.folio);
+    setGenerandoPdf(cot.id);
+    try {
+      const venta = await getVentaByPedido(folioPedido);
+      const productos = (backData.productos || []).map((p: any) => {
+        const esPapel = p.tipo_material === "papel";
+        const foilNombre = p.foil_nombre || null;
+        const asaNombre = p.asa_nombre || null;
+        if (esPapel) {
+          return {
+            tipo_material: "papel",
+            tipoCotizacion: "papel",
+            nombre: p.nombre,
+            grupo_descripcion: p.grupo_descripcion ?? "",
+            material: p.material || "",
+            calibre: p.calibre || "",
+            tintas: p.tintas ?? 0,
+            tintasDentro: 0,
+            caras: p.caras ?? 0,
+            medidasFormateadas: p.medida || "",
+            medidas: {},
+            bk: null,
+            foil: foilNombre ? true : null,
+            foil_nombre: foilNombre,
+            laminado: p.laminado_nombre ? true : null,
+            laminado_nombre: p.laminado_nombre || null,
+            asa_suaje: asaNombre || null,
+            asa_nombre: asaNombre || null,
+            uvBr: p.uv ? true : null,
+            alto_relieve: p.alto_relieve === true,
+            metodo_hojeado: p.metodo_hojeado ?? null,
+            lleva_armado: p.lleva_armado ?? true,
+            maquinaria_seleccionada: p.maquinaria_seleccionada ?? {},
+            textura_nombre: p.textura_nombre || null,
+            pigmentos: null,
+            pantones: p.pantones || null,
+            pantonesDentro: null,
+            observacion: p.observacion || null,
+            descripcion: p.descripcion || null,
+            perforacion: false,
+            por_kilo: null,
+            herramental_descripcion: null,
+            herramental_precio: null,
+            herramental_aprobado: null,
+            detalles: (p.detalles || [])
+              .filter((d: any) => d.aprobado === true)
+              .map((d: any) => ({
+                cantidad: Number(d.cantidad),
+                precio_total: Number(d.precio_total),
+                kilogramos: null,
+                modo_cantidad: "unidad",
+              })),
+          };
+        }
+        // plástico / expo
+        return {
+          nombre: p.nombre,
+          material: p.material || "",
+          calibre: p.calibre || "",
+          tintas: p.tintas ?? 0,
+          caras: p.caras ?? 0,
+          medidasFormateadas: p.medida || "",
+          medidas: {},
+          bk: null, foil: null, laminado: null, uvBr: null,
+          pigmentos: p.pigmentos || null,
+          pantones: p.pantones || null,
+          asa_suaje: p.suaje_tipo || null,
+          observacion: p.observacion || null,
+          descripcion: p.descripcion || null,
+          perforacion: false,
+          por_kilo: null,
+          herramental_descripcion: null,
+          herramental_precio: null,
+          herramental_aprobado: null,
+          detalles: (p.detalles || [])
+            .filter((d: any) => d.aprobado === true)
+            .map((d: any) => ({
+              cantidad: Number(d.cantidad),
+              precio_total: Number(d.precio_total),
+              kilogramos: null,
+              modo_cantidad: "unidad",
+            })),
+        };
+      });
+
+      await generarPdfPedido({
+        no_pedido: folioPedido,
+        no_cotizacion: cot.folio,
+        fecha: cot.fecha,
+        cliente: backData.cliente || "",
+        empresa: backData.impresion || "",
+        telefono: backData.celular || "",
+        correo: backData.correo || "",
+        impresion: backData.impresion ?? null,
+        celular: backData.celular ?? null,
+        razon_social: null,
+        rfc: null,
+        domicilio: null,
+        numero: null,
+        colonia: null,
+        codigo_postal: null,
+        poblacion: backData.ciudad ?? null,
+        estado_cliente: backData.estado_cliente ?? null,
+        cliente_id: backData.cliente_id ?? null,
+        identificar: backData.identificar ?? null,
+        subtotal: Number(venta.subtotal),
+        iva: Number(venta.iva),
+        total: Number(venta.total),
+        anticipo: Number(venta.anticipo),
+        saldo: Number(venta.saldo),
+        productos,
+      }, false);
+    } catch (e) {
+      console.error("❌ PDF Pedido expo:", e);
+      alert("No se pudo generar el PDF del pedido.");
+    } finally {
+      setGenerandoPdf(null);
+    }
   };
 
   return (
@@ -292,9 +420,9 @@ export default function ListaCotizaciones({
         {/* Filtros */}
         <div style={{ padding: "12px 20px 0", display: "flex", gap: 8, flexShrink: 0 }}>
           {([
-            ["todas",      `Todas (${cotizaciones.length})`],
+            ["todas", `Todas (${cotizaciones.length})`],
             ["cotizacion", `Cotización (${totalCots})`],
-            ["pedido",     `Pedido (${totalPeds})`],
+            ["pedido", `Pedido (${totalPeds})`],
           ] as const).map(([key, label]) => (
             <button key={key} onClick={() => setFiltro(key)}
               style={{ background: filtro === key ? "#C9922A22" : "transparent", border: `1px solid ${filtro === key ? "#C9922A" : "#2A2A2A"}`, color: filtro === key ? "#C9922A" : "#777", fontSize: 11, fontWeight: 600, padding: "6px 14px", borderRadius: 20, cursor: "pointer" }}>
@@ -324,20 +452,20 @@ export default function ListaCotizaciones({
           {!loading && (
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {ordenadas.map(cot => {
-                const abierto  = expandidoId === cot.id;
+                const abierto = expandidoId === cot.id;
                 const esPedido = cot.estado === "pedido";
                 const backData = (cot as any)._backData;
                 const productos = backData?.productos || [];
-                const selCot   = selecciones[cot.id] || {};
+                const selCot = selecciones[cot.id] || {};
                 const haySeleccion = Object.values(selCot).some(v => v !== null && v !== undefined);
 
                 const total = esPedido
                   ? productos.reduce((s: number, p: any) => {
-                      const ap = p.detalles?.find((d: any) => d.aprobado === true);
-                      return s + (ap ? Number(ap.precio_total) : 0);
-                    }, 0)
+                    const ap = p.detalles?.find((d: any) => d.aprobado === true);
+                    return s + (ap ? Number(ap.precio_total) : 0);
+                  }, 0)
                   : productos.reduce((s: number, p: any) =>
-                      s + (p.detalles || []).reduce((ss: number, d: any) => ss + Number(d.precio_total), 0), 0);
+                    s + (p.detalles || []).reduce((ss: number, d: any) => ss + Number(d.precio_total), 0), 0);
 
                 return (
                   <div key={cot.id} style={{ background: "#1A1A1A", border: `1px solid ${esPedido ? "#C9922A44" : "#222"}`, borderRadius: 10, overflow: "hidden" }}>
@@ -369,8 +497,12 @@ export default function ListaCotizaciones({
                         <div style={{ color: "#555", fontSize: 9 }}>{esPedido ? "total pedido" : "total cotizado"}</div>
                       </div>
                       <button
-                        onClick={e => { e.stopPropagation(); handleGenerarPdf(cot); }}
-                        title="Descargar PDF"
+                        onClick={e => {
+                          e.stopPropagation();
+                          if (esPedido) handleGenerarPdfPedido(cot);
+                          else handleGenerarPdf(cot);
+                        }}
+                        title={esPedido ? "Descargar PDF pedido" : "Descargar PDF cotización"}
                         style={{ background: "transparent", border: "1px solid #C9922A44", color: "#C9922A", fontSize: 10, fontWeight: 700, padding: "4px 8px", borderRadius: 5, cursor: "pointer", flexShrink: 0 }}>
                         🖨 PDF
                       </button>
@@ -383,19 +515,19 @@ export default function ListaCotizaciones({
                           <div style={{ background: "#1A1A1A", border: "1px solid #262626", borderRadius: 8, padding: "10px 12px", marginBottom: 12 }}>
                             <div style={{ color: "#C9922A", fontSize: 9, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", marginBottom: 8 }}>👤 Datos del cliente</div>
                             <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, marginBottom: 8 }}>
-                              <Dato label="Nombre"  value={backData.cliente} />
+                              <Dato label="Nombre" value={backData.cliente} />
                               <Dato label="Celular" value={backData.celular} />
-                              <Dato label="Correo"  value={backData.correo} />
+                              <Dato label="Correo" value={backData.correo} />
                             </div>
                             <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
                               <Dato label="Empresa" value={backData.impresion} />
-                              <Dato label="Ciudad"  value={backData.ciudad} />
-                              <Dato label="Estado"  value={backData.estado_cliente} />
+                              <Dato label="Ciudad" value={backData.ciudad} />
+                              <Dato label="Estado" value={backData.estado_cliente} />
                             </div>
                             {(backData.clasificacion || backData.intereses?.length > 0) && (
                               <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 10, marginTop: 8, paddingTop: 8, borderTop: "1px solid #222" }}>
                                 <Dato label="Clasificación" value={backData.clasificacion || "—"} />
-                                <Dato label="Le interesa"   value={backData.intereses?.join(", ") || "—"} />
+                                <Dato label="Le interesa" value={backData.intereses?.join(", ") || "—"} />
                               </div>
                             )}
                             {backData.observaciones && (
@@ -444,8 +576,22 @@ export default function ListaCotizaciones({
                             </button>
                           </div>
                         ) : (
-                          <div style={{ width: "100%", background: "#C9922A15", border: "1px solid #C9922A44", borderRadius: 8, padding: "10px", color: "#C9922A", fontSize: 11.5, fontWeight: 600, textAlign: "center", marginTop: 8 }}>
-                            ✓ Pedido aprobado — folio {cot.folioPedido || folioAPedido(cot.folio)}
+                          <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
+                            <div style={{ flex: 1, background: "#C9922A15", border: "1px solid #C9922A44", borderRadius: 8, padding: "10px", color: "#C9922A", fontSize: 11.5, fontWeight: 600, textAlign: "center" }}>
+                              ✓ Pedido aprobado — folio {cot.folioPedido || folioAPedido(cot.folio)}
+                            </div>
+                            <button
+                              onClick={() => handleGenerarPdfPedido(cot)}
+                              disabled={generandoPdf === cot.id}
+                              style={{
+                                background: generandoPdf === cot.id ? "#C9922A55" : "#C9922A",
+                                border: "none", borderRadius: 8, padding: "10px 16px",
+                                fontSize: 12, fontWeight: 700, color: "#1A1A1A",
+                                cursor: generandoPdf === cot.id ? "not-allowed" : "pointer",
+                                flexShrink: 0,
+                              }}>
+                              {generandoPdf === cot.id ? "⏳" : "🖨 PDF Pedido"}
+                            </button>
                           </div>
                         )}
                       </div>

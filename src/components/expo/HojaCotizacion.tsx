@@ -9,7 +9,6 @@ import type { FoilOpcion, TexturaOpcion } from "../../types/papel/cotizacion-pap
 import type { CatalogosPlastico } from "./Tablacontroles";
 import type { PigmentoDB } from "./Tablacontroles";
 
-// ─── Props ────────────────────────────────────────────────────────────────────
 interface Props {
   filas: FilaProducto[]; cliente: string; coment: string; folio: string;
   cant1: string; cant2: string; cant3: string;
@@ -20,7 +19,8 @@ interface Props {
   texturas:       TexturaOpcion[];
   catalogosPlast: CatalogosPlastico;
   pigmentosDB:    PigmentoDB[];
-  coloresAsa:     { id: number; nombre: string }[];  // ← para asa plástico
+  coloresAsa:     { id: number; nombre: string }[];
+  suajesPlast:    { id: number; tipo: string }[];   // ← NUEVO
   asesor:         string;
   setCliente:(v:string)=>void; setComent:(v:string)=>void;
   setCant1:(v:string)=>void; setCant2:(v:string)=>void; setCant3:(v:string)=>void;
@@ -33,7 +33,7 @@ interface Props {
 
 export default function HojaCotizacion({
   filas,cliente,coment,folio,cant1,cant2,cant3,mob,tab,desk,over,catalogoPropio,
-  catalogs, foils, texturas, catalogosPlast, pigmentosDB, coloresAsa, asesor,
+  catalogs, foils, texturas, catalogosPlast, pigmentosDB, coloresAsa, suajesPlast, asesor,
   setCliente,setComent,setCant1,setCant2,setCant3,setOver,
   onDrop,onEdit,onEditNombre,onDel,onAbrirDrawer,onAgregarProducto,
 }:Props){
@@ -166,10 +166,10 @@ export default function HojaCotizacion({
                   catalogosPlast={catalogosPlast}
                   pigmentosDB={pigmentosDB}
                   coloresAsa={coloresAsa}
+                  suajesPlast={suajesPlast}
                 />
               ))}
               {!alcanzoLimite && (
-                // ── ÚNICO CAMBIO: pasar catalogs a FilaVacia ──
                 <FilaVacia
                   onElegir={onAgregarProducto}
                   catalogoPropio={catalogoPropio}

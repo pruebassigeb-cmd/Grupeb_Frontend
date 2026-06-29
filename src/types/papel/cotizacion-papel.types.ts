@@ -19,6 +19,11 @@ export interface AsaOpcion {
   nombre: string;
 }
 
+export interface ColorAsaOpcion {
+  id_color: number;
+  color: string;
+}
+
 export interface LaminadoOpcion {
   idcat_laminado: number;
   nombre: string;
@@ -70,9 +75,11 @@ export interface ProductoPapelCotizacion {
   nombre: string;
   descripcion_papel: string | null;
   medida: string | null;
+  tamano_asa_default?: string | null;
   idgrupo_papel: number | null;
   grupo_descripcion: string;
   precio_sugerido: number | null;
+
   tintasId: number | null;
   tintas: number;
   pantones: string;
@@ -81,9 +88,14 @@ export interface ProductoPapelCotizacion {
   pantonesDentro: string;
   carasId: number | null;
   caras: number;
+
   id_asa: number | null;
   asa_nombre: string | null;
+  id_color: number | null;
+  color_asa_nombre: string | null;
+  asa_color?: string | null;
   tamano_asa: string | null;
+
   idcat_laminado: number | null;
   laminado_nombre: string | null;
   idfoil: number | null;
@@ -92,13 +104,18 @@ export interface ProductoPapelCotizacion {
   textura_nombre: string | null;
   uv: boolean;
   alto_relieve: boolean;
+
   metodo_hojeado: "hojeado" | "guillotina" | null;
   lleva_armado: boolean;
   maquinaria_seleccionada: MaquinariaSeleccionadaPapel;
+
   observacion: string;
   descripcion: string | null;
   cantidades: [number, number, number];
   precios: [number, number, number];
+
   herramental_descripcion?: string | null;
   herramental_precio?: number | null;
+  cargo_adicional_descripcion?: string | null;
+  cargo_adicional_precio?: number | null;
 }

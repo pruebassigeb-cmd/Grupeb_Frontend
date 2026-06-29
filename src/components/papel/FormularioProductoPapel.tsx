@@ -7,6 +7,7 @@ import {
   mapearOpciones,
   getFoils,
   getTexturas,
+  getColoresAsa,
 } from "../../services/papel/papelCotizacionService";
 import { crearProductoPapel } from "../../services/papel/papel.service";
 import type {
@@ -16,6 +17,7 @@ import type {
   LaminadoOpcion,
   FoilOpcion,
   TexturaOpcion,
+  ColorAsaOpcion,
   ProductoPapelCotizacion,
 } from "../../types/papel/cotizacion-papel.types";
 import FormularioProductoPapelAlta from "./FormularioProductoPapelAlta";
@@ -54,6 +56,11 @@ const nuevoSpecs = () => ({
   carasId: null as number | null,
   caras: 0,
   id_asa: null as number | null,
+  // FIX: id_color e color_asa_nombre se inicializan explícitamente en null
+  // para que TypeScript los rastree como campos reales del estado y no los
+  // pierda cuando el objeto specs se recrea (ej. al cambiar producto).
+  id_color: null as number | null,
+  color_asa_nombre: null as string | null,
   tamano_asa: "",
   idcat_laminado: null as number | null,
   idfoil: null as number | null,
@@ -100,7 +107,8 @@ export default function FormularioProductoPapel({
 
   const [foils, setFoils] = useState<FoilOpcion[]>([]);
   const [texturas, setTexturas] = useState<TexturaOpcion[]>([]);
-
+const [coloresAsa, setColoresAsa] = useState<ColorAsaOpcion[]>([]);
+const [loadingColores, setLoadingColores] = useState(true);
   const [specs, setSpecs] = useState(nuevoSpecs());
   const [inputsPantones, setInputsPantones] = useState<string[]>([]);
   const [usaTintasDentro, setUsaTintasDentro] = useState(false);
@@ -170,6 +178,33 @@ export default function FormularioProductoPapel({
   }, []);
 
   useEffect(() => {
+  setLoadingColores(true);
+  getColoresAsa()
+    .then((data) => {
+      const lista = Array.isArray(data) ? data : [];
+      setColoresAsa(lista);
+      setSpecs((prev) => {
+        if (prev.id_color != null && !prev.color_asa_nombre) {
+          const found = lista.find((c) => c.id_color === prev.id_color);
+          if (found) return { ...prev, color_asa_nombre: found.color };
+        }
+        if (prev.id_color == null && prev.color_asa_nombre) {
+          const found = lista.find(
+            (c) => c.color.toLowerCase() === prev.color_asa_nombre!.toLowerCase()
+          );
+          if (found) return { ...prev, id_color: found.id_color };
+        }
+        return prev;
+      });
+    })
+    .catch((error) => {
+      console.error("Error cargando colores de asa:", error);
+      setColoresAsa([]);
+    })
+    .finally(() => setLoadingColores(false));
+}, []);
+
+  useEffect(() => {
     setInputsPantones((prev) =>
       Array(specs.tintas)
         .fill("")
@@ -185,6 +220,9 @@ export default function FormularioProductoPapel({
     );
   }, [specs.tintasDentro]);
 
+  // FIX: Este efecto SOLO actualiza carasId y caras, y usa la forma
+  // funcional de setSpecs para no depender del valor actual de specs
+  // en el closure — así no puede borrar accidentalmente id_color.
   useEffect(() => {
     const auto = calcularCarasAutomaticas();
     setSpecs((prev) => {
@@ -193,6 +231,7 @@ export default function FormularioProductoPapel({
         Number(prev.caras ?? 0) === auto.caras
       )
         return prev;
+      // Solo sobreescribe carasId y caras; el resto (incluido id_color) se preserva.
       return { ...prev, carasId: auto.carasId, caras: auto.caras };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -212,6 +251,21 @@ export default function FormularioProductoPapel({
       descripcion_papel: productoEditando.descripcion_papel,
       medida: productoEditando.medida,
     });
+
+    const idColorRestaurado = productoEditando.id_color ?? null;
+    const nombreColorRestaurado =
+      productoEditando.color_asa_nombre ??
+      (productoEditando as any).asa_color ??
+      null;
+
+    let idColorFinal = idColorRestaurado;
+    if (idColorFinal == null && nombreColorRestaurado && coloresAsa.length > 0) {
+      const encontrado = coloresAsa.find(
+        (c) => c.color.toLowerCase() === nombreColorRestaurado.toLowerCase(),
+      );
+      if (encontrado) idColorFinal = encontrado.id_color;
+    }
+
     setSpecs({
       idgrupo_papel: productoEditando.idgrupo_papel,
       grupo_descripcion: productoEditando.grupo_descripcion,
@@ -225,6 +279,8 @@ export default function FormularioProductoPapel({
       carasId: productoEditando.carasId,
       caras: productoEditando.caras,
       id_asa: productoEditando.id_asa,
+      id_color: idColorFinal,
+      color_asa_nombre: nombreColorRestaurado,
       tamano_asa: productoEditando.tamano_asa ?? "",
       idcat_laminado: productoEditando.idcat_laminado,
       idfoil: productoEditando.idfoil,
@@ -287,7 +343,6 @@ export default function FormularioProductoPapel({
         ? productoEditando.precios[2].toFixed(4)
         : "",
     ]);
-    // Herramental al editar
     setHerramentalDescripcion(
       (productoEditando as any).herramental_descripcion || "",
     );
@@ -302,6 +357,24 @@ export default function FormularioProductoPapel({
     );
     cargarDetalleProducto(productoEditando.idproducto_papel);
   }, [productoEditando]);
+
+  // AGREGAR después del useEffect de productoEditando:
+useEffect(() => {
+  if (loadingColores || coloresAsa.length === 0) return;
+  setSpecs((prev) => {
+    if (prev.id_color != null && !prev.color_asa_nombre) {
+      const found = coloresAsa.find((c) => c.id_color === prev.id_color);
+      if (found) return { ...prev, color_asa_nombre: found.color };
+    }
+    if (prev.id_color == null && prev.color_asa_nombre) {
+      const found = coloresAsa.find(
+        (c) => c.color.toLowerCase() === prev.color_asa_nombre!.toLowerCase()
+      );
+      if (found) return { ...prev, id_color: found.id_color };
+    }
+    return prev;
+  });
+}, [loadingColores, coloresAsa]);
 
   const resetForm = () => {
     setProductoSel(null);
@@ -387,6 +460,8 @@ export default function FormularioProductoPapel({
     setProductoSel(p);
     setMostrarModal(false);
     setBusqueda("");
+    // Al cambiar de producto se reinicia todo el formulario porque el nuevo
+    // producto puede tener asas y colores completamente distintos.
     setSpecs(nuevoSpecs());
     setInputsPantones([]);
     setUsaTintasDentro(false);
@@ -493,6 +568,21 @@ export default function FormularioProductoPapel({
     aplicarSugerido(g.precio_sugerido);
   };
 
+  // FIX: handleColorAsa ahora también actualiza color_asa_nombre de forma
+  // garantizada usando el catálogo local. Antes podía quedar desincronizado
+  // si coloresAsa tardaba en cargarse o si el usuario cambiaba el asa
+  // primero y el color después.
+  const handleColorAsa = (idStr: string) => {
+    const idColor = idStr ? Number(idStr) : null;
+    const color = coloresAsa.find((item) => item.id_color === idColor) ?? null;
+
+    setSpecs((prev) => ({
+      ...prev,
+      id_color: idColor,
+      color_asa_nombre: color?.color ?? null,
+    }));
+  };
+
   const handleTintas = (idStr: string) => {
     const t = tintasPapel.find((x) => x.id === Number(idStr));
     setSpecs((prev) => ({
@@ -578,12 +668,30 @@ export default function FormularioProductoPapel({
       (t) => t.idcat_textura === specs.idcat_textura,
     );
 
+    // FIX: id_color y color_asa_nombre se resuelven desde specs directamente.
+    // NO se condicionan a que asaSel exista en este momento — la condición
+    // de "solo guardar si hay asa" la aplica el backend. Aquí solo enviamos
+    // lo que el usuario seleccionó. Si el usuario eligió asa+color y luego
+    // deseleccionó el asa, tanto id_asa como id_color quedarán en null
+    // porque handleAsa ya los limpia en ese caso.
+    const idColorFinal = specs.id_asa ? (specs.id_color ?? null) : null;
+    let colorNombreFinal = specs.id_asa ? (specs.color_asa_nombre ?? null) : null;
+    if (idColorFinal != null && !colorNombreFinal && coloresAsa.length > 0) {
+      const found = coloresAsa.find((c) => c.id_color === idColorFinal);
+      if (found) colorNombreFinal = found.color;
+    }
+
     const herramentalPrecioFinal =
       herramentalPrecioTexto !== ""
         ? parseFloat(herramentalPrecioTexto) || null
         : null;
     const herramentalDescFinal = herramentalDescripcion.trim() || null;
     const carasFinales = calcularCarasAutomaticas();
+
+    // Log de diagnóstico — confirma que id_color llega al payload.
+    console.log(
+      `🎨 handleAgregar papel: id_asa=${specs.id_asa} | id_color=${specs.id_color} | id_color enviado=${idColorFinal} | color_asa_nombre=${colorNombreFinal}`
+    );
 
     const producto: ProductoPapelCotizacion = {
       tipoCotizacion: "papel",
@@ -604,6 +712,12 @@ export default function FormularioProductoPapel({
       caras: carasFinales.caras,
       id_asa: specs.id_asa,
       asa_nombre: asaSel?.nombre ?? null,
+      // FIX: se usan las variables resueltas arriba, no el acceso directo
+      // a specs dentro de una expresión condicional que podría evaluarse
+      // en el momento equivocado del ciclo de renders.
+      id_color: idColorFinal,
+      color_asa_nombre: colorNombreFinal,
+      asa_color: colorNombreFinal,
       tamano_asa: specs.id_asa ? specs.tamano_asa.trim() || null : null,
       idcat_laminado: specs.idcat_laminado,
       laminado_nombre: lamSel?.nombre ?? null,
@@ -617,13 +731,11 @@ export default function FormularioProductoPapel({
       alto_relieve: specs.alto_relieve,
       metodo_hojeado: specs.metodo_hojeado,
       lleva_armado: specs.lleva_armado,
-      // Se conserva al editar, pero se configura en un paso independiente.
       maquinaria_seleccionada: specs.maquinaria_seleccionada,
       observacion: specs.observacion,
       descripcion: specs.descripcion,
       cantidades: specs.cantidades,
       precios: specs.precios,
-      // ── Herramental ──────────────────────────────────────────────────
       herramental_descripcion: herramentalDescFinal,
       herramental_precio: herramentalPrecioFinal,
     } as any;
@@ -1029,8 +1141,6 @@ export default function FormularioProductoPapel({
               </div>
             </div>
 
-            {/* La configuración de procesos de papel se realiza en el modal final. */}
-
             {/* Tintas y Caras */}
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -1154,7 +1264,7 @@ export default function FormularioProductoPapel({
               )}
             </div>
 
-            {/* Asa y Laminado */}
+            {/* Asa, Color de Asa y Laminado */}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -1165,13 +1275,16 @@ export default function FormularioProductoPapel({
                 </label>
                 <select
                   value={specs.id_asa ?? ""}
-                  onChange={(e) =>
+                  onChange={(e) => {
+                    const nuevoIdAsa = e.target.value ? Number(e.target.value) : null;
                     setSpecs((prev) => ({
                       ...prev,
-                      id_asa: e.target.value ? Number(e.target.value) : null,
-                      tamano_asa: e.target.value ? prev.tamano_asa : "",
-                    }))
-                  }
+                      id_asa: nuevoIdAsa,
+                      id_color: nuevoIdAsa ? prev.id_color : null,
+                      color_asa_nombre: nuevoIdAsa ? prev.color_asa_nombre : null,
+                      tamano_asa: nuevoIdAsa ? prev.tamano_asa : "",
+                    }));
+                  }}
                   className={selectCls}
                   disabled={asas.length === 0}
                 >
@@ -1184,6 +1297,40 @@ export default function FormularioProductoPapel({
                     </option>
                   ))}
                 </select>
+
+                <label className="block text-sm font-medium text-gray-700 mt-3 mb-1">
+                  Color de asa{" "}
+                  <span className="text-xs text-gray-400 font-normal">
+                    (opcional)
+                  </span>
+                </label>
+                <select
+                  value={specs.id_color ?? ""}
+                  onChange={(e) => handleColorAsa(e.target.value)}
+                  className={selectCls}
+                  disabled={!specs.id_asa || loadingColores}
+                >
+                  <option value="">
+                    {loadingColores
+                      ? "Cargando colores..."
+                      : coloresAsa.length === 0
+                        ? "Sin colores registrados"
+                        : "Sin color"}
+                  </option>
+                  {!loadingColores && coloresAsa.map((color) => (
+                    <option key={color.id_color} value={color.id_color}>
+                      {color.color}
+                    </option>
+                  ))}
+                </select>
+                {/* FIX: indicador visual del color seleccionado para confirmar
+                    que el estado se actualizó correctamente antes de agregar. */}
+                {specs.id_asa && specs.color_asa_nombre && (
+                  <p className="text-xs text-amber-600 mt-1">
+                    ✓ Color: <strong>{specs.color_asa_nombre}</strong>
+                  </p>
+                )}
+
                 <label className="block text-sm font-medium text-gray-700 mt-3 mb-1">
                   Tamaño de asa{" "}
                   <span className="text-xs text-gray-400 font-normal">

@@ -6,6 +6,7 @@ import type {
   LaminadoOpcion,
   FoilOpcion,
   TexturaOpcion,
+  ColorAsaOpcion,
   MaquinariaProducto,
 } from "../../types/papel/cotizacion-papel.types";
 
@@ -90,4 +91,15 @@ export const getTexturas = async (): Promise<TexturaOpcion[]> => {
     idcat_textura: Number(item.idcat_textura ?? item.id),
     nombre: item.nombre,
   }));
+};
+
+export const getColoresAsa = async (): Promise<ColorAsaOpcion[]> => {
+  try {
+    const { data } = await api.get("/cotizaciones/colores-asa");
+    return Array.isArray(data) ? data : [];
+  } catch (error: any) {
+    if (error?.response?.status && error.response.status !== 404) throw error;
+    const { data } = await api.get("/colores-asa");
+    return Array.isArray(data) ? data : [];
+  }
 };

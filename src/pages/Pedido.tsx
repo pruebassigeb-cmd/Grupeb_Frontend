@@ -170,8 +170,8 @@ export default function Pedidos() {
       perforacion: false,
       por_kilo: null,
       herramental_descripcion: p.herramental_descripcion ?? null,  // ← fix herramental
-    herramental_precio: p.herramental_precio != null ? Number(p.herramental_precio) : null,  // ← fix herramental
-    herramental_aprobado: p.herramental_aprobado ?? null,        // ← fix herramental
+      herramental_precio: p.herramental_precio != null ? Number(p.herramental_precio) : null,  // ← fix herramental
+      herramental_aprobado: p.herramental_aprobado ?? null,        // ← fix herramental
       detalles: (p.detalles || []).map((d: any) => ({
         cantidad: d.cantidad,
         precio_total: d.precio_total,
@@ -262,7 +262,7 @@ export default function Pedidos() {
             esLineaPapel(item) &&
             Number(item.idproducto_papel) === Number(prod.idproducto_papel) &&
             Number(item.idgrupo_papel ?? 0) ===
-              Number(prod.idgrupo_papel ?? 0)
+            Number(prod.idgrupo_papel ?? 0)
         );
         const base = buildPapelPdf({
           ...prod,
@@ -419,8 +419,8 @@ export default function Pedidos() {
     } catch (e: any) {
       setErrorGuardar(
         e.response?.data?.error ||
-          e.message ||
-          "No se pudo guardar la maquinaria"
+        e.message ||
+        "No se pudo guardar la maquinaria"
       );
     } finally {
       setGuardando(false);
@@ -801,6 +801,16 @@ export default function Pedidos() {
                                         {p.caras && <span>Caras: {p.caras}</span>}
                                       </div>
                                       {p.pantones && <p className="text-xs text-purple-600 mt-0.5">🎨 {Array.isArray(p.pantones) ? p.pantones.join(", ") : p.pantones}</p>}
+                                      {p.asa_suaje && (
+                                        <p className="text-xs text-blue-600 mt-0.5">
+                                          Asa: {p.asa_suaje}{p.color_asa_nombre ? ` · ${p.color_asa_nombre}` : ""}
+                                        </p>
+                                      )}
+                                      {!p.asa_suaje && p.suaje_tipo && (
+                                        <p className="text-xs text-blue-600 mt-0.5">
+                                          Asa: {p.suaje_tipo}{p.color_asa_nombre ? ` · ${p.color_asa_nombre}` : ""}
+                                        </p>
+                                      )}
                                       {p.pigmentos && <p className="text-xs text-orange-600 mt-0.5">🧪 {p.pigmentos}</p>}
                                       {p.observacion && <p className="text-xs text-gray-500 mt-1 italic">Obs: {p.observacion}</p>}
                                     </>

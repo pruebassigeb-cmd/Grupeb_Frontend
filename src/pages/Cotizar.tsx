@@ -341,7 +341,7 @@ export default function Cotizaciones() {
         detalles: esPedido ? p.detalles.filter(d => d.aprobado === true) : p.detalles,
       }))
     );
-     console.log("DESCARGA PDF - productos:", JSON.stringify(
+    console.log("DESCARGA PDF - productos:", JSON.stringify(
       productosParaPdf.map(p => ({
         nombre: (p as any).nombre,
         tipo_material: (p as any).tipo_material,
@@ -665,6 +665,16 @@ export default function Cotizaciones() {
                                     <>
                                       {p.medidasFormateadas && <p className="text-xs text-gray-400 mt-0.5">Medidas: {p.medidasFormateadas}</p>}
                                       {p.pantones && <p className="text-xs text-purple-600 mt-0.5">🎨 {Array.isArray(p.pantones) ? p.pantones.join(", ") : p.pantones}</p>}
+                                      {p.asa_suaje && (
+                                        <p className="text-xs text-blue-600 mt-0.5">
+                                          Asa: {p.asa_suaje}{p.color_asa_nombre ? ` · ${p.color_asa_nombre}` : ""}
+                                        </p>
+                                      )}
+                                      {!p.asa_suaje && p.suaje_tipo && (
+                                        <p className="text-xs text-blue-600 mt-0.5">
+                                          Asa: {p.suaje_tipo}{p.color_asa_nombre ? ` · ${p.color_asa_nombre}` : ""}
+                                        </p>
+                                      )}
                                       {p.pigmentos && <p className="text-xs text-orange-600 mt-0.5">🧪 {p.pigmentos}</p>}
                                       {p.herramental_precio != null && p.herramental_precio > 0 && (
                                         <p className="text-xs text-amber-700 mt-0.5">
@@ -728,9 +738,9 @@ export default function Cotizaciones() {
                 <p className="text-blue-700 text-sm">Guardando cotización y generando PDF...</p>
               </div>
             )}
-            
+
             <FormularioCotizacion
-             onSubmit={handleSubmit} onCancel={() => setModalOpen(false)} catalogos={catalogos} />
+              onSubmit={handleSubmit} onCancel={() => setModalOpen(false)} catalogos={catalogos} />
           </div>
         )}
       </Modal>

@@ -37,13 +37,11 @@ export interface Producto {
   perforado?:    boolean;
   configuracion_plastico_id?: number;
   idproducto_papel?:          number;
-  // ── Campos papel sistema ──
   idgrupo_papel?:     number;
   grupo_descripcion?: string;
   tintasId?:          number;
   carasId?:           number;
-  // ── Campos de origen para futura conversión a producto del sistema ──
-  origen?:          string;
+  origen?:            string;
 }
 
 export interface FilaProducto {
@@ -64,8 +62,9 @@ export interface FilaProducto {
   idTextura:    number | null;
   uv:           boolean;
   asa:          boolean;
-  tipoAsa:      string;
-  idAsa:        number | null;
+  tipoAsa:      string;   // plástico = nombre del color ("Azul"); papel = nombre tipo asa
+  idAsa:        number | null;  // plástico = id_color; papel = idcat_tipo_asa
+  idSuaje:      number | null;  // plástico = idsuaje (1=flexible, 3=rígida); papel = null
   tintas:       string;
   otro:         string;
   medida:       string;
@@ -195,37 +194,43 @@ export const sumarTotales = (filas: FilaProducto[]) => ({
   precio3: filas.reduce((acc, f) => acc + _num(f.precio3), 0),
 });
 
-export const filaDesdeProducto = (p: Producto): FilaProducto => ({
-  uid:          uid(),
-  producto:     p,
-  precio1:      p.precio500,
-  precio2:      p.precio1000,
-  precio3:      p.precio3000,
-  laminacion:   p.laminacion,
-  tipoLaminado: p.tipoLaminado || "",
-  idLaminado:   null,
-  hs:           p.hs,
-  tipoHs:       p.tipoHs || "",
-  idFoil:       null,
-  ar:           p.ar,
-  textura:      p.textura,
-  tipoTextura:  p.tipoTextura || "",
-  idTextura:    null,
-  uv:           p.uv,
-  asa:          p.asa,
-  tipoAsa:      p.tipoAsa || "",
-  idAsa:        null,
-  tintas:       p.tintas || (p.categoria === "plastico" ? "1" : "1x0"),
-  otro:         p.otro || "",
-  medida:       p.medida || "",
-  material:     p.material || "",
-  calibre:      p.calibre || "",
-  tipoPlastico: p.categoria === "plastico" ? (p.tipoProducto || p.tipo || "") : "",
-  modoExtra:    "precio",
-  extra:        "",
-  pigmento:     "",
-  pantones:     null,
-});
+export const filaDesdeProducto = (p: Producto): FilaProducto => {
+  const esPlastico = p.categoria === "plastico";
+  const esPapelOCarton = p.categoria === "papel" || p.categoria === "carton";
+  return {
+    uid:          uid(),
+    producto:     p,
+    precio1:      p.precio500,
+    precio2:      p.precio1000,
+    precio3:      p.precio3000,
+    laminacion:   esPapelOCarton ? p.laminacion : false,
+    tipoLaminado: esPapelOCarton ? (p.tipoLaminado || "") : "",
+    idLaminado:   null,
+    hs:           esPapelOCarton ? p.hs : false,
+    tipoHs:       esPapelOCarton ? (p.tipoHs || "") : "",
+    idFoil:       null,
+    ar:           esPapelOCarton ? p.ar : false,
+    textura:      esPapelOCarton ? p.textura : false,
+    tipoTextura:  esPapelOCarton ? (p.tipoTextura || "") : "",
+    idTextura:    null,
+    uv:           esPapelOCarton ? p.uv : false,
+    asa:          p.asa,
+    tipoAsa:      p.tipoAsa || "",
+    idAsa:        null,
+    idSuaje:      null,
+    tintas:       p.tintas || (esPlastico ? "1" : "1x0"),
+    otro:         p.otro || "",
+    medida:       p.medida || "",
+    // Solo inicializar material y calibre para la categoría correcta
+    material:     p.material || "",
+    calibre:      p.calibre || "",
+    tipoPlastico: esPlastico ? (p.tipoProducto || p.tipo || "") : "",
+    modoExtra:    "precio",
+    extra:        "",
+    pigmento:     "",
+    pantones:     null,
+  };
+};
 
 export const mapearCatalogoExpoAProducto = (p: {
   idcatalogo_expo:   number;
@@ -251,7 +256,6 @@ export const mapearCatalogoExpoAProducto = (p: {
   precio_3000:       number | null;
   imagen_url:        string | null;
   tipo_producto:     string | null;
-  // ── Medidas desglosadas ──
   altura?:           number | null;
   ancho?:            number | null;
   fuelle?:           number | null;
@@ -260,42 +264,45 @@ export const mapearCatalogoExpoAProducto = (p: {
   fuelle_lateral_de?: number | null;
   refuerzo?:         number | null;
   origen?:           string | null;
-}): Producto => ({
-  id:           p.idcatalogo_expo,
-  fuente:       "expo",
-  nombre:       p.nombre,
-  categoria:    p.categoria,
-  medida:       p.medida         || "",
-  material:     p.material       || "",
-  calibre:      p.calibre        || "",
-  tintas:       p.tintas         || (p.categoria === "plastico" ? "1" : "1x0"),
-  laminacion:   p.laminacion,
-  tipoLaminado: p.tipo_laminado  || "",
-  hs:           p.hs,
-  tipoHs:       p.tipo_hs        || "",
-  ar:           p.ar,
-  textura:      p.textura,
-  tipoTextura:  p.tipo_textura   || "",
-  uv:           p.uv,
-  asa:          p.asa,
-  tipoAsa:      p.tipo_asa       || "",
-  otro:         p.otro           || "",
-  precio500:    p.precio_500  != null ? `$${Number(p.precio_500).toFixed(2)}`  : "",
-  precio1000:   p.precio_1000 != null ? `$${Number(p.precio_1000).toFixed(2)}` : "",
-  precio3000:   p.precio_3000 != null ? `$${Number(p.precio_3000).toFixed(2)}` : "",
-  imagen:       p.imagen_url     || "",
-  tipo:         p.categoria === "plastico" ? (p.tipo_producto || "") : "",
-  tipoProducto: p.categoria === "plastico" ? (p.tipo_producto || "") : "",
-  // ── Medidas desglosadas ──
-  altura:      p.altura            != null ? String(p.altura)            : "",
-  ancho:       p.ancho             != null ? String(p.ancho)             : "",
-  fuelle:      p.fuelle            != null ? String(p.fuelle)            : "",
-  fuelFondo:   p.fuelle_fondo      != null ? String(p.fuelle_fondo)      : "",
-  fuelLateral: p.fuelle_lateral_iz != null ? String(p.fuelle_lateral_iz) : "",
-  fuelLateral2:p.fuelle_lateral_de != null ? String(p.fuelle_lateral_de) : "",
-  refuerzo:    p.refuerzo          != null ? String(p.refuerzo)          : "",
-  origen:      p.origen            || "expo",
-});
+}): Producto => {
+  const esPlastico = p.categoria === "plastico";
+  const esPapelOCarton = p.categoria === "papel" || p.categoria === "carton";
+  return {
+    id:           p.idcatalogo_expo,
+    fuente:       "expo",
+    nombre:       p.nombre,
+    categoria:    p.categoria,
+    medida:       p.medida         || "",
+    material:     p.material       || "",
+    calibre:      p.calibre        || "",
+    tintas:       p.tintas         || (esPlastico ? "1" : "1x0"),
+    laminacion:   esPapelOCarton ? p.laminacion : false,
+    tipoLaminado: esPapelOCarton ? (p.tipo_laminado || "") : "",
+    hs:           esPapelOCarton ? p.hs : false,
+    tipoHs:       esPapelOCarton ? (p.tipo_hs || "") : "",
+    ar:           esPapelOCarton ? p.ar : false,
+    textura:      esPapelOCarton ? p.textura : false,
+    tipoTextura:  esPapelOCarton ? (p.tipo_textura || "") : "",
+    uv:           esPapelOCarton ? p.uv : false,
+    asa:          p.asa,
+    tipoAsa:      p.tipo_asa       || "",
+    otro:         p.otro           || "",
+    precio500:    p.precio_500  != null ? `$${Number(p.precio_500).toFixed(2)}`  : "",
+    precio1000:   p.precio_1000 != null ? `$${Number(p.precio_1000).toFixed(2)}` : "",
+    precio3000:   p.precio_3000 != null ? `$${Number(p.precio_3000).toFixed(2)}` : "",
+    imagen:       p.imagen_url     || "",
+    tipo:         esPlastico ? (p.tipo_producto || "") : "",
+    tipoProducto: esPlastico ? (p.tipo_producto || "") : "",
+    altura:       p.altura            != null ? String(p.altura)            : "",
+    ancho:        p.ancho             != null ? String(p.ancho)             : "",
+    fuelle:       esPapelOCarton && p.fuelle != null ? String(p.fuelle)    : "",
+    fuelFondo:    esPlastico && p.fuelle_fondo      != null ? String(p.fuelle_fondo)      : "",
+    fuelLateral:  esPlastico && p.fuelle_lateral_iz != null ? String(p.fuelle_lateral_iz) : "",
+    fuelLateral2: esPlastico && p.fuelle_lateral_de != null ? String(p.fuelle_lateral_de) : "",
+    refuerzo:     esPlastico && p.refuerzo          != null ? String(p.refuerzo)          : "",
+    origen:       p.origen            || "expo",
+  };
+};
 
 const normalizarMaterialPlastico = (material: string | null): string => {
   const m = (material || "").toLowerCase();
@@ -324,23 +331,30 @@ export const mapearPlasticoSistemaAProducto = (p: {
     calibre,
     tintas:       "1",
     laminacion:   false,
+    tipoLaminado: "",
     hs:           false,
+    tipoHs:       "",
     ar:           false,
     textura:      false,
+    tipoTextura:  "",
     uv:           false,
     asa:          false,
+    tipoAsa:      "",
     otro:         "",
     precio500:    "",
     precio1000:   "",
     precio3000:   "",
     imagen:       "",
+    tipo:         "",
+    tipoProducto: "",
     configuracion_plastico_id: p.id,
-    // Medidas desglosadas del sistema
     altura:      p.altura       != null ? String(p.altura)       : "",
     ancho:       p.ancho        != null ? String(p.ancho)        : "",
     fuelFondo:   p.fuelle_fondo != null ? String(p.fuelle_fondo) : "",
     fuelLateral: p.fuelle_latiz != null ? String(p.fuelle_latiz) : "",
     fuelLateral2:p.fuelle_latde != null ? String(p.fuelle_latde) : "",
+    fuelle:      "",
+    refuerzo:    "",
     origen:      "sistema",
   };
 };
@@ -361,22 +375,29 @@ export const mapearPapelSistemaAProducto = (p: {
   calibre:      "",
   tintas:       "1x0",
   laminacion:   false,
+  tipoLaminado: "",
   hs:           false,
+  tipoHs:       "",
   ar:           false,
   textura:      false,
+  tipoTextura:  "",
   uv:           false,
   asa:          false,
+  tipoAsa:      "",
   otro:         "",
   precio500:    "",
   precio1000:   "",
   precio3000:   "",
   imagen:       "",
   idproducto_papel: p.id,
-  tipo:         "",   // papel nunca tiene tipo de bolsa plástico
-  tipoProducto: "",   // ídem
-  // Medidas desglosadas del sistema
+  tipo:         "",
+  tipoProducto: "",
   ancho:   p.ancho  != null ? String(p.ancho)  : "",
   fuelle:  p.fuelle != null ? String(p.fuelle) : "",
   altura:  p.altura != null ? String(p.altura) : "",
+  fuelFondo:    "",
+  fuelLateral:  "",
+  fuelLateral2: "",
+  refuerzo:     "",
   origen:  "sistema",
 });

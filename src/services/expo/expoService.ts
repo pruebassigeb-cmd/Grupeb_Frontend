@@ -1,8 +1,6 @@
 import api from "../api";
 import type { ClienteExpo, FilaProducto } from "../../types/expo/expo.types";
 
-// ─── Tipos base ────────────────────────────────────────────────────────────────
-
 export interface ProductoCatalogoExpo {
   idcatalogo_expo: number;
   nombre: string;
@@ -23,16 +21,15 @@ export interface ProductoCatalogoExpo {
   precio_1000: number | null;
   precio_3000: number | null;
   imagen_url: string | null;
-  tipo_producto: string | null;  // ← agregado
+  tipo_producto: string | null;
 }
 
 export interface CatalogoSistema {
   plastico:   any[];
   papel:      any[];
-  coloresAsa: { id: number; nombre: string }[];  // ← agregado
+  coloresAsa: { id: number; nombre: string }[];
 }
 
-// ── Tipo para clientes expo tal como los devuelve el backend ──────────────────
 export interface ClienteExpoAPI {
   idclientes:    number;
   nombre:        string | null;
@@ -204,10 +201,6 @@ export const eliminarCotizacionExpo = async (folio: string): Promise<void> => {
   await api.delete(`/expo/cotizaciones/${folio}`);
 };
 
-// ═══════════════════════════════════════════════════════════
-// crearCotizacionExpo
-// ═══════════════════════════════════════════════════════════
-
 export const crearCotizacionExpo = async (payload: {
   clienteId:    number;
   productos:    any[];
@@ -307,6 +300,7 @@ export const mapearProductoAPayload = (
   cant3: string = "3,000",
 ): any => {
   const p = fila.producto;
+    console.log("[PAYLOAD] fuente:", p.fuente, "categoria:", p.categoria, "nombre:", p.nombre); // ← AQUÍ
 
   const parseP = (s: string) => parseFloat(s.replace(/[^0-9.]/g, "")) || 0;
 
@@ -320,7 +314,7 @@ export const mapearProductoAPayload = (
   const c2 = parseCant(cant2);
   const c3 = parseCant(cant3);
 
-  // ── Producto de PAPEL (del sistema SIGEB) ──
+  // ── Papel del sistema SIGEB ──────────────────────────────────────────────
   if (p.fuente === "sistema" && p.categoria === "papel") {
     return {
       tipoCotizacion:   "papel",
@@ -351,7 +345,7 @@ export const mapearProductoAPayload = (
     };
   }
 
-  // ── Producto EXPO de papel/cartón ──
+  // ── Papel expo propio ────────────────────────────────────────────────────
   if (p.fuente === "expo" && (p.categoria === "papel" || p.categoria === "carton")) {
     return {
       tipoCotizacion:  "expo_papel",
@@ -372,7 +366,11 @@ export const mapearProductoAPayload = (
     };
   }
 
-  // ── Plástico del sistema o catálogo expo ──
+  // ── Plástico (sistema o expo) ────────────────────────────────────────────
+  // Para plástico expo:
+  //   idSuaje = idsuaje (1=flexible, 3=rígida) — elegido por el usuario
+  //   idAsa   = id_color del color del asa
+  //   tipoAsa = nombre del color ("Azul", "Negro", etc.)
   return {
     tipoCotizacion:            "plastico",
     tipo_material:             "plastico",
@@ -383,8 +381,9 @@ export const mapearProductoAPayload = (
     id_laminado: fila.idLaminado ?? null,
     idfoil:      fila.idFoil     ?? null,
     id_textura:  fila.idTextura  ?? null,
-    id_asa:      fila.idAsa      ?? null,
-    tipoAsa:     fila.tipoAsa    || null,
+    // Asa plástico — manda idsuaje e id_color por separado
+    idsuaje:     fila.idSuaje   ?? null,   // tipo (1=flexible, 3=rígida)
+    id_color:    fila.idAsa     ?? null,   // color (id_color de color_asa)
     uv:          fila.uv,
     ar:          fila.ar,
     pigmento:    fila.modoExtra === "pigmento" ? (fila.pigmento || null) : null,
