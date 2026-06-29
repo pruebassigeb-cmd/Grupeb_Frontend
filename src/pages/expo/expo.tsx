@@ -25,7 +25,7 @@ import {
 import { useCatalogosPapel } from "../../hooks/papel/useCatalogosPapel";
 import { getFoils, getTexturas } from "../../services/papel/papelCotizacionService";
 import type { FoilOpcion, TexturaOpcion } from "../../types/papel/cotizacion-papel.types";
-import type { CatalogosPlastico, PigmentoDB } from "../../components/expo/TablaControles";
+import type { CatalogosPlastico, PigmentoDB } from "../../components/expo/Tablacontroles";
 import { getTiposInsumo, buscarInsumos } from "../../services/proveedoresService";
 import { useAuth } from "../../context/AuthContext";
 import { generarPdfCotizacionExpo } from "../../utils/expo/generarPdfCotizacionExpo";

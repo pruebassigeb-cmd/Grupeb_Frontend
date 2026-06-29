@@ -1,13 +1,13 @@
 import {
   FilaTabla, FilaVacia, CantidadSelect,
   TH, TH2, THD, TD,
-} from "./TablaControles";
+} from "./Tablacontroles";
 import type { FilaProducto, Producto } from "../../types/expo/expo.types";
 import { TODAY } from "../../types/expo/expo.types";
 import type { Catalogs } from "../../types/papel/papel.types";
 import type { FoilOpcion, TexturaOpcion } from "../../types/papel/cotizacion-papel.types";
-import type { CatalogosPlastico } from "./TablaControles";
-import type { PigmentoDB } from "./TablaControles";
+import type { CatalogosPlastico } from "./Tablacontroles";
+import type { PigmentoDB } from "./Tablacontroles";
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 interface Props {
