@@ -220,7 +220,7 @@ export const filaDesdeProducto = (p: Producto): FilaProducto => ({
   medida:       p.medida || "",
   material:     p.material || "",
   calibre:      p.calibre || "",
-  tipoPlastico: p.tipoProducto || p.tipo || "",
+  tipoPlastico: p.categoria === "plastico" ? (p.tipoProducto || p.tipo || "") : "",
   modoExtra:    "precio",
   extra:        "",
   pigmento:     "",
@@ -284,8 +284,8 @@ export const mapearCatalogoExpoAProducto = (p: {
   precio1000:   p.precio_1000 != null ? `$${Number(p.precio_1000).toFixed(2)}` : "",
   precio3000:   p.precio_3000 != null ? `$${Number(p.precio_3000).toFixed(2)}` : "",
   imagen:       p.imagen_url     || "",
-  tipo:         p.tipo_producto  || "",
-  tipoProducto: p.tipo_producto  || "",
+  tipo:         p.categoria === "plastico" ? (p.tipo_producto || "") : "",
+  tipoProducto: p.categoria === "plastico" ? (p.tipo_producto || "") : "",
   // ── Medidas desglosadas ──
   altura:      p.altura            != null ? String(p.altura)            : "",
   ancho:       p.ancho             != null ? String(p.ancho)             : "",
@@ -372,6 +372,8 @@ export const mapearPapelSistemaAProducto = (p: {
   precio3000:   "",
   imagen:       "",
   idproducto_papel: p.id,
+  tipo:         "",   // papel nunca tiene tipo de bolsa plástico
+  tipoProducto: "",   // ídem
   // Medidas desglosadas del sistema
   ancho:   p.ancho  != null ? String(p.ancho)  : "",
   fuelle:  p.fuelle != null ? String(p.fuelle) : "",
