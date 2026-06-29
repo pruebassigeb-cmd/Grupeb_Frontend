@@ -25,9 +25,10 @@ export interface ProductoCatalogoExpo {
 }
 
 export interface CatalogoSistema {
-  plastico:   any[];
-  papel:      any[];
-  coloresAsa: { id: number; nombre: string }[];
+  plastico:    any[];
+  papel:       any[];
+  coloresAsa:  { id: number; nombre: string }[];
+  suajesPlast: { id: number; tipo: string }[];
 }
 
 export interface ClienteExpoAPI {
