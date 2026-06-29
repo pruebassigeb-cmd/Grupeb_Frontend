@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { CLIENTE_VACIO, ESTADOS_MX, CORREO_EXT } from "../../types/expo/expo.types";
 import type { ClienteExpo } from "../../types/expo/expo.types";
 import {
@@ -12,7 +13,7 @@ interface Props {
   setClienteData: React.Dispatch<React.SetStateAction<ClienteExpo>>;
   clienteGuardado: ClienteExpo | null;
   mob:            boolean;
-  onCotizar:      (clienteId?: number, nombre?: string) => void; // ← nombre opcional
+  onCotizar:      (clienteId?: number, nombre?: string) => void;
   onCerrar:       () => void;
   cotizacionesCount: number;
   onAbrirLista:      () => void;
@@ -385,6 +386,8 @@ export default function RegistroCliente({
   cotizacionesCount,
   onAbrirLista,
 }: Props) {
+  const navigate = useNavigate();  // ← NUEVO
+
   const [modalProspectos, setModalProspectos] = useState(false);
   const [guardando,       setGuardando]       = useState(false);
   const [error,           setError]           = useState<string|null>(null);
@@ -406,7 +409,7 @@ export default function RegistroCliente({
     setError(null);
     try {
       const resultado = await crearClienteExpo(clienteData);
-      onCotizar(resultado.id, clienteData.nombre.trim()); // ← pasa nombre
+      onCotizar(resultado.id, clienteData.nombre.trim());
     } catch (err: any) {
       setError(err?.response?.data?.error || "No se pudo registrar el prospecto.");
     } finally {
@@ -429,7 +432,6 @@ export default function RegistroCliente({
     }
   };
 
-  // ← pasa nombre del prospecto seleccionado
   const seleccionarProspecto = (p: ClienteExpoAPI) => {
     const parsearCorreo = (correo: string|null) => {
       if (!correo) return { usuario:"", ext:"gmail.com", extCustom:"" };
@@ -456,7 +458,7 @@ export default function RegistroCliente({
       observaciones:   p.observaciones || "",
     });
     setModalProspectos(false);
-    onCotizar(p.idclientes, p.nombre || ""); // ← pasa nombre directamente
+    onCotizar(p.idclientes, p.nombre || "");
   };
 
   const puedeAvanzar = clienteData.nombre.trim().length > 0 && !guardando;
@@ -481,6 +483,14 @@ export default function RegistroCliente({
               </div>
             </div>
             <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+              {/* ← NUEVO: botón regresar a SIGEB */}
+              <button
+                onClick={() => navigate("/home")}
+                style={{ background:"transparent", border:"1px solid #333", color:"#666", fontSize:11, fontWeight:600, padding:"6px 12px", borderRadius:6, cursor:"pointer", display:"flex", alignItems:"center", gap:5 }}
+                title="Regresar a SIGEB"
+              >
+                🏠 SIGEB
+              </button>
               <button
                 onClick={()=>setModalProspectos(true)}
                 style={{ background:"transparent", border:"1px solid #C9922A44", color:"#C9922A", fontSize:11, fontWeight:600, padding:"6px 12px", borderRadius:6, cursor:"pointer", display:"flex", alignItems:"center", gap:5 }}>

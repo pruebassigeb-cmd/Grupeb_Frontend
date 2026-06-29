@@ -37,6 +37,11 @@ export interface Producto {
   perforado?:    boolean;
   configuracion_plastico_id?: number;
   idproducto_papel?:          number;
+  // ── Campos papel sistema ──
+  idgrupo_papel?:     number;
+  grupo_descripcion?: string;
+  tintasId?:          number;
+  carasId?:           number;
   // ── Campos de origen para futura conversión a producto del sistema ──
   origen?:          string;
 }
@@ -70,6 +75,7 @@ export interface FilaProducto {
   modoExtra:    "precio" | "pigmento";
   extra:        string;
   pigmento:     string;
+  pantones?:    string | null;
 }
 
 export interface ClienteExpo {
@@ -218,6 +224,7 @@ export const filaDesdeProducto = (p: Producto): FilaProducto => ({
   modoExtra:    "precio",
   extra:        "",
   pigmento:     "",
+  pantones:     null,
 });
 
 export const mapearCatalogoExpoAProducto = (p: {

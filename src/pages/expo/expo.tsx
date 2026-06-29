@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   CATS, CLIENTE_VACIO, filaDesdeProducto, sumarTotales,
   mapearCatalogoExpoAProducto, mapearPlasticoSistemaAProducto, mapearPapelSistemaAProducto,
@@ -33,6 +34,8 @@ const TODAY_NOW = () =>
   new Date().toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" });
 
 export default function Expo() {
+  const navigate = useNavigate(); // ← CAMBIO 2
+
   const [filas,    setFilas]    = useState<FilaProducto[]>([]);
   const [vista,    setVista]    = useState<"registro" | "cotizacion">("registro");
   const [catalogo, setCatalogo] = useState<Producto[]>([]);
@@ -497,6 +500,23 @@ export default function Expo() {
   // ── Sub-componentes UI ────────────────────────────────────────────────────
   const BotonesAccion = () => (
     <div className="no-print" style={{ display: "flex", gap: 10, width: "100%", maxWidth: desk ? 1100 : undefined, justifyContent: "flex-end" }}>
+      {/* ← CAMBIO 3: botón SIGEB */}
+      <button
+        onClick={() => navigate("/home")}
+        style={{
+          background: "transparent",
+          border: "1px solid #444",
+          color: "#666",
+          fontSize: 11,
+          fontWeight: 600,
+          padding: "7px 9px",
+          borderRadius: 6,
+          cursor: "pointer",
+        }}
+        title="Regresar a SIGEB"
+      >
+        🏠 SIGEB
+      </button>
       <button onClick={() => setVista("registro")} style={{ background: "transparent", border: "1px solid #333", color: "#888", fontSize: 12, fontWeight: 600, padding: "8px 14px", borderRadius: 6, cursor: "pointer", fontFamily: "'Inter',sans-serif" }}>← Cliente</button>
       <button onClick={limpiar} style={{ background: "transparent", border: "1px solid #555", color: "#AAA", fontSize: 12, fontWeight: 600, padding: "8px 18px", borderRadius: 6, cursor: "pointer", fontFamily: "'Inter',sans-serif" }}>Limpiar</button>
       <button onClick={guardarCotizacion} disabled={guardando} style={{ background: "transparent", border: "1px solid #C9922A", color: "#C9922A", fontSize: 12, fontWeight: 700, padding: "8px 18px", borderRadius: 6, cursor: guardando ? "not-allowed" : "pointer", opacity: guardando ? .7 : 1, fontFamily: "'Inter',sans-serif" }}>{guardando ? "Guardando..." : "💾 Guardar cotización"}</button>
@@ -580,6 +600,23 @@ export default function Expo() {
                 </div>
               </div>
               <div style={{ display: "flex", gap: 6 }}>
+                {/* ← CAMBIO 3: botón SIGEB */}
+                <button
+                  onClick={() => navigate("/home")}
+                  style={{
+                    background: "transparent",
+                    border: "1px solid #444",
+                    color: "#666",
+                    fontSize: 11,
+                    fontWeight: 600,
+                    padding: "7px 9px",
+                    borderRadius: 6,
+                    cursor: "pointer",
+                  }}
+                  title="Regresar a SIGEB"
+                >
+                  🏠 SIGEB
+                </button>
                 <button onClick={() => setVista("registro")} style={{ background: "transparent", border: "1px solid #333", color: "#888", fontSize: 11, fontWeight: 600, padding: "7px 9px", borderRadius: 6, cursor: "pointer" }}>← Cliente</button>
                 <button onClick={limpiar} style={{ background: "transparent", border: "1px solid #444", color: "#AAA", fontSize: 11, fontWeight: 600, padding: "7px 9px", borderRadius: 6, cursor: "pointer" }}>Limpiar</button>
                 <button onClick={guardarCotizacion} disabled={guardando} style={{ background: "transparent", border: "1px solid #C9922A", color: "#C9922A", fontSize: 11, fontWeight: 700, padding: "7px 9px", borderRadius: 6, cursor: "pointer", opacity: guardando ? .7 : 1 }}>{guardando ? "..." : "💾"}</button>
@@ -613,6 +650,23 @@ export default function Expo() {
                 </div>
               </div>
               <div style={{ display: "flex", gap: 10 }}>
+                {/* ← CAMBIO 3: botón SIGEB */}
+                <button
+                  onClick={() => navigate("/home")}
+                  style={{
+                    background: "transparent",
+                    border: "1px solid #444",
+                    color: "#666",
+                    fontSize: 11,
+                    fontWeight: 600,
+                    padding: "7px 9px",
+                    borderRadius: 6,
+                    cursor: "pointer",
+                  }}
+                  title="Regresar a SIGEB"
+                >
+                  🏠 SIGEB
+                </button>
                 <button onClick={() => setVista("registro")} style={{ background: "transparent", border: "1px solid #333", color: "#888", fontSize: 12, fontWeight: 600, padding: "8px 14px", borderRadius: 6, cursor: "pointer" }}>← Cliente</button>
                 <button onClick={limpiar} style={{ background: "transparent", border: "1px solid #555", color: "#AAA", fontSize: 12, fontWeight: 600, padding: "8px 16px", borderRadius: 6, cursor: "pointer" }}>Limpiar</button>
                 <button onClick={guardarCotizacion} disabled={guardando} style={{ background: "transparent", border: "1px solid #C9922A", color: "#C9922A", fontSize: 12, fontWeight: 700, padding: "8px 16px", borderRadius: 6, cursor: "pointer", opacity: guardando ? .7 : 1 }}>{guardando ? "Guardando..." : "💾 Guardar"}</button>

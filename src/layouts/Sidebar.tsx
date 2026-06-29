@@ -50,7 +50,6 @@ export default function Dashboard({ children }: DashboardProps) {
     return () => window.removeEventListener("resize", checkMobile);
   }, []);
 
-  // Cerrar flyout al click fuera
   useEffect(() => {
     if (!flyout) return;
     const handler = (e: MouseEvent) => {
@@ -62,7 +61,6 @@ export default function Dashboard({ children }: DashboardProps) {
     return () => document.removeEventListener("mousedown", handler);
   }, [flyout]);
 
-  // Cerrar flyout al navegar
   useEffect(() => { setFlyout(null); }, [location.pathname]);
 
   const menuItems: MenuItem[] = [
@@ -175,6 +173,14 @@ export default function Dashboard({ children }: DashboardProps) {
       permiso: "Gestionar Proveedores",
       subItems: [],
     },
+    // ── Cotizador Expo — solo acceso total ──────────────────────────────────
+    {
+      name: "Cotizador Expo",
+      icon: "🎪",
+      path: "/expo",
+      accesoTotal: true,
+      subItems: [],
+    },
   ];
 
   const menuFiltrado = menuItems.filter((item) => {
@@ -219,7 +225,7 @@ export default function Dashboard({ children }: DashboardProps) {
       return tienePermiso(sub.permiso);
     });
 
-    // ── COLAPSADO ────────────────────────────────────────────────────────────
+    // ── COLAPSADO ─────────────────────────────────────────────────────────────
     if (collapsed) {
       const isFlyoutActive = flyout?.name === item.name;
 
@@ -254,7 +260,7 @@ export default function Dashboard({ children }: DashboardProps) {
       );
     }
 
-    // ── EXPANDIDO: igual al diseño original ──────────────────────────────────
+    // ── EXPANDIDO ─────────────────────────────────────────────────────────────
     return (
       <div key={item.name}>
         <button
@@ -357,7 +363,6 @@ export default function Dashboard({ children }: DashboardProps) {
     </div>
   );
 
-  // Flyout activo — busca el item correspondiente
   const flyoutItem = flyout
     ? menuFiltrado.find((i) => i.name === flyout.name)
     : null;
@@ -370,7 +375,6 @@ export default function Dashboard({ children }: DashboardProps) {
   return (
     <div className="min-h-screen flex">
 
-      {/* ── Overlay mobile ── */}
       {isMobile && (
         <div
           onClick={() => setOpen(false)}
@@ -379,7 +383,6 @@ export default function Dashboard({ children }: DashboardProps) {
         />
       )}
 
-      {/* ── Flyout portal — fixed, fuera del sidebar ── */}
       {collapsed && flyout && flyoutItem && flyoutSubs.length > 0 && (
         <div
           ref={flyoutRef}
@@ -408,7 +411,6 @@ export default function Dashboard({ children }: DashboardProps) {
         </div>
       )}
 
-      {/* ── Sidebar mobile ── */}
       {isMobile && (
         <aside
           className={`fixed inset-y-0 left-0 w-64 bg-slate-800 z-50
@@ -433,18 +435,15 @@ export default function Dashboard({ children }: DashboardProps) {
         </aside>
       )}
 
-      {/* ── Sidebar desktop ── */}
       {!isMobile && (
         <aside
           style={{ width: sidebarWidthPx, minWidth: sidebarWidthPx }}
           className="sticky top-0 h-screen bg-slate-800 flex flex-col flex-shrink-0 transition-all duration-300 ease-in-out overflow-hidden"
         >
-          {/* Header */}
           <div
             className={`border-b border-slate-700 flex items-center flex-shrink-0 transition-all duration-300
               ${collapsed ? "flex-col justify-center gap-2 py-3 px-1" : "justify-between p-4"}`}
           >
-            {/* Logo — grande expandido, pequeño colapsado */}
             <img
               src={logo}
               alt="GrupoEB"
@@ -452,8 +451,6 @@ export default function Dashboard({ children }: DashboardProps) {
               className={`cursor-pointer object-contain transition-all duration-300
                 ${collapsed ? "h-6 w-auto" : "h-10 w-auto"}`}
             />
-
-            {/* Botón colapsar / expandir */}
             <button
               onClick={() => setCollapsed((c) => !c)}
               title={collapsed ? "Expandir menú" : "Colapsar menú"}
@@ -471,7 +468,6 @@ export default function Dashboard({ children }: DashboardProps) {
             </button>
           </div>
 
-          {/* Nav */}
           <nav className={`flex-1 py-4 space-y-0.5 overflow-y-auto overflow-x-hidden ${collapsed ? "px-1" : "px-2"}`}>
             {menuFiltrado.map(renderMenuItem)}
           </nav>
@@ -480,7 +476,6 @@ export default function Dashboard({ children }: DashboardProps) {
         </aside>
       )}
 
-      {/* ── Contenido principal ── */}
       <main className="flex-1 min-w-0 overflow-auto">
         {isMobile && (
           <header className="sticky top-0 z-20 bg-white shadow">
