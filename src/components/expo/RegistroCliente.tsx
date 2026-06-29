@@ -234,13 +234,13 @@ function ModalProspectos({ onSeleccionar, onClose }: ModalProspectosProps) {
   };
 
   const filtrados = busq.trim()
-    ? prospectos.filter(p =>
-        p.nombre.toLowerCase().includes(busq.toLowerCase()) ||
-        (p.impresion||"").toLowerCase().includes(busq.toLowerCase()) ||
-        (p.celular||"").includes(busq) ||
-        (p.ciudad||"").toLowerCase().includes(busq.toLowerCase())
-      )
-    : prospectos;
+  ? prospectos.filter(p =>
+      (p.nombre || "").toLowerCase().includes(busq.toLowerCase()) ||
+      (p.impresion||"").toLowerCase().includes(busq.toLowerCase()) ||
+      (p.celular||"").includes(busq) ||
+      (p.ciudad||"").toLowerCase().includes(busq.toLowerCase())
+    )
+  : prospectos;
 
   return (
     <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.82)", zIndex:300, display:"flex", alignItems:"center", justifyContent:"center", padding:20 }}
