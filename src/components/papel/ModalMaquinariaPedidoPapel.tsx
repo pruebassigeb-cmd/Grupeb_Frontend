@@ -1,0 +1,753 @@
+import { useEffect, useMemo, useState } from "react";
+import { getProductoPapelDetalle } from "../../services/papel/papelCotizacionService";
+import type { ProductoPapelDetalleCotizacion } from "../../services/papel/papelCotizacionService";
+import type { ProductoCotizacion } from "../../types/cotizaciones.types";
+import type {
+  MaquinariaProductoPedidoPapel,
+  MaquinariaSeleccionadaPedidoPapel,
+  MetodoHojeadoPedidoPapel,
+} from "../../types/papel/maquinaria-pedido.types";
+import type { MaquinaPapelOpcion } from "../../types/papel/cotizacion-papel.types";
+
+type ProductoEntrada = ProductoCotizacion | (Record<string, any> & { nombre?: string });
+
+type Props = {
+  productos: ProductoEntrada[];
+  onCancel: () => void;
+  onConfirm: (selecciones: MaquinariaProductoPedidoPapel[]) => void;
+};
+
+type ConfigProcesoProducto = {
+  metodo_hojeado: MetodoHojeadoPedidoPapel | null;
+  lleva_armado: boolean;
+};
+
+const asAny = (producto: ProductoEntrada) => producto as any;
+
+const getIdSolicitudProducto = (producto: ProductoEntrada) => {
+  const p = asAny(producto);
+  return Number(
+    p.idsolicitud_producto ??
+      p.idcotizacion_producto ??
+      p.idcotizacion_producto_papel ??
+      p.idproducto_solicitud ??
+      0,
+  );
+};
+
+const getIdProductoPapel = (producto: ProductoEntrada) => {
+  const p = asAny(producto);
+  return Number(
+    p.idproducto_papel ??
+      p.producto_papel_idproducto_papel ??
+      p.producto_papel_id ??
+      0,
+  );
+};
+
+const esPapel = (producto: ProductoEntrada) => {
+  const p = asAny(producto);
+  return (
+    p.tipo_material === "papel" ||
+    p.tipoCotizacion === "papel" ||
+    p.idproducto_papel != null ||
+    p.producto_papel_idproducto_papel != null
+  );
+};
+
+const labelMetodo = (metodo: MetodoHojeadoPedidoPapel | null) =>
+  metodo === "guillotina"
+    ? "Guillotina"
+    : metodo === "hojeado"
+      ? "Hojeado"
+      : "Preparación";
+
+const tipoMaquinaParaMetodo = (
+  metodo: MetodoHojeadoPedidoPapel | null,
+): "hojeadora" | "guillotina" | null => {
+  if (metodo === "hojeado") return "hojeadora";
+  if (metodo === "guillotina") return "guillotina";
+  return null;
+};
+
+const metodoPorTipoMaquina = (
+  tipo: string | null | undefined,
+): MetodoHojeadoPedidoPapel | null => {
+  if (tipo === "hojeadora") return "hojeado";
+  if (tipo === "guillotina") return "guillotina";
+  return null;
+};
+
+const resolverMetodoAutomatico = (
+  opciones: MaquinaPapelOpcion[],
+): MetodoHojeadoPedidoPapel | null => {
+  const tipos = Array.from(
+    new Set(
+      opciones
+        .map((opcion) => opcion.tipo_maquina)
+        .filter((tipo): tipo is "hojeadora" | "guillotina" =>
+          tipo === "hojeadora" || tipo === "guillotina",
+        ),
+    ),
+  );
+
+  if (tipos.length === 1) return metodoPorTipoMaquina(tipos[0]);
+  return null;
+};
+
+const procesosProducto = (producto: any, config: ConfigProcesoProducto) => [
+  {
+    key: "hojeado_guillotina",
+    label: labelMetodo(config.metodo_hojeado),
+    aplica: config.metodo_hojeado != null,
+  },
+  { key: "impresora", label: "Impresión", aplica: true },
+  {
+    key: "laminado_maquina",
+    label: "Laminación",
+    aplica: producto.idcat_laminado != null,
+  },
+  { key: "uv", label: "Barniz UV", aplica: producto.uv === true },
+  {
+    key: "hs_ar",
+    label:
+      producto.idfoil != null && producto.alto_relieve === true
+        ? "Hot Stamping / Alto relieve"
+        : producto.alto_relieve === true
+          ? "Alto relieve"
+          : "Hot Stamping",
+    aplica: producto.idfoil != null || producto.alto_relieve === true,
+  },
+  {
+    key: "texturizadora",
+    label: "Texturizado",
+    aplica: producto.idcat_textura != null,
+  },
+  { key: "suaje_maquina", label: "Suaje", aplica: true },
+  {
+    key: "armado",
+    label: "Armado",
+    aplica: config.lleva_armado === true,
+  },
+  { key: "empaque_maquina", label: "Empaque", aplica: true },
+];
+
+function filtrarMaquinasPorProceso(
+  procesoKey: string,
+  opciones: MaquinaPapelOpcion[],
+  metodo: MetodoHojeadoPedidoPapel | null,
+): MaquinaPapelOpcion[] {
+  if (procesoKey !== "hojeado_guillotina") return opciones;
+
+  const tipoRequerido = tipoMaquinaParaMetodo(metodo);
+  if (!tipoRequerido) return [];
+
+  const existenTipos = opciones.some((opcion) => opcion.tipo_maquina != null);
+  if (!existenTipos) return opciones;
+
+  return opciones.filter((opcion) => opcion.tipo_maquina === tipoRequerido);
+}
+
+const nombreMaquina = (maquina: MaquinaPapelOpcion) => {
+  const numero = maquina.numero_maquina ? ` (${maquina.numero_maquina})` : "";
+  const tipo =
+    maquina.tipo_maquina === "hojeadora"
+      ? " — Hojeadora"
+      : maquina.tipo_maquina === "guillotina"
+        ? " — Guillotina"
+        : "";
+  return `${maquina.nombre}${numero}${tipo}`;
+};
+
+const detallesAprobados = (producto: any) => {
+  const detalles = producto.detalles ?? [];
+  const tieneCampoAprobado = detalles.some((detalle: any) =>
+    Object.prototype.hasOwnProperty.call(detalle, "aprobado"),
+  );
+
+  if (!tieneCampoAprobado) return detalles;
+  return detalles.filter((detalle: any) => detalle.aprobado === true);
+};
+
+const formatoNumero = (valor: number) =>
+  Number(valor || 0).toLocaleString("es-MX", {
+    maximumFractionDigits: 2,
+  });
+
+const formatoMoneda = (valor: number) =>
+  Number(valor || 0).toLocaleString("es-MX", {
+    style: "currency",
+    currency: "MXN",
+  });
+
+const resumenCantidadesAprobadas = (producto: any) => {
+  const aprobados = detallesAprobados(producto);
+  if (aprobados.length === 0) return "Sin cantidad capturada";
+
+  return aprobados
+    .map((detalle: any) => {
+      if (detalle.modo_cantidad === "kilo" && detalle.kilogramos != null) {
+        return `${formatoNumero(Number(detalle.kilogramos))} kg · ${formatoNumero(Number(detalle.cantidad))} pzas`;
+      }
+      return `${formatoNumero(Number(detalle.cantidad))} pzas`;
+    })
+    .join(" + ");
+};
+
+const subtotalAprobado = (producto: any) =>
+  detallesAprobados(producto).reduce(
+    (total: number, detalle: any) => total + Number(detalle.precio_total ?? 0),
+    0,
+  );
+
+function detailOrNull(valor: unknown): string | null {
+  if (valor === null || valor === undefined) return null;
+  const txt = String(valor).trim();
+  return txt ? txt : null;
+}
+
+const chipsProducto = (
+  producto: any,
+  detalle?: ProductoPapelDetalleCotizacion,
+) => {
+  const chips = [
+    producto.medida ? `Medida: ${producto.medida}` : null,
+    producto.grupo_descripcion
+      ? `Material: ${producto.grupo_descripcion}`
+      : null,
+    producto.tintas != null ? `Tintas frente: ${producto.tintas}` : null,
+    producto.tintasDentro ? `Tintas dentro: ${producto.tintasDentro}` : null,
+    producto.laminado_nombre ? `Laminado: ${producto.laminado_nombre}` : null,
+    producto.foil_nombre ? `Foil: ${producto.foil_nombre}` : null,
+    producto.textura_nombre ? `Textura: ${producto.textura_nombre}` : null,
+    producto.uv === true ? "Barniz UV" : null,
+    producto.alto_relieve === true ? "Alto relieve" : null,
+    producto.asa_nombre ? `Asa: ${producto.asa_nombre}` : null,
+    detailOrNull(detalle?.acabados?.empaque)
+      ? `Empaque: ${detalle?.acabados?.empaque}`
+      : null,
+    detailOrNull(detalle?.acabados?.pzs_caja)
+      ? `${detalle?.acabados?.pzs_caja} pzas/caja`
+      : null,
+  ];
+
+  return chips.filter(Boolean) as string[];
+};
+
+const mismaMaquina = (
+  a: { id: number; nombre: string } | null | undefined,
+  b: MaquinaPapelOpcion,
+) => a?.id === b.id;
+
+export default function ModalMaquinariaPedidoPapel({
+  productos,
+  onCancel,
+  onConfirm,
+}: Props) {
+  const productosPapel = useMemo(() => productos.filter(esPapel), [productos]);
+
+  const [detalles, setDetalles] = useState<Record<number, ProductoPapelDetalleCotizacion>>({});
+  const [selecciones, setSelecciones] = useState<Record<number, MaquinariaSeleccionadaPedidoPapel>>({});
+  const [configProcesos, setConfigProcesos] = useState<Record<number, ConfigProcesoProducto>>({});
+  const [cargando, setCargando] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const seleccionesIniciales: Record<number, MaquinariaSeleccionadaPedidoPapel> = {};
+    const configInicial: Record<number, ConfigProcesoProducto> = {};
+
+    for (const producto of productosPapel) {
+      const id = getIdSolicitudProducto(producto);
+      const p = asAny(producto);
+      if (!id) continue;
+
+      seleccionesIniciales[id] = p.maquinaria_seleccionada ?? {};
+      configInicial[id] = {
+        metodo_hojeado:
+          p.metodo_hojeado === "hojeado" || p.metodo_hojeado === "guillotina"
+            ? p.metodo_hojeado
+            : null,
+        lleva_armado: p.lleva_armado !== false,
+      };
+    }
+
+    setSelecciones(seleccionesIniciales);
+    setConfigProcesos(configInicial);
+  }, [productosPapel]);
+
+  useEffect(() => {
+    let activo = true;
+    setCargando(true);
+    setError(null);
+
+    Promise.all(
+      productosPapel.map(async (producto) => {
+        const idProductoPapel = getIdProductoPapel(producto);
+        const idSolicitudProducto = getIdSolicitudProducto(producto);
+
+        if (!idProductoPapel) {
+          throw new Error(
+            `El producto "${asAny(producto).nombre ?? "Producto papel"}" no tiene idproducto_papel`,
+          );
+        }
+
+        const detalle = await getProductoPapelDetalle(Number(idProductoPapel));
+        return [idSolicitudProducto, detalle] as const;
+      }),
+    )
+      .then((resultados) => {
+        if (!activo) return;
+        const detallesPorProducto: Record<number, ProductoPapelDetalleCotizacion> = {};
+        for (const [idSolicitudProducto, detalle] of resultados) {
+          detallesPorProducto[idSolicitudProducto] = detalle;
+        }
+        setDetalles(detallesPorProducto);
+      })
+      .catch(() => {
+        if (activo) {
+          setError("No se pudieron cargar las máquinas de los productos.");
+        }
+      })
+      .finally(() => {
+        if (activo) setCargando(false);
+      });
+
+    return () => {
+      activo = false;
+    };
+  }, [productosPapel]);
+
+  // Si el producto solo tiene máquinas de un tipo en Hojeado/Guillotina,
+  // el método se resuelve automáticamente.
+  useEffect(() => {
+    if (cargando) return;
+
+    setConfigProcesos((prev) => {
+      let cambio = false;
+      const next = { ...prev };
+
+      for (const producto of productosPapel) {
+        const id = getIdSolicitudProducto(producto);
+        const detalle = detalles[id];
+        if (!id || !detalle) continue;
+
+        const actual = next[id] ?? { metodo_hojeado: null, lleva_armado: true };
+        if (actual.metodo_hojeado) continue;
+
+        const metodo = resolverMetodoAutomatico(detalle.maquinaria?.hojeado_guillotina ?? []);
+        if (metodo) {
+          next[id] = { ...actual, metodo_hojeado: metodo };
+          cambio = true;
+        }
+      }
+
+      return cambio ? next : prev;
+    });
+  }, [cargando, detalles, productosPapel]);
+
+  // Si un proceso aplicable tiene una sola máquina posible, queda seleccionada
+  // por defecto. Esto aplica al crear pedido, aprobar cotización y editar pedido.
+  useEffect(() => {
+    if (cargando) return;
+
+    setSelecciones((prev) => {
+      let cambio = false;
+      const next: Record<number, MaquinariaSeleccionadaPedidoPapel> = { ...prev };
+
+      for (const producto of productosPapel) {
+        const id = getIdSolicitudProducto(producto);
+        const detalle = detalles[id];
+        const p = asAny(producto);
+        if (!id || !detalle) continue;
+
+        const config = configProcesos[id] ?? {
+          metodo_hojeado: null,
+          lleva_armado: true,
+        };
+
+        for (const proceso of procesosProducto(p, config).filter((proc) => proc.aplica)) {
+          const opciones = filtrarMaquinasPorProceso(
+            proceso.key,
+            detalle.maquinaria?.[proceso.key] ?? [],
+            config.metodo_hojeado,
+          );
+
+          if (opciones.length !== 1) continue;
+
+          const actual = next[id]?.[proceso.key];
+          if (mismaMaquina(actual, opciones[0])) continue;
+          if (actual) continue;
+
+          next[id] = {
+            ...(next[id] ?? {}),
+            [proceso.key]: opciones[0],
+          };
+          cambio = true;
+        }
+      }
+
+      return cambio ? next : prev;
+    });
+  }, [cargando, detalles, configProcesos, productosPapel]);
+
+  const actualizarMetodo = (
+    idsolicitudProducto: number,
+    metodo: MetodoHojeadoPedidoPapel,
+  ) => {
+    setError(null);
+    setConfigProcesos((prev) => ({
+      ...prev,
+      [idsolicitudProducto]: {
+        ...(prev[idsolicitudProducto] ?? {
+          metodo_hojeado: null,
+          lleva_armado: true,
+        }),
+        metodo_hojeado: metodo,
+      },
+    }));
+    setSelecciones((prev) => ({
+      ...prev,
+      [idsolicitudProducto]: {
+        ...(prev[idsolicitudProducto] ?? {}),
+        hojeado_guillotina: null,
+      },
+    }));
+  };
+
+  const actualizarArmado = (
+    idsolicitudProducto: number,
+    llevaArmado: boolean,
+  ) => {
+    setError(null);
+    setConfigProcesos((prev) => ({
+      ...prev,
+      [idsolicitudProducto]: {
+        ...(prev[idsolicitudProducto] ?? {
+          metodo_hojeado: null,
+          lleva_armado: true,
+        }),
+        lleva_armado: llevaArmado,
+      },
+    }));
+    if (!llevaArmado) {
+      setSelecciones((prev) => ({
+        ...prev,
+        [idsolicitudProducto]: {
+          ...(prev[idsolicitudProducto] ?? {}),
+          armado: null,
+        },
+      }));
+    }
+  };
+
+  const seleccionar = (
+    idsolicitudProducto: number,
+    proceso: string,
+    maquinaId: string,
+  ) => {
+    setError(null);
+    const config = configProcesos[idsolicitudProducto] ?? {
+      metodo_hojeado: null,
+      lleva_armado: true,
+    };
+    const opciones = filtrarMaquinasPorProceso(
+      proceso,
+      detalles[idsolicitudProducto]?.maquinaria?.[proceso] ?? [],
+      config.metodo_hojeado,
+    );
+    const maquina = opciones.find((item) => item.id === Number(maquinaId)) ?? null;
+
+    setSelecciones((prev) => ({
+      ...prev,
+      [idsolicitudProducto]: {
+        ...(prev[idsolicitudProducto] ?? {}),
+        [proceso]: maquina,
+      },
+    }));
+  };
+
+  const confirmar = () => {
+    for (const producto of productosPapel) {
+      const id = getIdSolicitudProducto(producto);
+      const detalle = detalles[id];
+      const p = asAny(producto);
+      const config = configProcesos[id] ?? {
+        metodo_hojeado: null,
+        lleva_armado: true,
+      };
+
+      if (!config.metodo_hojeado) {
+        setError(
+          `Selecciona si el producto "${p.nombre}" lleva Hojeado o Guillotina.`,
+        );
+        return;
+      }
+
+      for (const proceso of procesosProducto(p, config).filter((proc) => proc.aplica)) {
+        const opciones = filtrarMaquinasPorProceso(
+          proceso.key,
+          detalle?.maquinaria?.[proceso.key] ?? [],
+          config.metodo_hojeado,
+        );
+        if (opciones.length > 0 && !selecciones[id]?.[proceso.key]) {
+          setError(
+            `Selecciona la máquina de ${proceso.label} para "${p.nombre}".`,
+          );
+          return;
+        }
+      }
+    }
+
+    onConfirm(
+      productosPapel.map((producto) => {
+        const id = getIdSolicitudProducto(producto);
+        const config = configProcesos[id];
+        return {
+          idsolicitud_producto: id,
+          metodo_hojeado: config.metodo_hojeado as MetodoHojeadoPedidoPapel,
+          lleva_armado: config.lleva_armado,
+          maquinaria_seleccionada: selecciones[id] ?? {},
+        };
+      }),
+    );
+  };
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40">
+      <div className="mx-4 flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-lg bg-white shadow-2xl">
+        <div className="border-b border-gray-200 px-5 py-4">
+          <h3 className="font-bold text-gray-900">
+            Procesos y maquinaria de papel
+          </h3>
+          <p className="mt-1 text-xs text-gray-500">
+            Configura la preparación del material y las máquinas del producto.
+            Cuando un proceso tiene una sola máquina disponible, se selecciona automáticamente.
+          </p>
+        </div>
+
+        <div className="flex-1 space-y-4 overflow-y-auto bg-gray-50 p-5">
+          {cargando && (
+            <p className="py-8 text-center text-sm text-gray-500">
+              Cargando maquinaria...
+            </p>
+          )}
+
+          {error && (
+            <div className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+              {error}
+            </div>
+          )}
+
+          {!cargando && productosPapel.length === 0 && (
+            <div className="rounded-lg border border-gray-200 bg-white p-6 text-center text-sm text-gray-500">
+              No hay productos de papel para configurar.
+            </div>
+          )}
+
+          {!cargando &&
+            productosPapel.map((producto) => {
+              const id = getIdSolicitudProducto(producto);
+              const p = asAny(producto);
+              const detalle = detalles[id];
+              const config = configProcesos[id] ?? {
+                metodo_hojeado: null,
+                lleva_armado: true,
+              };
+              return (
+                <section
+                  key={id}
+                  className="overflow-hidden rounded-lg border border-gray-300 bg-white"
+                >
+                  <div className="border-b border-gray-200 bg-gray-100 px-4 py-3">
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h4 className="font-semibold text-gray-900">
+                            {p.nombre}
+                          </h4>
+                          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-800">
+                            Papel
+                          </span>
+                          <span className="rounded-full bg-gray-200 px-2 py-0.5 text-xs font-semibold text-gray-700">
+                            Solicitud #{id}
+                          </span>
+                        </div>
+                        {p.descripcion && (
+                          <p className="mt-1 text-xs text-gray-500">
+                            {p.descripcion}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="grid min-w-[260px] grid-cols-2 gap-2 rounded-lg border border-green-200 bg-green-50 p-3 text-xs">
+                        <div>
+                          <span className="block font-bold uppercase tracking-wide text-green-700">
+                            Cantidad
+                          </span>
+                          <span className="mt-0.5 block font-semibold text-gray-900">
+                            {resumenCantidadesAprobadas(p)}
+                          </span>
+                        </div>
+                        <div className="text-right">
+                          <span className="block font-bold uppercase tracking-wide text-green-700">
+                            Subtotal
+                          </span>
+                          <span className="mt-0.5 block font-semibold text-gray-900">
+                            {formatoMoneda(subtotalAprobado(p))}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 flex flex-wrap gap-1.5">
+                      {chipsProducto(p, detalle).map((chip) => (
+                        <span
+                          key={chip}
+                          className="rounded-full border border-gray-200 bg-white px-2 py-0.5 text-xs text-gray-600"
+                        >
+                          {chip}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="border-b border-gray-100 p-4">
+                    <p className="mb-2 text-xs font-bold uppercase tracking-wide text-gray-500">
+                      Preparación del material
+                    </p>
+                    <div className="grid grid-cols-2 gap-3">
+                      {(
+                        [
+                          ["hojeado", "Hojeado"],
+                          ["guillotina", "Guillotina"],
+                        ] as [MetodoHojeadoPedidoPapel, string][]
+                      ).map(([value, label]) => (
+                        <label
+                          key={value}
+                          className={`flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm font-semibold ${
+                            config.metodo_hojeado === value
+                              ? "border-blue-500 bg-blue-50 text-blue-800"
+                              : "border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            checked={config.metodo_hojeado === value}
+                            onChange={() => actualizarMetodo(id, value)}
+                          />
+                          {label}
+                        </label>
+                      ))}
+                    </div>
+
+                    <label className="mt-3 flex cursor-pointer items-center gap-2 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700">
+                      <input
+                        type="checkbox"
+                        checked={config.lleva_armado}
+                        onChange={(event) =>
+                          actualizarArmado(id, event.target.checked)
+                        }
+                      />
+                      Armado
+                      <span className="text-xs font-normal text-gray-500">
+                        Activarlo solo cuando este producto requiera ensamble.
+                      </span>
+                    </label>
+                  </div>
+
+                  <div className="divide-y divide-gray-100">
+                    {procesosProducto(p, config)
+                      .filter((proceso) => proceso.aplica)
+                      .map((proceso) => {
+                        const opciones = filtrarMaquinasPorProceso(
+                          proceso.key,
+                          detalle?.maquinaria?.[proceso.key] ?? [],
+                          config.metodo_hojeado,
+                        );
+                        const seleccion = selecciones[id]?.[proceso.key];
+
+                        return (
+                          <div
+                            key={proceso.key}
+                            className="grid grid-cols-[minmax(140px,0.7fr)_minmax(220px,1.3fr)] items-center gap-3 px-4 py-3"
+                          >
+                            <div>
+                              <span className="block text-sm font-medium text-gray-800">
+                                {proceso.label}
+                              </span>
+                              {proceso.key === "hojeado_guillotina" &&
+                                config.metodo_hojeado && (
+                                  <span className="text-xs text-gray-500">
+                                    Mostrando máquinas tipo{" "}
+                                    {tipoMaquinaParaMetodo(
+                                      config.metodo_hojeado,
+                                    ) === "hojeadora"
+                                      ? "Hojeadora"
+                                      : "Guillotina"}
+                                  </span>
+                                )}
+                              {proceso.key === "texturizadora" && (
+                                <span className="text-xs text-gray-500">
+                                  Acabado: {p.textura_nombre ?? "N/A"}
+                                </span>
+                              )}
+                              {proceso.key === "empaque_maquina" && (
+                                <span className="text-xs text-gray-500">
+                                  {detalle?.acabados?.empaque ??
+                                    "Sin tipo de empaque"}
+                                  {detalle?.acabados?.pzs_caja
+                                    ? ` - ${detalle.acabados.pzs_caja} pzas/caja`
+                                    : ""}
+                                </span>
+                              )}
+                            </div>
+
+                            <select
+                              value={seleccion?.id ?? ""}
+                              onChange={(event) =>
+                                seleccionar(id, proceso.key, event.target.value)
+                              }
+                              disabled={opciones.length === 0}
+                              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm disabled:bg-gray-100 disabled:text-gray-400"
+                            >
+                              <option value="">
+                                {opciones.length === 0
+                                  ? "Sin máquinas configuradas"
+                                  : "Selecciona una máquina"}
+                              </option>
+                              {opciones.map((maquina) => (
+                                <option key={maquina.id} value={maquina.id}>
+                                  {nombreMaquina(maquina)}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        );
+                      })}
+                  </div>
+                </section>
+              );
+            })}
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 border-t border-gray-200 p-4">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={confirmar}
+            disabled={cargando || productosPapel.length === 0}
+            className="rounded-lg bg-green-600 px-4 py-2 text-sm font-bold text-white hover:bg-green-700 disabled:opacity-50"
+          >
+            Guardar configuración
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

@@ -130,6 +130,7 @@ function DetalleProducto({ id }: { id: number }) {
         {row("Fuelle", detalle.fuelle)}
         {row("Altura", detalle.altura)}
         {row("Medida", detalle.medida)}
+        {row("Tamaño de asa sugerido", detalle.tamano_asa_default)}
         {row("Creado por", detalle.creado_por_nombre)}
       </div>
 
@@ -428,6 +429,7 @@ export default function Papel() {
       form.fuelle = d.fuelle ? String(d.fuelle) : "";
       form.altura = d.altura ? String(d.altura) : "";
       form.medida = d.medida ?? "";
+      form.tamanoAsaDefault = d.tamano_asa_default ?? "";
 
       form.grupos = (d.grupos ?? []).map((g: any, gi: number) => ({
         id: Date.now() + gi,

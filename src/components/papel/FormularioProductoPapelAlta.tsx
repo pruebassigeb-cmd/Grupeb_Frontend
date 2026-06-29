@@ -117,12 +117,19 @@ function PuntosSelect({ idSel, items, onSel }: {
 // ═══════════════════════════════════════════════════════════════════════════
 // ASA MULTI-SELECT CON ALTA
 // ═══════════════════════════════════════════════════════════════════════════
-function AsaMultiSelect({ selectedIds, selectedNames, catItems, onChange, onAdd, catKeyForAdd = "tipo_asa" }: {
+function AsaMultiSelect({
+  selectedIds = [],
+  selectedNames = [],
+  catItems = [],
+  onChange,
+  onAdd,
+  catKeyForAdd = "tipo_asa",
+}: {
   selectedIds: number[];
   selectedNames: string[];
   catItems: { id: number; nombre: string }[];
   onChange: (ids: number[], nombres: string[]) => void;
-  onAdd: (key: CatKey, nombre: string) => Promise<void>;
+  onAdd: (key: CatKey, nombre: string) => Promise<unknown>;
   catKeyForAdd?: CatKey;
 }) {
   const [open, setOpen] = useState(false);
@@ -212,13 +219,20 @@ function AsaMultiSelect({ selectedIds, selectedNames, catItems, onChange, onAdd,
 // ═══════════════════════════════════════════════════════════════════════════
 // MAQUINARIA MULTI-SELECT CON ALTA
 // ═══════════════════════════════════════════════════════════════════════════
-function MaquinariaMultiSelect({ catKey, selectedIds, selectedNames, catItems, onChange, onAdd }: {
+function MaquinariaMultiSelect({
+  catKey,
+  selectedIds = [],
+  selectedNames = [],
+  catItems = [],
+  onChange,
+  onAdd,
+}: {
   catKey: CatKey;
   selectedIds: number[];
   selectedNames: string[];
-  catItems: { id: number; nombre: string }[];
+  catItems: { id: number; nombre: string; tipo_maquina?: string | null; numero_maquina?: string | null }[];
   onChange: (ids: number[], nombres: string[]) => void;
-  onAdd: (key: CatKey, nombre: string) => Promise<void>;
+  onAdd: (key: CatKey, nombre: string) => Promise<unknown>;
 }) {
   const [open, setOpen] = useState(false);
   const [adding, setAdding] = useState(false);
@@ -234,7 +248,7 @@ function MaquinariaMultiSelect({ catKey, selectedIds, selectedNames, catItems, o
   }, []);
   useEffect(() => { if (adding) addRef.current?.focus(); }, [adding]);
 
-  const toggle = (item: { id: number; nombre: string }) => {
+  const toggle = (item: { id: number; nombre: string; tipo_maquina?: string | null; numero_maquina?: string | null }) => {
     const exists = selectedIds.includes(item.id);
     onChange(
       exists ? selectedIds.filter(i => i !== item.id) : [...selectedIds, item.id],
@@ -243,10 +257,16 @@ function MaquinariaMultiSelect({ catKey, selectedIds, selectedNames, catItems, o
   };
 
   const handleAdd = async () => {
-    const t = newVal.trim(); if (!t) return;
+    const t = newVal.trim(); if (!t || catKey === "hojeado_guillotina") return;
     setSaving(true);
     try { await onAdd(catKey, t); setNewVal(""); setAdding(false); }
     finally { setSaving(false); }
+  };
+
+  const etiquetaMaquina = (item: { nombre: string; tipo_maquina?: string | null; numero_maquina?: string | null }) => {
+    const numero = item.numero_maquina ? ` (${item.numero_maquina})` : "";
+    const tipo = item.tipo_maquina === "hojeadora" ? " — Hojeadora" : item.tipo_maquina === "guillotina" ? " — Guillotina" : "";
+    return `${item.nombre}${numero}${tipo}`;
   };
 
   const todosSeleccionados = catItems.length > 0 && catItems.every(item => selectedIds.includes(item.id));
@@ -279,7 +299,7 @@ function MaquinariaMultiSelect({ catKey, selectedIds, selectedNames, catItems, o
           {catItems.map(item => (
             <label key={item.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 12px", cursor: "pointer", fontSize: 13, color: "#111827", background: selectedIds.includes(item.id) ? "#F1F5F9" : "transparent" }}>
               <input type="checkbox" checked={selectedIds.includes(item.id)} onChange={() => toggle(item)} style={{ width: 14, height: 14, accentColor: "#64748B", cursor: "pointer", flexShrink: 0 }} />
-              {item.nombre}
+              {etiquetaMaquina(item)}
             </label>
           ))}
           <div style={{ borderTop: "1px solid #F3F4F6", marginTop: 2, paddingTop: 2 }}>
@@ -290,6 +310,10 @@ function MaquinariaMultiSelect({ catKey, selectedIds, selectedNames, catItems, o
                   style={{ flex: 1, height: 28, padding: "0 8px", border: "1px solid #64748B", borderRadius: 4, fontSize: 12, outline: "none", color: "#111827" }} />
                 <button onClick={handleAdd} disabled={saving} style={{ height: 28, padding: "0 8px", background: "#64748B", border: "none", borderRadius: 4, cursor: saving ? "wait" : "pointer", color: "#fff", fontSize: 12, fontWeight: 700 }}>{saving ? "..." : "OK"}</button>
                 <button onClick={() => { setAdding(false); setNewVal(""); }} style={{ height: 28, padding: "0 6px", background: "#F3F4F6", border: "none", borderRadius: 4, cursor: "pointer", color: "#6B7280", fontSize: 13 }}>X</button>
+              </div>
+            ) : catKey === "hojeado_guillotina" ? (
+              <div style={{ padding: "6px 12px", color: "#9CA3AF", fontSize: 12 }}>
+                Agrega nuevas máquinas desde Catálogos para indicar si son Hojeadora o Guillotina.
               </div>
             ) : (
               <button type="button" onClick={() => setAdding(true)}
@@ -556,22 +580,37 @@ export default function FormularioProductoPapelAlta({ initial, onSave, onCancel,
     await onSave(form, pendientesRef.current);
   };
 
+
+  // En useCatalogosPapel, `names` es un Record<CatKey, string[]>;
+  // no es una función. Este helper evita el error:
+  // "Record<CatKey, string[]> has no call signatures".
+  const namesOf = (key: CatKey): string[] => {
+    const lista = (names as any)?.[key];
+    return Array.isArray(lista) ? lista : [];
+  };
+
+  const catalogItems = <T = any,>(key: CatKey): T[] => {
+    const lista = (catalogs as any)?.[key];
+    return Array.isArray(lista) ? lista : [];
+  };
+
   const nombrePor = (key: CatKey, id: number | null) =>
-    id ? (catalogs[key] as any[]).find((i: any) => i.id === id)?.nombre ?? "" : "";
+    id ? catalogItems<any>(key).find((i: any) => i.id === id)?.nombre ?? "" : "";
 
   const labelConMedida = (item: { nombre: string; medida?: string }) =>
     item.medida ? `${item.nombre} -- ${item.medida}` : item.nombre;
 
   const namesMedida = (key: CatKey) =>
-    (catalogs[key] as any[]).map((i: any) => labelConMedida(i));
+    catalogItems<any>(key).map((i: any) => labelConMedida(i));
 
-  const puntosItems = ((catalogs as any).puntos ?? []) as { id: number; nombre: string; puntos?: number }[];
+  const puntosItems = catalogItems<{ id: number; nombre: string; puntos?: number }>("puntos" as CatKey);
 
   const sublbl: React.CSSProperties = {
     display: "block", fontSize: 10, fontWeight: 700, color: "#9CA3AF",
     marginBottom: 6, letterSpacing: "0.08em", textTransform: "uppercase",
     paddingBottom: 4, borderBottom: "1px dashed #E5E7EB",
   };
+
 
   return (
     <div ref={contRef} style={{ maxWidth: "100%", margin: "0 auto", padding: "16px", fontFamily: "'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif", color: "#111827" }}>
@@ -590,9 +629,7 @@ export default function FormularioProductoPapelAlta({ initial, onSave, onCancel,
         borderBottom: "1px solid #E5E7EB",
         boxShadow: "0 2px 4px rgba(0,0,0,0.04)",
       }}>
-        <button onClick={onCancel} style={{ height: 36, padding: "0 16px", border: "1px solid #D1D5DB", borderRadius: 7, background: "#fff", color: "#374151", fontSize: 13, fontWeight: 500, cursor: "pointer" }}>
-          Cancelar
-        </button>
+        
         <button onClick={handleSubmit} disabled={saving} style={{ height: 36, padding: "0 20px", border: "none", borderRadius: 7, background: saving ? "#93C5FD" : "#1D4ED8", color: "#fff", fontSize: 13, fontWeight: 600, cursor: saving ? "wait" : "pointer" }}>
           {saving ? "Guardando..." : isEdit ? "Guardar cambios" : "Registrar producto"}
         </button>
@@ -602,8 +639,8 @@ export default function FormularioProductoPapelAlta({ initial, onSave, onCancel,
         <Sec title="Tipo de producto" colorKey="tipo">
           <FG cols={2} gap="6px 8px">
             <Field label="Tipo" style={{ gridColumn: "span 2" }}>
-              <SelConAlta catKey="tipo_producto" options={names("tipo_producto")} value={form.tipoProductoNombre}
-                onChange={(v) => { const item = catalogs.tipo_producto.find(i => i.nombre === v); upd({ tipoProductoNombre: v, idcat_tipo_producto_papel: item?.id ?? null }); }}
+              <SelConAlta catKey="tipo_producto" options={namesOf("tipo_producto")} value={form.tipoProductoNombre}
+                onChange={(v) => { const item = catalogItems<any>("tipo_producto" as CatKey).find(i => i.nombre === v); upd({ tipoProductoNombre: v, idcat_tipo_producto_papel: item?.id ?? null }); }}
                 onAdd={addItem} />
             </Field>
             <Field label="Descripción" style={{ gridColumn: "span 2" }}>
@@ -624,8 +661,8 @@ export default function FormularioProductoPapelAlta({ initial, onSave, onCancel,
           {form.grupos.map((g, i) => (
             <GrupoBlock key={g.id} grupo={g} grupoIndex={i} totalGrupos={form.grupos.length}
               onUpdate={updateGrupo} onRemove={() => removeGrupo(g.id)}
-              catTipoPapel={names("tipo_papel")} catCalibre={names("calibre")}
-              catTipoPapelItems={catalogs.tipo_papel} catCalibreItems={catalogs.calibre}
+              catTipoPapel={namesOf("tipo_papel")} catCalibre={namesOf("calibre")}
+              catTipoPapelItems={catalogItems("tipo_papel")} catCalibreItems={catalogItems("calibre")}
               onAdd={addItem}
               collapsed={expandedGrupoId !== g.id}
               onToggle={() => setExpandedGrupoId(expandedGrupoId === g.id ? null : g.id)} />
@@ -640,8 +677,8 @@ export default function FormularioProductoPapelAlta({ initial, onSave, onCancel,
           <Field label="Tamaño">  <Inp value={form.suaje.tamano} onChange={v => updSuaje({ tamano: v })} /></Field>
           <Field label="mm (Corte y doblez)"><Inp value={form.suaje.metros} onChange={v => updSuaje({ metros: v })} /></Field>
           <Field label="Matrix">
-            <SelConAlta catKey="matrix" options={names("matrix")} value={form.suaje.matrix}
-              onChange={(v) => { const item = catalogs.matrix.find(i => i.nombre === v); updSuaje({ matrix: v, idcat_matrix: item?.id ?? null }); }}
+            <SelConAlta catKey="matrix" options={namesOf("matrix")} value={form.suaje.matrix}
+              onChange={(v) => { const item = catalogItems<any>("matrix" as CatKey).find(i => i.nombre === v); updSuaje({ matrix: v, idcat_matrix: item?.id ?? null }); }}
               onAdd={addItem} />
           </Field>
         </FG>
@@ -688,7 +725,7 @@ export default function FormularioProductoPapelAlta({ initial, onSave, onCancel,
             <span style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", whiteSpace: "nowrap", paddingBottom: 10 }}>Sacabocado</span>
             <div>
               <SelConAlta catKey="sacabocados" options={namesMedida("sacabocados")} value={form.suaje.sacabocadoNombre}
-                onChange={(v) => { const item = (catalogs.sacabocados as any[]).find((i: any) => labelConMedida(i) === v); updSuaje({ sacabocadoNombre: v, idcat_sacabocados: item?.id ?? null }); }}
+                onChange={(v) => { const item = catalogItems<any>("sacabocados").find((i: any) => labelConMedida(i) === v); updSuaje({ sacabocadoNombre: v, idcat_sacabocados: item?.id ?? null }); }}
                 onAdd={addItem} placeholder="" />
             </div>
             <div>
@@ -700,7 +737,7 @@ export default function FormularioProductoPapelAlta({ initial, onSave, onCancel,
             <span style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", whiteSpace: "nowrap", marginLeft: 8, paddingBottom: 10 }}>Perforado</span>
             <div>
               <SelConAlta catKey="perforado" options={namesMedida("perforado")} value={form.suaje.perforadoNombre}
-                onChange={(v) => { const item = (catalogs.perforado as any[]).find((i: any) => labelConMedida(i) === v); updSuaje({ perforadoNombre: v, idcat_perforado: item?.id ?? null }); }}
+                onChange={(v) => { const item = catalogItems<any>("perforado").find((i: any) => labelConMedida(i) === v); updSuaje({ perforadoNombre: v, idcat_perforado: item?.id ?? null }); }}
                 onAdd={addItem} placeholder="" />
             </div>
             <div>
@@ -736,26 +773,26 @@ export default function FormularioProductoPapelAlta({ initial, onSave, onCancel,
         <Sec title="Pegado y acabados" colorKey="acabados">
           <FG cols={2} gap="6px 8px" style={{ alignItems: "start" }}>
             <Field label="Tipo de pegado">
-              <SelConAlta catKey="tipo_pegado" options={names("tipo_pegado")}
+              <SelConAlta catKey="tipo_pegado" options={namesOf("tipo_pegado")}
                 value={nombrePor("tipo_pegado", form.acabados.idcat_tipo_pegado)}
-                onChange={(v) => { const item = catalogs.tipo_pegado.find(i => i.nombre === v); updAcabados({ idcat_tipo_pegado: item?.id ?? null }); }}
+                onChange={(v) => { const item = catalogItems<any>("tipo_pegado" as CatKey).find(i => i.nombre === v); updAcabados({ idcat_tipo_pegado: item?.id ?? null }); }}
                 onAdd={addItem} />
             </Field>
             <Field label="Pegamento">
-              <SelConAlta catKey="pegamento" options={names("pegamento")}
+              <SelConAlta catKey="pegamento" options={namesOf("pegamento")}
                 value={nombrePor("pegamento", form.acabados.idcat_pegamento)}
-                onChange={(v) => { const item = catalogs.pegamento.find(i => i.nombre === v); updAcabados({ idcat_pegamento: item?.id ?? null }); }}
+                onChange={(v) => { const item = catalogItems<any>("pegamento" as CatKey).find(i => i.nombre === v); updAcabados({ idcat_pegamento: item?.id ?? null }); }}
                 onAdd={addItem} />
             </Field>
             <Field label="Asa">
               <AsaMultiSelect selectedIds={form.acabados.asas} selectedNames={form.acabados.asasNombres}
-                catItems={catalogs.tipo_asa}
+                catItems={catalogs?.tipo_asa ?? []}
                 onChange={(ids, nombres) => updAcabados({ asas: ids, asasNombres: nombres })}
                 onAdd={addItem} />
             </Field>
             <Field label="Laminado">
               <AsaMultiSelect selectedIds={form.acabados.laminados} selectedNames={form.acabados.laminadosNombres}
-                catItems={catalogs.laminado}
+                catItems={catalogs?.laminado ?? []}
                 onChange={(ids, nombres) => updAcabados({ laminados: ids, laminadosNombres: nombres })}
                 onAdd={addItem} catKeyForAdd={"laminado" as CatKey} />
             </Field>
@@ -767,15 +804,15 @@ export default function FormularioProductoPapelAlta({ initial, onSave, onCancel,
             <label style={sublbl}>Refuerzo</label>
             <FG cols={2} gap="5px 6px">
               <Field label="Material">
-                <SelConAlta catKey="refuerzo_material" options={names("refuerzo_material")}
+                <SelConAlta catKey="refuerzo_material" options={namesOf("refuerzo_material")}
                   value={nombrePor("refuerzo_material", form.acabados.idcat_refuerzo_material)}
-                  onChange={(v) => { const item = catalogs.refuerzo_material.find(i => i.nombre === v); updAcabados({ idcat_refuerzo_material: item?.id ?? null }); }}
+                  onChange={(v) => { const item = catalogItems<any>("refuerzo_material" as CatKey).find(i => i.nombre === v); updAcabados({ idcat_refuerzo_material: item?.id ?? null }); }}
                   onAdd={addItem} placeholder="" />
               </Field>
               <Field label="Medida">
-                <SelConAlta catKey="refuerzo_medidas" options={names("refuerzo_medidas")}
+                <SelConAlta catKey="refuerzo_medidas" options={namesOf("refuerzo_medidas")}
                   value={form.acabados.refuerzoMedidaNombre}
-                  onChange={(v) => { const item = catalogs.refuerzo_medidas.find(i => i.nombre === v); updAcabados({ refuerzoMedidaNombre: v, idcat_refuerzo_medidas: item?.id ?? null }); }}
+                  onChange={(v) => { const item = catalogItems<any>("refuerzo_medidas" as CatKey).find(i => i.nombre === v); updAcabados({ refuerzoMedidaNombre: v, idcat_refuerzo_medidas: item?.id ?? null }); }}
                   onAdd={addItem} placeholder="" />
               </Field>
             </FG>
@@ -784,9 +821,9 @@ export default function FormularioProductoPapelAlta({ initial, onSave, onCancel,
             <label style={sublbl}>Base</label>
             <FG cols={2} gap="5px 6px">
               <Field label="Material">
-                <SelConAlta catKey="refuerzo_material" options={names("refuerzo_material")}
+                <SelConAlta catKey="refuerzo_material" options={namesOf("refuerzo_material")}
                   value={nombrePor("refuerzo_material", form.acabados.idcat_base_material)}
-                  onChange={(v) => { const item = catalogs.refuerzo_material.find(i => i.nombre === v); updAcabados({ idcat_base_material: item?.id ?? null }); }}
+                  onChange={(v) => { const item = catalogItems<any>("refuerzo_material" as CatKey).find(i => i.nombre === v); updAcabados({ idcat_base_material: item?.id ?? null }); }}
                   onAdd={addItem} placeholder="" />
               </Field>
               <Field label="Medida (auto)"><Inp value={form.acabados.base_medida} readOnly /></Field>
@@ -797,9 +834,9 @@ export default function FormularioProductoPapelAlta({ initial, onSave, onCancel,
         <Sec title="Empaque" colorKey="acabados">
           <FG cols={1} gap="6px 0">
             <Field label="Tipo de empaque">
-              <SelConAlta catKey="empaque" options={names("empaque")}
+              <SelConAlta catKey="empaque" options={namesOf("empaque")}
                 value={nombrePor("empaque", form.acabados.idcat_empaque)}
-                onChange={(v) => { const item = catalogs.empaque.find(i => i.nombre === v); updAcabados({ idcat_empaque: item?.id ?? null }); }}
+                onChange={(v) => { const item = catalogItems<any>("empaque" as CatKey).find(i => i.nombre === v); updAcabados({ idcat_empaque: item?.id ?? null }); }}
                 onAdd={addItem} />
             </Field>
             <Field label="Piezas por caja">
@@ -822,15 +859,17 @@ export default function FormularioProductoPapelAlta({ initial, onSave, onCancel,
               <MaquinariaMultiSelect catKey={key as CatKey}
                 selectedIds={(form.maquinaria as any)[key] ?? []}
                 selectedNames={(form.maquinaria as any)[`${key}_nombres`] ?? []}
-                catItems={catalogs[key as CatKey] as { id: number; nombre: string }[]}
+                catItems={(catalogs?.[key as CatKey] ?? []) as { id: number; nombre: string; tipo_maquina?: string | null; numero_maquina?: string | null }[]}
                 onChange={(ids, nombres) => updMaq({ [key]: ids, [`${key}_nombres`]: nombres })}
                 onAdd={addItem} />
             </Field>
           ))}
         </FG>
-        <FG cols={5} gap="6px 10px" style={{ alignItems: "start" }}>
+        <FG cols={6} gap="6px 10px" style={{ alignItems: "start" }}>
           {([
-            ["textura", "Textura"],
+            ["laminado_maquina", "Laminadora"],
+            ["texturizadora", "Texturizadora"],
+            ["empaque_maquina", "Empaque"],
             ["empalme", "Empalme"],
             ["armado", "Armado"],
             ["asas_maquina", "Fabricacion de asas"],
@@ -840,7 +879,7 @@ export default function FormularioProductoPapelAlta({ initial, onSave, onCancel,
               <MaquinariaMultiSelect catKey={key as CatKey}
                 selectedIds={(form.maquinaria as any)[key] ?? []}
                 selectedNames={(form.maquinaria as any)[`${key}_nombres`] ?? []}
-                catItems={catalogs[key as CatKey] as { id: number; nombre: string }[]}
+                catItems={(catalogs?.[key as CatKey] ?? []) as { id: number; nombre: string; tipo_maquina?: string | null; numero_maquina?: string | null }[]}
                 onChange={(ids, nombres) => updMaq({ [key]: ids, [`${key}_nombres`]: nombres })}
                 onAdd={addItem} />
             </Field>

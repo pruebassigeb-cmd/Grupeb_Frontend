@@ -14,16 +14,21 @@ import type { Cara, Tinta } from "../types/catalogos-produccion.types";
 import { getSuajes, getColoresAsa, getMedidasTroquel } from "../services/suajesService";
 import type { Suaje, ColorAsa, MedidaTroquel } from "../services/suajesService";
 import { showAlert } from "./CustomAlert";
-import type { Producto, DatosCotizacion, FormularioCotizacionProps, OpcionCP } from "../types/formulario-solicitud.types";
+import type { Producto, DatosCotizacion, FormularioCotizacionProps } from "../types/formulario-solicitud.types";
 import { ESTADO_INICIAL_PRODUCTO_MEDIDAS } from "../constants/formulario-solicitud.constants";
 import FormularioCliente from "./FormularioCliente";
-import { buscarInsumos, getTiposInsumo } from "../services/proveedoresService";
+import { getTiposInsumo } from "../services/proveedoresService";
 import type { ProductoProveedor } from "../services/proveedoresService";
 import ModalRegistrarInsumo from "./ModalRegistrarInsumo";
 import ComboboxInsumo from "./ComboboxInsumo";
 import FormularioProductoPapel from "../components/papel/FormularioProductoPapel";
 import type { ProductoPapelCotizacion } from "../components/papel/FormularioProductoPapel";
 
+const esProductoPapel = (p: any): boolean =>
+  p?.tipoCotizacion === "papel" ||
+  p?.tipo_material === "papel" ||
+  p?.idproducto_papel != null ||
+  p?.producto_papel_idproducto_papel != null;
 
 export default function FormularioSolicitud({
   onSubmit,
@@ -32,10 +37,8 @@ export default function FormularioSolicitud({
   modo = "cotizacion",
 }: FormularioCotizacionProps) {
 
-  // ── Pasos ────────────────────────────────────────────────────────────────
   const [paso, setPaso] = useState(1);
 
-  // ── Datos de la cotización/pedido ────────────────────────────────────────
   const [datos, setDatos] = useState<DatosCotizacion>({
     cliente: "", telefono: "", correo: "", empresa: "",
     identificar: null,
@@ -50,25 +53,21 @@ export default function FormularioSolicitud({
 
   const isMounted = useRef(false);
 
-  // ── Selector de material (plástico / papel) ───────────────────────────────
   const [tipoMaterial, setTipoMaterial] = useState<"plastico" | "papel">("plastico");
   const [editandoPapelIndex, setEditandoPapelIndex] = useState<number | null>(null);
 
-  // ── Catálogos ────────────────────────────────────────────────────────────
   const [caras, setCaras] = useState<Cara[]>([]);
   const [tintas, setTintas] = useState<Tinta[]>([]);
   const [suajes, setSuajes] = useState<Suaje[]>([]);
   const [coloresAsa, setColoresAsa] = useState<ColorAsa[]>([]);
   const [medidasTroquel, setMedidasTroquel] = useState<MedidaTroquel[]>([]);
 
-  // ── Modal clientes ───────────────────────────────────────────────────────
   const [mostrarModalClientes, setMostrarModalClientes] = useState(false);
   const [busquedaCliente, setBusquedaCliente] = useState("");
   const [clientesCargados, setClientesCargados] = useState<ClienteBusqueda[]>([]);
   const [loadingClientes, setLoadingClientes] = useState(false);
   const [errorClientes, setErrorClientes] = useState<string | null>(null);
 
-  // ── Modal productos ──────────────────────────────────────────────────────
   const [modoProducto, setModoProducto] = useState<"registrado" | "nuevo">("registrado");
   const [productoNuevoListo, setProductoNuevoListo] = useState(false);
   const [mostrarModalProductos, setMostrarModalProductos] = useState(false);
@@ -80,43 +79,33 @@ export default function FormularioSolicitud({
   const [advertenciaDuplicado, setAdvertenciaDuplicado] = useState<string | null>(null);
   const [verificandoDuplicado, setVerificandoDuplicado] = useState(false);
 
-  // ── Dropdowns ────────────────────────────────────────────────────────────
   const [mostrarDropdownCaras, setMostrarDropdownCaras] = useState(false);
   const [mostrarDropdownTintas, setMostrarDropdownTintas] = useState(false);
   const [mostrarDropdownSuaje, setMostrarDropdownSuaje] = useState(false);
   const [mostrarDropdownColorAsa, setMostrarDropdownColorAsa] = useState(false);
   const [mostrarDropdownTroquel, setMostrarDropdownTroquel] = useState(false);
 
-  // ── Precios ──────────────────────────────────────────────────────────────
   const [preciosEditadosManualmente, setPreciosEditadosManualmente] = useState<[boolean, boolean, boolean]>([false, false, false]);
   const [preciosTexto, setPreciosTexto] = useState<[string, string, string]>(["", "", ""]);
 
-  // ── Color / Pantones ─────────────────────────────────────────────────────
   const [modoColor, setModoColor] = useState<"pantones" | null>("pantones");
   const [inputsPantones, setInputsPantones] = useState<string[]>(Array(1).fill(""));
   const [idTipoPigmento, setIdTipoPigmento] = useState<number | null>(null);
   const [idTipoPanton, setIdTipoPanton] = useState<number | null>(null);
 
   const [modalInsumo, setModalInsumo] = useState<{
-    abierto: boolean;
-    tipoId: number;
-    nombre: string;
-    indice: number | null;
+    abierto: boolean; tipoId: number; nombre: string; indice: number | null;
   }>({ abierto: false, tipoId: 0, nombre: "", indice: null });
 
-  // ── Cantidad ─────────────────────────────────────────────────────────────
   const [modoCantidad, setModoCantidad] = useState<"unidad" | "kilo">("unidad");
   const [cantidadesTexto, setCantidadesTexto] = useState<[string, string, string]>(["", "", ""]);
 
-  // ── Herramental ──────────────────────────────────────────────────────────
   const [herramentalExpandido, setHerramentalExpandido] = useState(false);
   const [herramentalDescripcion, setHerramentalDescripcion] = useState("");
   const [herramentalPrecioTexto, setHerramentalPrecioTexto] = useState("");
 
-  // ── Edición de producto ya agregado ──────────────────────────────────────
   const [editandoProductoIndex, setEditandoProductoIndex] = useState<number | null>(null);
 
-  // ── Estado inicial del producto ──────────────────────────────────────────
   const estadoInicialProducto: Producto = {
     nombre: "", cantidades: [0, 0, 0], kilogramos: [0, 0, 0], precios: [0, 0, 0],
     calibre: "200", tintas: 1, tintasId: 1, caras: 2, carasId: 2, material: "",
@@ -139,10 +128,26 @@ export default function FormularioSolicitud({
     medidasFormateadas: "", nombreCompleto: "",
   });
 
-  // ── Cálculo de cantidades en bolsas ──────────────────────────────────────
+  const tintasPlastico = useMemo(
+    () => tintas.filter(t => {
+      const cantidad = Number(t.cantidad);
+      return cantidad >= 1 && cantidad <= 6;
+    }),
+    [tintas]
+  );
+  const tintaPlasticoDefault = tintasPlastico[0] ?? null;
+
   const { bolsas: cantidadesEnBolsas } = calcularDesdeInput(
     cantidadesTexto, modoCantidad, productoActual.porKilo
   );
+
+  const porKiloNumerico = Number(productoActual.porKilo ?? 0);
+  const puedeCalcularPrecioPlastico =
+    tipoMaterial === "plastico" &&
+    porKiloNumerico > 0 &&
+    Number(productoActual.tintas ?? 0) > 0 &&
+    Number(productoActual.tintasId ?? 0) > 0 &&
+    cantidadesEnBolsas.some(c => c > 0);
 
   const cantidadesEstables = useMemo(
     () => cantidadesEnBolsas,
@@ -152,9 +157,9 @@ export default function FormularioSolicitud({
 
   const { resultados, loading: calculandoPrecios, error: errorCalculo } = usePreciosBatch({
     cantidades: cantidadesEstables,
-    porKilo: productoActual.porKilo,
+    porKilo: porKiloNumerico,
     tintasId: productoActual.tintasId,
-    enabled: cantidadesEnBolsas.some(c => c > 0) && !!productoActual.porKilo,
+    enabled: puedeCalcularPrecioPlastico,
   });
 
   // ═══════════════════════════════════════════════════════════════════════
@@ -162,6 +167,34 @@ export default function FormularioSolicitud({
   // ═══════════════════════════════════════════════════════════════════════
 
   useEffect(() => { cargarCatalogos(); }, []);
+
+  useEffect(() => {
+    if (tipoMaterial !== "plastico" || !tintaPlasticoDefault) return;
+
+    const tintaActual = tintas.find(t => t.id === productoActual.tintasId);
+    const cantidadTintaActual = Number(tintaActual?.cantidad ?? productoActual.tintas ?? 0);
+    const tintaActualInvalida =
+      cantidadTintaActual < 1 ||
+      cantidadTintaActual > 6;
+
+    if (!tintaActualInvalida) return;
+
+    setProductoActual(prev => ({
+      ...prev,
+      tintas: tintaPlasticoDefault.cantidad,
+      tintasId: tintaPlasticoDefault.id,
+      pantones: null,
+      pigmentos: null,
+    }));
+    setPreciosEditadosManualmente([false, false, false]);
+    setPreciosTexto(["", "", ""]);
+  }, [
+    tipoMaterial,
+    tintas,
+    tintaPlasticoDefault,
+    productoActual.tintas,
+    productoActual.tintasId,
+  ]);
 
   useEffect(() => {
     if (modoColor === "pantones") {
@@ -172,6 +205,7 @@ export default function FormularioSolicitud({
   }, [productoActual.tintas, modoColor]);
 
   useEffect(() => {
+    if (tipoMaterial !== "plastico") return;
     if (resultados.length === 0) return;
     setProductoActual(prev => {
       const nuevosPrecios = [...prev.precios] as [number, number, number];
@@ -186,15 +220,15 @@ export default function FormularioSolicitud({
       resultados.forEach((r, i) => {
         if (!preciosEditadosManualmente[i] && r?.precio_unitario !== undefined) {
           const precioMostrar =
-            modoCantidad === "kilo" && productoActual.porKilo && Number(productoActual.porKilo) > 0
-              ? r.precio_unitario * Number(productoActual.porKilo)
+            modoCantidad === "kilo" && porKiloNumerico > 0
+              ? r.precio_unitario * porKiloNumerico
               : r.precio_unitario;
           nuevosTextos[i] = precioMostrar.toFixed(4);
         }
       });
       return nuevosTextos;
     });
-  }, [resultados, preciosEditadosManualmente]);
+  }, [resultados, preciosEditadosManualmente, tipoMaterial, modoCantidad, porKiloNumerico]);
 
   useEffect(() => {
     if (mostrarModalClientes && clientesCargados.length === 0) cargarClientes();
@@ -232,7 +266,6 @@ export default function FormularioSolicitud({
 
   useEffect(() => {
     getTiposInsumo().then(tipos => {
-      console.log("Tipos insumo:", tipos.map(t => `"${t.nombre}"`));
       const panton = tipos.find(t => t.nombre === "Pantón");
       const pigmento = tipos.find(t => t.nombre === "Pigmento");
       if (panton) setIdTipoPanton(panton.idtipo_insumo);
@@ -241,14 +274,13 @@ export default function FormularioSolicitud({
   }, []);
 
   // ═══════════════════════════════════════════════════════════════════════
-  // HANDLERS — CATÁLOGOS
+  // HANDLERS
   // ═══════════════════════════════════════════════════════════════════════
 
   const cargarCatalogos = async () => {
     try {
       const [catalogosData, suajesData, coloresAsaData, medidasTroquelData] = await Promise.all([
-        getCatalogosProduccion(), getSuajes(),
-        getColoresAsa(), getMedidasTroquel(),
+        getCatalogosProduccion(), getSuajes(), getColoresAsa(), getMedidasTroquel(),
       ]);
       setCaras(catalogosData.caras);
       setTintas(catalogosData.tintas);
@@ -260,28 +292,18 @@ export default function FormularioSolicitud({
     }
   };
 
-  // ═══════════════════════════════════════════════════════════════════════
-  // HANDLERS — CLIENTES
-  // ═══════════════════════════════════════════════════════════════════════
-
   const cargarClientes = async (query?: string) => {
-    setLoadingClientes(true);
-    setErrorClientes(null);
-    try {
-      setClientesCargados(await searchClientes(query));
-    } catch (error: any) {
-      setErrorClientes(error.response?.data?.error || "Error al cargar clientes");
-    } finally {
-      setLoadingClientes(false);
-    }
+    setLoadingClientes(true); setErrorClientes(null);
+    try { setClientesCargados(await searchClientes(query)); }
+    catch (error: any) { setErrorClientes(error.response?.data?.error || "Error al cargar clientes"); }
+    finally { setLoadingClientes(false); }
   };
 
   const handleSubmitClienteNuevo = async (datosCliente: CreateClienteRequest) => {
     const response = await createCliente(datosCliente);
     const clienteId = response?.cliente?.id ?? response?.id;
     setDatos(prev => ({
-      ...prev,
-      clienteId,
+      ...prev, clienteId,
       cliente: datosCliente.atencion || datosCliente.empresa || "",
       telefono: datosCliente.telefono || "",
       correo: datosCliente.correo || "",
@@ -292,70 +314,44 @@ export default function FormularioSolicitud({
   };
 
   const seleccionarCliente = async (cliente: ClienteBusqueda) => {
-    setMostrarModalClientes(false);
-    setBusquedaCliente("");
+    setMostrarModalClientes(false); setBusquedaCliente("");
     try {
       const completo = await getClienteById(cliente.idclientes);
       setDatos(prev => ({
         ...prev,
-        clienteId: completo.idclientes,
-        identificar: completo.identificar ?? null,
-        cliente: completo.atencion || "",
-        telefono: completo.telefono || "",
-        correo: completo.correo || "",
-        empresa: completo.empresa || "",
-        impresion: completo.impresion ?? null,
-        celular: completo.celular ?? null,
-        razon_social: completo.razon_social ?? null,
-        rfc: completo.rfc ?? null,
-        domicilio: completo.domicilio ?? null,
-        numero: completo.numero ?? null,
-        colonia: completo.colonia ?? null,
-        codigo_postal: completo.codigo_postal ?? null,
-        poblacion: completo.poblacion ?? null,
-        estado_cliente: completo.estado ?? null,
-        envio_domicilio: completo.envio_domicilio ?? null,
-        envio_numero: completo.envio_numero ?? null,
-        envio_colonia: completo.envio_colonia ?? null,
-        envio_codigo_postal: completo.envio_codigo_postal ?? null,
-        envio_poblacion: completo.envio_poblacion ?? null,
-        envio_estado: completo.envio_estado ?? null,
+        clienteId: completo.idclientes, identificar: completo.identificar ?? null,
+        cliente: completo.atencion || "", telefono: completo.telefono || "",
+        correo: completo.correo || "", empresa: completo.empresa || "",
+        impresion: completo.impresion ?? null, celular: completo.celular ?? null,
+        razon_social: completo.razon_social ?? null, rfc: completo.rfc ?? null,
+        domicilio: completo.domicilio ?? null, numero: completo.numero ?? null,
+        colonia: completo.colonia ?? null, codigo_postal: completo.codigo_postal ?? null,
+        poblacion: completo.poblacion ?? null, estado_cliente: completo.estado ?? null,
+        envio_domicilio: completo.envio_domicilio ?? null, envio_numero: completo.envio_numero ?? null,
+        envio_colonia: completo.envio_colonia ?? null, envio_codigo_postal: completo.envio_codigo_postal ?? null,
+        envio_poblacion: completo.envio_poblacion ?? null, envio_estado: completo.envio_estado ?? null,
         envio_referencia: completo.envio_referencia ?? null,
       }));
     } catch {
       setDatos(prev => ({
-        ...prev,
-        clienteId: cliente.idclientes,
-        identificar: cliente.identificar ?? null,
-        cliente: cliente.atencion || "",
-        telefono: cliente.telefono || "",
-        correo: cliente.correo || "",
-        empresa: cliente.empresa || "",
+        ...prev, clienteId: cliente.idclientes, identificar: cliente.identificar ?? null,
+        cliente: cliente.atencion || "", telefono: cliente.telefono || "",
+        correo: cliente.correo || "", empresa: cliente.empresa || "",
         impresion: cliente.impresion ?? null,
       }));
     }
   };
 
-  // ═══════════════════════════════════════════════════════════════════════
-  // HANDLERS — PRODUCTOS PLÁSTICO
-  // ═══════════════════════════════════════════════════════════════════════
-
   const cargarProductos = async (query?: string) => {
-    setLoadingProductos(true);
-    setErrorProductos(null);
-    try {
-      setProductosCargados(await searchProductosPlastico(query));
-    } catch (error: any) {
-      setErrorProductos(error.response?.data?.error || "Error al cargar productos");
-    } finally {
-      setLoadingProductos(false);
-    }
+    setLoadingProductos(true); setErrorProductos(null);
+    try { setProductosCargados(await searchProductosPlastico(query)); }
+    catch (error: any) { setErrorProductos(error.response?.data?.error || "Error al cargar productos"); }
+    finally { setLoadingProductos(false); }
   };
 
   const seleccionarProducto = (producto: ProductoBusqueda) => {
     const medidasMapeadas: Record<MedidaKey, string> = {
-      altura: producto.altura.toString(),
-      ancho: producto.ancho.toString(),
+      altura: producto.altura.toString(), ancho: producto.ancho.toString(),
       fuelleFondo: producto.fuelle_fondo.toString(),
       fuelleLateral1: producto.fuelle_lateral_izquierdo.toString(),
       fuelleLateral2: producto.fuelle_lateral_derecho.toString(),
@@ -364,35 +360,23 @@ export default function FormularioSolicitud({
     setProductoActual({
       productoId: producto.id,
       nombre: `${producto.tipo_producto} ${producto.medida} ${producto.material.toLowerCase()}`,
-      cantidades: [0, 0, 0],
-      kilogramos: [0, 0, 0],
-      precios: [0, 0, 0],
+      cantidades: [0, 0, 0], kilogramos: [0, 0, 0], precios: [0, 0, 0],
       calibre: producto.calibre.toString(),
-      tintas: tintas[0]?.cantidad || 1,
-      tintasId: tintas[0]?.id || 1,
-      caras: caras.find(c => c.id === 2)?.cantidad || 2,
-      carasId: 2,
-      material: producto.material,
-      medidas: medidasMapeadas,
-      perforacion: false,
-      medidasFormateadas: producto.medida,
-      porKilo: producto.por_kilo,
+      tintas: tintaPlasticoDefault?.cantidad || 1, tintasId: tintaPlasticoDefault?.id || 1,
+      caras: caras.find(c => c.id === 2)?.cantidad || 2, carasId: 2,
+      material: producto.material, medidas: medidasMapeadas, perforacion: false,
+      medidasFormateadas: producto.medida, porKilo: producto.por_kilo,
       idsuaje: null, suajeTipo: null, colorAsaId: null, colorAsaNombre: null,
-      pantones: null, pigmentos: null,
-      descripcion: null,
-      modoCantidad: modoCantidad,
-      herramental_descripcion: null, herramental_precio: null,
+      pantones: null, pigmentos: null, descripcion: null,
+      modoCantidad: modoCantidad, herramental_descripcion: null, herramental_precio: null,
     });
     setCantidadesTexto(["", "", ""]);
     setPreciosEditadosManualmente([false, false, false]);
     setPreciosTexto(["", "", ""]);
     setModoColor("pantones");
-    setInputsPantones(Array(tintas[0]?.cantidad || 1).fill(""));
-    setHerramentalExpandido(false);
-    setHerramentalDescripcion("");
-    setHerramentalPrecioTexto("");
-    setMostrarModalProductos(false);
-    setBusquedaProducto("");
+    setInputsPantones(Array(tintaPlasticoDefault?.cantidad || 1).fill(""));
+    setHerramentalExpandido(false); setHerramentalDescripcion(""); setHerramentalPrecioTexto("");
+    setMostrarModalProductos(false); setBusquedaProducto("");
   };
 
   const crearYAgregarProductoNuevo = async (): Promise<Producto | null> => {
@@ -409,20 +393,16 @@ export default function FormularioSolicitud({
         fuelle_latIz: Number(datosProductoNuevo.medidas.fuelleLateral1) || 0,
         fuelle_latDe: Number(datosProductoNuevo.medidas.fuelleLateral2) || 0,
         refuerzo: Number(datosProductoNuevo.medidas.refuerzo) || 0,
-        medida: datosProductoNuevo.medidasFormateadas,
-        por_kilo: porKiloCalculado ?? 0,
+        medida: datosProductoNuevo.medidasFormateadas, por_kilo: porKiloCalculado ?? 0,
       };
       const response = await crearOObtenerProducto(productoData);
       const productoConId: Producto = { ...productoActual, productoId: response.producto.id, porKilo: response.producto.por_kilo };
       setProductoActual(productoConId);
       return productoConId;
     } catch (error: any) {
-      console.error("Error al crear/obtener producto:", error);
       showAlert(error.response?.data?.error || "Error al guardar producto");
       return null;
-    } finally {
-      setGuardandoProducto(false);
-    }
+    } finally { setGuardandoProducto(false); }
   };
 
   const verificarDuplicadoAntesDeConfirmar = async () => {
@@ -436,51 +416,42 @@ export default function FormularioSolicitud({
         tipo_producto_plastico_id: datosProductoNuevo.tipoProductoId,
         material_plastico_id: datosProductoNuevo.materialId,
         calibre_id: datosProductoNuevo.calibreId,
-        altura: Number(m.altura) || 0,
-        ancho: Number(m.ancho) || 0,
+        altura: Number(m.altura) || 0, ancho: Number(m.ancho) || 0,
         fuelle_fondo: Number(m.fuelleFondo) || 0,
         fuelle_latIz: Number(m.fuelleLateral1) || 0,
         fuelle_latDe: Number(m.fuelleLateral2) || 0,
         refuerzo: Number(m.refuerzo) || 0,
       });
       if (resultado.existe) setAdvertenciaDuplicado(resultado.detalle ?? null);
-    } catch { /* no bloqueamos */ } finally {
-      setVerificandoDuplicado(false); setProductoNuevoListo(true);
-    }
+    } catch { }
+    finally { setVerificandoDuplicado(false); setProductoNuevoListo(true); }
   };
 
   const handleProductoNuevoChange = (nuevosDatos: DatosProducto) => {
-    setDatosProductoNuevo(nuevosDatos);
-    setAdvertenciaDuplicado(null);
+    setDatosProductoNuevo(nuevosDatos); setAdvertenciaDuplicado(null);
     const porKiloCalculado = calcularPorKilo(nuevosDatos, catalogos.materiales);
     const porKiloStr = porKiloCalculado !== null ? parseFloat(porKiloCalculado.toFixed(3)).toString() : undefined;
     setProductoActual(prev => ({
-      ...prev,
-      nombre: nuevosDatos.nombreCompleto, material: nuevosDatos.material,
+      ...prev, nombre: nuevosDatos.nombreCompleto, material: nuevosDatos.material,
       calibre: nuevosDatos.calibre, medidas: { ...nuevosDatos.medidas },
       medidasFormateadas: nuevosDatos.medidasFormateadas, porKilo: porKiloStr,
     }));
   };
 
-  // ── Cantidades ────────────────────────────────────────────────────────────
   const handleCantidadChange = (index: number, value: string) => {
     if (!esNumeroEnteroValido(value)) return;
     const nuevasTexto = [...cantidadesTexto] as [string, string, string];
-    nuevasTexto[index] = value;
-    setCantidadesTexto(nuevasTexto);
+    nuevasTexto[index] = value; setCantidadesTexto(nuevasTexto);
     const { bolsas, kgs } = calcularDesdeInput(nuevasTexto, modoCantidad, productoActual.porKilo);
     setProductoActual(prev => ({ ...prev, cantidades: bolsas, kilogramos: kgs }));
   };
 
-  // ── Precios ───────────────────────────────────────────────────────────────
   const handlePrecioChange = (index: number, value: string) => {
     if (!esDecimalValido(value)) return;
     const nuevosTextos = [...preciosTexto] as [string, string, string];
-    nuevosTextos[index] = value;
-    setPreciosTexto(nuevosTextos);
+    nuevosTextos[index] = value; setPreciosTexto(nuevosTextos);
     const nuevosFlags = [...preciosEditadosManualmente] as [boolean, boolean, boolean];
-    nuevosFlags[index] = true;
-    setPreciosEditadosManualmente(nuevosFlags);
+    nuevosFlags[index] = true; setPreciosEditadosManualmente(nuevosFlags);
     const nuevosPrecios = [...productoActual.precios] as [number, number, number];
     const parsed = parseFloat(value);
     if (modoCantidad === "kilo" && productoActual.porKilo && Number(productoActual.porKilo) > 0) {
@@ -496,47 +467,25 @@ export default function FormularioSolicitud({
     const valor = parseFloat(nuevosTextos[index]);
     if (isNaN(valor) || nuevosTextos[index] === "") {
       const nuevosFlags = [...preciosEditadosManualmente] as [boolean, boolean, boolean];
-      nuevosFlags[index] = false;
-      setPreciosEditadosManualmente(nuevosFlags);
+      nuevosFlags[index] = false; setPreciosEditadosManualmente(nuevosFlags);
       nuevosTextos[index] = "";
-    } else {
-      nuevosTextos[index] = valor.toFixed(4);
-    }
+    } else { nuevosTextos[index] = valor.toFixed(4); }
     setPreciosTexto(nuevosTextos);
   };
 
   const handleRestaurarPrecioAuto = (index: number) => {
     const nuevosFlags = [...preciosEditadosManualmente] as [boolean, boolean, boolean];
-    nuevosFlags[index] = false;
-    setPreciosEditadosManualmente(nuevosFlags);
+    nuevosFlags[index] = false; setPreciosEditadosManualmente(nuevosFlags);
     const nuevosTextos = [...preciosTexto] as [string, string, string];
-    nuevosTextos[index] = "";
-    setPreciosTexto(nuevosTextos);
-  };
-
-  // ── Color / Pantones ──────────────────────────────────────────────────────
-  const handleCambiarModoColor = (modo: "pantones") => {
-    setModoColor(modo);
-    if (productoActual.pantones) {
-      const arr = productoActual.pantones.split(", ").map(s => s.trim());
-      setInputsPantones(Array(productoActual.tintas).fill("").map((_, i) => arr[i] || ""));
-    } else {
-      setInputsPantones(Array(productoActual.tintas).fill(""));
-    }
-  };
-
-  const handlePigmentoChange = (value: string) => {
-    setProductoActual(prev => ({ ...prev, pigmentos: sanitizarTexto(value) || null }));
+    nuevosTextos[index] = ""; setPreciosTexto(nuevosTextos);
   };
 
   const handlePantoneChange = (index: number, value: string) => {
     const sanitizado = sanitizarTexto(value);
-    const nuevos = [...inputsPantones];
-    nuevos[index] = sanitizado;
+    const nuevos = [...inputsPantones]; nuevos[index] = sanitizado;
     setInputsPantones(nuevos);
     setProductoActual(prev => ({
-      ...prev,
-      pantones: nuevos.join(", ").replace(/^[\s,]+|[\s,]+$/g, "") || null,
+      ...prev, pantones: nuevos.join(", ").replace(/^[\s,]+|[\s,]+$/g, "") || null,
     }));
   };
 
@@ -549,12 +498,8 @@ export default function FormularioSolicitud({
     if (modalInsumo.indice !== null) {
       const indice = modalInsumo.indice;
       setInputsPantones(prev => {
-        const nuevos = [...prev];
-        nuevos[indice] = texto;
-        setProductoActual(p => ({
-          ...p,
-          pantones: nuevos.join(", ").replace(/^[\s,]+|[\s,]+$/g, "") || null,
-        }));
+        const nuevos = [...prev]; nuevos[indice] = texto;
+        setProductoActual(p => ({ ...p, pantones: nuevos.join(", ").replace(/^[\s,]+|[\s,]+$/g, "") || null }));
         return nuevos;
       });
     } else {
@@ -563,12 +508,10 @@ export default function FormularioSolicitud({
     setModalInsumo({ abierto: false, tipoId: 0, nombre: "", indice: null });
   };
 
-  // ── Herramental ───────────────────────────────────────────────────────────
   const herramentalTieneData = !!herramentalDescripcion.trim() || (herramentalPrecioTexto !== "" && parseFloat(herramentalPrecioTexto) > 0);
 
   const handleHerramentalToggle = () => {
-    const nuevo = !herramentalExpandido;
-    setHerramentalExpandido(nuevo);
+    const nuevo = !herramentalExpandido; setHerramentalExpandido(nuevo);
     if (!nuevo && !herramentalDescripcion && !herramentalPrecioTexto)
       setProductoActual(prev => ({ ...prev, herramental_descripcion: null, herramental_precio: null }));
   };
@@ -586,13 +529,11 @@ export default function FormularioSolicitud({
   };
 
   const handleHerramentalLimpiar = () => {
-    setHerramentalDescripcion("");
-    setHerramentalPrecioTexto("");
+    setHerramentalDescripcion(""); setHerramentalPrecioTexto("");
     setProductoActual(prev => ({ ...prev, herramental_descripcion: null, herramental_precio: null }));
     setHerramentalExpandido(false);
   };
 
-  // ── Medidas inline ────────────────────────────────────────────────────────
   const construirMedidasFormateadasLocal = (medidas: Record<MedidaKey, string>) => {
     const verticales = FORMATO_MEDIDAS.verticales.map(k => medidas[k]).filter(v => v && Number(v) > 0);
     const horizontales = FORMATO_MEDIDAS.horizontales.map(k => medidas[k]).filter(v => v && Number(v) > 0);
@@ -628,7 +569,6 @@ export default function FormularioSolicitud({
     setAdvertenciaDuplicado(null);
   };
 
-  // ── Helpers tipo producto ─────────────────────────────────────────────────
   const getEsAsaFlexible = (): boolean => {
     const tipo = modoProducto === "nuevo" ? datosProductoNuevo.tipoProducto : productoActual.nombre;
     return (tipo || "").toLowerCase().includes("asa flexible");
@@ -639,7 +579,6 @@ export default function FormularioSolicitud({
     return (tipo || "").toLowerCase().includes("troquelada");
   };
 
-  // ── Validaciones cantidad ─────────────────────────────────────────────────
   const MIN_KG = 30;
 
   const getEquivalente = (index: number): string | null => {
@@ -676,7 +615,6 @@ export default function FormularioSolicitud({
 
   const labelCantidad = modoCantidad === "kilo" ? "kg" : "bolsas";
 
-  // ── Agregar / Editar producto PLÁSTICO ───────────────────────────────────
   const handleAgregarProducto = async () => {
     const { bolsas: cantsBolsas, kgs: catsKgs } = calcularDesdeInput(cantidadesTexto, modoCantidad, productoActual.porKilo);
     const tieneValoresValidos = cantsBolsas.some((cant, i) => cant > 0 && productoActual.precios[i] > 0);
@@ -687,21 +625,23 @@ export default function FormularioSolicitud({
     const herramentalDescFinal = herramentalDescripcion.trim() || null;
 
     let productoParaAgregar: Producto = {
-      ...productoActual, cantidades: cantsBolsas, kilogramos: catsKgs,
+      ...productoActual, tipoCotizacion: "plastico", tipo_material: "plastico",
+      cantidades: cantsBolsas, kilogramos: catsKgs,
       modoCantidad, herramental_descripcion: herramentalDescFinal, herramental_precio: herramentalPrecioFinal,
-    };
+    } as any;
 
     if (modoProducto === "nuevo" && !productoActual.productoId) {
       const productoCreado = await crearYAgregarProductoNuevo();
       if (!productoCreado) return;
-      productoParaAgregar = { ...productoCreado, cantidades: cantsBolsas, kilogramos: catsKgs, modoCantidad, herramental_descripcion: herramentalDescFinal, herramental_precio: herramentalPrecioFinal };
+      productoParaAgregar = {
+        ...productoCreado, tipoCotizacion: "plastico", tipo_material: "plastico",
+        cantidades: cantsBolsas, kilogramos: catsKgs, modoCantidad,
+        herramental_descripcion: herramentalDescFinal, herramental_precio: herramentalPrecioFinal,
+      } as any;
     }
 
     if (editandoProductoIndex !== null) {
-      setDatos(prev => ({
-        ...prev,
-        productos: prev.productos.map((p, i) => i === editandoProductoIndex ? productoParaAgregar : p),
-      }));
+      setDatos(prev => ({ ...prev, productos: prev.productos.map((p, i) => i === editandoProductoIndex ? productoParaAgregar : p) }));
       setEditandoProductoIndex(null);
     } else {
       setDatos(prev => ({ ...prev, productos: [...prev.productos, productoParaAgregar] }));
@@ -709,34 +649,23 @@ export default function FormularioSolicitud({
     resetearFormularioProducto();
   };
 
-  // ── Agregar / Editar producto PAPEL ──────────────────────────────────────
   const handleAgregarProductoPapel = (prod: ProductoPapelCotizacion) => {
+    const productoPapel = { ...prod, tipoCotizacion: "papel", tipo_material: "papel" } as any;
     if (editandoPapelIndex !== null) {
-      setDatos(prev => ({
-        ...prev,
-        productos: prev.productos.map((p, i) => i === editandoPapelIndex ? (prod as any) : p),
-      }));
+      setDatos(prev => ({ ...prev, productos: prev.productos.map((p, i) => i === editandoPapelIndex ? productoPapel : p) }));
       setEditandoPapelIndex(null);
     } else {
-      setDatos(prev => ({ ...prev, productos: [...prev.productos, prod as any] }));
+      setDatos(prev => ({ ...prev, productos: [...prev.productos, productoPapel] }));
     }
   };
 
   const handleEditarProducto = (index: number) => {
     const prod = datos.productos[index] as any;
-
-    // Si es papel, abre el formulario de papel
-    if (prod.tipoCotizacion === "papel") {
-      setEditandoPapelIndex(index);
-      setTipoMaterial("papel");
-      window.scrollTo({ top: 0, behavior: "smooth" });
-      return;
+    if (esProductoPapel(prod)) {
+      setEditandoPapelIndex(index); setTipoMaterial("papel");
+      window.scrollTo({ top: 0, behavior: "smooth" }); return;
     }
-
-    // Si es plástico, flujo normal
-    setEditandoProductoIndex(index);
-    setTipoMaterial("plastico");
-    setModoProducto("registrado");
+    setEditandoProductoIndex(index); setTipoMaterial("plastico"); setModoProducto("registrado");
     setProductoActual({ ...prod });
     setCantidadesTexto([
       prod.cantidades[0] > 0 ? String(prod.modoCantidad === "kilo" ? prod.kilogramos[0] : prod.cantidades[0]) : "",
@@ -759,51 +688,39 @@ export default function FormularioSolicitud({
   };
 
   const resetearFormularioProducto = () => {
-    setModoProducto("registrado");
-    setProductoNuevoListo(false);
-    setEditandoProductoIndex(null);
+    setModoProducto("registrado"); setProductoNuevoListo(false); setEditandoProductoIndex(null);
     setProductoActual({
       ...estadoInicialProducto,
-      tintas: tintas[0]?.cantidad || 1,
-      tintasId: tintas[0]?.id || 1,
-      caras: caras.find(c => c.id === 2)?.cantidad || 2,
-      carasId: 2,
+      tintas: tintaPlasticoDefault?.cantidad || 1, tintasId: tintaPlasticoDefault?.id || 1,
+      caras: caras.find(c => c.id === 2)?.cantidad || 2, carasId: 2,
     });
     setDatosProductoNuevo({
       tipoProducto: "", tipoProductoId: 0, material: "", materialId: 0, calibre: "", calibreId: 0,
       medidas: { ...ESTADO_INICIAL_PRODUCTO_MEDIDAS }, medidasFormateadas: "", nombreCompleto: "",
     });
     setPreciosEditadosManualmente([false, false, false]);
-    setPreciosTexto(["", "", ""]);
-    setCantidadesTexto(["", "", ""]);
+    setPreciosTexto(["", "", ""]); setCantidadesTexto(["", "", ""]);
     setModoCantidad("unidad");
-    setMostrarDropdownSuaje(false);
-    setMostrarDropdownColorAsa(false);
-    setMostrarDropdownTroquel(false);
-    setModoColor("pantones");
-    setInputsPantones(Array(tintas[0]?.cantidad || 1).fill(""));
+    setMostrarDropdownSuaje(false); setMostrarDropdownColorAsa(false); setMostrarDropdownTroquel(false);
+    setModoColor("pantones"); setInputsPantones(Array(tintaPlasticoDefault?.cantidad || 1).fill(""));
     setAdvertenciaDuplicado(null);
-    setHerramentalExpandido(false);
-    setHerramentalDescripcion("");
-    setHerramentalPrecioTexto("");
+    setHerramentalExpandido(false); setHerramentalDescripcion(""); setHerramentalPrecioTexto("");
   };
 
   const handleEliminarProducto = (index: number) => {
     setDatos(prev => ({ ...prev, productos: prev.productos.filter((_, i) => i !== index) }));
   };
 
-  // ── Totales ───────────────────────────────────────────────────────────────
   const calcularTotal = () =>
     datos.productos.reduce((total, prod) => {
       const p = prod as any;
-      // Productos de papel — solo piezas × precio
-      if (p.tipoCotizacion === "papel") {
-        return total + p.cantidades.reduce((sum: number, cant: number, i: number) => {
+      if (esProductoPapel(p)) {
+        const subtotalPapel = p.cantidades.reduce((sum: number, cant: number, i: number) => {
           if (!cant || cant <= 0) return sum;
           return sum + Math.round(cant * p.precios[i] * 100) / 100;
         }, 0);
+        return total + subtotalPapel + (p.herramental_precio ?? 0) + (p.cargo_adicional_precio ?? 0);
       }
-      // Productos de plástico — lógica existente
       const pk = Number(p.porKilo || 1);
       const subtotalProducto = p.cantidades.reduce((sum: number, cant: number, i: number) => {
         if (!cant || cant <= 0) return sum;
@@ -816,7 +733,6 @@ export default function FormularioSolicitud({
       return total + subtotalProducto + (p.herramental_precio ?? 0);
     }, 0);
 
-  // ── Navegación pasos ──────────────────────────────────────────────────────
   const handleAvanzarConClienteExistente = () => { if (datos.clienteId) setPaso(2); };
   const handleAtras = () => { if (paso === 2) setPaso(1); };
 
@@ -826,14 +742,10 @@ export default function FormularioSolicitud({
     e.preventDefault();
     if (datos.productos.length === 0 || enviando) return;
     setEnviando(true);
-    try {
-      await onSubmit({ ...datos, tipo: modo });
-    } finally {
-      setEnviando(false);
-    }
+    try { await onSubmit({ ...datos, tipo: modo }); }
+    finally { setEnviando(false); }
   };
 
-  // ── Helpers JSX ───────────────────────────────────────────────────────────
   const hayProductoSeleccionado =
     (modoProducto === "registrado" && productoActual.nombre) ||
     (modoProducto === "nuevo" && productoNuevoListo);
@@ -1024,58 +936,19 @@ export default function FormularioSolicitud({
         <div className="mb-4 flex gap-3 bg-gray-100 p-1 rounded-lg w-fit">
           <button
             type="button"
-            onClick={() => {
-              setTipoMaterial("plastico");
-              setEditandoPapelIndex(null);
-            }}
-            className={`flex items-center gap-2 px-5 py-2 rounded-md font-medium text-sm transition-all ${tipoMaterial === "plastico" ? "bg-white text-blue-600 shadow" : "text-gray-600 hover:text-gray-900"
-              }`}
+            onClick={() => { setTipoMaterial("plastico"); setEditandoPapelIndex(null); }}
+            className={`flex items-center gap-2 px-5 py-2 rounded-md font-medium text-sm transition-all ${tipoMaterial === "plastico" ? "bg-white text-blue-600 shadow" : "text-gray-600 hover:text-gray-900"}`}
           >
             🧴 Plástico
           </button>
           <button
             type="button"
-            onClick={() => {
-              setTipoMaterial("papel");
-              setEditandoProductoIndex(null);
-              resetearFormularioProducto();
-            }}
-            className={`flex items-center gap-2 px-5 py-2 rounded-md font-medium text-sm transition-all ${tipoMaterial === "papel" ? "bg-white text-amber-600 shadow" : "text-gray-600 hover:text-gray-900"
-              }`}
+            onClick={() => { setTipoMaterial("papel"); setEditandoProductoIndex(null); resetearFormularioProducto(); }}
+            className={`flex items-center gap-2 px-5 py-2 rounded-md font-medium text-sm transition-all ${tipoMaterial === "papel" ? "bg-white text-amber-600 shadow" : "text-gray-600 hover:text-gray-900"}`}
           >
             📄 Papel
           </button>
         </div>
-
-        {/* ── Sub-tabs solo para Plástico ── */}
-        {tipoMaterial === "plastico" && (
-          <div className="mb-6 flex gap-4 bg-gray-100 p-1 rounded-lg w-fit">
-            <button type="button" onClick={() => { setModoProducto("registrado"); setAdvertenciaDuplicado(null); }}
-              className={`px-6 py-2 rounded-md font-medium transition-all text-sm ${modoProducto === "registrado" ? "bg-white text-blue-600 shadow" : "text-gray-600 hover:text-gray-900"}`}>
-              Producto Registrado
-            </button>
-            <button type="button" onClick={() => { setModoProducto("nuevo"); setAdvertenciaDuplicado(null); }}
-              className={`px-6 py-2 rounded-md font-medium transition-all text-sm ${modoProducto === "nuevo" ? "bg-white text-blue-600 shadow" : "text-gray-600 hover:text-gray-900"}`}>
-              Producto Nuevo
-            </button>
-          </div>
-        )}
-
-        {/* ── Banner edición plástico ── */}
-        {tipoMaterial === "plastico" && editandoProductoIndex !== null && (
-          <div className="mb-4 flex items-center justify-between px-4 py-3 bg-blue-50 border border-blue-200 rounded-lg">
-            <div className="flex items-center gap-2">
-              <span className="text-blue-600">✏️</span>
-              <span className="text-sm font-semibold text-blue-800">
-                Editando producto {editandoProductoIndex + 1}: {(datos.productos[editandoProductoIndex] as any)?.nombre}
-              </span>
-            </div>
-            <button type="button" onClick={() => { setEditandoProductoIndex(null); resetearFormularioProducto(); }}
-              className="text-xs text-blue-500 hover:text-blue-700 underline">
-              Cancelar edición
-            </button>
-          </div>
-        )}
 
         {/* ══════════════════════════════════════════════════════════════
             FORMULARIO PAPEL
@@ -1085,11 +958,7 @@ export default function FormularioSolicitud({
             <FormularioProductoPapel
               modo={modo}
               onAgregar={handleAgregarProductoPapel}
-              productoEditando={
-                editandoPapelIndex !== null
-                  ? (datos.productos[editandoPapelIndex] as any as ProductoPapelCotizacion)
-                  : null
-              }
+              productoEditando={editandoPapelIndex !== null ? (datos.productos[editandoPapelIndex] as any as ProductoPapelCotizacion) : null}
               onCancelarEdicion={() => setEditandoPapelIndex(null)}
               tintas={tintas}
               caras={caras}
@@ -1099,28 +968,56 @@ export default function FormularioSolicitud({
         )}
 
         {/* ══════════════════════════════════════════════════════════════
-            FORMULARIO PLÁSTICO (sin cambios)
+            FORMULARIO PLÁSTICO — un solo contenedor con todo adentro
         ══════════════════════════════════════════════════════════════ */}
         {tipoMaterial === "plastico" && (
           <div className="bg-gray-50 p-6 rounded-lg mb-4">
 
+            {/* ── Tabs Existente / Nuevo ── */}
+            <div className="mb-4 flex gap-3 bg-gray-100 p-1 rounded-lg w-fit">
+              <button type="button" onClick={() => { setModoProducto("registrado"); setAdvertenciaDuplicado(null); }}
+                className={`flex items-center gap-2 px-5 py-2 rounded-md font-medium text-sm transition-all ${modoProducto === "registrado" ? "bg-white text-blue-600 shadow" : "text-gray-600 hover:text-gray-900"}`}>
+                🧴 Existente
+              </button>
+              <button type="button" onClick={() => { setModoProducto("nuevo"); setAdvertenciaDuplicado(null); }}
+                className={`flex items-center gap-2 px-5 py-2 rounded-md font-medium text-sm transition-all ${modoProducto === "nuevo" ? "bg-white text-blue-600 shadow" : "text-gray-600 hover:text-gray-900"}`}>
+                ✚ Nuevo
+              </button>
+            </div>
+
+            {/* ── Banner edición ── */}
+            {editandoProductoIndex !== null && (
+              <div className="mb-4 flex items-center justify-between px-4 py-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <div className="flex items-center gap-2">
+                  <span className="text-blue-600">✏️</span>
+                  <span className="text-sm font-semibold text-blue-800">
+                    Editando producto {editandoProductoIndex + 1}: {(datos.productos[editandoProductoIndex] as any)?.nombre}
+                  </span>
+                </div>
+                <button type="button" onClick={() => { setEditandoProductoIndex(null); resetearFormularioProducto(); }}
+                  className="text-xs text-blue-500 hover:text-blue-700 underline">
+                  Cancelar edición
+                </button>
+              </div>
+            )}
+
+            {/* ── Modo registrado ── */}
             {modoProducto === "registrado" && (
               <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Buscar Producto</label>
-                  <button type="button" onClick={() => setMostrarModalProductos(true)}
-                    className="w-full px-4 py-3 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-blue-500 hover:text-blue-600 flex items-center justify-center gap-2">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
-                    Click para buscar producto registrado
-                  </button>
-                </div>
+                <button type="button" onClick={() => setMostrarModalProductos(true)}
+                  className="w-full px-4 py-3 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-blue-500 hover:text-blue-600 flex items-center justify-center gap-2">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                  {productoActual.nombre ? "Cambiar producto" : "Click para buscar producto registrado"}
+                </button>
                 {productoActual.nombre && (
                   <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                     <p className="font-semibold text-gray-900 mb-2">{productoActual.nombre}</p>
                     <div className="grid grid-cols-2 gap-2 text-sm text-gray-700">
                       <p><span className="font-semibold">Material:</span> {productoActual.material}</p>
-                      <p><span className="font-semibold">Calibre:</span>  {productoActual.calibre}</p>
-                      <p><span className="font-semibold">Medidas:</span>  {productoActual.medidasFormateadas}</p>
+                      <p><span className="font-semibold">Calibre:</span> {productoActual.calibre}</p>
+                      <p><span className="font-semibold">Medidas:</span> {productoActual.medidasFormateadas}</p>
                       <p><span className="font-semibold">Por kilo:</span> {productoActual.porKilo}</p>
                     </div>
                   </div>
@@ -1128,6 +1025,7 @@ export default function FormularioSolicitud({
               </div>
             )}
 
+            {/* ── Modo nuevo ── */}
             {modoProducto === "nuevo" && (
               <div className="space-y-4">
                 {!productoNuevoListo && (
@@ -1201,6 +1099,7 @@ export default function FormularioSolicitud({
               </div>
             )}
 
+            {/* ── Specs (solo si hay producto seleccionado) ── */}
             {hayProductoSeleccionado && (
               <div className="mt-6 space-y-4 border-t pt-4">
 
@@ -1265,12 +1164,11 @@ export default function FormularioSolicitud({
                     </div>
                     {mostrarDropdownTintas && (
                       <ul className="absolute w-full bg-white border border-gray-300 mt-1 rounded-lg shadow-lg z-20">
-                        {tintas.map(t => (
+                        {tintasPlastico.map(t => (
                           <li key={t.id} onClick={() => {
                             setProductoActual(p => ({ ...p, tintas: t.cantidad, tintasId: t.id, pantones: null, pigmentos: null }));
                             setInputsPantones(Array(t.cantidad).fill(""));
-                            setModoColor("pantones");
-                            setMostrarDropdownTintas(false);
+                            setModoColor("pantones"); setMostrarDropdownTintas(false);
                           }} className="px-4 py-2 hover:bg-blue-100 cursor-pointer text-gray-900">
                             {t.cantidad} tinta{t.cantidad > 1 ? "s" : ""}
                           </li>
@@ -1301,7 +1199,7 @@ export default function FormularioSolicitud({
                   </div>
                 </div>
 
-                {/* Modal registrar insumo nuevo */}
+                {/* Modal insumo */}
                 {modalInsumo.abierto && (
                   <ModalRegistrarInsumo
                     tipoInsumoInicial={modalInsumo.tipoId}
@@ -1350,8 +1248,7 @@ export default function FormularioSolicitud({
                               onChange={(val) => handlePantoneChange(i, val)}
                               onSeleccionar={(item) => {
                                 const texto = item.codigo ? `${item.nombre} (${item.codigo})` : item.nombre;
-                                const nuevos = [...inputsPantones];
-                                nuevos[i] = texto;
+                                const nuevos = [...inputsPantones]; nuevos[i] = texto;
                                 setInputsPantones(nuevos);
                                 setProductoActual((prev) => ({ ...prev, pantones: nuevos.join(", ").replace(/^[\s,]+|[\s,]+$/g, "") || null }));
                               }}
@@ -1630,6 +1527,7 @@ export default function FormularioSolicitud({
                 </button>
               </div>
             )}
+
           </div>
         )}
 
@@ -1640,15 +1538,13 @@ export default function FormularioSolicitud({
             <div className="space-y-3">
               {datos.productos.map((prod, index) => {
                 const p = prod as any;
-                const esPapel = p.tipoCotizacion === "papel";
+                const esPapel = esProductoPapel(p);
                 return (
                   <div key={index} className={`flex items-start justify-between p-4 rounded-lg border shadow-sm ${esPapel ? "bg-amber-50 border-amber-200" : "bg-white border-gray-200"}`}>
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-1 flex-wrap">
                         {esPapel && (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-200 text-amber-800 border border-amber-300">
-                            📄 Papel
-                          </span>
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-200 text-amber-800 border border-amber-300">📄 Papel</span>
                         )}
                         <p className="font-semibold text-gray-900">{p.nombre}</p>
                         {p.descripcion && (
@@ -1661,9 +1557,7 @@ export default function FormularioSolicitud({
                           <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-sky-100 text-sky-700 border border-sky-200">Perforada</span>
                         )}
                       </div>
-
                       {esPapel ? (
-                        // Info de producto de papel
                         <div>
                           <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-600 mt-1">
                             {p.medida && <span>Medida: {p.medida}</span>}
@@ -1688,6 +1582,16 @@ export default function FormularioSolicitud({
                               return <p key={i} className="text-sm text-gray-700">{cant.toLocaleString()} pzs × ${p.precios[i].toFixed(4)}/pz = ${importe.toFixed(2)}</p>;
                             })}
                           </div>
+                          {(p.herramental_descripcion || p.herramental_precio != null) && (
+                            <div className="mt-2 flex items-center gap-2 px-3 py-1.5 bg-gray-100 border border-gray-200 rounded-lg">
+                              <span className="text-sm">🔧</span>
+                              <div className="flex-1 min-w-0">
+                                <span className="text-xs font-semibold text-gray-700">Herramental</span>
+                                {p.herramental_descripcion && <span className="text-xs text-gray-600 ml-1">— {p.herramental_descripcion}</span>}
+                              </div>
+                              {p.herramental_precio != null && <span className="text-xs font-bold text-gray-800 flex-shrink-0">+${p.herramental_precio.toFixed(2)}</span>}
+                            </div>
+                          )}
                           {p.observacion && (
                             <div className="mt-2 p-2 bg-amber-100 border border-amber-200 rounded text-sm">
                               <span className="font-semibold text-amber-900">Obs:</span>
@@ -1696,7 +1600,6 @@ export default function FormularioSolicitud({
                           )}
                         </div>
                       ) : (
-                        // Info de producto de plástico (igual que antes)
                         <div>
                           <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-600">
                             <span>Material: {p.material}</span>
@@ -1795,11 +1698,10 @@ export default function FormularioSolicitud({
           {datos.productos.length > 0 && (
             <button type="button" onClick={handleSubmit} disabled={enviando}
               className={`px-6 py-2 rounded-lg font-semibold transition flex items-center gap-2 ${enviando ? "bg-gray-400 text-white cursor-not-allowed" : "bg-green-600 hover:bg-green-700 text-white"}`}>
-              {enviando ? (
-                <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Guardando...</>
-              ) : (
-                modo === "pedido" ? "Crear Pedido" : "Crear Cotización"
-              )}
+              {enviando
+                ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Guardando...</>
+                : modo === "pedido" ? "Crear Pedido" : "Crear Cotización"
+              }
             </button>
           )}
         </div>

@@ -1,175 +1,183 @@
-import { useState, useEffect, useCallback } from "react";
-import type { Catalogs, CatKey } from "../../types/papel/papel.types";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { Catalogs, CatItem, CatKey } from "../../types/papel/papel.types";
 import {
-  fetchCatalogosPapel,
-  fetchCatalogosInactivos,
   agregarItemCatalogo,
   editarItemCatalogo,
   eliminarItemCatalogo,
+  fetchCatalogosInactivos,
+  fetchCatalogosPapel,
   reactivarItemCatalogo,
 } from "../../services/papel/papel.service";
 
-const EMPTY: Catalogs = {
-  tipo_producto: [], tipo_papel: [], calibre: [], tipo_pegado: [],
-  pegamento: [], tipo_asa: [], laminado: [], refuerzo_medidas: [],
-  refuerzo_material: [], empaque: [], sacabocados: [], perforado: [],
-  hojeado_guillotina: [], impresora: [], hs_ar: [], suaje_maquina: [],
-  uv: [], textura: [], empalme: [], armado: [], asas_maquina: [], desbarbe: [],
-  matrix: [],
-  cortes: [],
-  dobles: [],
-  puntos: [],
+const CAT_KEYS: CatKey[] = [
+  "tipo_producto",
+  "tipo_papel",
+  "calibre",
+  "tipo_pegado",
+  "pegamento",
+  "tipo_asa",
+  "laminado",
+  "laminado_maquina",
+  "textura",
+  "refuerzo_medidas",
+  "refuerzo_material",
+  "empaque",
+  "sacabocados",
+  "perforado",
+  "hojeado_guillotina",
+  "impresora",
+  "hs_ar",
+  "suaje_maquina",
+  "uv",
+  "texturizadora",
+  "empaque_maquina",
+  "empalme",
+  "armado",
+  "asas_maquina",
+  "desbarbe",
+  "matrix",
+  "cortes",
+  "dobles",
+  "puntos",
+];
+
+const emptyCatalogs = (): Catalogs => {
+  const acc = {} as Catalogs;
+  for (const key of CAT_KEYS) acc[key] = [];
+  return acc;
 };
 
+const ordenar = (items: CatItem[]) =>
+  [...items].sort((a, b) => String(a.nombre).localeCompare(String(b.nombre), "es"));
+
 export function useCatalogosPapel() {
-  const [catalogs,          setCatalogs]          = useState<Catalogs>(EMPTY);
-  const [catalogsInactivos, setCatalogsInactivos] = useState<Catalogs>(EMPTY);
-  const [loading,           setLoading]           = useState(true);
-  const [loadingInactivos,  setLoadingInactivos]  = useState(false);
-  const [error,             setError]             = useState<string | null>(null);
+  const [catalogs, setCatalogs] = useState<Catalogs>(emptyCatalogs);
+  const [catalogsInactivos, setCatalogsInactivos] = useState<Catalogs>(emptyCatalogs);
+  const [loading, setLoading] = useState(true);
+  const [loadingInactivos, setLoadingInactivos] = useState(false);
 
   const load = useCallback(async () => {
+    setLoading(true);
     try {
-      setLoading(true);
-      setError(null);
-      const data = await fetchCatalogosPapel();
-      setCatalogs(data);
-    } catch (e: any) {
-      setError(e.message);
+      setCatalogs({ ...emptyCatalogs(), ...(await fetchCatalogosPapel()) });
     } finally {
       setLoading(false);
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
-
   const loadInactivos = useCallback(async () => {
+    setLoadingInactivos(true);
     try {
-      setLoadingInactivos(true);
-      setError(null);
-      const data = await fetchCatalogosInactivos();
-      setCatalogsInactivos(data);
-    } catch (e: any) {
-      setError(e.message);
+      setCatalogsInactivos({ ...emptyCatalogs(), ...(await fetchCatalogosInactivos()) });
     } finally {
       setLoadingInactivos(false);
     }
   }, []);
 
-  const names = (key: CatKey) => (catalogs[key] ?? []).map(i => i.nombre);
+  useEffect(() => {
+    load();
+  }, [load]);
 
-  // ── addItem: ahora recibe altura para cortes/dobles ───────────────────
-  const addItem = async (
-    key: CatKey,
-    nombre: string,
-    medida?: string,
-    numeroMaquina?: string,
-    altura?: string,          // ← nuevo
-  ) => {
-    const tempId = Date.now();
-    setCatalogs(prev => ({
-      ...prev,
-      [key]: [...(prev[key] ?? []), { id: tempId, nombre, medida, numero_maquina: numeroMaquina, altura }],
-    }));
-    try {
-      const created = await agregarItemCatalogo(key, nombre, medida, numeroMaquina, altura);
+  const names = useMemo(() => {
+    const acc = {} as Record<CatKey, string[]>;
+    for (const key of CAT_KEYS) acc[key] = (catalogs[key] ?? []).map(item => item.nombre);
+    return acc;
+  }, [catalogs]);
+
+  const addItem = useCallback(
+    async (
+      catalogo: CatKey,
+      nombre: string,
+      medida?: string,
+      numeroMaquina?: string,
+      altura?: string,
+      idcatPunto?: number | null,
+      tipoMaquina?: string | null
+    ) => {
+      const item = await agregarItemCatalogo(
+        catalogo,
+        nombre,
+        medida,
+        numeroMaquina,
+        altura,
+        idcatPunto,
+        tipoMaquina
+      );
       setCatalogs(prev => ({
         ...prev,
-        [key]: (prev[key] ?? []).map(i => i.id === tempId ? created : i),
+        [catalogo]: ordenar([...(prev[catalogo] ?? []), item]),
       }));
-    } catch {
+      return item;
+    },
+    []
+  );
+
+  const editItem = useCallback(
+    async (
+      catalogo: CatKey,
+      id: number,
+      nombre: string,
+      medida?: string,
+      numeroMaquina?: string,
+      altura?: string,
+      idcatPunto?: number | null,
+      tipoMaquina?: string | null
+    ) => {
+      await editarItemCatalogo(
+        catalogo,
+        id,
+        nombre,
+        medida,
+        numeroMaquina,
+        altura,
+        idcatPunto,
+        tipoMaquina
+      );
       setCatalogs(prev => ({
         ...prev,
-        [key]: (prev[key] ?? []).filter(i => i.id !== tempId),
+        [catalogo]: ordenar(
+          (prev[catalogo] ?? []).map(item =>
+            item.id === id
+              ? {
+                  ...item,
+                  nombre,
+                  medida: medida ?? item.medida,
+                  numero_maquina: numeroMaquina ?? item.numero_maquina,
+                  tipo_maquina: tipoMaquina ?? item.tipo_maquina,
+                }
+              : item
+          )
+        ),
       }));
-    }
-  };
+    },
+    []
+  );
 
-  // ── editItem: ahora recibe altura para cortes/dobles ──────────────────
-  const editItem = async (
-    key: CatKey,
-    id: number,
-    nombre: string,
-    medida?: string,
-    numeroMaquina?: string,
-    altura?: string,          // ← nuevo
-  ) => {
-    const backup = (catalogs[key] ?? []).find(i => i.id === id);
+  const deleteItem = useCallback(async (catalogo: CatKey, id: number) => {
+    await eliminarItemCatalogo(catalogo, id);
     setCatalogs(prev => ({
       ...prev,
-      [key]: (prev[key] ?? []).map(i =>
-        i.id === id ? { ...i, nombre, medida, numero_maquina: numeroMaquina, altura } : i
-      ),
+      [catalogo]: (prev[catalogo] ?? []).filter(item => item.id !== id),
     }));
-    try {
-      await editarItemCatalogo(key, id, nombre, medida, numeroMaquina, altura);
-    } catch {
-      if (backup) {
-        setCatalogs(prev => ({
-          ...prev,
-          [key]: (prev[key] ?? []).map(i => i.id === id ? backup : i),
-        }));
-      }
-    }
-  };
+  }, []);
 
-  const deleteItem = async (key: CatKey, id: number) => {
-    const item   = (catalogs[key] ?? []).find(i => i.id === id);
-    const backup = catalogs[key] ?? [];
-    setCatalogs(prev => ({
-      ...prev,
-      [key]: (prev[key] ?? []).filter(i => i.id !== id),
-    }));
-    if (item) {
-      setCatalogsInactivos(prev => ({
-        ...prev,
-        [key]: [...(prev[key] ?? []), item],
-      }));
-    }
-    try {
-      await eliminarItemCatalogo(key, id);
-    } catch {
-      setCatalogs(prev => ({ ...prev, [key]: backup }));
-      if (item) {
-        setCatalogsInactivos(prev => ({
-          ...prev,
-          [key]: (prev[key] ?? []).filter(i => i.id !== id),
-        }));
-      }
-    }
-  };
-
-  const reactivarItem = async (key: CatKey, id: number) => {
-    const item            = (catalogsInactivos[key] ?? []).find(i => i.id === id);
-    const backupInactivos = catalogsInactivos[key] ?? [];
-    setCatalogsInactivos(prev => ({
-      ...prev,
-      [key]: (prev[key] ?? []).filter(i => i.id !== id),
-    }));
-    if (item) {
-      setCatalogs(prev => ({
-        ...prev,
-        [key]: [...(prev[key] ?? []), item],
-      }));
-    }
-    try {
-      await reactivarItemCatalogo(key, id);
-    } catch {
-      setCatalogsInactivos(prev => ({ ...prev, [key]: backupInactivos }));
-      if (item) {
-        setCatalogs(prev => ({
-          ...prev,
-          [key]: (prev[key] ?? []).filter(i => i.id !== id),
-        }));
-      }
-    }
-  };
+  const reactivarItem = useCallback(async (catalogo: CatKey, id: number) => {
+    await reactivarItemCatalogo(catalogo, id);
+    await load();
+    await loadInactivos();
+  }, [load, loadInactivos]);
 
   return {
-    catalogs, catalogsInactivos,
-    loading, loadingInactivos, error,
+    catalogs,
+    catalogsInactivos,
     names,
-    addItem, editItem, deleteItem, reactivarItem,
-    reload: load, loadInactivos,
+    loading,
+    loadingInactivos,
+    addItem,
+    editItem,
+    deleteItem,
+    reactivarItem,
+    load,
+    loadInactivos,
   };
 }

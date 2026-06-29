@@ -1,8 +1,7 @@
 import { useState, useEffect } from "react";
 import Dashboard from "../layouts/Sidebar";
-import { getSeguimiento, getOrdenProduccion } from "../services/seguimientoService";
-import type { OrdenProduccionProducto } from "../services/seguimientoService";
-import { generarPdfOrdenProduccion } from "../services/generarPdfOrdenProduccion";
+import { getSeguimiento } from "../services/seguimientoService";
+import { descargarPdfOrdenProduccionUniversal } from "../services/descargarPdfOrdenProduccion";
 import { generarPdfEstadoCuentaSimple } from "../services/generarPdfEstadoCuentaSimple";
 import { generarPdfPedido } from "../services/generarPdfPedido";
 import { getEstadoCuenta } from "../services/estadoCuentaService";
@@ -22,8 +21,14 @@ import { useAuth } from "../context/AuthContext";
 import { usePermiso } from "../hooks/usePermiso";
 import ModalVerificarOperador from "../components/ModalVerificarOperador";
 import { showAlert } from '../components/CustomAlert';
-import { getImagenesDiseno } from "../services/ordenDisenoService";
- 
+import ModalProcesoIndividualPapel from "../components/papel/ModalProcesoIndividualPapel";
+import { getProcesosOrdenPapel } from "../services/papel/seguimientoPapelService";
+import type {
+  ProcesoRegistroPapel,
+  ProcesosOrdenPapelRespuesta,
+} from "../services/papel/seguimientoPapelService";
+import type { PedidoSeguimientoPapel, NombreProcesoPapel } from "../types/papel/seguimientoPapel.types";
+import { NOMBRES_PROCESO_PAPEL } from "../types/papel/seguimientoPapel.types";
 
 
 const diasDesde = (fecha: string | null): number | null => {
@@ -65,7 +70,7 @@ const obtenerColorEstado = (estado: string) => {
 const obtenerTextoEstado = (estado: string) => {
   const mapa: Record<string, string> = {
     finalizado: "✓", proceso: "⚙", pendiente: "–",
-    resagado: "!", "no-aplica": "N/A", aprobado: "✓", pagado: "✓",
+    detenido: "!", resagado: "!", "no-aplica": "N/A", aprobado: "✓", pagado: "✓",
   };
   return mapa[estado] ?? "–";
 };
@@ -268,91 +273,32 @@ function BotonPdfDirecto({ pedido }: { pedido: PedidoSeguimiento }) {
   const [descargando, setDescargando] = useState(false);
 
   const handleDescargar = async () => {
+    if (!pedido.no_produccion) return;
+
     setDescargando(true);
     try {
-      const data = await getOrdenProduccion(pedido.no_pedido);
-      const producto: OrdenProduccionProducto | undefined =
-        data.productos.find((p: any) => p.no_produccion === pedido.no_produccion);
-      if (!producto) { showAlert("No se encontró la orden."); return; }
-
-      // ── Cargar imágenes de diseño si existe la OD ──
-      let url_render: string | null = null;
-      let url_master: string | null = null;
-
-      const idorden = (pedido as any).idorden_diseno as number | null;
-      if (idorden) {
-        try {
-          const imagenes = await getImagenesDiseno(idorden);
-          url_render = imagenes.url_render;
-          url_master = imagenes.url_master;
-          console.log("🖼️ render URL:", url_render?.substring(0, 60));
-          console.log("🎨 master URL:", url_master?.substring(0, 60));
-        } catch (e) {
-          console.warn("No se pudieron cargar imágenes de diseño:", e);
-          // No bloqueamos el PDF si falla
-        }
-      }
-
       const guardarS3 = await preguntarGuardarS3("orden de producción");
-      await generarPdfOrdenProduccion({
-        no_pedido: data.no_pedido,
-        no_produccion: producto.no_produccion,
-        fecha: data.fecha,
-        fecha_produccion: producto.fecha_produccion,
-        fecha_aprobacion_diseno: producto.fecha_aprobacion_diseno,
-        observaciones_diseno: producto.observaciones_diseno ?? null,
-        cliente: data.cliente,
-        empresa: data.empresa,
-        telefono: data.telefono,
-        correo: data.correo,
-        impresion: data.impresion,
-        prioridad: data.prioridad ?? false,
-        nombre_producto: producto.nombre_producto,
-        descripcion: (pedido as any).descripcion ?? null,
-        categoria: producto.categoria,
-        material: producto.material,
-        calibre: producto.calibre,
-        medida: producto.medida,
-        altura: producto.altura,
-        ancho: producto.ancho,
-        fuelle_fondo: producto.fuelle_fondo,
-        fuelle_lat_iz: producto.fuelle_lat_iz,
-        fuelle_lat_de: producto.fuelle_lat_de,
-        refuerzo: producto.refuerzo,
-        por_kilo: producto.por_kilo,
-        medidas: producto.medidas,
-        tintas: producto.tintas,
-        caras: producto.caras,
-        pigmentos: producto.pigmentos,
-        pantones: producto.pantones,
-        asa_suaje: producto.asa_suaje,
-        color_asa_nombre: producto.color_asa_nombre ?? null,
-        medida_troquel: producto.medida_troquel ?? null,
-        observacion: producto.observacion,
-        perforacion: producto.perforacion ?? false,
-        cantidad: producto.cantidad,
-        kilogramos: producto.kilogramos,
-        modo_cantidad: producto.modo_cantidad,
-        repeticion_extrusion: producto.repeticion_extrusion ?? null,
-        repeticion_metro: producto.repeticion_metro ?? null,
-        metros: producto.metros ?? null,
-        ancho_bobina: producto.ancho_bobina ?? null,
-        repeticion_kidder: producto.repeticion_kidder ?? null,
-        repeticion_sicosa: producto.repeticion_sicosa ?? null,
-        fecha_entrega: producto.fecha_entrega ?? null,
-        kilos: producto.kilos ?? null,
-        kilos_merma: producto.kilos_merma ?? null,
-        pzas: producto.pzas ?? null,
-        pzas_merma: producto.pzas_merma ?? null,
-        kilos_extruir: producto.kilos_extruir ?? null,
-        metros_extruir: producto.metros_extruir ?? null,
-        // ── Imágenes resueltas ──
-        url_render,
-        url_master,
-      }, guardarS3);
-    } catch { showAlert("No se pudo generar el PDF."); }
-    finally { setDescargando(false); }
+      await descargarPdfOrdenProduccionUniversal(
+        pedido.no_pedido,
+        pedido.no_produccion,
+        guardarS3,
+        {
+          idordenDiseno: (pedido as any).idorden_diseno ?? null,
+          descripcion: (pedido as any).descripcion ?? null,
+          forzarTipoMaterial: String((pedido as any).tipo_producto ?? "")
+            .toLowerCase()
+            .includes("papel")
+            ? "papel"
+            : null,
+        }
+      );
+    } catch (e: any) {
+      showAlert(e?.message || "No se pudo generar el PDF.");
+    } finally {
+      setDescargando(false);
+    }
   };
+
   return (
     <div className="flex items-center gap-1.5 justify-center">
       <span className="text-xs font-medium text-gray-700">{pedido.no_produccion}</span>
@@ -384,23 +330,59 @@ function RenderOrdenProduccion({ pedido }: { pedido: PedidoSeguimiento }) {
 
 
 
+const PROCESOS_PAPEL: { key: NombreProcesoPapel; encabezado: string; titulo: string }[] = [
+  { key: "hojeado_papel", encabezado: "Hoj", titulo: "Hojeado" },
+  { key: "guillotina_papel", encabezado: "Gui", titulo: "Guillotina" },
+  { key: "impresion_papel", encabezado: "Imp. Papel", titulo: "Impresión de papel" },
+  { key: "laminacion_papel", encabezado: "Lam", titulo: "Laminación" },
+  { key: "barniz_uv_papel", encabezado: "UV", titulo: "Barniz UV" },
+  { key: "hot_stamping_papel", encabezado: "Hot", titulo: "Hot stamping" },
+  { key: "texturizado_papel", encabezado: "Tex", titulo: "Texturizado" },
+  { key: "alto_relieve_papel", encabezado: "Rel", titulo: "Alto relieve" },
+  { key: "suaje_produccion_papel", encabezado: "Sua", titulo: "Suaje" },
+  { key: "armado_papel", encabezado: "Arm", titulo: "Armado" },
+  { key: "empaque_papel", encabezado: "Emp", titulo: "Empaque" },
+];
+
+const COLUMNAS_PAPEL = PROCESOS_PAPEL.map(({ encabezado }) => encabezado);
+
 const COLUMNAS = [
   "Fecha", "N° Pedido", "Impresion + Info", "Tipo",
   "Anticipo", "OD", "Diseno", "Orden",
-  "Ext", "Imp", "Bol", "Asa",
+  "Ext", "Imp", "Bol", "Asa", ...COLUMNAS_PAPEL,
   "E. Cta", "Pago", "Envio",
 ];
 const COLS_CENTRADAS = new Set([
   "Impresion + Info", "Tipo", "Anticipo", "OD", "Diseno", "Orden",
-  "Ext", "Imp", "Bol", "Asa",
+  "Ext", "Imp", "Bol", "Asa", ...COLUMNAS_PAPEL,
   "E. Cta", "Pago", "Envio",
 ]);
+
+const estadoProcesoPapelATabla = (estado?: string): string => {
+  const estados: Record<string, string> = {
+    terminado: "finalizado",
+    en_proceso: "proceso",
+    pendiente: "pendiente",
+    resagado: "resagado",
+    no_aplica: "no-aplica",
+  };
+  return estados[estado ?? ""] ?? "no-aplica";
+};
+
+const fechaProcesoPapel = (proceso?: ProcesoRegistroPapel): string | null => {
+  const avances = proceso?.avances ?? [];
+  return proceso?.registro?.fecha_fin ??
+    proceso?.registro?.fecha_inicio ??
+    avances[avances.length - 1]?.fecha_registro ??
+    null;
+};
 
 const renderThead = (oscuro = false) => (
   <thead className={oscuro ? "bg-gray-900 text-white" : "bg-gray-100 border-b border-gray-200"}>
     <tr>
       {COLUMNAS.map(h => (
         <th key={h}
+          title={PROCESOS_PAPEL.find(proceso => proceso.encabezado === h)?.titulo}
           className={`px-3 py-2 text-xs font-semibold uppercase tracking-wider ${oscuro ? "text-white" : "text-gray-700"
             } ${COLS_CENTRADAS.has(h) ? "text-center" : "text-left"}`}>
           {h}
@@ -433,6 +415,13 @@ export default function Seguimiento() {
     proceso: "extrusion" | "impresion" | "bolseo" | "asa_flexible" | "orden_diseno";
   } | null>(null);
 
+  const [procesosPapel, setProcesosPapel] = useState<Record<number, ProcesosOrdenPapelRespuesta>>({});
+  const [erroresProcesosPapel, setErroresProcesosPapel] = useState<Set<number>>(new Set());
+  const [modalProcesoPapel, setModalProcesoPapel] = useState<{
+    pedido: PedidoSeguimiento;
+    nombreProceso: NombreProcesoPapel;
+  } | null>(null);
+
   const { user } = useAuth();
   const esAccesoTotal = user?.acceso_total ?? false;
 
@@ -457,6 +446,33 @@ const [ordenFecha, setOrdenFecha] = useState<"reciente" | "antiguo">("antiguo");
       setCargando(true); setError(null);
       const data = await getSeguimiento();
       setPedidos(data);
+      const idsPapel = Array.from(new Set(
+        data
+          .filter(p =>
+            (p.tipo_producto ?? "").toLowerCase() === "papel" &&
+            p.idproduccion != null
+          )
+          .map(p => Number(p.idproduccion))
+      ));
+
+      const resultados = await Promise.allSettled(
+        idsPapel.map(async idproduccion => ({
+          idproduccion,
+          datos: await getProcesosOrdenPapel(idproduccion),
+        }))
+      );
+
+      const procesosPorOrden: Record<number, ProcesosOrdenPapelRespuesta> = {};
+      const idsConError = new Set<number>();
+      resultados.forEach((resultado, index) => {
+        if (resultado.status === "fulfilled") {
+          procesosPorOrden[resultado.value.idproduccion] = resultado.value.datos;
+        } else {
+          idsConError.add(idsPapel[index]);
+        }
+      });
+      setProcesosPapel(procesosPorOrden);
+      setErroresProcesosPapel(idsConError);
     } catch { setError("No se pudo cargar el seguimiento."); }
     finally { setCargando(false); }
   };
@@ -527,10 +543,11 @@ const [ordenFecha, setOrdenFecha] = useState<"reciente" | "antiguo">("antiguo");
     const estadoPago = pagadoReal ? "pagado" : pedido.anticipo_cubierto ? "proceso" : "pendiente";
 
     const tieneOrden = !!pedido.no_produccion && !!pedido.idproduccion;
-    const extEstado = tieneOrden ? pedido.extrusion_estado : "no-aplica";
-    const impEstado = tieneOrden ? pedido.impresion_estado : "no-aplica";
-    const bolEstado = tieneOrden ? pedido.bolseo_estado : "no-aplica";
-    const asaEstado = tieneOrden ? pedido.asa_flexible_estado : "no-aplica";
+    const esPapel = (pedido.tipo_producto ?? "").toLowerCase() === "papel";
+    const extEstado = tieneOrden && !esPapel ? pedido.extrusion_estado : "no-aplica";
+    const impEstado = tieneOrden && !esPapel ? pedido.impresion_estado : "no-aplica";
+    const bolEstado = tieneOrden && !esPapel ? pedido.bolseo_estado : "no-aplica";
+    const asaEstado = tieneOrden && !esPapel ? pedido.asa_flexible_estado : "no-aplica";
     const estadoEnvio = tieneOrden ? "pendiente" : "no-aplica";
 
     const odEstadoRaw = (pedido as any).od_estado as string | null;
@@ -547,6 +564,16 @@ const [ordenFecha, setOrdenFecha] = useState<"reciente" | "antiguo">("antiguo");
       if (!tieneOrden) return;
       setModalProceso({ pedido, nombreProceso });
     };
+
+    const procesosDeLaOrden = pedido.idproduccion
+      ? procesosPapel[Number(pedido.idproduccion)]?.procesos ?? []
+      : [];
+    const errorCargaProcesosPapel = esPapel &&
+      !!pedido.idproduccion &&
+      erroresProcesosPapel.has(Number(pedido.idproduccion));
+    const procesosPapelPorNombre = new Map<NombreProcesoPapel, ProcesoRegistroPapel>(
+      procesosDeLaOrden.map(proceso => [proceso.tabla, proceso] as const)
+    );
 
     return (
       <tr key={`${pedido.no_pedido}-${pedido.no_produccion ?? "sin-op"}-${idx}`}
@@ -657,6 +684,33 @@ const [ordenFecha, setOrdenFecha] = useState<"reciente" | "antiguo">("antiguo");
             }} />
         </td>
 
+        {PROCESOS_PAPEL.map(({ key }) => {
+          const proceso = esPapel ? procesosPapelPorNombre.get(key) : undefined;
+          const estado = estadoProcesoPapelATabla(proceso?.estado);
+          return (
+            <td key={key} className={`${px} text-center`}>
+              {errorCargaProcesosPapel ? (
+                <span
+                  title="No se pudieron cargar los procesos de papel"
+                  className="inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold border bg-red-100 text-red-800 border-red-300"
+                >
+                  !
+                </span>
+              ) : (
+                <Badge
+                  estado={estado}
+                  fechaEstado={fechaProcesoPapel(proceso)}
+                  clickable={esPapel && tieneOrden && !!proceso && estado !== "no-aplica"}
+                  onClick={() => {
+                    if (!esPapel || !tieneOrden || !proceso) return;
+                    setModalProcesoPapel({ pedido, nombreProceso: key });
+                  }}
+                />
+              )}
+            </td>
+          );
+        })}
+
         <td className={`${px} text-center`}>
           {puedeVerECta
             ? <BotonEstadoCuentaPdf noPedido={pedido.no_pedido} />
@@ -758,6 +812,21 @@ const [ordenFecha, setOrdenFecha] = useState<"reciente" | "antiguo">("antiguo");
             idorden={(modalOD as any).idorden_diseno as number}
             usuarioId={user?.id ?? 0}
             onClose={() => { setModalOD(null); cargar(); }}
+          />
+        </Modal>
+      )}
+
+      {modalProcesoPapel && (
+        <Modal
+          isOpen={!!modalProcesoPapel}
+          onClose={() => setModalProcesoPapel(null)}
+          title={`${NOMBRES_PROCESO_PAPEL[modalProcesoPapel.nombreProceso]} — ${modalProcesoPapel.pedido.no_produccion}`}
+        >
+          <ModalProcesoIndividualPapel
+            pedido={modalProcesoPapel.pedido as unknown as PedidoSeguimientoPapel}
+            nombreProceso={modalProcesoPapel.nombreProceso}
+            onClose={() => setModalProcesoPapel(null)}
+            onActualizar={cargar}
           />
         </Modal>
       )}

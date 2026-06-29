@@ -157,6 +157,9 @@ export default function ChatRevision({ idorden, usuarioId, onClose, onDisenoApro
     perforacion: boolean;
     nombre_producto: string | null;
     medida: string | null;
+      tipo_material?: string;     // ← NUEVO
+  uv?: boolean | null;         // ← NUEVO
+  alto_relieve?: boolean | null; // ← NUEVO
   } | null>(null);
 
   const cargarOrden = useCallback(async () => {
@@ -344,26 +347,35 @@ export default function ChatRevision({ idorden, usuarioId, onClose, onDisenoApro
       {/* ── Panel Chat ── */}
       {panel === "chat" && (
         <>
-          {infoProducto && (infoProducto.observacion || infoProducto.descripcion || infoProducto.pigmentos || infoProducto.perforacion) && (
-            <div className="mx-4 mt-3 mb-1 p-3 bg-amber-50 border border-amber-200 rounded-xl">
-              <p className="text-xs font-semibold text-amber-700 mb-1.5">📋 Info del producto</p>
-              <p className="text-xs text-gray-700">
-                {[
-                  infoProducto.nombre_producto && `${infoProducto.nombre_producto}${infoProducto.medida ? ` ${infoProducto.medida}` : ""}`,
-                  infoProducto.descripcion && `📌 ${infoProducto.descripcion}`,
-                  infoProducto.observacion && `💬 ${infoProducto.observacion}`,
-                ].filter(Boolean).join("  ·  ")}
-              </p>
-              {(infoProducto.pigmentos || infoProducto.perforacion) && (
-                <p className="text-xs text-gray-600 mt-0.5">
-                  {[
-                    infoProducto.pigmentos && `🧪 ${infoProducto.pigmentos}`,
-                    infoProducto.perforacion && "🔵 Con perforación",
-                  ].filter(Boolean).join("  ·  ")}
-                </p>
-              )}
-            </div>
-          )}
+          {infoProducto && (infoProducto.observacion || infoProducto.descripcion || infoProducto.pigmentos || infoProducto.perforacion || infoProducto.uv || infoProducto.alto_relieve) && (
+  <div className="mx-4 mt-3 mb-1 p-3 bg-amber-50 border border-amber-200 rounded-xl">
+    <p className="text-xs font-semibold text-amber-700 mb-1.5">
+      📋 Info del producto
+      {infoProducto.tipo_material === "papel" && (
+        <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-200 text-amber-800">
+          📄 Papel
+        </span>
+      )}
+    </p>
+    <p className="text-xs text-gray-700">
+      {[
+        infoProducto.nombre_producto && `${infoProducto.nombre_producto}${infoProducto.medida ? ` ${infoProducto.medida}` : ""}`,
+        infoProducto.descripcion && `📌 ${infoProducto.descripcion}`,
+        infoProducto.observacion && `💬 ${infoProducto.observacion}`,
+      ].filter(Boolean).join("  ·  ")}
+    </p>
+    {(infoProducto.pigmentos || infoProducto.perforacion || infoProducto.uv || infoProducto.alto_relieve) && (
+      <p className="text-xs text-gray-600 mt-0.5">
+        {[
+          infoProducto.pigmentos && `🧪 ${infoProducto.pigmentos}`,
+          infoProducto.perforacion && "🔵 Con perforación",
+          infoProducto.uv && "🔆 UV",
+          infoProducto.alto_relieve && "🔳 Alto relieve",
+        ].filter(Boolean).join("  ·  ")}
+      </p>
+    )}
+  </div>
+)}
           <div
             ref={chatRef}
             className="flex-1 overflow-y-auto px-4 py-3 space-y-2 bg-gray-50"

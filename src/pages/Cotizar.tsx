@@ -22,7 +22,10 @@ const ITEMS_POR_PAGINA = 7;
 
 // Identifica si una línea es de papel (viene de getCotizaciones / del form)
 const esLineaPapel = (p: any): boolean =>
-  p?.tipo_material === "papel" || p?.tipoCotizacion === "papel";
+  p?.tipo_material === "papel" ||
+  p?.tipoCotizacion === "papel" ||
+  p?.idproducto_papel != null ||
+  p?.producto_papel_idproducto_papel != null;
 
 export default function Cotizaciones() {
   const [cotizaciones, setCotizaciones] = useState<Cotizacion[]>([]);
@@ -40,6 +43,7 @@ export default function Cotizaciones() {
   const [errorCatalogos, setErrorCatalogos] = useState("");
   const [expandidas, setExpandidas] = useState<Set<string>>(new Set());
   const [paginaActual, setPaginaActual] = useState(1);
+  const [filtroMaterial, setFiltroMaterial] = useState<"todos" | "plastico" | "papel">("todos");
 
   useEffect(() => { cargarCatalogos(); cargarCotizaciones(); }, []);
   useEffect(() => { setPaginaActual(1); }, [busqueda]);
@@ -73,18 +77,29 @@ export default function Cotizaciones() {
     t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
 
   const cotizacionesFiltradas = cotizaciones.filter(c => {
-    if (!busqueda) return true;
-    const t = normalizar(busqueda);
-    return (
-      normalizar(c.cliente ?? "").includes(t) ||
-      normalizar(c.empresa ?? "").includes(t) ||
-      normalizar(c.correo ?? "").includes(t) ||
-      normalizar(c.telefono ?? "").includes(t) ||
-      normalizar(c.estado).includes(t) ||
-      String(c.cliente_id ?? "").includes(busqueda.trim()) ||
-      normalizar(c.impresion ?? "").includes(t) ||
-      (c.no_cotizacion ?? "").toLowerCase().includes(t)
-    );
+    if (busqueda) {
+      const t = normalizar(busqueda);
+      const coincideBusqueda =
+        normalizar(c.cliente ?? "").includes(t) ||
+        normalizar(c.empresa ?? "").includes(t) ||
+        normalizar(c.correo ?? "").includes(t) ||
+        normalizar(c.telefono ?? "").includes(t) ||
+        normalizar(c.estado).includes(t) ||
+        String(c.cliente_id ?? "").includes(busqueda.trim()) ||
+        normalizar(c.impresion ?? "").includes(t) ||
+        (c.no_cotizacion ?? "").toLowerCase().includes(t);
+      if (!coincideBusqueda) return false;
+    }
+
+    if (filtroMaterial === "todos") return true;
+
+    // Verificar si TODOS los productos de la cotización son del material filtrado
+    // o si AL MENOS UNO coincide (usamos "al menos uno" para mixtas)
+    return c.productos.some((p: any) => {
+      if (filtroMaterial === "papel") return esLineaPapel(p);
+      if (filtroMaterial === "plastico") return !esLineaPapel(p);
+      return true;
+    });
   });
 
   const totalPaginas = Math.max(1, Math.ceil(cotizacionesFiltradas.length / ITEMS_POR_PAGINA));
@@ -111,38 +126,62 @@ export default function Cotizaciones() {
   // Mapea una línea de PAPEL al shape ProductoPdf (compatible con la plantilla).
   // Los atributos propios de papel se doblan en la observación, que el PDF ya pinta.
   const buildPapelPdf = (p: any) => {
-    const extras: string[] = [];
-    if (p.foil_nombre)      extras.push(`Foil: ${p.foil_nombre}`);
-    if (p.laminado_nombre)  extras.push(`Laminado: ${p.laminado_nombre}`);
-    if (p.textura_nombre)   extras.push(`Textura: ${p.textura_nombre}`);
-    if (p.asa_nombre)       extras.push(`Asa: ${p.asa_nombre}`);
-    if (p.tintasDentro > 0) extras.push(`Tintas dentro: ${p.tintasDentro}`);
-    if (p.pantonesDentro)   extras.push(`Pantones int: ${p.pantonesDentro}`);
-    if (p.alto_relieve)     extras.push(`Alto relieve`);
-    const obs = [p.observacion, extras.join("  ·  ")].filter(Boolean).join("  —  ");
+    // ── Separar material y calibre desde grupo_descripcion ──
+    // grupo_descripcion viene como "Couché 12pts + Cartulina 14pts"
+    const grupDesc: string = p.grupo_descripcion ?? "";
+    const partes = grupDesc.split(/\s*\+\s*/).map((s: string) => s.trim());
+    const regexCalibre = /(\d+(?:\.\d+)?\s*(?:pts|gms|ect))/gi;
+
+    const materialStr = partes
+      .map((parte: string) => parte.replace(regexCalibre, "").trim())
+      .filter(Boolean)
+      .join(" + ") || grupDesc;
+
+    const calibreStr = partes
+      .map((parte: string) => {
+        const m = parte.match(/(\d+(?:\.\d+)?\s*(?:pts|gms|ect))/i);
+        return m ? m[1] : "";
+      })
+      .filter(Boolean)
+      .join(" / ") || "";
 
     return {
+      tipo_material: "papel",      // ← AGREGAR
+      tipoCotizacion: "papel",
       nombre: p.nombre,
-      material: p.grupo_descripcion || "",   // opción / materiales del papel
-      calibre: "",                            // el calibre va dentro de la opción
+      material: materialStr,          // ← solo nombres: "Couché + Cartulina"
+      calibre: calibreStr,            // ← solo calibres: "12pts / 14pts"
+      grupo_descripcion: grupDesc,    // ← original por si el PDF lo necesita
       tintas: p.tintas ?? 0,
+      tintasDentro: p.tintasDentro ?? 0,
       caras: p.caras ?? 0,
       medidasFormateadas: p.medida || "",
       medidas: {},
       bk: null,
-      foil: p.foil_nombre ? true : null,      // flag (SÍ/—); el nombre va en Obs
+      foil: p.foil_nombre ? true : null,
+      foil_nombre: p.foil_nombre || null,
       laminado: p.laminado_nombre ? true : null,
+      laminado_nombre: p.laminado_nombre || null,
+      asa_suaje: p.asa_nombre || null,
+      asa_nombre: p.asa_nombre || null,
       uvBr: p.uv ? true : null,
+      alto_relieve: p.alto_relieve === true,
+      metodo_hojeado: p.metodo_hojeado ?? null,
+      lleva_armado: p.lleva_armado ?? true,
+      maquinaria_seleccionada: p.maquinaria_seleccionada ?? {},
+      textura_nombre: p.textura_nombre || null,
       pigmentos: null,
       pantones: p.pantones || null,
-      asa_suaje: p.asa_nombre || null,
-      observacion: obs || null,
+      pantonesDentro: p.pantonesDentro || null,
+      observacion: p.observacion || null,
       descripcion: p.descripcion || null,
       perforacion: false,
       por_kilo: null,
-      herramental_descripcion: null,
-      herramental_precio: null,
-      herramental_aprobado: null,
+      herramental_descripcion: p.herramental_descripcion ?? null,
+      herramental_precio: p.herramental_precio != null ? Number(p.herramental_precio) : null,
+      herramental_aprobado: p.herramental_aprobado ?? null,
+      cargo_adicional_descripcion: p.cargo_adicional_descripcion ?? null,
+      cargo_adicional_precio: p.cargo_adicional_precio != null ? Number(p.cargo_adicional_precio) : null,
       detalles: (p.detalles || []).map((d: any) => ({
         cantidad: d.cantidad,
         precio_total: d.precio_total,
@@ -260,6 +299,8 @@ export default function Cotizaciones() {
       });
 
       try {
+        console.log("PRODUCTOS PDF:", JSON.stringify(productosPdf, null, 2));
+
         await generarPdfCotizacion({
           no_cotizacion: respuesta.no_cotizacion ?? respuesta.no_pedido ?? "",
           fecha: new Date().toISOString(),
@@ -300,6 +341,14 @@ export default function Cotizaciones() {
         detalles: esPedido ? p.detalles.filter(d => d.aprobado === true) : p.detalles,
       }))
     );
+     console.log("DESCARGA PDF - productos:", JSON.stringify(
+      productosParaPdf.map(p => ({
+        nombre: (p as any).nombre,
+        tipo_material: (p as any).tipo_material,
+        herramental_precio: (p as any).herramental_precio,
+        herramental_descripcion: (p as any).herramental_descripcion,
+      })), null, 2
+    ));
     const guardarS3 = await preguntarGuardarS3("cotización");
     await generarPdfCotizacion({
       no_cotizacion: cot.no_cotizacion,
@@ -435,7 +484,8 @@ export default function Cotizaciones() {
       <h1 className="text-2xl font-bold mb-2">Cotizaciones</h1>
       <p className="text-slate-400 mb-6">Gestión de cotizaciones y seguimiento de aprobaciones.</p>
 
-      <div className="mb-6 relative">
+      {/* Búsqueda */}
+      <div className="mb-4 relative">
         <input type="text" value={busqueda} onChange={e => setBusqueda(e.target.value)}
           placeholder="Buscar por cliente, empresa, correo, teléfono, estado o folio (ej: COT26001)..."
           className="w-full px-4 py-3 pl-12 border border-gray-300 rounded-lg text-gray-900 bg-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
@@ -445,8 +495,51 @@ export default function Cotizaciones() {
         {busqueda && <p className="mt-2 text-sm text-gray-500">{cotizacionesFiltradas.length} resultado(s)</p>}
       </div>
 
-      <div className="flex items-center gap-3 mb-6">
-        <button onClick={() => { setErrorGuardar(null); setModalOpen(true); }}
+      {/* Filtro material + botón nueva */}
+      <div className="flex items-center justify-between mb-6 gap-4 flex-wrap">
+        <div className="flex gap-2 bg-gray-100 p-1 rounded-lg">
+          {([
+            { key: "todos", label: "Todos", icon: "📋" },
+            { key: "plastico", label: "Plástico", icon: "🧴" },
+            { key: "papel", label: "Papel", icon: "📄" },
+          ] as const).map(({ key, label, icon }) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => { setFiltroMaterial(key); setPaginaActual(1); }}
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-medium transition-all ${filtroMaterial === key
+                ? key === "papel"
+                  ? "bg-white text-amber-600 shadow"
+                  : key === "plastico"
+                    ? "bg-white text-blue-600 shadow"
+                    : "bg-white text-gray-700 shadow"
+                : "text-gray-600 hover:text-gray-900"
+                }`}
+            >
+              {icon} {label}
+              <span className={`ml-1 text-xs font-bold px-1.5 py-0.5 rounded-full ${filtroMaterial === key
+                ? key === "papel"
+                  ? "bg-amber-100 text-amber-700"
+                  : key === "plastico"
+                    ? "bg-blue-100 text-blue-700"
+                    : "bg-gray-200 text-gray-600"
+                : "bg-gray-200 text-gray-500"
+                }`}>
+                {key === "todos"
+                  ? cotizaciones.length
+                  : cotizaciones.filter(c =>
+                    c.productos.some((p: any) =>
+                      key === "papel" ? esLineaPapel(p) : !esLineaPapel(p)
+                    )
+                  ).length
+                }
+              </span>
+            </button>
+          ))}
+        </div>
+
+        <button
+          onClick={() => { setErrorGuardar(null); setModalOpen(true); }}
           className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-6 rounded-lg shadow transition">
           + Nueva Cotización
         </button>
@@ -635,7 +728,9 @@ export default function Cotizaciones() {
                 <p className="text-blue-700 text-sm">Guardando cotización y generando PDF...</p>
               </div>
             )}
-            <FormularioCotizacion onSubmit={handleSubmit} onCancel={() => setModalOpen(false)} catalogos={catalogos} />
+            
+            <FormularioCotizacion
+             onSubmit={handleSubmit} onCancel={() => setModalOpen(false)} catalogos={catalogos} />
           </div>
         )}
       </Modal>

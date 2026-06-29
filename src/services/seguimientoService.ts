@@ -1,6 +1,7 @@
 import api from "./api";
 import axios from "axios";
 import type { PedidoSeguimiento } from "../types/seguimiento.types";
+import type { OrdenProduccionPapelData } from "../types/papel/ordenProduccionPapel.types";
 
 export const getSeguimiento = async (): Promise<PedidoSeguimiento[]> => {
   const response = await api.get("/seguimiento");
@@ -10,7 +11,8 @@ export const getSeguimiento = async (): Promise<PedidoSeguimiento[]> => {
 // ─────────────────────────────────────────────
 // ORDEN DE PRODUCCIÓN
 // ─────────────────────────────────────────────
-export interface OrdenProduccionProducto {
+export interface OrdenProduccionProductoPlastico {
+  tipo_material?: "plastico";
   idsolicitud_producto: number;
   no_produccion: string | null;
   idproduccion: number | null;
@@ -65,6 +67,10 @@ export interface OrdenProduccionProducto {
   url_master?: string | null;
 }
 
+export type OrdenProduccionProducto =
+  | OrdenProduccionProductoPlastico
+  | OrdenProduccionPapelData;
+
 export interface OrdenProduccionRespuesta {
   no_pedido: string;
   no_cotizacion: string | null;
@@ -95,7 +101,7 @@ export const getOrdenProduccion = async (
 export interface AvanceParcial {
   idavance: number;
   cantidad: number;
-  unidad: "kg" | "pzas";
+  unidad: "kg" | "pzas" | "pliegos" | "bolsas";
   observaciones: string | null;
   fecha_registro: string;
 }
@@ -105,7 +111,7 @@ export interface ProcesoRegistro {
   nombre_proceso: string;
   tabla: string;
   estado: string;
-  registro: any | null;
+  registro: Record<string, unknown> | null;
   observaciones: string | null;
   observaciones_proceso_anterior: string | null;
   avances: AvanceParcial[];
@@ -134,7 +140,7 @@ export const getProcesosOrden = async (
 
 export const iniciarProceso = async (
   idproduccion: number,
-  datos?: Record<string, any>
+  datos?: Record<string, unknown>
 ) => {
   const response = await api.post(`/procesos/${idproduccion}/iniciar`, datos ?? {});
   return response.data;
@@ -142,7 +148,7 @@ export const iniciarProceso = async (
 
 export const finalizarProceso = async (
   idproduccion: number,
-  datos: Record<string, any>
+  datos: Record<string, unknown>
 ) => {
   const response = await api.put(`/procesos/${idproduccion}/finalizar`, datos);
   return response.data;
@@ -151,7 +157,7 @@ export const finalizarProceso = async (
 export const editarProceso = async (
   idproduccion: number,
   tabla: string,
-  datos: Record<string, any>
+  datos: Record<string, unknown>
 ): Promise<void> => {
   await api.put(`/procesos/${idproduccion}/editar/${tabla}`, datos);
 };
@@ -188,7 +194,7 @@ export interface Bulto {
   idbulto: number;
   cantidad_unidades: number;
   fecha_creacion: string;
-  proceso_origen: "bolseo" | "asa_flexible";
+  proceso_origen: "bolseo" | "asa_flexible" | "empaque_papel";
   numero_parcialidad: number | null;
   peso_producto: number | null;
   peso: number | null;
@@ -281,7 +287,7 @@ export interface BultoEtiqueta {
   idbulto: number;
   cantidad_unidades: number;
   fecha_creacion: string;
-  proceso_origen: "bolseo" | "asa_flexible";
+  proceso_origen: "bolseo" | "asa_flexible" | "empaque_papel";
   peso_producto: number | null;
   peso: number | null;
   alto: number | null;

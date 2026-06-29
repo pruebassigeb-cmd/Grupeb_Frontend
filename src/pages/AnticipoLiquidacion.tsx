@@ -1,6 +1,7 @@
 import Dashboard from "../layouts/Sidebar";
 import Modal from "../components/Modal";
 import { useState, useEffect } from "react";
+import { descargarPdfOrdenProduccionUniversal } from "../services/descargarPdfOrdenProduccion";
 import {
   getVentas,
   getVentaByPedido,
@@ -9,8 +10,6 @@ import {
   getMetodosPago,
   autorizarAnticipoCredito,
 } from "../services/ventasservice";
-import { getOrdenProduccion } from "../services/seguimientoService";
-import { generarPdfOrdenProduccion } from "../services/generarPdfOrdenProduccion";
 import { generarPdfEstadoCuenta } from "../services/generarPdfEstadoCuenta";
 import { generarPdfEstadoCuentaSimple } from "../services/generarPdfEstadoCuentaSimple";
 import { generarPdfHistorialPagos } from "../services/generarPdfHistorialPagos";
@@ -58,68 +57,9 @@ function calcularEstado(
 }
 
 async function descargarPdfOrden(noPedido: string, noProduccion: string): Promise<void> {
-  const data = await getOrdenProduccion(noPedido);
-  const producto = data.productos.find((p: any) => p.no_produccion === noProduccion);
-  if (!producto) throw new Error(`Producto con folio ${noProduccion} no encontrado`);
-  await generarPdfOrdenProduccion({
-    no_pedido:               data.no_pedido,
-    no_produccion:           producto.no_produccion,
-    fecha:                   data.fecha,
-    fecha_produccion:        producto.fecha_produccion,
-    fecha_aprobacion_diseno: producto.fecha_aprobacion_diseno,
-    observaciones_diseno:    producto.observaciones_diseno    ?? null,
-    cliente:                 data.cliente,
-    empresa:                 data.empresa,
-    telefono:                data.telefono,
-    correo:                  data.correo,
-    impresion:               data.impresion,
-    prioridad:               data.prioridad ?? false,
-    nombre_producto:         producto.nombre_producto,
-    descripcion:             producto.descripcion ?? null,
-    categoria:               producto.categoria,
-    material:                producto.material,
-    calibre:                 producto.calibre,
-    medida:                  producto.medida,
-    altura:                  producto.altura,
-    ancho:                   producto.ancho,
-    fuelle_fondo:            producto.fuelle_fondo,
-    fuelle_lat_iz:           producto.fuelle_lat_iz,
-    fuelle_lat_de:           producto.fuelle_lat_de,
-    refuerzo:                producto.refuerzo,
-    por_kilo:                producto.por_kilo,
-    medidas:                 producto.medidas,
-    tintas:                  producto.tintas,
-    caras:                   producto.caras,
-    pigmentos:               producto.pigmentos,
-    pantones:                producto.pantones,
-    asa_suaje:               producto.asa_suaje,
-    color_asa_nombre:        producto.color_asa_nombre ?? null,
-    medida_troquel:          producto.medida_troquel ?? null,
-    observacion:             producto.observacion,
-    cantidad:                producto.cantidad,
-    kilogramos:              producto.kilogramos,
-    modo_cantidad:           producto.modo_cantidad,
-    repeticion_extrusion:    producto.repeticion_extrusion ?? null,
-    repeticion_metro:        producto.repeticion_metro     ?? null,
-    metros:                  producto.metros               ?? null,
-    ancho_bobina:            producto.ancho_bobina         ?? null,
-    repeticion_kidder:       producto.repeticion_kidder    ?? null,
-    repeticion_sicosa:       producto.repeticion_sicosa    ?? null,
-    fecha_entrega:           producto.fecha_entrega        ?? null,
-    kilos:                   producto.kilos                ?? null,
-    kilos_merma:             producto.kilos_merma          ?? null,
-    pzas:                    producto.pzas                 ?? null,
-    pzas_merma:              producto.pzas_merma           ?? null,
-    kilos_extruir:           producto.kilos_extruir        ?? null,
-    metros_extruir:          producto.metros_extruir       ?? null,
-    url_render:              (producto as any).url_render  ?? null,
-    url_master:              (producto as any).url_master  ?? null,
-  }, true);
+  await descargarPdfOrdenProduccionUniversal(noPedido, noProduccion, true);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// PAGINADOR
-// ─────────────────────────────────────────────────────────────────────────────
 function Paginador({
   total, pagina, porPagina, onChange,
 }: {
@@ -283,25 +223,48 @@ function SeccionEstadoCuenta({
           )}
 
           {datos && !cargando && (
-            <>
-              <div className="space-y-3">
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                  Comparativa por producto
-                </p>
+  <>
+    {datos.tiene_productos_papel_pendientes && (
+      <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
+        <span className="text-base flex-shrink-0">📄</span>
+        <div>
+          <p className="text-xs font-semibold text-amber-800">
+            {datos.productos_papel_pendientes_count} producto(s) de papel en este pedido
+          </p>
+          <p className="text-xs text-amber-600 mt-0.5">
+            El precio de papel ya está fijo desde la cotización/pedido (no varía
+            por producción). El detalle de producción real de papel se mostrará
+            aquí cuando el módulo de producción de papel esté disponible.
+          </p>
+        </div>
+      </div>
+    )}
+    <div className="space-y-3">
+      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+        Comparativa por producto
+      </p>
                 {datos.productos.map(prod => {
-                  const diffPzas   = prod.diferencia_piezas;
-                  const diffPrecio = prod.diferencia_precio;
-                  const esKiloProd = (prod as any).modo_cantidad === "kilo";
-                  const unidadProd = esKiloProd ? "kg" : "pzas";
-                  return (
-                    <div key={prod.idsolicitud_producto} className="border border-gray-100 rounded-lg p-3 space-y-2 bg-gray-50">
-                      <div>
-                        <p className="text-xs font-semibold text-gray-800">{prod.nombre}</p>
-                        <p className="text-[10px] text-gray-400">
-                          {prod.no_produccion} · {prod.tintas} tinta(s) · {prod.caras} cara(s)
-                          {esKiloProd && <span className="ml-1.5 inline-flex items-center px-1 py-0.5 rounded text-[9px] font-semibold bg-orange-100 text-orange-700">Por kg</span>}
-                        </p>
-                      </div>
+  const diffPzas   = prod.diferencia_piezas;
+  const diffPrecio = prod.diferencia_precio;
+  const esKiloProd = (prod as any).modo_cantidad === "kilo";
+  const unidadProd = esKiloProd ? "kg" : "pzas";
+  const esPapelProd = (prod as any).tipo_material === "papel";
+  return (
+    <div key={prod.idsolicitud_producto} className="border border-gray-100 rounded-lg p-3 space-y-2 bg-gray-50">
+      <div>
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <p className="text-xs font-semibold text-gray-800">{prod.nombre}</p>
+          {esPapelProd && (
+            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-semibold bg-amber-100 text-amber-700 border border-amber-200">
+              📄 Papel — precio fijo
+            </span>
+          )}
+        </div>
+        <p className="text-[10px] text-gray-400">
+          {prod.no_produccion ? `${prod.no_produccion} · ` : ""}{prod.tintas} tinta(s) · {prod.caras} cara(s)
+          {esKiloProd && <span className="ml-1.5 inline-flex items-center px-1 py-0.5 rounded text-[9px] font-semibold bg-orange-100 text-orange-700">Por kg</span>}
+        </p>
+      </div>
 
                       <div className={`grid gap-1.5 ${esKiloProd ? "grid-cols-1" : "grid-cols-2"}`}>
                         {!esKiloProd && (

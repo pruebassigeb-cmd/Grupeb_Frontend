@@ -354,8 +354,8 @@ function ProductoEditable({
             onChange={e => setProductoField(pi, "pigmentos", e.target.value)}
             placeholder={esBoppProd ? "No aplica" : "Rojo intenso, Azul marino..."}
             className={`w-full px-3 py-2 border rounded-lg text-sm bg-white focus:ring-2 ${esBoppProd
-                ? "border-gray-200 text-gray-300 cursor-not-allowed"
-                : "border-gray-200 text-gray-900 focus:ring-orange-400 focus:border-orange-400"
+              ? "border-gray-200 text-gray-300 cursor-not-allowed"
+              : "border-gray-200 text-gray-900 focus:ring-orange-400 focus:border-orange-400"
               }`} />
         </div>
 
@@ -536,105 +536,105 @@ function ProductoEditable({
 
               return (
                 <div key={di} className="p-3 bg-gray-50 rounded-lg border border-gray-100 space-y-2">
-                 <div className="flex gap-2">
-  {/* Cantidad */}
-  <div className="flex-1">
-    <label className="block text-xs text-gray-400 mb-1">
-      {det.modo_cantidad === "kilo" ? "Cantidad (kg)" : "Cantidad (pzas)"}
-    </label>
-    <input type="text" inputMode="numeric" value={det.cantidad}
-      onChange={e => { if (esEntero(e.target.value)) setDetalleField(pi, di, "cantidad", e.target.value); }}
-      placeholder="0"
-      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-blue-400" />
-  </div>
+                  <div className="flex gap-2">
+                    {/* Cantidad */}
+                    <div className="flex-1">
+                      <label className="block text-xs text-gray-400 mb-1">
+                        {det.modo_cantidad === "kilo" ? "Cantidad (kg)" : "Cantidad (pzas)"}
+                      </label>
+                      <input type="text" inputMode="numeric" value={det.cantidad}
+                        onChange={e => { if (esEntero(e.target.value)) setDetalleField(pi, di, "cantidad", e.target.value); }}
+                        placeholder="0"
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-blue-400" />
+                    </div>
 
-  {/* Precio total */}
-  <div className="flex-1">
-    <label className="block text-xs text-gray-400 mb-1">Precio total</label>
-    <div className="relative">
-      <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs">$</span>
-      <input type="text" readOnly
-        value={preciosTexto[di] !== "" ? preciosTexto[di] : (parseSafe(det.precio_total) > 0 ? parseSafe(det.precio_total).toFixed(2) : "")}
-        placeholder="—"
-        className="w-full pl-6 py-2 border border-gray-100 rounded-lg text-sm text-gray-600 bg-gray-50 cursor-not-allowed" />
-    </div>
-    <p className="mt-0.5 text-xs text-gray-400">Calculado automáticamente</p>
-  </div>
+                    {/* Precio total */}
+                    <div className="flex-1">
+                      <label className="block text-xs text-gray-400 mb-1">Precio total</label>
+                      <div className="relative">
+                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs">$</span>
+                        <input type="text" readOnly
+                          value={preciosTexto[di] !== "" ? preciosTexto[di] : (parseSafe(det.precio_total) > 0 ? parseSafe(det.precio_total).toFixed(2) : "")}
+                          placeholder="—"
+                          className="w-full pl-6 py-2 border border-gray-100 rounded-lg text-sm text-gray-600 bg-gray-50 cursor-not-allowed" />
+                      </div>
+                      <p className="mt-0.5 text-xs text-gray-400">Calculado automáticamente</p>
+                    </div>
 
-  {/* Precio/bolsa o kg */}
-  <div className="flex-1">
-    <label className="block text-xs text-gray-400 mb-1">
-      {esModoKilo && pk > 0 ? "Precio/kg" : "Precio/bolsa"}
-    </label>
-    <div className="relative">
-      <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs">$</span>
-      <input type="text" inputMode="decimal"
-        value={
-          preciosUnitTexto[di] !== ""
-            ? preciosUnitTexto[di]
-            : puMostrar > 0 ? puMostrar.toFixed(4) : ""
-        }
-        onChange={e => {
-          if (!esDecimal(e.target.value)) return;
-          const nuevos = [...preciosUnitTexto];
-          nuevos[di] = e.target.value;
-          setPreciosUnitTexto(nuevos);
-          const valorIngresado = parseSafe(e.target.value);
-          const puBolsaNuevo = esModoKilo && pk > 0 ? valorIngresado / pk : valorIngresado;
-          setDetalleField(pi, di, "precio_unitario", puBolsaNuevo.toFixed(6));
-          const kgs = parseSafe(det.kilogramos || det.cantidad);
-          const cant = parseSafe(det.cantidad);
-          let newTotal = 0;
-          if (esModoKilo) {
-            newTotal = Math.round(valorIngresado * kgs * 100) / 100;
-          } else {
-            newTotal = Math.round(puBolsaNuevo * cant * 100) / 100;
-          }
-          if (newTotal > 0) {
-            const nuevosTextos = [...preciosTexto];
-            nuevosTextos[di] = newTotal.toFixed(2);
-            setPreciosTexto(nuevosTextos);
-            setDetalleField(pi, di, "precio_total", newTotal.toFixed(2));
-          }
-          const nuevosEditados = [...preciosEditadosManual];
-          nuevosEditados[di] = true;
-          setPreciosEditadosManual(nuevosEditados);
-        }}
-        onBlur={() => {
-          const val = parseFloat(preciosUnitTexto[di]);
-          if (!isNaN(val) && val > 0) {
-            const nuevos = [...preciosUnitTexto];
-            nuevos[di] = val.toFixed(4);
-            setPreciosUnitTexto(nuevos);
-          }
-        }}
-        placeholder="0.0000"
-        className="w-full pl-6 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-blue-300" />
-    </div>
-    {esModoKilo && pk > 0 && puBolsa > 0 && (
-      <p className="mt-0.5 text-xs text-gray-400">≈ ${puBolsa.toFixed(6)}/bolsa</p>
-    )}
-  </div>
+                    {/* Precio/bolsa o kg */}
+                    <div className="flex-1">
+                      <label className="block text-xs text-gray-400 mb-1">
+                        {esModoKilo && pk > 0 ? "Precio/kg" : "Precio/bolsa"}
+                      </label>
+                      <div className="relative">
+                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs">$</span>
+                        <input type="text" inputMode="decimal"
+                          value={
+                            preciosUnitTexto[di] !== ""
+                              ? preciosUnitTexto[di]
+                              : puMostrar > 0 ? puMostrar.toFixed(4) : ""
+                          }
+                          onChange={e => {
+                            if (!esDecimal(e.target.value)) return;
+                            const nuevos = [...preciosUnitTexto];
+                            nuevos[di] = e.target.value;
+                            setPreciosUnitTexto(nuevos);
+                            const valorIngresado = parseSafe(e.target.value);
+                            const puBolsaNuevo = esModoKilo && pk > 0 ? valorIngresado / pk : valorIngresado;
+                            setDetalleField(pi, di, "precio_unitario", puBolsaNuevo.toFixed(6));
+                            const kgs = parseSafe(det.kilogramos || det.cantidad);
+                            const cant = parseSafe(det.cantidad);
+                            let newTotal = 0;
+                            if (esModoKilo) {
+                              newTotal = Math.round(valorIngresado * kgs * 100) / 100;
+                            } else {
+                              newTotal = Math.round(puBolsaNuevo * cant * 100) / 100;
+                            }
+                            if (newTotal > 0) {
+                              const nuevosTextos = [...preciosTexto];
+                              nuevosTextos[di] = newTotal.toFixed(2);
+                              setPreciosTexto(nuevosTextos);
+                              setDetalleField(pi, di, "precio_total", newTotal.toFixed(2));
+                            }
+                            const nuevosEditados = [...preciosEditadosManual];
+                            nuevosEditados[di] = true;
+                            setPreciosEditadosManual(nuevosEditados);
+                          }}
+                          onBlur={() => {
+                            const val = parseFloat(preciosUnitTexto[di]);
+                            if (!isNaN(val) && val > 0) {
+                              const nuevos = [...preciosUnitTexto];
+                              nuevos[di] = val.toFixed(4);
+                              setPreciosUnitTexto(nuevos);
+                            }
+                          }}
+                          placeholder="0.0000"
+                          className="w-full pl-6 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-blue-300" />
+                      </div>
+                      {esModoKilo && pk > 0 && puBolsa > 0 && (
+                        <p className="mt-0.5 text-xs text-gray-400">≈ ${puBolsa.toFixed(6)}/bolsa</p>
+                      )}
+                    </div>
 
-  {/* Modo + eliminar — alineados al input mediante margin-top manual */}
-  <div className="flex-shrink-0 flex items-start gap-1 mt-5">
-    <select value={det.modo_cantidad}
-      onChange={e => setDetalleField(pi, di, "modo_cantidad", e.target.value)}
-      className="px-2 py-2 border border-gray-200 rounded-lg text-xs text-gray-700 bg-white focus:ring-2 focus:ring-blue-400">
-      <option value="unidad">pz</option>
-      <option value="kilo">kg</option>
-    </select>
+                    {/* Modo + eliminar — alineados al input mediante margin-top manual */}
+                    <div className="flex-shrink-0 flex items-start gap-1 mt-5">
+                      <select value={det.modo_cantidad}
+                        onChange={e => setDetalleField(pi, di, "modo_cantidad", e.target.value)}
+                        className="px-2 py-2 border border-gray-200 rounded-lg text-xs text-gray-700 bg-white focus:ring-2 focus:ring-blue-400">
+                        <option value="unidad">pz</option>
+                        <option value="kilo">kg</option>
+                      </select>
 
-    {prod.detalles.length > 1 && (
-      <button onClick={() => eliminarDetalle(pi, di)}
-        className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition">
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-        </svg>
-      </button>
-    )}
-  </div>
-</div>
+                      {prod.detalles.length > 1 && (
+                        <button onClick={() => eliminarDetalle(pi, di)}
+                          className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 </div>
               );
             })}
@@ -667,6 +667,7 @@ export default function EditarPedido() {
   const [exito, setExito] = useState(false);
   const [pedidoOrig, setPedidoOrig] = useState<Pedido | null>(null);
   const [productos, setProductos] = useState<ProductoRow[]>([]);
+  const [pedidoMixto, setPedidoMixto] = useState(false);
 
   const [suajes, setSuajes] = useState<any[]>([]);
   const [coloresAsa, setColoresAsa] = useState<any[]>([]);
@@ -697,9 +698,24 @@ export default function EditarPedido() {
         const todos = await getPedidos() as Pedido[];
         const ped = todos.find(p => p.no_pedido === noPedido);
         if (!ped) { setError("Pedido no encontrado"); return; }
+        const tienePapel = (ped.productos as any[]).some(
+          p => p.tipo_material === "papel" || p.tipoCotizacion === "papel"
+        );
+        const tienePlastico = (ped.productos as any[]).some(
+          p => p.tipo_material !== "papel" && p.tipoCotizacion !== "papel"
+        );
+
+        if (tienePapel && !tienePlastico) {
+          navigate(`/pedido/${noPedido}/editar-papel`, { replace: true });
+          return;
+        }
+
+        setPedidoMixto(tienePapel && tienePlastico);
 
         setPedidoOrig(ped);
-        setProductos((ped.productos as any[]).map(p => ({
+        setProductos((ped.productos as any[])
+          .filter(p => p.tipo_material !== "papel" && p.tipoCotizacion !== "papel")
+          .map(p => ({
           idsolicitud_producto: p.idsolicitud_producto ?? p.idcotizacion_producto,
           nombre: p.nombre || "",
           material: p.material || "",
@@ -974,6 +990,30 @@ export default function EditarPedido() {
           <span className="text-lg font-bold text-blue-700">${fmt(totalGeneral)}</span>
         </div>
       </div>
+
+      {pedidoMixto && (
+        <div className="mb-5 p-3 bg-white border border-gray-200 rounded-xl flex items-center justify-between gap-3 shadow-sm">
+          <div>
+            <p className="text-sm font-semibold text-gray-800">Pedido mixto</p>
+            <p className="text-xs text-gray-400">Edita cada material del mismo pedido desde este selector.</p>
+          </div>
+          <div className="inline-flex rounded-lg bg-gray-100 p-1">
+            <button
+              type="button"
+              className="px-4 py-1.5 rounded-md bg-blue-600 text-white text-sm font-semibold shadow-sm"
+            >
+              Plástico
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate(`/pedido/${noPedido}/editar-papel`)}
+              className="px-4 py-1.5 rounded-md text-gray-600 hover:text-amber-700 hover:bg-white text-sm font-semibold transition"
+            >
+              Papel
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Error guardar */}
       {errorGuardar && (

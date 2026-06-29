@@ -21,7 +21,7 @@ const ESTADOS_MX = [
 ];
 
 type FormData = (CreateUsuarioRequest | UpdateUsuarioRequest) & {
-  fotoFile?: File | null;
+  fotoFile?: File | null; 
 };
 
 interface ArchivoINE {

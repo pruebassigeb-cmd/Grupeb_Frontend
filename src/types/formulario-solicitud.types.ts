@@ -1,7 +1,13 @@
 // src/types/formulario-solicitud.types.ts
 import type { MedidaKey } from "./productos-plastico.types";
+import type { ProductoPapelCotizacion } from "./papel/cotizacion-papel.types";
+
+export type TipoMaterialSolicitud = "plastico" | "papel";
 
 export interface Producto {
+  tipoCotizacion?: "plastico";
+  tipo_material?: "plastico";
+
   productoId?: number;
   nombre: string;
   cantidades: [number, number, number];
@@ -22,8 +28,8 @@ export interface Producto {
   colorAsaNombre?: string | null;
   idMedidaTroquel?: number | null;
   medidaTroquelTexto?: string | null;
-  observacion?: string;
-  descripcion?: string | null; 
+  observacion?: string | null;
+  descripcion?: string | null;
   perforacion?: boolean;
   pantones?: string | null;
   pigmentos?: string | null;
@@ -31,6 +37,8 @@ export interface Producto {
   herramental_descripcion?: string | null;
   herramental_precio?: number | null;
 }
+
+export type ProductoSolicitud = Producto | ProductoPapelCotizacion;
 
 export interface DatosCotizacion {
   clienteId?: number;
@@ -56,7 +64,7 @@ export interface DatosCotizacion {
   envio_poblacion?: string | null;
   envio_estado?: string | null;
   envio_referencia?: string | null;
-  productos: Producto[];
+  productos: ProductoSolicitud[];
   observaciones: string;
   perforacion?: boolean;
   tipo?: "cotizacion" | "pedido";

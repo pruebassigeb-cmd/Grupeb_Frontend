@@ -22,6 +22,8 @@ export interface ProductoEstadoCuenta {
   herramental_descripcion?: string | null;
   herramental_precio?:      number | null;
   herramental_aprobado?:    boolean | null;
+  tipo_material?:           "plastico" | "papel" | null;
+  produccion_pendiente?:     boolean | null;
 }
 
 export interface EstadoCuenta {
@@ -48,6 +50,8 @@ export interface EstadoCuenta {
   es_credito_anticipo:  boolean;
   diferencia_total:     number;
   estado_id:            number;
+  tiene_productos_papel_pendientes: boolean;
+  productos_papel_pendientes_count: number;
 }
 
 export interface ResumenEstadoCuenta {

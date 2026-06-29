@@ -1,10 +1,9 @@
 import Dashboard from "../layouts/Sidebar";
 import Modal from "../components/Modal";
 import { useState, useEffect } from "react";
+import { descargarPdfOrdenProduccionUniversal } from "../services/descargarPdfOrdenProduccion";
 import { getDisenoByPedido, actualizarEstadoProductoDiseno } from "../services/disenoservice";
 import { getPedidos } from "../services/pedidosService";
-import { getOrdenProduccion } from "../services/seguimientoService";
-import { generarPdfOrdenProduccion } from "../services/generarPdfOrdenProduccion";
 import type { Diseno, DisenoProducto } from "../types/ventas.types";
 import type { Pedido } from "../types/cotizaciones.types";
 import ChatRevision from "../components/ChatRevision";
@@ -32,65 +31,20 @@ function estadoLabel(estadoId: number): "pendiente" | "en_proceso" | "aprobado" 
   return "pendiente";
 }
 
-async function descargarPdfOrden(noPedido: string, noProduccion: string): Promise<void> {
-  const data = await getOrdenProduccion(noPedido);
-  const producto = data.productos.find((p: any) => p.no_produccion === noProduccion);
-  if (!producto) throw new Error(`Producto con folio ${noProduccion} no encontrado`);
+// ── Helper: detecta si un producto (del listado de Pedido) es de papel ──
+// Replica el mismo criterio usado en Pedidos.tsx / EditarCotizacion.tsx
+const esLineaPapel = (p: any): boolean =>
+  p?.tipo_material === "papel" || p?.tipoCotizacion === "papel";
 
-  await generarPdfOrdenProduccion({
-    no_pedido:               data.no_pedido,
-    no_produccion:           producto.no_produccion,
-    fecha:                   data.fecha,
-    fecha_produccion:        producto.fecha_produccion,
-    fecha_aprobacion_diseno: producto.fecha_aprobacion_diseno,
-    observaciones_diseno:    producto.observaciones_diseno    ?? null,
-    cliente:                 data.cliente,
-    empresa:                 data.empresa,
-    telefono:                data.telefono,
-    correo:                  data.correo,
-    impresion:               data.impresion,
-    prioridad:               data.prioridad ?? false,
-    descripcion:             producto.descripcion ?? null,
-    nombre_producto:         producto.nombre_producto,
-    categoria:               producto.categoria,
-    material:                producto.material,
-    calibre:                 producto.calibre,
-    medida:                  producto.medida,
-    altura:                  producto.altura,
-    ancho:                   producto.ancho,
-    fuelle_fondo:            producto.fuelle_fondo,
-    fuelle_lat_iz:           producto.fuelle_lat_iz,
-    fuelle_lat_de:           producto.fuelle_lat_de,
-    refuerzo:                producto.refuerzo,
-    por_kilo:                producto.por_kilo,
-    medidas:                 producto.medidas,
-    tintas:                  producto.tintas,
-    caras:                   producto.caras,
-    pigmentos:               producto.pigmentos,
-    pantones:                producto.pantones,
-    asa_suaje:               producto.asa_suaje,
-    color_asa_nombre:        producto.color_asa_nombre ?? null,
-    medida_troquel:          producto.medida_troquel   ?? null,
-    observacion:             producto.observacion,
-    cantidad:                producto.cantidad,
-    kilogramos:              producto.kilogramos,
-    modo_cantidad:           producto.modo_cantidad,
-    repeticion_extrusion:    producto.repeticion_extrusion ?? null,
-    repeticion_metro:        producto.repeticion_metro     ?? null,
-    metros:                  producto.metros               ?? null,
-    ancho_bobina:            producto.ancho_bobina         ?? null,
-    repeticion_kidder:       producto.repeticion_kidder    ?? null,
-    repeticion_sicosa:       producto.repeticion_sicosa    ?? null,
-    fecha_entrega:           producto.fecha_entrega        ?? null,
-    kilos:                   producto.kilos                ?? null,
-    kilos_merma:             producto.kilos_merma          ?? null,
-    pzas:                    producto.pzas                 ?? null,
-    pzas_merma:              producto.pzas_merma           ?? null,
-    kilos_extruir:           producto.kilos_extruir        ?? null,
-    metros_extruir:          producto.metros_extruir       ?? null,
-    url_render:              (producto as any).url_render  ?? null,
-    url_master:              (producto as any).url_master  ?? null,
-  }, true);
+async function descargarPdfOrden(
+  noPedido: string,
+  noProduccion: string,
+  productoReferencia?: any | null
+): Promise<void> {
+  await descargarPdfOrdenProduccionUniversal(noPedido, noProduccion, true, {
+    forzarTipoMaterial: esLineaPapel(productoReferencia) ? "papel" : null,
+    productoReferencia: productoReferencia ?? null,
+  });
 }
 
 function Paginador({
@@ -210,8 +164,10 @@ export function EditarDisenoReal({
       setDiseno(actualizado);
       onEstadoChange(pedido.no_pedido, resultado.estado_cabecera_id ?? actualizado.estado_id);
       if (estadoId === ESTADO.APROBADO && resultado.orden_generada && resultado.no_produccion) {
+        const productoActualizado = (actualizado.productos as any[])
+          .find((p: any) => p.iddiseno_producto === id) ?? null;
         try {
-          await descargarPdfOrden(pedido.no_pedido, resultado.no_produccion);
+          await descargarPdfOrden(pedido.no_pedido, resultado.no_produccion, productoActualizado);
           setAlertaPdf({ visible: true, folios: [resultado.no_produccion] });
         } catch (pdfErr) {
           console.error("Error al generar PDF:", pdfErr);
@@ -387,6 +343,14 @@ export function EditarDisenoReal({
           const aprobado    = producto.estado_id === ESTADO.APROBADO;
           const enProceso   = producto.estado_id === ESTADO.EN_PROCESO;
 
+          // ── Soporte papel: el backend ahora regresa tipo_material en
+          // cada producto de diseño (getDisenoByPedido). El nombre del
+          // producto ya viene resuelto correctamente desde el backend
+          // (papel usa producto_papel / cat_tipo_producto_papel; plástico
+          // sigue usando tipo_producto_plastico). Aquí solo agregamos
+          // el badge visual, igual al que ya se usa en Cotizaciones/Pedidos.
+          const esPapel = esLineaPapel(producto);
+
           if (soloChat && !producto.idorden_diseno) return null;
 
           return (
@@ -402,6 +366,11 @@ export function EditarDisenoReal({
   <div className="flex items-center gap-2 flex-1 min-w-0 flex-wrap">
     <span>{aprobado ? "✓" : enProceso ? "🔄" : "⏱️"}</span>
     <p className="text-sm font-semibold text-gray-900 truncate">{producto.nombre}</p>
+    {esPapel && (
+      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-700 border border-amber-200">
+        📄 Papel
+      </span>
+    )}
     {producto.descripcion && (
       <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800 border border-purple-200">
         {producto.descripcion}
@@ -436,6 +405,11 @@ export function EditarDisenoReal({
                   </svg>
                   <span className="text-xs font-semibold text-green-800">
                     ✅ Orden de Producción generada: {producto.no_produccion}
+                    {esPapel && (
+                      <span className="ml-1.5 font-normal text-green-600">
+                        (pendiente de definir proceso de producción de papel)
+                      </span>
+                    )}
                   </span>
                 </div>
               )}
@@ -570,7 +544,7 @@ export function EditarDisenoReal({
   setChatProducto(chatActual); // restaurar para que no se cierre
   if (noProduccion) {
     try {
-      await descargarPdfOrden(pedido.no_pedido, noProduccion);
+      await descargarPdfOrden(pedido.no_pedido, noProduccion, producto);
       setAlertaPdf({ visible: true, folios: [noProduccion] });
     } catch (pdfErr) {
       console.error("Error al generar PDF desde chat:", pdfErr);
@@ -718,7 +692,9 @@ export default function Diseno() {
                     <div className="text-xs text-gray-400 mt-1">
                       {ped.productos.slice(0, 2).map((p: any, i: number) => (
                         <div key={i} className="flex items-center gap-1">
-                          <span className="text-orange-500">⏱️</span>
+                          <span className={esLineaPapel(p) ? "text-amber-500" : "text-orange-500"}>
+                            {esLineaPapel(p) ? "📄" : "⏱️"}
+                          </span>
                           <span>{(p.nombre || "Producto").substring(0, 30)}...</span>
                         </div>
                       ))}

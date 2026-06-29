@@ -12,6 +12,9 @@ interface Props {
 
 type Paso = "cliente" | "historial";
 
+const esLineaPapel = (p: any): boolean =>
+  p?.tipo_material === "papel" || p?.tipoCotizacion === "papel";
+
 export default function ModalRepetirPedido({ onSeleccionar, onClose }: Props) {
   const [paso, setPaso] = useState<Paso>("cliente");
   const [busqueda, setBusqueda] = useState("");
@@ -77,8 +80,10 @@ export default function ModalRepetirPedido({ onSeleccionar, onClose }: Props) {
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
           <div className="flex items-center gap-3">
             {paso === "historial" && (
-              <button onClick={() => { setPaso("cliente"); setHistorial([]); setClienteSeleccionado(null); }}
-                className="text-gray-400 hover:text-gray-600 transition-colors">
+              <button
+                onClick={() => { setPaso("cliente"); setHistorial([]); setClienteSeleccionado(null); }}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                 </svg>
@@ -107,9 +112,14 @@ export default function ModalRepetirPedido({ onSeleccionar, onClose }: Props) {
           {paso === "cliente" && (
             <div className="p-6">
               <div className="relative mb-4">
-                <input autoFocus type="text" value={busqueda} onChange={handleBusquedaChange}
+                <input
+                  autoFocus
+                  type="text"
+                  value={busqueda}
+                  onChange={handleBusquedaChange}
                   placeholder="Buscar por nombre, empresa, teléfono..."
-                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg text-gray-900 bg-white focus:ring-2 focus:ring-purple-500 focus:border-transparent" />
+                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg text-gray-900 bg-white focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                />
                 <svg className="w-5 h-5 text-gray-400 absolute left-3 top-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                 </svg>
@@ -128,7 +138,8 @@ export default function ModalRepetirPedido({ onSeleccionar, onClose }: Props) {
               {!loadingClientes && clientes.length === 0 && busqueda.length <= 1 && (
                 <div className="text-center py-12 text-gray-400">
                   <svg className="w-12 h-12 mx-auto mb-3 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                      d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0" />
                   </svg>
                   <p className="text-sm">Escribe para buscar un cliente</p>
                 </div>
@@ -136,8 +147,11 @@ export default function ModalRepetirPedido({ onSeleccionar, onClose }: Props) {
 
               <div className="divide-y divide-gray-100">
                 {clientes.map(c => (
-                  <button key={c.idclientes} onClick={() => seleccionarCliente(c)}
-                    className="w-full text-left px-4 py-3 hover:bg-purple-50 rounded-lg transition-colors">
+                  <button
+                    key={c.idclientes}
+                    onClick={() => seleccionarCliente(c)}
+                    className="w-full text-left px-4 py-3 hover:bg-purple-50 rounded-lg transition-colors"
+                  >
                     <div className="flex items-center justify-between gap-2">
                       <span className="font-semibold text-gray-900 text-sm">
                         {c.atencion || c.empresa || "Sin nombre"}
@@ -153,7 +167,7 @@ export default function ModalRepetirPedido({ onSeleccionar, onClose }: Props) {
                     )}
                     <div className="flex gap-3 mt-1 text-xs text-gray-400">
                       {c.telefono && <span>{c.telefono}</span>}
-                      {c.correo && <span>{c.correo}</span>}
+                      {c.correo   && <span>{c.correo}</span>}
                     </div>
                   </button>
                 ))}
@@ -174,7 +188,8 @@ export default function ModalRepetirPedido({ onSeleccionar, onClose }: Props) {
               {!loadingHistorial && historial.length === 0 && (
                 <div className="text-center py-12 text-gray-400">
                   <svg className="w-12 h-12 mx-auto mb-3 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                      d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                   </svg>
                   <p className="text-sm">Este cliente no tiene pedidos registrados</p>
                 </div>
@@ -183,16 +198,23 @@ export default function ModalRepetirPedido({ onSeleccionar, onClose }: Props) {
               <div className="space-y-3">
                 {historial.map(ped => {
                   const expandido = expandidos.has(ped.no_pedido);
-                  return (
-                    <div key={ped.no_pedido}
-                      className="border border-gray-200 rounded-lg overflow-hidden hover:border-purple-300 transition-colors">
+                  const tienePapel    = ped.productos.some((p: any) => esLineaPapel(p));
+                  const tienePlastico = ped.productos.some((p: any) => !esLineaPapel(p));
 
-                      {/* Cabecera del pedido */}
+                  return (
+                    <div
+                      key={ped.no_pedido}
+                      className="border border-gray-200 rounded-lg overflow-hidden hover:border-purple-300 transition-colors"
+                    >
+                      {/* Cabecera */}
                       <div className="flex items-center justify-between px-4 py-3 bg-gray-50">
-                        <div className="flex items-center gap-3 min-w-0">
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
                           <span className="font-bold text-gray-900 text-sm shrink-0">{ped.no_pedido}</span>
                           <span className="text-xs text-gray-400 shrink-0">{formatFecha(ped.fecha)}</span>
-                          {/* Resumen de productos con descripción */}
+                          {/* Badges de tipo */}
+                          {tienePapel    && <span className="shrink-0 text-xs px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded-full font-medium">📄 Papel</span>}
+                          {tienePlastico && <span className="shrink-0 text-xs px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded-full font-medium">🧴 Plástico</span>}
+                          {/* Resumen */}
                           <span className="text-xs text-gray-500 truncate">
                             {ped.productos.map((p: any) =>
                               p.descripcion ? `${p.nombre} · ${p.descripcion}` : p.nombre
@@ -203,18 +225,22 @@ export default function ModalRepetirPedido({ onSeleccionar, onClose }: Props) {
                           </span>
                         </div>
                         <div className="flex items-center gap-2 shrink-0 ml-2">
-                          {/* Toggle detalle */}
-                          <button onClick={() => toggleExpandido(ped.no_pedido)}
+                          <button
+                            onClick={() => toggleExpandido(ped.no_pedido)}
                             className="p-1.5 text-gray-400 hover:text-gray-600 rounded-md hover:bg-gray-200 transition-colors"
-                            title="Ver detalle">
-                            <svg className={`w-4 h-4 transition-transform ${expandido ? "rotate-180" : ""}`}
-                              fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            title="Ver detalle"
+                          >
+                            <svg
+                              className={`w-4 h-4 transition-transform ${expandido ? "rotate-180" : ""}`}
+                              fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                            >
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                             </svg>
                           </button>
-                          {/* Botón principal */}
-                          <button onClick={() => onSeleccionar(ped)}
-                            className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-xs font-semibold rounded-lg hover:bg-purple-700 transition-colors">
+                          <button
+                            onClick={() => onSeleccionar(ped)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-xs font-semibold rounded-lg hover:bg-purple-700 transition-colors"
+                          >
                             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                                 d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -226,39 +252,107 @@ export default function ModalRepetirPedido({ onSeleccionar, onClose }: Props) {
 
                       {/* Detalle expandible */}
                       {expandido && (
-                        <div className="px-4 py-3 border-t border-gray-100 bg-white space-y-2">
-                          {ped.productos.map((p: any, i: number) => (
-                            <div key={i} className="flex items-start gap-3">
-                              <span className="w-5 h-5 rounded-full bg-purple-100 text-purple-700 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">
-                                {i + 1}
-                              </span>
-                              <div className="flex-1 min-w-0">
-                                {/* Nombre + descripción */}
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <p className="text-sm font-medium text-gray-800 truncate">{p.nombre}</p>
-                                  {p.descripcion && (
-                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800 border border-purple-200">
-                                      {p.descripcion}
-                                    </span>
+                        <div className="px-4 py-3 border-t border-gray-100 bg-white space-y-3">
+                          {ped.productos.map((p: any, i: number) => {
+                            const papel = esLineaPapel(p);
+                            return (
+                              <div key={i} className="flex items-start gap-3">
+                                <span className={`w-5 h-5 rounded-full text-xs font-bold flex items-center justify-center shrink-0 mt-0.5 ${papel ? "bg-amber-100 text-amber-700" : "bg-purple-100 text-purple-700"}`}>
+                                  {i + 1}
+                                </span>
+                                <div className="flex-1 min-w-0">
+
+                                  {/* Nombre + descripción */}
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <p className="text-sm font-medium text-gray-800 truncate">{p.nombre}</p>
+                                    {papel && (
+                                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-700 border border-amber-200">
+                                        📄 Papel
+                                      </span>
+                                    )}
+                                    {p.descripcion && (
+                                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800 border border-purple-200">
+                                        {p.descripcion}
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {papel ? (
+                                    /* ── Detalle PAPEL ── */
+                                    <div className="mt-1 space-y-1">
+                                      {/* Material y medida */}
+                                      <div className="flex flex-wrap gap-x-3 text-xs text-gray-500">
+                                        {p.grupo_descripcion && <span>📦 {p.grupo_descripcion}</span>}
+                                        {p.medida            && <span>📐 {p.medida}</span>}
+                                      </div>
+                                      {/* Tintas */}
+                                      <div className="flex flex-wrap gap-x-3 text-xs text-gray-500">
+                                        {p.tintas      > 0 && <span>Tintas frente: <strong className="text-gray-700">{p.tintas}</strong></span>}
+                                        {p.tintasDentro > 0 && <span>Tintas interior: <strong className="text-gray-700">{p.tintasDentro}</strong></span>}
+                                        {p.caras       > 0 && <span>Caras: <strong className="text-gray-700">{p.caras}</strong></span>}
+                                      </div>
+                                      {/* Pantones */}
+                                      {p.pantones && (
+                                        <p className="text-xs text-purple-600">🎨 {p.pantones}</p>
+                                      )}
+                                      {p.pantonesDentro && (
+                                        <p className="text-xs text-purple-500">🎨 interior: {p.pantonesDentro}</p>
+                                      )}
+                                      {/* Acabados */}
+                                      <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs">
+                                        {p.asa_nombre      && <span className="text-gray-600">Asa: <strong>{p.asa_nombre}</strong></span>}
+                                        {p.laminado_nombre && <span className="text-gray-600">Laminado: <strong>{p.laminado_nombre}</strong></span>}
+                                        {p.foil_nombre     && <span className="text-amber-600">✨ Foil: <strong>{p.foil_nombre}</strong></span>}
+                                        {p.textura_nombre  && <span className="text-amber-600">🪨 Textura: <strong>{p.textura_nombre}</strong></span>}
+                                        {p.uv              && <span className="text-yellow-600">🔆 UV</span>}
+                                        {p.alto_relieve    && <span className="text-purple-600">🔳 Alto relieve</span>}
+                                      </div>
+                                      {/* Observación */}
+                                      {p.observacion && (
+                                        <p className="text-xs text-gray-400 italic">Obs: {p.observacion}</p>
+                                      )}
+                                      {/* Detalles */}
+                                      {p.detalles?.map((d: any, j: number) => (
+                                        <p key={j} className="text-xs text-gray-600 font-medium">
+                                          {d.cantidad.toLocaleString()} pzs — ${d.precio_total.toFixed(2)}
+                                        </p>
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    /* ── Detalle PLÁSTICO ── */
+                                    <div className="mt-1 space-y-0.5">
+                                      <div className="flex flex-wrap gap-x-3 text-xs text-gray-400">
+                                        {p.material && <span>{p.material}</span>}
+                                        {p.calibre  && <span>Cal. {p.calibre}</span>}
+                                        {p.tintas   && <span>{p.tintas} tinta{p.tintas > 1 ? "s" : ""}</span>}
+                                        {p.caras    && <span>{p.caras} cara{p.caras > 1 ? "s" : ""}</span>}
+                                        {p.asa_suaje && <span>Suaje: {p.asa_suaje}</span>}
+                                      </div>
+                                      {p.pantones && (
+                                        <p className="text-xs text-purple-600">
+                                          🎨 {Array.isArray(p.pantones) ? p.pantones.join(", ") : p.pantones}
+                                        </p>
+                                      )}
+                                      {p.pigmentos && (
+                                        <p className="text-xs text-orange-600">🧪 {p.pigmentos}</p>
+                                      )}
+                                      {p.observacion && (
+                                        <p className="text-xs text-gray-400 italic">Obs: {p.observacion}</p>
+                                      )}
+                                      {p.detalles?.map((d: any, j: number) => (
+                                        <p key={j} className="text-xs text-gray-500">
+                                          {d.modo_cantidad === "kilo"
+                                            ? `${d.kilogramos} kg`
+                                            : `${d.cantidad.toLocaleString()} bolsas`}
+                                          {" — "}${d.precio_total.toFixed(2)}
+                                        </p>
+                                      ))}
+                                    </div>
                                   )}
                                 </div>
-                                <div className="flex flex-wrap gap-x-3 text-xs text-gray-400 mt-0.5">
-                                  {p.material && <span>{p.material}</span>}
-                                  {p.calibre && <span>Cal. {p.calibre}</span>}
-                                  {p.tintas && <span>{p.tintas} tinta{p.tintas > 1 ? "s" : ""}</span>}
-                                  {p.asa_suaje && <span>Suaje: {p.asa_suaje}</span>}
-                                </div>
-                                {p.detalles?.map((d: any, j: number) => (
-                                  <p key={j} className="text-xs text-gray-500 mt-0.5">
-                                    {d.modo_cantidad === "kilo"
-                                      ? `${d.kilogramos} kg`
-                                      : `${d.cantidad.toLocaleString()} bolsas`}
-                                    {" — "}${d.precio_total.toFixed(2)}
-                                  </p>
-                                ))}
                               </div>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       )}
                     </div>

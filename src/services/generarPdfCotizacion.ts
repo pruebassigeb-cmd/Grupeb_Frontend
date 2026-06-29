@@ -1,4 +1,5 @@
 // generarPdfCotizacion.ts — LANDSCAPE CARTA — B&N
+// Detección automática: solo plástico → tabla plástico, solo papel → tabla papel, mixto → tabla general
 
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -38,6 +39,626 @@ interface CotizacionPdf {
   identificar?: string | null;
 }
 
+// ── Detección de tipo de material ────────────────────────────────────────────
+const esPapelProd = (p: ProductoPdf): boolean =>
+  (p as any).tipo_material === "papel" ||
+  (p as any).tipoCotizacion === "papel" ||
+  (p as any).idproducto_papel != null ||
+  (p as any).producto_papel_idproducto_papel != null;
+
+const boolPdf = (value: unknown): string => boolLabel(value === true);
+
+// ── Helper: separar material y calibre desde grupo_descripcion ────────────────
+function parsearMaterialYCalibre(
+  grupDesc: string,
+  fallbackMaterial: string,
+  fallbackCalibre: string
+): { materialStr: string; calibreStr: string } {
+  if (!grupDesc) return { materialStr: fallbackMaterial, calibreStr: fallbackCalibre };
+  const partes = grupDesc.split("+").map((s: string) => s.trim());
+  const materialStr =
+    partes.map((p: string) => p.replace(/\s*\d+[\w.]*(?:pts|gms|ect)/gi, "").trim())
+      .filter(Boolean).join(" + ") || fallbackMaterial;
+  const calibreStr =
+    partes.map((p: string) => { const m = p.match(/(\d+[\w.]*(?:pts|gms|ect))/i); return m ? m[1] : ""; })
+      .filter(Boolean).join(" / ") || fallbackCalibre;
+  return { materialStr, calibreStr };
+}
+
+// ── Helper: celda diagonal tintas ────────────────────────────────────────────
+function dibujarCeldaTintasDiagonal(
+  doc: jsPDF, x: number, y: number, w: number, h: number,
+  exterior: string, interior: string, bgColor: [number, number, number]
+) {
+  doc.setFillColor(bgColor[0], bgColor[1], bgColor[2]);
+  doc.rect(x, y, w, h, "F");
+  doc.setDrawColor(180, 180, 180); doc.setLineWidth(0.3);
+  doc.line(x, y + h, x + w, y);
+  doc.setFontSize(6); doc.setTextColor(0, 0, 0); doc.setFont("helvetica", "normal");
+  doc.text(exterior, x + 1.5, y + 3.5, { maxWidth: w - 3 });
+  doc.setFontSize(6); doc.setTextColor(80, 80, 80);
+  doc.text(interior, x + w - 1.5, y + h - 1.5, { align: "right", maxWidth: w - 3 });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TABLA SOLO PLÁSTICO
+// Columnas: Descripción | Medida | Tintas E/I | Caras | Material | Calibre |
+//           Asa/Suaje | Pantones | Pigmento | Perf. | Cant 1 | Cant 2 | Cant 3
+// ═══════════════════════════════════════════════════════════════════════════════
+function renderTablaPlastico(
+  doc: jsPDF, productos: ProductoPdf[], startY: number,
+  numCantCols: number, M: number, PW: number, footerH: number
+): number {
+  const headFixed = ["Descripción", "Medida", "Tintas", "Caras", "Material", "Calibre", "Asa/Suaje", "Pantones", "Pigmento", "Perf."];
+  const headAll = [...headFixed, ...Array.from({ length: numCantCols }, (_, i) => `Cant ${i + 1}`)];
+
+  const filasDiagonal: { rowIndex: number; exterior: string; interior: string }[] = [];
+  const bodyRows: any[][] = [];
+  let rowIdx = 0;
+
+  productos.forEach(prod => {
+    const descripcion = (prod as any).descripcion?.trim() || null;
+    const tintasExt = prod.tintas != null ? String(prod.tintas) : "—";
+    const tintasInt = (prod as any).tintasDentro != null && (prod as any).tintasDentro > 0
+      ? String((prod as any).tintasDentro) : "—";
+    const tieneDiagonal = tintasInt !== "—";
+
+    const row: any[] = [
+      descripcion ? `${tipoProducto(prod.nombre)}\n${descripcion}` : tipoProducto(prod.nombre),
+      getMedida(prod),
+      `${tintasExt}x${tintasInt === "—" ? "0" : tintasInt}`,
+      val(prod.caras),
+      val(prod.material),
+      val(prod.calibre),
+      (prod as any).asa_nombre ? String((prod as any).asa_nombre).trim() : boolLabel(prod.asa_suaje),
+      parsePantones(prod.pantones),
+      prod.pigmentos ? String(prod.pigmentos).trim() || "—" : "—",
+      prod.perforacion ? "SI" : "—",
+    ];
+
+    for (let i = 0; i < numCantCols; i++) {
+      const det = prod.detalles[i];
+      row.push(det && det.cantidad > 0 ? formatCantidadCelda(det, prod.por_kilo) : "—");
+    }
+
+    if (tieneDiagonal) filasDiagonal.push({ rowIndex: rowIdx, exterior: tintasExt, interior: tintasInt });
+
+    bodyRows.push(row);
+    rowIdx++;
+
+    // Fila observaciones
+    const tieneKilo = prod.detalles.some(d => d.modo_cantidad === "kilo");
+    const modoLabel = tieneKilo ? "Cotizado por kilo" : "Cotizado por unidad";
+    const hasHerr = prod.herramental_precio != null && prod.herramental_precio > 0;
+    const MID_COL = Math.floor(headAll.length / 2);
+
+    const obsPartes: string[] = [`Obs: ${modoLabel}`];
+    if (prod.observacion?.trim()) obsPartes.push(prod.observacion.trim());
+    const obsTexto = obsPartes.join("  —  ");
+
+    const comboRow = new Array(headAll.length).fill("");
+    comboRow[0] = obsTexto;
+    if (hasHerr) {
+      const nombreHerr = prod.herramental_descripcion?.trim() || "Herramental / molde";
+      comboRow[1] = `Herramental: ${nombreHerr}  —  Cargo único.`;
+      comboRow[headAll.length - 1] = `$${Number(prod.herramental_precio).toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    }
+    bodyRows.push(comboRow);
+    rowIdx++;
+  });
+
+  const availW = PW - M * 2;
+  const colW: Record<number, number> = { 0: 30, 1: 17, 2: 12, 3: 10, 4: 20, 5: 13, 6: 16, 7: 25, 8: 16, 9: 8 };
+  const fixedTotal = Object.values(colW).reduce((a, b) => a + b, 0);
+  const cantW = Math.max((availW - fixedTotal) / numCantCols, 16);
+  for (let i = 0; i < numCantCols; i++) colW[10 + i] = cantW;
+  const totalColW = Object.values(colW).reduce((a, b) => a + b, 0);
+  if (totalColW > availW) {
+    const scale = availW / totalColW;
+    Object.keys(colW).forEach(k => { colW[+k] = colW[+k] * scale; });
+  }
+
+  const MID_COL = Math.floor(headAll.length / 2);
+
+  autoTable(doc, {
+    startY,
+    margin: { left: M, right: M, bottom: footerH + M },
+    head: [headAll],
+    body: bodyRows,
+    theme: "grid",
+    headStyles: { fillColor: BLACK, textColor: WHITE, fontStyle: "bold", fontSize: 7, cellPadding: 1.2, halign: "center", valign: "middle" },
+    bodyStyles: { fontSize: 7, textColor: [0, 0, 0], cellPadding: 1.2, valign: "middle", minCellHeight: 7 },
+    alternateRowStyles: { fillColor: WHITE },
+    columnStyles: {
+      0: { cellWidth: colW[0], halign: "left", fontSize: 7, overflow: "linebreak" },
+      1: { cellWidth: colW[1], halign: "center", fontSize: 7 },
+      2: { cellWidth: colW[2], halign: "center", fontSize: 7 },
+      3: { cellWidth: colW[3], halign: "center", fontSize: 7 },
+      4: { cellWidth: colW[4], halign: "center", fontSize: 7, overflow: "linebreak" },
+      5: { cellWidth: colW[5], halign: "center", fontSize: 7 },
+      6: { cellWidth: colW[6], halign: "center", fontSize: 7, overflow: "linebreak" },
+      7: { cellWidth: colW[7], halign: "left", fontSize: 7, overflow: "linebreak" },
+      8: { cellWidth: colW[8], halign: "center", fontSize: 7, overflow: "linebreak" },
+      9: { cellWidth: colW[9], halign: "center", fontSize: 7 },
+      ...(numCantCols >= 1 ? { 10: { cellWidth: colW[10], halign: "center" as const, fontSize: 8, fontStyle: "bold" as const, textColor: BLACK } } : {}),
+      ...(numCantCols >= 2 ? { 11: { cellWidth: colW[11], halign: "center" as const, fontSize: 8, fontStyle: "bold" as const, textColor: BLACK } } : {}),
+      ...(numCantCols >= 3 ? { 12: { cellWidth: colW[12], halign: "center" as const, fontSize: 8, fontStyle: "bold" as const, textColor: BLACK } } : {}),
+    },
+    didParseCell(data) {
+      if (data.section === "head" && data.column.index >= 10) {
+        data.cell.styles.fillColor = BLACK;
+        data.cell.styles.textColor = WHITE;
+      }
+      if (data.section === "body") {
+        const raw = data.row.raw as any[];
+        const raw0 = String(raw?.[0] ?? "");
+        const raw1 = String(raw?.[1] ?? "");
+        const ci = data.column.index;
+        const lastCol = headAll.length - 1;
+
+        if (ci === 2 && !raw0.startsWith("Obs:")) {
+          if (String(raw?.[2] ?? "").startsWith("DIAG:")) data.cell.text = [];
+        }
+
+        if (raw0.startsWith("Obs:")) {
+          const hasHerr = raw1.startsWith("Herramental:");
+          if (ci === 0) {
+            data.cell.colSpan = hasHerr ? MID_COL : headAll.length;
+            data.cell.styles.fillColor = WHITE;
+            data.cell.styles.fontStyle = "italic";
+            data.cell.styles.fontSize = 6.5;
+            data.cell.styles.textColor = BLACK;
+            data.cell.styles.halign = "left";
+            data.cell.styles.cellPadding = 0.8;
+          } else if (hasHerr && ci === MID_COL) {
+            data.cell.colSpan = lastCol - MID_COL;
+            data.cell.styles.fillColor = WHITE;
+            data.cell.styles.fontStyle = "italic";
+            data.cell.styles.fontSize = 6.5;
+            data.cell.styles.textColor = BLACK;
+            data.cell.styles.halign = "left";
+            data.cell.styles.overflow = "linebreak";
+            data.cell.styles.cellPadding = 0.8;
+            data.cell.text = [raw1];
+          } else if (hasHerr && ci === lastCol) {
+            data.cell.styles.fillColor = WHITE;
+            data.cell.styles.fontStyle = "bold";
+            data.cell.styles.fontSize = 7;
+            data.cell.styles.textColor = BLACK;
+            data.cell.styles.halign = "center";
+          } else {
+            data.cell.styles.fillColor = WHITE;
+            data.cell.text = [];
+          }
+        }
+      }
+    },
+    didDrawCell(data) {
+      if (data.section !== "body" || data.column.index !== 2) return;
+      const raw = data.row.raw as any[];
+      const raw0 = String(raw?.[0] ?? "");
+      if (raw0.startsWith("Obs:")) return;
+      const cellVal = String(raw?.[2] ?? "");
+      if (!cellVal.startsWith("DIAG:")) return;
+      const partes = cellVal.replace("DIAG:", "").split("|");
+      const bg: [number, number, number] = data.row.index % 2 === 0
+        ? [255, 255, 255]
+        : [(GRAY_ROW as number[])[0] ?? 245, (GRAY_ROW as number[])[1] ?? 245, (GRAY_ROW as number[])[2] ?? 245];
+      dibujarCeldaTintasDiagonal(doc, data.cell.x, data.cell.y, data.cell.width, data.cell.height, partes[0] ?? "—", partes[1] ?? "—", bg);
+    },
+  });
+
+  return (doc as any).lastAutoTable?.finalY ?? startY;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TABLA SOLO PAPEL
+// Columnas: Descripción | Medida | Tintas E/I | Material |
+//           Foil | Asa/Suaje | Alto Rel | Laminado | UV | Textura | Pantones | Cant 1/2/3
+// ═══════════════════════════════════════════════════════════════════════════════
+function renderTablaPapel(
+  doc: jsPDF, productos: ProductoPdf[], startY: number,
+  numCantCols: number, M: number, PW: number, footerH: number
+): number {
+  const headFixed = ["Descripción", "Medida", "Tintas", "Material", "HS", "Asa/Suaje", "AR", "Laminado", "UV", "Textura", "Pantones"];
+  const headAll = [...headFixed, ...Array.from({ length: numCantCols }, (_, i) => `Cant ${i + 1}`)];
+
+  const filasDiagonal: { rowIndex: number; exterior: string; interior: string }[] = [];
+  const bodyRows: any[][] = [];
+  let rowIdx = 0;
+
+  productos.forEach(prod => {
+    const descripcion = (prod as any).descripcion?.trim() || null;
+    const grupDesc: string = (prod as any).grupo_descripcion ?? "";
+    const { materialStr } = parsearMaterialYCalibre(grupDesc, val(prod.material), val(prod.calibre));
+
+    const tintasExt = prod.tintas != null ? String(prod.tintas) : "—";
+    const tintasInt = (prod as any).tintasDentro != null && (prod as any).tintasDentro > 0
+      ? String((prod as any).tintasDentro) : "—";
+    const tieneDiagonal = tintasInt !== "—";
+
+    const foilMostrar = (prod as any).foil_nombre ? String((prod as any).foil_nombre).trim() : boolLabel(prod.foil);
+    const asaMostrar = (prod as any).asa_nombre ? String((prod as any).asa_nombre).trim() : boolLabel(prod.asa_suaje);
+    const laminadoMostrar = (prod as any).laminado_nombre ? String((prod as any).laminado_nombre).trim() : boolLabel(prod.laminado);
+    const texturaMostrar = (prod as any).textura_nombre ? String((prod as any).textura_nombre).trim() : "—";
+    const altoRelMostrar = (prod as any).alto_relieve === true ? "SI" : boolLabel((prod as any).alto_rel);
+
+    const row: any[] = [
+      descripcion ? `${tipoProducto(prod.nombre)}\n${descripcion}` : tipoProducto(prod.nombre),
+      getMedida(prod),
+      `${tintasExt}x${tintasInt === "—" ? "0" : tintasInt}`,
+      materialStr,
+      foilMostrar,
+      asaMostrar,
+      altoRelMostrar,
+      laminadoMostrar,
+      boolPdf((prod as any).uv ?? (prod as any).uvBr),
+      texturaMostrar,
+      parsePantones(prod.pantones),
+    ];
+
+    for (let i = 0; i < numCantCols; i++) {
+      const det = prod.detalles[i];
+      row.push(det && det.cantidad > 0 ? formatCantidadCelda(det, prod.por_kilo) : "—");
+    }
+
+    if (tieneDiagonal) filasDiagonal.push({ rowIndex: rowIdx, exterior: tintasExt, interior: tintasInt });
+    bodyRows.push(row);
+    rowIdx++;
+
+    // Fila observaciones
+    const hasHerr = prod.herramental_precio != null && prod.herramental_precio > 0;
+    const MID_COL = Math.floor(headAll.length / 2);
+    const extras: string[] = [];
+    if (tieneDiagonal) extras.push(`Tintas dentro: ${tintasInt}`);
+    if ((prod as any).pantonesDentro) extras.push(`Pantones int: ${(prod as any).pantonesDentro}`);
+    const metodo = (prod as any).metodo_hojeado;
+    extras.push(
+      `Preparación: ${
+        metodo === "hojeado"
+          ? "Hojeado"
+          : metodo === "guillotina"
+            ? "Guillotina"
+            : "Pendiente"
+      }`
+    );
+    extras.push(`Armado: ${(prod as any).lleva_armado === true ? "SI" : "N/A"}`);
+    const obsPartes: string[] = ["Obs: Por unidad"];
+    if (extras.length) obsPartes.push(extras.join("  ·  "));
+    if (prod.observacion?.trim()) obsPartes.push(prod.observacion.trim());
+    const obsTexto = obsPartes.join("  —  ");
+
+    const comboRow = new Array(headAll.length).fill("");
+    comboRow[0] = obsTexto;
+    if (hasHerr) {
+      const nombreHerr = prod.herramental_descripcion?.trim() || "Herramental / molde";
+      comboRow[1] = `Herramental: ${nombreHerr}  —  Cargo único.`;
+      comboRow[headAll.length - 1] = `$${Number(prod.herramental_precio).toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    }
+    bodyRows.push(comboRow);
+    rowIdx++;
+  });
+
+  const availW = PW - M * 2;
+  const colW: Record<number, number> = { 0: 30, 1: 17, 2: 12, 3: 24, 4: 14, 5: 16, 6: 10, 7: 14, 8: 8, 9: 14, 10: 24 };
+  const fixedTotal = Object.values(colW).reduce((a, b) => a + b, 0);
+  const cantW = Math.max((availW - fixedTotal) / numCantCols, 16);
+  for (let i = 0; i < numCantCols; i++) colW[11 + i] = cantW;
+  const totalColW = Object.values(colW).reduce((a, b) => a + b, 0);
+  if (totalColW > availW) {
+    const scale = availW / totalColW;
+    Object.keys(colW).forEach(k => { colW[+k] = colW[+k] * scale; });
+  }
+
+  const MID_COL = Math.floor(headAll.length / 2);
+
+  autoTable(doc, {
+    startY,
+    margin: { left: M, right: M, bottom: footerH + M },
+    head: [headAll],
+    body: bodyRows,
+    theme: "grid",
+    headStyles: { fillColor: BLACK, textColor: WHITE, fontStyle: "bold", fontSize: 7, cellPadding: 1.2, halign: "center", valign: "middle" },
+    bodyStyles: { fontSize: 7, textColor: [0, 0, 0], cellPadding: 1.2, valign: "middle", minCellHeight: 7 },
+    alternateRowStyles: { fillColor: WHITE },
+    columnStyles: {
+      0: { cellWidth: colW[0], halign: "left", fontSize: 7, overflow: "linebreak" },
+      1: { cellWidth: colW[1], halign: "center", fontSize: 7 },
+      2: { cellWidth: colW[2], halign: "center", fontSize: 7 },
+      3: { cellWidth: colW[3], halign: "center", fontSize: 7, overflow: "linebreak" },
+      4: { cellWidth: colW[4], halign: "center", fontSize: 7, overflow: "linebreak" },
+      5: { cellWidth: colW[5], halign: "center", fontSize: 7, overflow: "linebreak" },
+      6: { cellWidth: colW[6], halign: "center", fontSize: 7 },
+      7: { cellWidth: colW[7], halign: "center", fontSize: 7, overflow: "linebreak" },
+      8: { cellWidth: colW[8], halign: "center", fontSize: 7 },
+      9: { cellWidth: colW[9], halign: "center", fontSize: 7, overflow: "linebreak" },
+      10: { cellWidth: colW[10], halign: "left", fontSize: 7, overflow: "linebreak" },
+      ...(numCantCols >= 1 ? { 11: { cellWidth: colW[11], halign: "center" as const, fontSize: 8, fontStyle: "bold" as const, textColor: BLACK } } : {}),
+      ...(numCantCols >= 2 ? { 12: { cellWidth: colW[12], halign: "center" as const, fontSize: 8, fontStyle: "bold" as const, textColor: BLACK } } : {}),
+      ...(numCantCols >= 3 ? { 13: { cellWidth: colW[13], halign: "center" as const, fontSize: 8, fontStyle: "bold" as const, textColor: BLACK } } : {}),
+    },
+    didParseCell(data) {
+      if (data.section === "head" && data.column.index >= 11) {
+        data.cell.styles.fillColor = BLACK;
+        data.cell.styles.textColor = WHITE;
+      }
+      if (data.section === "body") {
+        const raw = data.row.raw as any[];
+        const raw0 = String(raw?.[0] ?? "");
+        const raw1 = String(raw?.[1] ?? "");
+        const ci = data.column.index;
+        const lastCol = headAll.length - 1;
+
+        if (ci === 2 && !raw0.startsWith("Obs:")) {
+          if (String(raw?.[2] ?? "").startsWith("DIAG:")) data.cell.text = [];
+        }
+
+        if (raw0.startsWith("Obs:")) {
+          const hasHerr = raw1.startsWith("Herramental:");
+          if (ci === 0) {
+            data.cell.colSpan = hasHerr ? MID_COL : headAll.length;
+            data.cell.styles.fillColor = WHITE;
+            data.cell.styles.fontStyle = "italic";
+            data.cell.styles.fontSize = 6.5;
+            data.cell.styles.textColor = BLACK;
+            data.cell.styles.halign = "left";
+            data.cell.styles.cellPadding = 0.8;
+          } else if (hasHerr && ci === MID_COL) {
+            data.cell.colSpan = lastCol - MID_COL;
+            data.cell.styles.fillColor = WHITE;
+            data.cell.styles.fontStyle = "italic";
+            data.cell.styles.fontSize = 6.5;
+            data.cell.styles.textColor = BLACK;
+            data.cell.styles.halign = "left";
+            data.cell.styles.overflow = "linebreak";
+            data.cell.styles.cellPadding = 0.8;
+            data.cell.text = [raw1];
+          } else if (hasHerr && ci === lastCol) {
+            data.cell.styles.fillColor = WHITE;
+            data.cell.styles.fontStyle = "bold";
+            data.cell.styles.fontSize = 7;
+            data.cell.styles.textColor = BLACK;
+            data.cell.styles.halign = "center";
+          } else {
+            data.cell.styles.fillColor = WHITE;
+            data.cell.text = [];
+          }
+        }
+      }
+    },
+    didDrawCell(data) {
+      if (data.section !== "body" || data.column.index !== 2) return;
+      const raw = data.row.raw as any[];
+      const raw0 = String(raw?.[0] ?? "");
+      if (raw0.startsWith("Obs:")) return;
+      const cellVal = String(raw?.[2] ?? "");
+      if (!cellVal.startsWith("DIAG:")) return;
+      const partes = cellVal.replace("DIAG:", "").split("|");
+      const bg: [number, number, number] = data.row.index % 2 === 0
+        ? [255, 255, 255]
+        : [(GRAY_ROW as number[])[0] ?? 245, (GRAY_ROW as number[])[1] ?? 245, (GRAY_ROW as number[])[2] ?? 245];
+      dibujarCeldaTintasDiagonal(doc, data.cell.x, data.cell.y, data.cell.width, data.cell.height, partes[0] ?? "—", partes[1] ?? "—", bg);
+    },
+  });
+
+  return (doc as any).lastAutoTable?.finalY ?? startY;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TABLA MIXTA (plástico + papel) — tabla general con todas las columnas
+// ═══════════════════════════════════════════════════════════════════════════════
+function renderTablaMixta(
+  doc: jsPDF, productos: ProductoPdf[], startY: number,
+  numCantCols: number, M: number, PW: number, footerH: number
+): number {
+  const headFixed = [
+    "Descripción", "Medida", "Tintas", "Caras",
+    "Material", "Calibre", "HS", "Asa/Suaje", "AR",
+    "Laminado", "UV", "Textura", "Pantones", "Pigmento", "Perf.",
+  ];
+  const headAll = [...headFixed, ...Array.from({ length: numCantCols }, (_, i) => `Cant ${i + 1}`)];
+  const MID_COL = Math.floor(headAll.length / 2);
+
+  const bodyRows: any[][] = [];
+  let rowIdx = 0;
+
+  productos.forEach(prod => {
+    const esPapel = esPapelProd(prod);
+    const descripcion = (prod as any).descripcion?.trim() || null;
+    const tintasExt = prod.tintas != null ? String(prod.tintas) : "—";
+    const tintasInt = (prod as any).tintasDentro != null && (prod as any).tintasDentro > 0
+      ? String((prod as any).tintasDentro) : "—";
+    const tieneDiagonal = tintasInt !== "—";
+
+    const grupDesc: string = (prod as any).grupo_descripcion ?? "";
+    const { materialStr, calibreStr } = parsearMaterialYCalibre(grupDesc, val(prod.material), val(prod.calibre));
+
+    const altoRelMostrar = (prod as any).alto_relieve === true ? "SI" : boolLabel((prod as any).alto_rel);
+    const foilMostrar = (prod as any).foil_nombre ? String((prod as any).foil_nombre).trim() : (esPapel ? "—" : boolLabel(prod.foil));
+    const asaMostrar = (prod as any).asa_nombre ? String((prod as any).asa_nombre).trim() : boolLabel(prod.asa_suaje);
+    const laminadoMostrar = (prod as any).laminado_nombre ? String((prod as any).laminado_nombre).trim() : (esPapel ? "—" : boolLabel(prod.laminado));
+    const texturaMostrar = (prod as any).textura_nombre ? String((prod as any).textura_nombre).trim() : "—";
+
+    const row: any[] = [
+      descripcion ? `${tipoProducto(prod.nombre)}\n${descripcion}` : tipoProducto(prod.nombre),
+      getMedida(prod),
+      `${tintasExt}x${tintasInt === "—" ? "0" : tintasInt}`,
+      esPapel ? "—" : val(prod.caras),
+      materialStr,
+      esPapel ? "—" : calibreStr,
+      foilMostrar,
+      asaMostrar,
+      altoRelMostrar,
+      laminadoMostrar,
+      boolPdf((prod as any).uv ?? (prod as any).uvBr),
+      texturaMostrar,
+      parsePantones(prod.pantones),
+      esPapel ? "—" : (prod.pigmentos ? String(prod.pigmentos).trim() || "—" : "—"),
+      esPapel ? "—" : (prod.perforacion ? "SI" : "—"),
+    ];
+
+    for (let i = 0; i < numCantCols; i++) {
+      const det = prod.detalles[i];
+      row.push(det && det.cantidad > 0 ? formatCantidadCelda(det, prod.por_kilo) : "—");
+    }
+
+    bodyRows.push(row);
+    rowIdx++;
+
+    // Fila observaciones
+    const tieneKilo = prod.detalles.some(d => d.modo_cantidad === "kilo");
+    const modoLabel = tieneKilo ? "Por kilo" : "Por unidad";
+    const hasHerr = prod.herramental_precio != null && prod.herramental_precio > 0;
+    const extras: string[] = [];
+    if (foilMostrar !== "—" && foilMostrar !== "NO") extras.push(`Foil: ${foilMostrar}`);
+    if (asaMostrar !== "—" && asaMostrar !== "NO") extras.push(`Asa: ${asaMostrar}`);
+    if (laminadoMostrar !== "—" && laminadoMostrar !== "NO") extras.push(`Laminado: ${laminadoMostrar}`);
+    if (texturaMostrar !== "—") extras.push(`Textura: ${texturaMostrar}`);
+    if (tieneDiagonal) extras.push(`Tintas dentro: ${tintasInt}`);
+    if ((prod as any).pantonesDentro) extras.push(`Pantones int: ${(prod as any).pantonesDentro}`);
+    if (esPapel) {
+      const metodo = (prod as any).metodo_hojeado;
+      extras.push(
+        `Preparación: ${
+          metodo === "hojeado"
+            ? "Hojeado"
+            : metodo === "guillotina"
+              ? "Guillotina"
+              : "Pendiente"
+        }`
+      );
+      extras.push(`Armado: ${(prod as any).lleva_armado === true ? "SI" : "N/A"}`);
+    }
+
+    const obsPartes: string[] = [`Obs: ${modoLabel}`];
+    if (extras.length) obsPartes.push(extras.join("  ·  "));
+    if (prod.observacion?.trim()) obsPartes.push(prod.observacion.trim());
+    const obsTexto = obsPartes.join("  —  ");
+
+    const comboRow = new Array(headAll.length).fill("");
+    comboRow[0] = obsTexto;
+    if (hasHerr) {
+      const nombreHerr = prod.herramental_descripcion?.trim() || "Herramental / molde";
+      comboRow[1] = `Herramental: ${nombreHerr}  —  Cargo único.`;
+      comboRow[headAll.length - 1] = `$${Number(prod.herramental_precio).toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    }
+    bodyRows.push(comboRow);
+    rowIdx++;
+  });
+
+  const availW = PW - M * 2;
+  const colW: Record<number, number> = {
+    0: 20, 1: 17, 2: 12, 3: 10, 4: 17, 5: 12, 6: 14, 7: 15,
+    8: 10, 9: 14, 10: 8, 11: 14, 12: 22, 13: 14, 14: 8,
+  };
+  const fixedTotal = Object.values(colW).reduce((a, b) => a + b, 0);
+  const cantW = Math.max((availW - fixedTotal) / numCantCols, 16);
+  for (let i = 0; i < numCantCols; i++) colW[15 + i] = cantW;
+  const totalColW = Object.values(colW).reduce((a, b) => a + b, 0);
+  if (totalColW > availW) {
+    const scale = availW / totalColW;
+    Object.keys(colW).forEach(k => { colW[+k] = colW[+k] * scale; });
+  }
+
+  autoTable(doc, {
+    startY,
+    margin: { left: M, right: M, bottom: footerH + M },
+    head: [headAll],
+    body: bodyRows,
+    theme: "grid",
+    headStyles: { fillColor: BLACK, textColor: WHITE, fontStyle: "bold", fontSize: 7, cellPadding: 1.2, halign: "center", valign: "middle" },
+    bodyStyles: { fontSize: 7, textColor: [0, 0, 0], cellPadding: 1.2, valign: "middle", minCellHeight: 7 },
+    alternateRowStyles: { fillColor: WHITE },
+    columnStyles: {
+      0:  { cellWidth: colW[0],  halign: "left",   fontSize: 7, overflow: "linebreak" },
+      1:  { cellWidth: colW[1],  halign: "center", fontSize: 7 },
+      2:  { cellWidth: colW[2],  halign: "center", fontSize: 7 },
+      3:  { cellWidth: colW[3],  halign: "center", fontSize: 7 },
+      4:  { cellWidth: colW[4],  halign: "center", fontSize: 7, overflow: "linebreak" },
+      5:  { cellWidth: colW[5],  halign: "center", fontSize: 7, overflow: "linebreak" },
+      6:  { cellWidth: colW[6],  halign: "center", fontSize: 7, overflow: "linebreak" },
+      7:  { cellWidth: colW[7],  halign: "center", fontSize: 7, overflow: "linebreak" },
+      8:  { cellWidth: colW[8],  halign: "center", fontSize: 7 },
+      9:  { cellWidth: colW[9],  halign: "center", fontSize: 7, overflow: "linebreak" },
+      10: { cellWidth: colW[10], halign: "center", fontSize: 7 },
+      11: { cellWidth: colW[11], halign: "center", fontSize: 7, overflow: "linebreak" },
+      12: { cellWidth: colW[12], halign: "left",   fontSize: 7, overflow: "linebreak" },
+      13: { cellWidth: colW[13], halign: "center", fontSize: 7, overflow: "linebreak" },
+      14: { cellWidth: colW[14], halign: "center", fontSize: 7 },
+      ...(numCantCols >= 1 ? { 15: { cellWidth: colW[15], halign: "center" as const, fontSize: 8, fontStyle: "bold" as const, textColor: BLACK } } : {}),
+      ...(numCantCols >= 2 ? { 16: { cellWidth: colW[16], halign: "center" as const, fontSize: 8, fontStyle: "bold" as const, textColor: BLACK } } : {}),
+      ...(numCantCols >= 3 ? { 17: { cellWidth: colW[17], halign: "center" as const, fontSize: 8, fontStyle: "bold" as const, textColor: BLACK } } : {}),
+    },
+    didParseCell(data) {
+      if (data.section === "head" && data.column.index >= 15) {
+        data.cell.styles.fillColor = BLACK;
+        data.cell.styles.textColor = WHITE;
+      }
+      if (data.section === "body") {
+        const raw = data.row.raw as any[];
+        const raw0 = String(raw?.[0] ?? "");
+        const raw1 = String(raw?.[1] ?? "");
+        const ci = data.column.index;
+        const lastCol = headAll.length - 1;
+
+        if (ci === 2 && !raw0.startsWith("Obs:")) {
+          if (String(raw?.[2] ?? "").startsWith("DIAG:")) data.cell.text = [];
+        }
+
+        if (raw0.startsWith("Obs:")) {
+          const hasHerr = raw1.startsWith("Herramental:");
+          if (ci === 0) {
+            data.cell.colSpan = hasHerr ? MID_COL : headAll.length;
+            data.cell.styles.fillColor = WHITE;
+            data.cell.styles.fontStyle = "italic";
+            data.cell.styles.fontSize = 6.5;
+            data.cell.styles.textColor = BLACK;
+            data.cell.styles.halign = "left";
+            data.cell.styles.cellPadding = 0.8;
+          } else if (hasHerr && ci === MID_COL) {
+            data.cell.colSpan = lastCol - MID_COL;
+            data.cell.styles.fillColor = WHITE;
+            data.cell.styles.fontStyle = "italic";
+            data.cell.styles.fontSize = 6.5;
+            data.cell.styles.textColor = BLACK;
+            data.cell.styles.halign = "left";
+            data.cell.styles.overflow = "linebreak";
+            data.cell.styles.cellPadding = 0.8;
+            data.cell.text = [raw1];
+          } else if (hasHerr && ci === lastCol) {
+            data.cell.styles.fillColor = WHITE;
+            data.cell.styles.fontStyle = "bold";
+            data.cell.styles.fontSize = 7;
+            data.cell.styles.textColor = BLACK;
+            data.cell.styles.halign = "center";
+          } else {
+            data.cell.styles.fillColor = WHITE;
+            data.cell.text = [];
+          }
+        }
+      }
+    },
+    didDrawCell(data) {
+      if (data.section !== "body" || data.column.index !== 2) return;
+      const raw = data.row.raw as any[];
+      const raw0 = String(raw?.[0] ?? "");
+      if (raw0.startsWith("Obs:")) return;
+      const cellVal = String(raw?.[2] ?? "");
+      if (!cellVal.startsWith("DIAG:")) return;
+      const partes = cellVal.replace("DIAG:", "").split("|");
+      const bg: [number, number, number] = data.row.index % 2 === 0
+        ? [255, 255, 255]
+        : [(GRAY_ROW as number[])[0] ?? 245, (GRAY_ROW as number[])[1] ?? 245, (GRAY_ROW as number[])[2] ?? 245];
+      dibujarCeldaTintasDiagonal(doc, data.cell.x, data.cell.y, data.cell.width, data.cell.height, partes[0] ?? "—", partes[1] ?? "—", bg);
+    },
+  });
+
+  return (doc as any).lastAutoTable?.finalY ?? startY;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// FUNCIÓN PRINCIPAL
+// ═══════════════════════════════════════════════════════════════════════════════
 export async function generarPdfCotizacion(cotizacion: CotizacionPdf, guardarEnS3 = false): Promise<void> {
   const logoBase64 = cotizacion.logoBase64 ?? await cargarLogoBase64(logoUrl);
   const sinIva = cotizacion.sin_iva === true;
@@ -49,240 +670,40 @@ export async function generarPdfCotizacion(cotizacion: CotizacionPdf, guardarEnS
   const COT_FOOTER_H = 55;
 
   const y = await dibujarEncabezado({
-    doc,
-    logoBase64,
-    labelDocumento: "COTIZACION",
-    labelFolio: "No F",
-    folio: cotizacion.no_cotizacion,
-    fecha: cotizacion.fecha,
-    empresa: cotizacion.empresa,
-    impresion: cotizacion.impresion,
-    cliente: cotizacion.cliente,
-    telefono: cotizacion.telefono,
-    correo: cotizacion.correo,
-    celular: cotizacion.celular ?? null,
-    razon_social: cotizacion.razon_social ?? null,
-    rfc: cotizacion.rfc ?? null,
-    domicilio: cotizacion.domicilio ?? null,
-    numero: cotizacion.numero ?? null,
-    colonia: cotizacion.colonia ?? null,
-    codigo_postal: cotizacion.codigo_postal ?? null,
-    poblacion: cotizacion.poblacion ?? null,
-    estado_cliente: cotizacion.estado_cliente ?? null,
-    cliente_id: cotizacion.cliente_id ?? null,
+    doc, logoBase64,
+    labelDocumento: "COTIZACION", labelFolio: "No F", folio: cotizacion.no_cotizacion,
+    fecha: cotizacion.fecha, empresa: cotizacion.empresa, impresion: cotizacion.impresion,
+    cliente: cotizacion.cliente, telefono: cotizacion.telefono, correo: cotizacion.correo,
+    celular: cotizacion.celular ?? null, razon_social: cotizacion.razon_social ?? null,
+    rfc: cotizacion.rfc ?? null, domicilio: cotizacion.domicilio ?? null,
+    numero: cotizacion.numero ?? null, colonia: cotizacion.colonia ?? null,
+    codigo_postal: cotizacion.codigo_postal ?? null, poblacion: cotizacion.poblacion ?? null,
+    estado_cliente: cotizacion.estado_cliente ?? null, cliente_id: cotizacion.cliente_id ?? null,
     identificar: cotizacion.identificar ?? null,
   });
+
+  // ── Detección de modo ──────────────────────────────────────────────────────
+  const hayPapel = cotizacion.productos.some(esPapelProd);
+  const hayPlastico = cotizacion.productos.some(p => !esPapelProd(p));
+  const esMixto = hayPapel && hayPlastico;
 
   const maxDet = Math.max(...cotizacion.productos.map(p => p.detalles.length), 1);
   const numCantCols = Math.min(maxDet, 3);
 
-  // ── Columnas fijas — índices 0-14 (Perf. en 14) ──────────────────────────
-  const headFixed = [
-    "Descripción", "Medida", "B/K", "Tintas", "Caras",
-    "Material", "Calibre", "Foil", "Asa/Suaje", "Alto Rel",
-    "Laminado", "UV/BR", "Pantones", "Pigmento", "Perf.",
-  ];
-  const headAll = [
-    ...headFixed,
-    ...Array.from({ length: numCantCols }, (_, i) => `Cant ${i + 1}`),
-  ];
+  let finalY = y;
 
-  const MID_COL = Math.floor(headAll.length / 2);
-
-  const bodyRows: any[][] = [];
-
-  cotizacion.productos.forEach(prod => {
-    const nombreBase = tipoProducto(prod.nombre);
-    const descripcion = (prod as any).descripcion?.trim() || null;
-
-    const row: any[] = [
-      nombreBase, 
-      getMedida(prod),
-      boolLabel(prod.bk),
-      val(prod.tintas),
-      val(prod.caras),
-      val(prod.material),
-      val(prod.calibre),
-      boolLabel(prod.foil),
-      boolLabel(prod.asa_suaje),
-      boolLabel(prod.alto_rel),
-      boolLabel(prod.laminado),
-      boolLabel(prod.uvBr),
-      parsePantones(prod.pantones),
-      prod.pigmentos ? String(prod.pigmentos).trim() || "—" : "—",
-      prod.perforacion ? "SI" : "—",
-    ];
-    for (let i = 0; i < numCantCols; i++) {
-      const det = prod.detalles[i];
-      row.push(det && det.cantidad > 0 ? formatCantidadCelda(det, prod.por_kilo) : "—");
-    }
-
-    const tieneKilo = prod.detalles.some(d => d.modo_cantidad === "kilo");
-    const tieneUnidad = prod.detalles.some(d => d.modo_cantidad !== "kilo");
-    const modoLabel = tieneKilo && tieneUnidad ? "Por kilo y por unidad"
-      : tieneKilo ? "Cotizado por kilo"
-        : "Cotizado por unidad";
-    const obsTexto = prod.observacion?.trim()
-      ? `Obs: ${modoLabel}  —  ${prod.observacion.trim()}`
-      : `Obs: ${modoLabel}`;
-
-    const hasHerr = prod.herramental_precio != null && prod.herramental_precio > 0;
-
-    // Igual que en pedido: obs y herramental van en la misma fila (comboRow)
-    const comboRow = new Array(headAll.length).fill("");
-    comboRow[0] = obsTexto;
-
-    if (hasHerr) {
-      const nombreHerr = prod.herramental_descripcion?.trim() || "Herramental / molde";
-      comboRow[1] = `Herramental: ${nombreHerr}  —  Cargo único por fabricación del molde/troquel.`;
-      comboRow[headAll.length - 1] = `$${Number(prod.herramental_precio).toLocaleString("es-MX", {
-        minimumFractionDigits: 2, maximumFractionDigits: 2,
-      })}`;
-    }
-
-    bodyRows.push(row);
-    bodyRows.push(comboRow);
-
-    // ── Fila descripción propia ───────────────────────────────────────────────
-    if (descripcion) {
-      const descRow = new Array(headAll.length).fill("");
-      descRow[0] = `DESC:${descripcion}`;
-      bodyRows.push(descRow);
-    }
-  });
-
-  const availW = PW - M * 2;
-
-  const colW: Record<number, number> = {
-    0: 20, 1: 17, 2: 8, 3: 10, 4: 10,
-    5: 17, 6: 12, 7: 10, 8: 15, 9: 12,
-    10: 14, 11: 12, 12: 25, 13: 16, 14: 9,
-  };
-  const fixedTotal = Object.values(colW).reduce((a, b) => a + b, 0);
-  const cantW = Math.max((availW - fixedTotal) / numCantCols, 16);
-  for (let i = 0; i < numCantCols; i++) colW[15 + i] = cantW;
-
-  const totalColW = Object.values(colW).reduce((a, b) => a + b, 0);
-  if (totalColW > availW) {
-    const scale = availW / totalColW;
-    Object.keys(colW).forEach(k => { colW[+k] = colW[+k] * scale; });
+  if (esMixto) {
+    // Tabla general con todos los productos
+    finalY = renderTablaMixta(doc, cotizacion.productos, y, numCantCols, M, PW, COT_FOOTER_H);
+  } else if (hayPapel) {
+    // Solo papel
+    finalY = renderTablaPapel(doc, cotizacion.productos, y, numCantCols, M, PW, COT_FOOTER_H);
+  } else {
+    // Solo plástico
+    finalY = renderTablaPlastico(doc, cotizacion.productos, y, numCantCols, M, PW, COT_FOOTER_H);
   }
 
-  const columnStyles: Parameters<typeof autoTable>[1]["columnStyles"] = {
-    0: { cellWidth: colW[0], halign: "left", fontSize: 7, overflow: "linebreak" },
-    1: { cellWidth: colW[1], halign: "center", fontSize: 7 },
-    2: { cellWidth: colW[2], halign: "center", fontSize: 7 },
-    3: { cellWidth: colW[3], halign: "center", fontSize: 7 },
-    4: { cellWidth: colW[4], halign: "center", fontSize: 7 },
-    5: { cellWidth: colW[5], halign: "center", fontSize: 7 },
-    6: { cellWidth: colW[6], halign: "center", fontSize: 7 },
-    7: { cellWidth: colW[7], halign: "center", fontSize: 7 },
-    8: { cellWidth: colW[8], halign: "center", fontSize: 7 },
-    9: { cellWidth: colW[9], halign: "center", fontSize: 7 },
-    10: { cellWidth: colW[10], halign: "center", fontSize: 7 },
-    11: { cellWidth: colW[11], halign: "center", fontSize: 7 },
-    12: { cellWidth: colW[12], halign: "left", fontSize: 7 },
-    13: { cellWidth: colW[13], halign: "center", fontSize: 7 },
-    14: { cellWidth: colW[14], halign: "center", fontSize: 7 },
-    ...(numCantCols >= 1 ? { 15: { cellWidth: colW[15], halign: "center" as const, fontSize: 8, fontStyle: "bold" as const } } : {}),
-    ...(numCantCols >= 2 ? { 16: { cellWidth: colW[16], halign: "center" as const, fontSize: 8, fontStyle: "bold" as const } } : {}),
-    ...(numCantCols >= 3 ? { 17: { cellWidth: colW[17], halign: "center" as const, fontSize: 8, fontStyle: "bold" as const } } : {}),
-  };
-
-  autoTable(doc, {
-    startY: y,
-    margin: { left: M, right: M, bottom: COT_FOOTER_H + M },
-    head: [headAll],
-    body: bodyRows,
-    theme: "grid",
-    headStyles: {
-      fillColor: GRAY_DARK, textColor: WHITE, fontStyle: "bold",
-      fontSize: 7, cellPadding: 1.2, halign: "center", valign: "middle",
-    },
-    bodyStyles: { fontSize: 7, textColor: BLACK, cellPadding: 1.2, valign: "middle", minCellHeight: 7 },
-    alternateRowStyles: { fillColor: GRAY_ROW },
-    columnStyles,
-    didParseCell(data) {
-      if (data.section === "head" && data.column.index >= 15) {
-        data.cell.styles.fillColor = GRAY_MED;
-      }
-
-
-      if (data.section === "body") {
-        const raw = data.row.raw as any[];
-        const raw0 = String(raw?.[0] ?? "");
-        const raw1 = String(raw?.[1] ?? "");
-        const ci = data.column.index;
-        const lastCol = headAll.length - 1;
-
-        // ── Fila descripción propia ──────────────────────────────────────────
-         if (raw0.startsWith("DESC:")) {
-           if (ci === 0) {
-             data.cell.colSpan = headAll.length;
-             data.cell.styles.fillColor = [235, 242, 255] as [number, number, number];
-             data.cell.styles.fontStyle = "bold";
-             data.cell.styles.fontSize = 7.5;
-             data.cell.styles.textColor = [40, 80, 180] as [number, number, number];
-             data.cell.styles.halign = "left";
-             data.cell.styles.cellPadding = 1.2;
-             data.cell.text = [`Desc: ${raw0.slice(5)}`];
-           } else {
-             data.cell.styles.fillColor = [235, 242, 255] as [number, number, number];
-             data.cell.text = [];
-           }
-           return;
-         }
-
-        // ── Fila observaciones (+ herramental embebido igual que en pedido) ────
-        if (raw0.startsWith("Obs:")) {
-          const hasHerr = raw1.startsWith("Herramental:");
-
-          if (ci === 0) {
-            data.cell.colSpan = hasHerr ? MID_COL : headAll.length;
-            data.cell.styles.fillColor = GRAY_LIGHT;
-            data.cell.styles.fontStyle = "italic";
-            data.cell.styles.fontSize = 6.5;
-            data.cell.styles.textColor = [80, 80, 80] as [number, number, number];
-            data.cell.styles.halign = "left";
-            data.cell.styles.cellPadding = 0.8;
-
-          } else if (hasHerr && ci === MID_COL) {
-            data.cell.colSpan = lastCol - MID_COL;
-            data.cell.styles.fillColor = [250, 244, 230] as [number, number, number];
-            data.cell.styles.fontStyle = "italic";
-            data.cell.styles.fontSize = 6.5;
-            data.cell.styles.textColor = [130, 70, 0] as [number, number, number];
-            data.cell.styles.halign = "left";
-            data.cell.styles.overflow = "linebreak";
-            data.cell.styles.cellPadding = 0.8;
-            data.cell.text = [raw1];
-
-          } else if (hasHerr && ci === lastCol) {
-            data.cell.styles.fillColor = [250, 244, 230] as [number, number, number];
-            data.cell.styles.fontStyle = "bold";
-            data.cell.styles.fontSize = 7;
-            data.cell.styles.textColor = [130, 70, 0] as [number, number, number];
-            data.cell.styles.halign = "center";
-
-          } else {
-            data.cell.styles.fillColor =
-              ci < MID_COL
-                ? GRAY_LIGHT
-                : [250, 244, 230] as [number, number, number];
-            data.cell.text = [];
-          }
-          return;
-        }
-
-
-      }
-    },
-  });
-
-  const finalY = (doc as any).lastAutoTable?.finalY ?? 0;
-  if (finalY + COT_FOOTER_H + M > PH) {
-    doc.addPage();
-  }
+  if (finalY + COT_FOOTER_H + M > PH) doc.addPage();
 
   const condLines = sinIva
     ? [
@@ -304,6 +725,7 @@ export async function generarPdfCotizacion(cotizacion: CotizacionPdf, guardarEnS
 
   dibujarCajasPie(doc, cotizacion.productos, condLines);
   dibujarPiePagina(doc, "COTIZACION", cotizacion.no_cotizacion, cotizacion.fecha);
+
   const nombre = `Cotizacion_${cotizacion.no_cotizacion}.pdf`;
   doc.save(nombre);
   if (guardarEnS3) {

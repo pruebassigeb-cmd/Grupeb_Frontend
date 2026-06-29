@@ -1,82 +1,93 @@
-// src/services/papel/papelCotizacionService.ts
-// ─────────────────────────────────────────────────────────────────────────
-// Centraliza las llamadas que el formulario de papel hacía inline.
-// (Si usas la instancia axios `api.ts`, puedes cambiar los fetch por ella.)
-// ─────────────────────────────────────────────────────────────────────────
+import api from "../api";
 import type {
   ProductoPapelBusqueda,
-  ProductoPapelDetalle,
-  OpcionesProductoPapel,
   GrupoOpcion,
   AsaOpcion,
   LaminadoOpcion,
   FoilOpcion,
   TexturaOpcion,
+  MaquinariaProducto,
 } from "../../types/papel/cotizacion-papel.types";
 
-const BASE = import.meta.env.VITE_API_URL;
-const authHeaders = () => ({
-  "Content-Type": "application/json",
-  Authorization: `Bearer ${localStorage.getItem("token") ?? ""}`,
-});
-
-export async function getProductosPapel(query = ""): Promise<ProductoPapelBusqueda[]> {
-  const res = await fetch(`${BASE}/productos-papel`, { headers: authHeaders() });
-  if (!res.ok) throw new Error("Error al cargar productos de papel");
-  const data: ProductoPapelBusqueda[] = await res.json();
-
-  const q = query.trim().toLowerCase();
-  if (!q) return data;
-  return data.filter(p =>
-    (p.tipo_producto ?? "").toLowerCase().includes(q) ||
-    (p.medida ?? "").toLowerCase().includes(q) ||
-    (p.descripcion_papel ?? "").toLowerCase().includes(q) ||
-    (p.primer_tipo_papel ?? "").toLowerCase().includes(q)
-  );
+export interface ProductoPapelDetalleCotizacion {
+  idproducto_papel: number;
+  tamano_asa_default?: string | null;
+  grupos: any[];
+  acabados: any | null;
+  maquinaria: MaquinariaProducto;
 }
 
-export async function getProductoPapelDetalle(id: number): Promise<ProductoPapelDetalle> {
-  const res = await fetch(`${BASE}/productos-papel/${id}`, { headers: authHeaders() });
-  if (!res.ok) throw new Error("Error al cargar el detalle del producto");
-  return res.json();
-}
+export const getProductosPapel = async (
+  busqueda = ""
+): Promise<ProductoPapelBusqueda[]> => {
+  const { data } = await api.get("/productos-papel", {
+    params: busqueda ? { q: busqueda } : undefined,
+  });
+  return Array.isArray(data) ? data : [];
+};
 
-export function mapearOpciones(det: ProductoPapelDetalle): OpcionesProductoPapel {
-  const grupos: GrupoOpcion[] = (det.grupos ?? []).map(g => ({
-    idgrupo_papel: g.idgrupo_papel,
-    precio_sugerido: g.precio_sugerido != null ? parseFloat(String(g.precio_sugerido)) : null,
-    etiqueta:
-      (g.materiales ?? [])
-        .map(m => [m.tipo_papel, m.calibre].filter(Boolean).join(" "))
-        .filter(Boolean)
-        .join(" + ") || `Opción ${g.orden ?? ""}`,
+export const getProductoPapelDetalle = async (
+  idproductoPapel: number
+): Promise<ProductoPapelDetalleCotizacion> => {
+  const { data } = await api.get(`/productos-papel/${idproductoPapel}`);
+  return {
+    ...data,
+    maquinaria: data.maquinaria ?? {},
+  };
+};
+
+export const getOpcionesProductoPapel = async (idproductoPapel: number) => {
+  const detalle = await getProductoPapelDetalle(idproductoPapel);
+  return mapearOpciones(detalle);
+};
+
+export const mapearOpciones = (detalle: any): {
+  grupos: GrupoOpcion[];
+  asas: AsaOpcion[];
+  laminados: LaminadoOpcion[];
+} => {
+  const grupos: GrupoOpcion[] = (detalle.grupos ?? []).map((grupo: any) => {
+    const etiqueta = (grupo.materiales ?? [])
+      .map((material: any) =>
+        [material.tipo_papel, material.calibre].filter(Boolean).join(" ")
+      )
+      .filter(Boolean)
+      .join(" + ");
+
+    return {
+      idgrupo_papel: Number(grupo.idgrupo_papel),
+      etiqueta: etiqueta || `Grupo ${grupo.orden ?? ""}`.trim(),
+      precio_sugerido:
+        grupo.precio_sugerido != null
+          ? Number(grupo.precio_sugerido)
+          : null,
+    };
+  });
+
+  const asas: AsaOpcion[] = (detalle.acabados?.asas ?? []).map((asa: any) => ({
+    idcat_tipo_asa: Number(asa.idcat_tipo_asa ?? asa.id),
+    nombre: asa.tipo_asa ?? asa.nombre,
   }));
 
-  const asas: AsaOpcion[] = (det.acabados?.asas ?? []).map(a => ({
-    idcat_tipo_asa: a.idcat_tipo_asa,
-    nombre: a.tipo_asa,
-  }));
-
-  const laminados: LaminadoOpcion[] = (det.acabados?.laminados ?? []).map(l => ({
-    idcat_laminado: l.id,
-    nombre: l.nombre,
+  const laminados: LaminadoOpcion[] = (
+    detalle.acabados?.laminados ?? []
+  ).map((laminado: any) => ({
+    idcat_laminado: Number(laminado.idcat_laminado ?? laminado.id),
+    nombre: laminado.nombre,
   }));
 
   return { grupos, asas, laminados };
-}
+};
 
-export async function getOpcionesProductoPapel(id: number): Promise<OpcionesProductoPapel> {
-  return mapearOpciones(await getProductoPapelDetalle(id));
-}
+export const getFoils = async (): Promise<FoilOpcion[]> => {
+  const { data } = await api.get("/foil");
+  return Array.isArray(data) ? data : [];
+};
 
-export async function getFoils(): Promise<FoilOpcion[]> {
-  const res = await fetch(`${BASE}/foil`, { headers: authHeaders() });
-  if (!res.ok) throw new Error("Error al cargar foils");
-  return res.json();
-}
-
-export async function getTexturas(): Promise<TexturaOpcion[]> {
-  const res = await fetch(`${BASE}/cat-textura`, { headers: authHeaders() });
-  if (!res.ok) throw new Error("Error al cargar texturas");
-  return res.json();
-}
+export const getTexturas = async (): Promise<TexturaOpcion[]> => {
+  const { data } = await api.get("/catalogos-papel");
+  return (data.textura ?? []).map((item: any) => ({
+    idcat_textura: Number(item.idcat_textura ?? item.id),
+    nombre: item.nombre,
+  }));
+};

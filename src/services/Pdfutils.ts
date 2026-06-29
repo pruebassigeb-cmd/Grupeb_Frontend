@@ -4,10 +4,10 @@ import jsPDF from "jspdf";
 import QRCode from "qrcode";
 
 // ── Paleta B&N ────────────────────────────────────────────────────────────────
-export const GRAY_DARK  = [80,  80,  80]  as [number, number, number];
-export const GRAY_MED   = [160, 160, 160] as [number, number, number];
-export const GRAY_LIGHT = [220, 220, 220] as [number, number, number];
-export const GRAY_ROW   = [240, 240, 240] as [number, number, number];
+export const GRAY_DARK  = [0,   0,   0]   as [number, number, number];
+export const GRAY_MED   = [255, 255, 255] as [number, number, number];
+export const GRAY_LIGHT = [255, 255, 255] as [number, number, number];
+export const GRAY_ROW   = [255, 255, 255] as [number, number, number];
 export const BLACK      = [0,   0,   0]   as [number, number, number];
 export const WHITE      = [255, 255, 255] as [number, number, number];
 
@@ -128,13 +128,12 @@ export function formatCantidadCelda(det: DetallePdf, porKilo?: string | number |
     const kgStr    = Number.isInteger(det.kilogramos)
       ? det.kilogramos.toString()
       : Number(det.kilogramos).toFixed(2);
-    return `${kgStr} kg\n${fmtMoneda(precioKg)}/kg`;
+    return `${kgStr} kg\n${fmtMoneda(precioKg)}/kg\n+/-20%`;
   }
 
   const precioUnit = det.cantidad > 0 ? det.precio_total / det.cantidad : 0;
-  return `${det.cantidad.toLocaleString("es-MX")}\n${fmtMoneda(Math.round(precioUnit * 100) / 100)}/pza`;
+  return `${det.cantidad.toLocaleString("es-MX")}\n${fmtMoneda(Math.round(precioUnit * 100) / 100)}/pza\n+/-20%`;
 }
-
 // ── Importe — columna separada ────────────────────────────────────────────────
 export function formatImporte(det: DetallePdf, porKilo?: string | number | null): string {
   const fmtMoneda = (n: number) =>
@@ -260,7 +259,7 @@ export async function dibujarEncabezado(opts: OpcionesEncabezado): Promise<numbe
 
   doc.setFont("helvetica", "normal"); doc.setFontSize(7); doc.setTextColor(...GRAY_DARK);
   doc.text("FECHA", cotBoxX + halfBox + halfBox / 2, dataY + 3.5, { align: "center" });
-  doc.setFont("helvetica", "normal"); doc.setFontSize(9.5); doc.setTextColor(...BLACK);
+  doc.setFont("helvetica", "normal"); doc.setFontSize(7); doc.setTextColor(...BLACK); doc.setTextColor(...BLACK);
   doc.text(val(formatFecha(fecha)), cotBoxX + halfBox + halfBox / 2, dataY + dataH / 2 + 3.5, { align: "center" });
 
   y += row1H;
@@ -412,18 +411,18 @@ export function dibujarCajasPie(
 
     const totalW  = PW - M * 2;
     const halfW   = totalW / 2;
-    const cotBoxH = footerHeaderH + condLines.length * 5.5 + 5;
+    const cotBoxH = footerHeaderH + condLines.length * 4 + 3;
 
     doc.rect(M, fY, halfW - 1, cotBoxH);
     doc.setFillColor(...GRAY_DARK);
     doc.rect(M, fY, halfW - 1, footerHeaderH, "F");
     doc.setFont("helvetica", "bold"); doc.setFontSize(11); doc.setTextColor(...WHITE);
     doc.text("Observaciones", M + (halfW - 1) / 2, fY + footerHeaderH - 2, { align: "center" });
-    doc.setTextColor(...BLACK); doc.setFont("helvetica", "normal"); doc.setFontSize(10.5);
+    doc.setTextColor(...BLACK); doc.setFont("helvetica", "normal"); doc.setFontSize(7);
     if (obsText) {
       doc.text(doc.splitTextToSize(obsText, halfW - 5), M + 2, fY + footerHeaderH + 6);
     } else {
-      doc.setTextColor(...GRAY_MED);
+      doc.setTextColor(...BLACK);
       doc.text("—", M + 2, fY + footerHeaderH + 6);
       doc.setTextColor(...BLACK);
     }
@@ -433,15 +432,15 @@ export function dibujarCajasPie(
     );
     if (prodConHerr.length > 0) {
       let herrY = fY + footerHeaderH + 6 + (obsText ? (obsText.split("\n").length) * 5 + 4 : 5);
-      doc.setFont("helvetica", "bold"); doc.setFontSize(10); doc.setTextColor(100, 60, 0);
+      doc.setFont("helvetica", "bold"); doc.setFontSize(7); doc.setTextColor(...BLACK);
       doc.text("Herramental:", M + 2, herrY);
-      herrY += 5;
-      doc.setFont("helvetica", "normal"); doc.setFontSize(9.5);
+      herrY += 4;
+      doc.setFont("helvetica", "normal"); doc.setFontSize(7); doc.setTextColor(...BLACK);
       prodConHerr.forEach(p => {
         const desc   = p.herramental_descripcion?.trim() || p.nombre;
         const precio = fmtN(p.herramental_precio!);
         doc.text(`• ${desc}: ${precio}`, M + 4, herrY);
-        herrY += 5;
+        herrY += 4;
       });
       doc.setTextColor(...BLACK);
     }
@@ -452,9 +451,9 @@ export function dibujarCajasPie(
     doc.rect(cvX, fY, halfW - 1, footerHeaderH, "F");
     doc.setFont("helvetica", "bold"); doc.setFontSize(11); doc.setTextColor(...WHITE);
     doc.text("Condiciones de Venta", cvX + (halfW - 1) / 2, fY + footerHeaderH - 2, { align: "center" });
-    doc.setTextColor(...BLACK); doc.setFont("helvetica", "normal"); doc.setFontSize(10.5);
-    let cvY = fY + footerHeaderH + 6;
-    condLines.forEach(line => { doc.text(line, cvX + 2, cvY); cvY += 5.5; });
+    doc.setTextColor(...BLACK); doc.setFont("helvetica", "normal"); doc.setFontSize(5);
+    let cvY = fY + footerHeaderH + 5;
+    condLines.forEach(line => { doc.text(line, cvX + 2, cvY); cvY += 4; });
     return;
   }
 
@@ -473,7 +472,7 @@ export function dibujarCajasPie(
     { label: "I.V.A.",    value: fmtN(totales.iva),           bold: false },
     { label: "Total",     value: fmtN(totales.total),         bold: true  },
     { label: "Anticipo",  value: fmtN(totales.anticipo ?? 0), bold: false },
-    { label: "Saldo",     value: fmtN(totales.saldo ?? 0),    bold: true  },
+    //{ label: "Saldo",     value: fmtN(totales.saldo ?? 0),    bold: true  },
   ];
 
   const etW   = tvW * 0.42;
