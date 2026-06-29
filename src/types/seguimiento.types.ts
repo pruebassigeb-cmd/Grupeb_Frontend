@@ -1,4 +1,4 @@
-  export type EstadoSeguimiento =
+export type EstadoSeguimiento =
   | "pendiente"
   | "proceso"
   | "finalizado"
@@ -67,6 +67,8 @@ export interface PedidoSeguimientoBase {
   perforacion?: boolean;
   asa_suaje?: string | null;
   color_asa_nombre?: string | null;
+  tintas?: number | null;
+  caras?: number | null;
 
   cantidad_orden?: number | null;
   kilogramos_orden?: number | null;
@@ -78,6 +80,13 @@ export interface PedidoSeguimientoBase {
   idorden_diseno?: number | null;
   od_estado?: string | null;
   es_parcialidad?: boolean;
+
+  // Metas/merma de producción — se leen en ModalProcesoIndividual.tsx sin
+  // discriminar primero entre plástico y papel, igual que pigmentos/observacion.
+  kilos_merma?: number | null;
+  pzas_merma?: number | null;
+  metros_merma?: number | null;
+
 }
 
 export interface PedidoSeguimientoPlastico extends PedidoSeguimientoBase {
@@ -87,10 +96,8 @@ export interface PedidoSeguimientoPlastico extends PedidoSeguimientoBase {
   medida_troquel?: string | null;
 
   kilos?: number | null;
-  kilos_merma?: number | null;
   pzas?: number | null;
-  pzas_merma?: number | null;
-  metros_merma?: number | null;
+  // kilos_merma, pzas_merma, metros_merma ahora viven en PedidoSeguimientoBase
 }
 
 export type NombreProcesoOrdenPapel =

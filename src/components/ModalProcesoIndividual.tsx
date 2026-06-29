@@ -70,13 +70,45 @@ const AVANCE_UNIDAD: Record<string, { label: string; unidad: string; placeholder
 // ─────────────────────────────────────────────
 // HELPERS
 // ─────────────────────────────────────────────
+function numeroSeguro(valor: string | number | null | undefined): number {
+  if (valor == null || valor === "") return 0;
+
+  const numero = typeof valor === "number"
+    ? valor
+    : parseFloat(String(valor));
+
+  return Number.isFinite(numero) ? numero : 0;
+}
+
+function textoReact(valor: unknown): string {
+  if (valor === null || valor === undefined) return "";
+
+  if (Array.isArray(valor)) {
+    return valor.map(textoReact).filter(Boolean).join(", ");
+  }
+
+  if (valor instanceof Date) {
+    return valor.toLocaleString("es-MX");
+  }
+
+  if (typeof valor === "object") {
+    try {
+      return JSON.stringify(valor);
+    } catch {
+      return String(valor);
+    }
+  }
+
+  return String(valor);
+}
+
 function calcularBobinaVisual(pedido: PedidoSeguimiento) {
-  const alto = parseFloat(pedido.altura) || 0;
-  const ancho = parseFloat(pedido.ancho) || 0;
-  const fFondo = parseFloat(pedido.fuelle_fondo) || 0;
-  const fLatIz = parseFloat(pedido.fuelle_lat_iz) || 0;
-  const fLatDe = parseFloat(pedido.fuelle_lat_de) || 0;
-  const refuerzo = parseFloat(pedido.refuerzo) || 0;
+  const alto = numeroSeguro(pedido.altura);
+  const ancho = numeroSeguro(pedido.ancho);
+  const fFondo = numeroSeguro(pedido.fuelle_fondo);
+  const fLatIz = numeroSeguro(pedido.fuelle_lat_iz);
+  const fLatDe = numeroSeguro(pedido.fuelle_lat_de);
+  const refuerzo = numeroSeguro(pedido.refuerzo);
   const piezas = pedido.cantidad_orden || 0;
 
   let anchoBobina: number;
@@ -1551,7 +1583,7 @@ export default function ModalProcesoIndividual({ pedido, nombreProceso, onClose,
       const res = await getProcesosOrden(pedido.idproduccion!);
       setDatos(res);
       const proc = res.procesos.find((p: any) => p.tabla === nombreProceso || p.nombre_proceso === nombreProceso);
-      if (proc?.registro?.observaciones) setObservaciones(proc.registro.observaciones);
+      if (proc?.registro?.observaciones) setObservaciones(String(proc.registro.observaciones));
     } catch { setError("No se pudieron cargar los procesos."); }
     finally { setCargando(false); }
   };
@@ -1664,22 +1696,39 @@ export default function ModalProcesoIndividual({ pedido, nombreProceso, onClose,
   };
 
   const handleAbrirEditar = () => {
-    const preFill: Record<string, any> = {};
-    if (proc?.registro) {
-      campos.forEach((c: any) => {
-        if (proc.registro[c.key] != null) preFill[c.key] = proc.registro[c.key];
-      });
-      if (nombreProceso === "impresion" && proc.registro.maquina) {
-        const partes = proc.registro.maquina.split(" | ");
-        preFill.maquina = partes[0] ?? "";
-        preFill.repeticion = partes[1] ?? "";
+  const preFill: Record<string, any> = {};
+  const registro = proc?.registro ?? null;
+
+  if (registro) {
+    campos.forEach((c: any) => {
+      if (registro[c.key] != null) {
+        preFill[c.key] = registro[c.key];
       }
-      if (proc.registro.fecha_inicio) preFill.fecha_inicio = proc.registro.fecha_inicio?.slice(0, 16);
-      if (proc.registro.fecha_fin) preFill.fecha_fin = proc.registro.fecha_fin?.slice(0, 16);
+    });
+
+    if (nombreProceso === "impresion" && registro.maquina != null) {
+      const maquinaTexto = textoReact(registro.maquina);
+      const partes = maquinaTexto.split(" | ");
+      preFill.maquina = partes[0] ?? "";
+      preFill.repeticion = partes[1] ?? "";
     }
-    setFormEditar(preFill); setObsEditar(proc?.registro?.observaciones ?? "");
-    setEditando(true); setError(null);
-  };
+
+    if (registro.fecha_inicio != null) {
+      preFill.fecha_inicio = textoReact(registro.fecha_inicio).slice(0, 16);
+    }
+
+    if (registro.fecha_fin != null) {
+      preFill.fecha_fin = textoReact(registro.fecha_fin).slice(0, 16);
+    }
+  }
+
+  setFormEditar(preFill);
+  setObsEditar(
+    registro?.observaciones != null ? textoReact(registro.observaciones) : ""
+  );
+  setEditando(true);
+  setError(null);
+};
 
   const handleGuardarEdicion = async () => {
     if (!pedido.idproduccion) return;
@@ -1694,10 +1743,11 @@ export default function ModalProcesoIndividual({ pedido, nombreProceso, onClose,
     } finally { setGuardandoEdit(false); }
   };
 
-  const tienePendienteSinIniciar = proc?.registro != null && !proc?.registro?.fecha_inicio;
+  const tieneFechaInicio = proc?.registro?.fecha_inicio != null && textoReact(proc.registro.fecha_inicio) !== "";
+  const tienePendienteSinIniciar = proc?.registro != null && !tieneFechaInicio;
   const puedeIniciar = (datos?.proceso_actual === proc?.idproceso_cat && proc?.estado === "pendiente") || tienePendienteSinIniciar;
-  const puedeFinalizar = proc?.estado === "en_proceso" && proc?.registro?.fecha_inicio && anteriorTerminado;
-  const puedeAvance = proc?.estado === "en_proceso" && proc?.registro?.fecha_inicio;
+  const puedeFinalizar = proc?.estado === "en_proceso" && tieneFechaInicio && anteriorTerminado;
+  const puedeAvance = proc?.estado === "en_proceso" && tieneFechaInicio;
   const nombreLabel = nombreProceso.replace("_", " ");
 
   const getNombreProcesoAnterior = () => {
@@ -1827,25 +1877,25 @@ export default function ModalProcesoIndividual({ pedido, nombreProceso, onClose,
         <p className="text-gray-500 text-sm text-center">Proceso no encontrado.</p>
       ) : (
         <>
-          {proc.registro && (
+          {proc.registro != null && (
             <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-1.5">
               <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Registro</p>
-              {proc.registro.fecha_inicio && (
+              {proc.registro.fecha_inicio != null && textoReact(proc.registro.fecha_inicio) !== "" && (
                 <div className="flex justify-between text-xs">
                   <span className="text-gray-400">Inicio</span>
-                  <span className="text-gray-800 font-medium">{new Date(proc.registro.fecha_inicio).toLocaleString("es-MX")}</span>
+                  <span className="text-gray-800 font-medium">{new Date(textoReact(proc.registro.fecha_inicio)).toLocaleString("es-MX")}</span>
                 </div>
               )}
-              {proc.registro.fecha_fin && (
+              {proc.registro.fecha_fin != null && textoReact(proc.registro.fecha_fin) !== "" && (
                 <div className="flex justify-between text-xs">
                   <span className="text-gray-400">Fin</span>
-                  <span className="text-gray-800 font-medium">{new Date(proc.registro.fecha_fin).toLocaleString("es-MX")}</span>
+                  <span className="text-gray-800 font-medium">{new Date(textoReact(proc.registro.fecha_fin)).toLocaleString("es-MX")}</span>
                 </div>
               )}
-              {nombreProceso === "impresion" && proc.registro.maquina && (
+              {nombreProceso === "impresion" && proc.registro.maquina != null && textoReact(proc.registro.maquina) !== "" && (
                 <div className="flex justify-between text-xs">
                   <span className="text-gray-400">Maquina</span>
-                  <span className="font-semibold text-indigo-700 capitalize">{proc.registro.maquina}</span>
+                  <span className="font-semibold text-indigo-700 capitalize">{textoReact(proc.registro.maquina)}</span>
                 </div>
               )}
               {campos.map((campo: any) => {
@@ -1854,14 +1904,14 @@ export default function ModalProcesoIndividual({ pedido, nombreProceso, onClose,
                 return (
                   <div key={campo.key} className="flex justify-between text-xs">
                     <span className="text-gray-400">{campo.label}</span>
-                    <span className={`font-medium ${campo.readOnly ? "text-blue-700" : "text-gray-800"}`}>{val}</span>
+                    <span className={`font-medium ${campo.readOnly ? "text-blue-700" : "text-gray-800"}`}>{textoReact(val)}</span>
                   </div>
                 );
               })}
-              {proc.registro.observaciones && (
+              {proc.registro.observaciones != null && textoReact(proc.registro.observaciones) !== "" && (
                 <div className="mt-2 pt-2 border-t border-gray-200">
                   <p className="text-xs font-semibold text-gray-500 mb-1">📝 Observaciones del operador</p>
-                  <p className="text-sm text-gray-700 bg-white p-2 rounded border border-gray-200">{proc.registro.observaciones}</p>
+                  <p className="text-sm text-gray-700 bg-white p-2 rounded border border-gray-200">{textoReact(proc.registro.observaciones)}</p>
                 </div>
               )}
             </div>
@@ -1885,7 +1935,7 @@ export default function ModalProcesoIndividual({ pedido, nombreProceso, onClose,
               onAvanceRegistrado={async () => { await cargar(); onActualizar(); }}
               metaKg={pedido.kilos_merma ?? null}
               metaPzas={pedido.pzas_merma ?? null}
-              modoCantidad={pedido.modo_cantidad}
+              modoCantidad={pedido.modo_cantidad ?? "unidad"}
               limiteAnterior={limiteAnterior}
             />
           )}
@@ -2062,7 +2112,7 @@ export default function ModalProcesoIndividual({ pedido, nombreProceso, onClose,
               </select>
               {repeticionMaquina && (
                 <div className="bg-white border border-indigo-100 rounded px-3 py-2 text-xs text-indigo-700">
-                  <span className="font-semibold">Repeticion: </span>{repeticionMaquina}
+                  <span className="font-semibold">Repeticion: </span>{String(repeticionMaquina)}
                 </div>
               )}
             </div>
