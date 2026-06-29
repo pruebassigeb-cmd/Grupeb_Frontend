@@ -2,7 +2,6 @@ import { useRef } from "react";
 import { CATS } from "../../types/expo/expo.types";
 import type { Producto } from "../../types/expo/expo.types";
 
-// Store de búsqueda fuera del componente
 export const busquedaStore: Record<string, string> = { papel: "", plastico: "", carton: "" };
 
 interface Props {
@@ -10,9 +9,7 @@ interface Props {
   mob: boolean;
   tab: boolean;
   desk: boolean;
-  // Productos propios del catálogo expo
   catalogo: Producto[];
-  // Productos reales del sistema (plastico + papel)
   sistemaProductos: Producto[];
   loadingCatalogo: boolean;
   expanded: Record<string, boolean>;
@@ -42,7 +39,6 @@ export default function Catalogo({
   return (
     <div style={{ paddingBottom: mob ? 80 : 16 }}>
 
-      {/* Loading */}
       {loadingCatalogo && (
         <div style={{ padding: "24px 16px", textAlign: "center" }}>
           <div style={{ color: "#444", fontSize: 12 }}>Cargando catálogo...</div>
@@ -50,10 +46,7 @@ export default function Catalogo({
       )}
 
       {!loadingCatalogo && CATS.map(cat => {
-        // Productos propios expo de esta categoría
         const ps = catalogo.filter(p => p.categoria === cat.key);
-
-        // Productos del sistema de esta categoría
         const sysTotal = sistemaProductos.filter(p => p.categoria === cat.key);
         const busq = busquedaStore[cat.key]?.toLowerCase() || "";
         const sPs = sysTotal.filter(p =>
@@ -64,7 +57,7 @@ export default function Catalogo({
         );
 
         const open  = expanded[cat.key];
-        const sOpen = sistemaOpen[cat.key];
+        const expoOpen = sistemaOpen[cat.key]; // reutilizamos sistemaOpen para el desplegable expo
 
         return (
           <div key={cat.key} style={{ marginBottom: 2 }}>
@@ -76,104 +69,104 @@ export default function Catalogo({
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <span style={{ fontSize: 14 }}>{cat.emoji}</span>
                 <span style={{ color: cat.color, fontSize: 11, fontWeight: 700, letterSpacing: 1.5, textTransform: "uppercase" }}>{cat.label}</span>
-                <span style={{ background: `${cat.color}22`, color: cat.color, fontSize: 9, fontWeight: 700, padding: "1px 7px", borderRadius: 10, border: `1px solid ${cat.color}44` }}>{ps.length}</span>
+                <span style={{ background: `${cat.color}22`, color: cat.color, fontSize: 9, fontWeight: 700, padding: "1px 7px", borderRadius: 10, border: `1px solid ${cat.color}44` }}>{sysTotal.length}</span>
               </div>
               <span style={{ color: cat.color, fontSize: 11 }}>{open ? "▲" : "▼"}</span>
             </button>
 
-            {/* Productos propios expo */}
             {open && (
-              <div style={{ padding: "6px 8px", display: "grid", gridTemplateColumns: grid ? "1fr 1fr" : "1fr", gap: 6 }}>
-                {ps.length === 0 && (
-                  <div style={{ gridColumn: grid ? "1 / -1" : undefined, padding: "10px 8px", color: "#444", fontSize: 11, fontStyle: "italic", textAlign: "center" }}>
-                    Sin productos en el catálogo expo
+              <>
+                {/* ── Productos del SISTEMA — visibles directo con buscador y scroll ── */}
+                <div style={{ background: "#0D0D0D" }}>
+                  {/* Buscador */}
+                  <div style={{ padding: "8px 10px 4px" }}>
+                    <div style={{ position: "relative" }}>
+                      <span style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", fontSize: 11, color: "#444", pointerEvents: "none" }}>🔍</span>
+                      <input
+                        key={`busq-${cat.key}`}
+                        defaultValue={busquedaStore[cat.key] || ""}
+                        onChange={e => { busquedaStore[cat.key] = e.target.value; setBusquedaTick(t => t + 1); }}
+                        placeholder="Buscar producto del sistema..."
+                        style={{ width: "100%", background: "#1A1A1A", border: "1px solid #2A2A2A", borderRadius: 6, padding: "6px 28px 6px 26px", color: "#DDD", fontSize: 11, outline: "none", fontFamily: "'Inter',sans-serif" }}
+                      />
+                      {busquedaStore[cat.key] && (
+                        <button
+                          onClick={() => { busquedaStore[cat.key] = ""; setBusquedaTick(t => t + 1); }}
+                          style={{ position: "absolute", right: 7, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "#555", cursor: "pointer", fontSize: 13 }}>✕</button>
+                      )}
+                    </div>
                   </div>
-                )}
-                {ps.map(p => (
-                  <TarjetaProducto
-                    key={p.id}
-                    p={p}
-                    catColor={cat.color}
-                    grid={!!grid}
-                    mob={mob}
-                    tab={tab}
-                    desk={desk}
-                    addedId={addedId}
-                    onDragStart={onDragStart}
-                    onDragEnd={onDragEnd}
-                    addProd={addProd}
-                    abrirEditar={abrirEditar}
-                    eliminarProd={eliminarProd}
-                    esPropio
-                  />
-                ))}
-              </div>
-            )}
 
-            {/* Productos del sistema */}
-            {open && (
-              <div style={{ margin: "0 8px 8px", borderRadius: 8, border: "1px solid #222", overflow: "hidden" }}>
-                <button
-                  onClick={() => setSistemaOpen(prev => ({ ...prev, [cat.key]: !prev[cat.key] }))}
-                  style={{ width: "100%", background: "#141414", border: "none", padding: "8px 12px", display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
-                    <span style={{ fontSize: 11 }}>🗂</span>
-                    <span style={{ color: "#555", fontSize: 10, fontWeight: 600, letterSpacing: .8, textTransform: "uppercase" }}>Del sistema</span>
-                    <span style={{ background: "#1E1E1E", color: "#555", fontSize: 9, fontWeight: 700, padding: "1px 6px", borderRadius: 8, border: "1px solid #2A2A2A" }}>{sysTotal.length}</span>
-                  </div>
-                  <span style={{ color: "#444", fontSize: 10 }}>{sOpen ? "▲" : "▼"}</span>
-                </button>
-
-                {sOpen && (
-                  <div style={{ background: "#0D0D0D" }}>
-                    {/* Buscador */}
-                    <div style={{ padding: "8px 10px 4px" }}>
-                      <div style={{ position: "relative" }}>
-                        <span style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", fontSize: 11, color: "#444", pointerEvents: "none" }}>🔍</span>
-                        <input
-                          key={`busq-${cat.key}`}
-                          defaultValue={busquedaStore[cat.key] || ""}
-                          onChange={e => { busquedaStore[cat.key] = e.target.value; setBusquedaTick(t => t + 1); }}
-                          placeholder="Buscar producto..."
-                          style={{ width: "100%", background: "#1A1A1A", border: "1px solid #2A2A2A", borderRadius: 6, padding: "6px 28px 6px 26px", color: "#DDD", fontSize: 11, outline: "none", fontFamily: "'Inter',sans-serif" }}
+                  <div style={{ maxHeight: 300, overflowY: "auto", padding: "4px 8px 8px" }}>
+                    {sPs.length === 0
+                      ? <div style={{ color: "#444", fontSize: 11, textAlign: "center", padding: "16px 0" }}>
+                          {busq ? "Sin resultados" : "Sin productos del sistema en esta categoría"}
+                        </div>
+                      : sPs.map(p => (
+                        <TarjetaProducto
+                          key={p.id}
+                          p={p}
+                          catColor={cat.color}
+                          grid={false}
+                          mob={mob}
+                          tab={tab}
+                          desk={desk}
+                          addedId={addedId}
+                          onDragStart={onDragStart}
+                          onDragEnd={onDragEnd}
+                          addProd={addProd}
+                          abrirEditar={abrirEditar}
+                          eliminarProd={eliminarProd}
+                          esPropio={false}
+                          compacto
                         />
-                        {busquedaStore[cat.key] && (
-                          <button
-                            onClick={() => { busquedaStore[cat.key] = ""; setBusquedaTick(t => t + 1); }}
-                            style={{ position: "absolute", right: 7, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "#555", cursor: "pointer", fontSize: 13 }}>✕</button>
-                        )}
-                      </div>
-                    </div>
-
-                    <div style={{ maxHeight: 260, overflowY: "auto", padding: "4px 8px 8px" }}>
-                      {sPs.length === 0
-                        ? <div style={{ color: "#444", fontSize: 11, textAlign: "center", padding: "16px 0" }}>
-                            {busq ? "Sin resultados" : "Sin productos del sistema en esta categoría"}
-                          </div>
-                        : sPs.map(p => (
-                          <TarjetaProducto
-                            key={p.id}
-                            p={p}
-                            catColor={cat.color}
-                            grid={false}
-                            mob={mob}
-                            tab={tab}
-                            desk={desk}
-                            addedId={addedId}
-                            onDragStart={onDragStart}
-                            onDragEnd={onDragEnd}
-                            addProd={addProd}
-                            abrirEditar={abrirEditar}
-                            eliminarProd={eliminarProd}
-                            esPropio={false}
-                            compacto
-                          />
-                        ))
-                      }
-                    </div>
+                      ))
+                    }
                   </div>
-                )}
-              </div>
+                </div>
+
+                {/* ── Productos propios EXPO — ahora en desplegable ── */}
+                <div style={{ margin: "0 8px 8px", borderRadius: 8, border: "1px solid #222", overflow: "hidden" }}>
+                  <button
+                    onClick={() => setSistemaOpen(prev => ({ ...prev, [cat.key]: !prev[cat.key] }))}
+                    style={{ width: "100%", background: "#141414", border: "none", padding: "8px 12px", display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                      <span style={{ fontSize: 11 }}>⭐</span>
+                      <span style={{ color: "#C9922A", fontSize: 10, fontWeight: 600, letterSpacing: .8, textTransform: "uppercase" }}>Catálogo Expo</span>
+                      <span style={{ background: "#C9922A22", color: "#C9922A", fontSize: 9, fontWeight: 700, padding: "1px 6px", borderRadius: 8, border: "1px solid #C9922A44" }}>{ps.length}</span>
+                    </div>
+                    <span style={{ color: "#C9922A", fontSize: 10 }}>{expoOpen ? "▲" : "▼"}</span>
+                  </button>
+
+                  {expoOpen && (
+                    <div style={{ padding: "6px 8px 8px", display: "grid", gridTemplateColumns: grid ? "1fr 1fr" : "1fr", gap: 6, background: "#111" }}>
+                      {ps.length === 0 && (
+                        <div style={{ gridColumn: grid ? "1 / -1" : undefined, padding: "10px 8px", color: "#444", fontSize: 11, fontStyle: "italic", textAlign: "center" }}>
+                          Sin productos en el catálogo expo
+                        </div>
+                      )}
+                      {ps.map(p => (
+                        <TarjetaProducto
+                          key={p.id}
+                          p={p}
+                          catColor={cat.color}
+                          grid={!!grid}
+                          mob={mob}
+                          tab={tab}
+                          desk={desk}
+                          addedId={addedId}
+                          onDragStart={onDragStart}
+                          onDragEnd={onDragEnd}
+                          addProd={addProd}
+                          abrirEditar={abrirEditar}
+                          eliminarProd={eliminarProd}
+                          esPropio
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </>
             )}
           </div>
         );
@@ -191,7 +184,7 @@ interface TarjetaProps {
   tab:          boolean;
   desk:         boolean;
   addedId:      number | null;
-  esPropio:     boolean;   // true = catálogo expo, false = del sistema
+  esPropio:     boolean;
   compacto?:    boolean;
   onDragStart:  (e: React.DragEvent, id: number) => void;
   onDragEnd:    () => void;
@@ -206,11 +199,9 @@ function TarjetaProducto({
   onDragStart, onDragEnd, addProd, abrirEditar, eliminarProd,
 }: TarjetaProps) {
   const agregado = addedId === p.id;
-
   const preciosMostrar = p.precio500 || p.precio1000 || p.precio3000;
 
   if (compacto) {
-    // Estilo compacto para "del sistema"
     return (
       <div
         className="pcard"
@@ -257,7 +248,6 @@ function TarjetaProducto({
     );
   }
 
-  // Estilo normal para catálogo expo propio
   return (
     <div
       className="pcard"
@@ -295,7 +285,6 @@ function TarjetaProducto({
       )}
       {desk && <span style={{ position: "absolute", right: 7, top: "50%", transform: "translateY(-50%)", color: "#444", fontSize: 13 }}>⠿</span>}
 
-      {/* Acciones — solo para productos propios expo */}
       {esPropio && (
         <div className="pcard-actions" style={{ position: "absolute", bottom: 6, right: 6, display: "flex", gap: 4 }}>
           <button onClick={e => { e.stopPropagation(); abrirEditar(p); }}
