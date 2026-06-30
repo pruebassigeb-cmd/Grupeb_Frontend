@@ -181,6 +181,14 @@ export const CLIENTE_VACIO: ClienteExpo = {
 
 export const uid = () => Math.random().toString(36).slice(2, 9);
 
+// Clave única real de un producto: el id solo NO alcanza porque
+// configuracion_plastico.id y producto_papel.id son autoincrementales
+// independientes y pueden colisionar (ej: plástico id=7 y papel id=7).
+// Por eso el drag-and-drop debe identificar productos con esta clave
+// compuesta (fuente:categoria:id) en vez del id puro.
+export const claveProducto = (p: { id: number; categoria: string; fuente?: string }) =>
+  `${p.fuente || "sistema"}:${p.categoria}:${p.id}`;
+
 export const TODAY = new Date().toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" });
 
 export const folioAPedido = (folioCotizacion: string): string =>

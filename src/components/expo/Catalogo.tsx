@@ -19,7 +19,7 @@ interface Props {
   setBusquedaTick: React.Dispatch<React.SetStateAction<number>>;
   toggleExp: (k: string) => void;
   setSistemaOpen: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
-  onDragStart: (e: React.DragEvent, id: number) => void;
+  onDragStart: (e: React.DragEvent, p: Producto) => void;
   onDragEnd: () => void;
   addProd: (p: Producto) => void;
   abrirEditar: (p: Producto) => void;
@@ -186,7 +186,7 @@ interface TarjetaProps {
   addedId:      number | null;
   esPropio:     boolean;
   compacto?:    boolean;
-  onDragStart:  (e: React.DragEvent, id: number) => void;
+  onDragStart:  (e: React.DragEvent, p: Producto) => void;
   onDragEnd:    () => void;
   addProd:      (p: Producto) => void;
   abrirEditar:  (p: Producto) => void;
@@ -207,7 +207,7 @@ function TarjetaProducto({
         className="pcard"
         style={{ background: "#171717", border: "1px solid #222", borderRadius: 7, padding: "7px 8px", display: "flex", gap: 8, cursor: mob ? "pointer" : "grab", userSelect: "none", position: "relative", marginBottom: 5 }}
         draggable={!mob}
-        onDragStart={e => !mob && onDragStart(e, p.id)}
+        onDragStart={e => !mob && onDragStart(e, p)}
         onDragEnd={onDragEnd}
         onClick={() => (mob || tab) && addProd(p)}
       >
@@ -253,7 +253,7 @@ function TarjetaProducto({
       className="pcard"
       style={{ background: "#1E1E1E", border: "1px solid #333", borderRadius: 8, padding: 8, display: "flex", flexDirection: grid ? "column" : "row", gap: 8, cursor: mob ? "pointer" : "grab", userSelect: "none", position: "relative" }}
       draggable={!mob}
-      onDragStart={e => !mob && onDragStart(e, p.id)}
+      onDragStart={e => !mob && onDragStart(e, p)}
       onDragEnd={onDragEnd}
       onClick={() => (mob || tab) && addProd(p)}
     >

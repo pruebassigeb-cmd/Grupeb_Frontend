@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  CATS, CLIENTE_VACIO, filaDesdeProducto, sumarTotales,
+  CATS, CLIENTE_VACIO, filaDesdeProducto, sumarTotales, claveProducto,
   mapearCatalogoExpoAProducto, mapearPlasticoSistemaAProducto, mapearPapelSistemaAProducto,
 } from "../../types/expo/expo.types";
 import type { Producto, FilaProducto, ClienteExpo, CotizacionGuardada, ItemPedidoAprobado } from "../../types/expo/expo.types";
@@ -290,12 +290,18 @@ export default function Expo() {
   };
 
   // ── Drag & drop ───────────────────────────────────────────────────────────
-  const onDragStart = (e: React.DragEvent, id: number) => e.dataTransfer.setData("pid", String(id));
+  // Usamos una clave compuesta (fuente:categoria:id) en vez del id puro porque
+  // configuracion_plastico.id y producto_papel.id son autoincrementales
+  // independientes y pueden colisionar (ej: plástico id=7 y papel id=7).
+  // Buscar solo por id causaba que se agregara el producto equivocado
+  // cuando ambas tablas crecían lo suficiente para repetir un id.
+  const onDragStart = (e: React.DragEvent, p: Producto) =>
+    e.dataTransfer.setData("pkey", claveProducto(p));
   const onDragEnd = () => {};
   const onDrop = (e: React.DragEvent) => {
     e.preventDefault(); setOver(false);
-    const id = Number(e.dataTransfer.getData("pid"));
-    const p = [...catalogo, ...sistemaProductos].find(x => x.id === id);
+    const key = e.dataTransfer.getData("pkey");
+    const p = [...catalogo, ...sistemaProductos].find(x => claveProducto(x) === key);
     if (p) addProd(p);
   };
 
