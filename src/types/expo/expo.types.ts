@@ -44,6 +44,10 @@ export interface Producto {
   origen?:            string;
 }
 
+// Opciones filtradas por producto de papel del sistema
+export interface AsaPermitida    { idcat_tipo_asa: number; nombre: string; }
+export interface LaminadoPermitido { idcat_laminado: number; nombre: string; }
+
 export interface FilaProducto {
   uid:          string;
   producto:     Producto;
@@ -62,9 +66,9 @@ export interface FilaProducto {
   idTextura:    number | null;
   uv:           boolean;
   asa:          boolean;
-  tipoAsa:      string;   // plástico = nombre del color ("Azul"); papel = nombre tipo asa
-  idAsa:        number | null;  // plástico = id_color; papel = idcat_tipo_asa
-  idSuaje:      number | null;  // plástico = idsuaje (1=flexible, 3=rígida); papel = null
+  tipoAsa:      string;
+  idAsa:        number | null;
+  idSuaje:      number | null;
   tintas:       string;
   otro:         string;
   medida:       string;
@@ -75,6 +79,10 @@ export interface FilaProducto {
   extra:        string;
   pigmento:     string;
   pantones?:    string | null;
+  // Opciones filtradas para productos de papel del sistema
+  // Si viene con datos, FilaTabla usará estas en vez del catálogo completo
+  asasPermitidas?:      AsaPermitida[]     | null;
+  laminadosPermitidos?: LaminadoPermitido[] | null;
 }
 
 export interface ClienteExpo {
@@ -184,8 +192,6 @@ export const uid = () => Math.random().toString(36).slice(2, 9);
 // Clave única real de un producto: el id solo NO alcanza porque
 // configuracion_plastico.id y producto_papel.id son autoincrementales
 // independientes y pueden colisionar (ej: plástico id=7 y papel id=7).
-// Por eso el drag-and-drop debe identificar productos con esta clave
-// compuesta (fuente:categoria:id) en vez del id puro.
 export const claveProducto = (p: { id: number; categoria: string; fuente?: string }) =>
   `${p.fuente || "sistema"}:${p.categoria}:${p.id}`;
 
@@ -229,7 +235,6 @@ export const filaDesdeProducto = (p: Producto): FilaProducto => {
     tintas:       p.tintas || (esPlastico ? "1" : "1x0"),
     otro:         p.otro || "",
     medida:       p.medida || "",
-    // Solo inicializar material y calibre para la categoría correcta
     material:     p.material || "",
     calibre:      p.calibre || "",
     tipoPlastico: esPlastico ? (p.tipoProducto || p.tipo || "") : "",
@@ -237,6 +242,9 @@ export const filaDesdeProducto = (p: Producto): FilaProducto => {
     extra:        "",
     pigmento:     "",
     pantones:     null,
+    // Se populan en Expo.tsx al hacer addProd, solo para papel del sistema
+    asasPermitidas:      null,
+    laminadosPermitidos: null,
   };
 };
 

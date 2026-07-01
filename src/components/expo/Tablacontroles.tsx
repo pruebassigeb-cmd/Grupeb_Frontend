@@ -3,7 +3,7 @@ import {
   OPCIONES_TINTAS, OPCIONES_TINTAS_PLASTICO,
   MEDIDAS_CAT, CATS,
 } from "../../types/expo/expo.types";
-import type { FilaProducto, Producto } from "../../types/expo/expo.types";
+import type { FilaProducto, Producto, AsaPermitida, LaminadoPermitido } from "../../types/expo/expo.types";
 import type { Catalogs } from "../../types/papel/papel.types";
 import type { FoilOpcion, TexturaOpcion } from "../../types/papel/cotizacion-papel.types";
 
@@ -123,8 +123,7 @@ export function BuscadorProductoModal({ catalogoPropio, onElegir, onClose, catal
   const catColor = CATS.find(c => c.key === catSeleccionada)?.color ?? "#C9922A";
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.75)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}
-      onClick={onClose}>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.75)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
       <div style={{ background: "#1A1A1A", border: "1px solid #333", borderRadius: 12, width: "100%", maxWidth: 520, maxHeight: "80vh", display: "flex", flexDirection: "column", overflow: "hidden", boxShadow: "0 20px 60px rgba(0,0,0,.8)" }}
         onClick={e => e.stopPropagation()}>
 
@@ -576,12 +575,17 @@ interface FilaProps {
   catalogosPlast: CatalogosPlastico;
   pigmentosDB:    PigmentoDB[];
   coloresAsa:     { id: number; nombre: string }[];
-  suajesPlast:    { id: number; tipo: string }[];  // tipos de asa para plástico (idproductos=1)
+  suajesPlast:    { id: number; tipo: string }[];
+  // Opciones filtradas del producto de papel del sistema
+  // Si vienen, se usan en lugar del catálogo completo
+  asasPermitidas?:      AsaPermitida[]      | null;
+  laminadosPermitidos?: LaminadoPermitido[] | null;
 }
 
 export const FilaTabla = memo(function FilaTabla({
   fila, rowIdx, onDel, onEdit, onEditNombre,
   catalogs, foils, texturas, catalogosPlast, pigmentosDB, coloresAsa, suajesPlast,
+  asasPermitidas, laminadosPermitidos,
 }: FilaProps) {
   const { uid, producto: p } = fila;
   const pre = `r${rowIdx}`;
@@ -632,10 +636,19 @@ export const FilaTabla = memo(function FilaTabla({
     </span>
   );
 
-  const laminadoOpts = catalogs.laminado     ?? [];
+  // ── Opciones de catálogo ──────────────────────────────────────────────────
+  // Para papel del sistema: usar las opciones filtradas si existen.
+  // Para papel expo propio o plástico: usar el catálogo completo.
+  const laminadoOpts = (laminadosPermitidos && laminadosPermitidos.length > 0)
+    ? laminadosPermitidos.map(l => ({ id: l.idcat_laminado, nombre: l.nombre }))
+    : (catalogs.laminado ?? []);
+
+  const asaOpts = (asasPermitidas && asasPermitidas.length > 0)
+    ? asasPermitidas.map(a => ({ id: a.idcat_tipo_asa, nombre: a.nombre }))
+    : (catalogs.tipo_asa ?? []);
+
   const foilOpts     = foils                 ?? [];
   const texturaOpts  = texturas              ?? [];
-  const asaOpts      = catalogs.tipo_asa     ?? [];
   const matPapelOpts = catalogs.tipo_papel   ?? [];
   const calPapelOpts = catalogs.calibre      ?? [];
   const matPlastOpts = catalogosPlast.materiales    ?? [];
@@ -757,7 +770,7 @@ export const FilaTabla = memo(function FilaTabla({
         </>
       ) : (
         <>
-          {/* Laminado */}
+          {/* Laminado — usa opciones filtradas si el producto es del sistema */}
           <td style={{ ...TD, fontSize: 8 }}>
             <select className="no-print-show" style={{ ...iSel, maxWidth: 82 }} value={laminacion ? tipoLam : ""}
               onChange={e => {
@@ -818,11 +831,10 @@ export const FilaTabla = memo(function FilaTabla({
         </>
       )}
 
-      {/* Asa — plástico: tipo (idsuaje) + color; papel: tipo de asa */}
+      {/* Asa — plástico: tipo (idsuaje) + color; papel: tipo de asa filtrado si es del sistema */}
       <td style={{ ...TD, fontSize: 8 }}>
         {esPlastico ? (
           <div className="no-print-show" style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-            {/* Select 1: tipo de asa (flexible / rígida) */}
             <select style={{ ...iSel, fontSize: 7.5 }} value={idSuaje ?? ""}
               onChange={e => {
                 const v = e.target.value;
@@ -831,7 +843,6 @@ export const FilaTabla = memo(function FilaTabla({
                 setAsa(id !== null);
                 propagar("idSuaje", id);
                 propagar("asa", id !== null);
-                // limpiar color al cambiar tipo
                 setTipoAsa("");
                 propagar("tipoAsa", "");
                 propagar("idAsa", null);
@@ -841,7 +852,6 @@ export const FilaTabla = memo(function FilaTabla({
                 <option key={s.id} value={s.id}>{s.tipo}</option>
               ))}
             </select>
-            {/* Select 2: color (solo si hay tipo elegido) */}
             {idSuaje !== null && (
               <select style={{ ...iSel, fontSize: 7.5 }} value={tipoAsa}
                 onChange={e => {
@@ -859,6 +869,7 @@ export const FilaTabla = memo(function FilaTabla({
             )}
           </div>
         ) : (
+          // Papel: usa asaOpts (filtradas o catálogo completo según fuente del producto)
           <select className="no-print-show" style={iSel} value={asa ? tipoAsa : ""}
             onChange={e => {
               const v = e.target.value;

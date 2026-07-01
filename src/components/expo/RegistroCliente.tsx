@@ -44,7 +44,6 @@ function Campo({ label, value }: { label:string; value:string }) {
   );
 }
 
-// ─── Form de edición inline ───────────────────────────────────────────────────
 interface FormEdicionProps {
   inicial: ClienteExpoAPI;
   onGuardar: (data: ClienteExpo) => Promise<void>;
@@ -234,19 +233,23 @@ function ModalProspectos({ onSeleccionar, onClose }: ModalProspectosProps) {
   };
 
   const filtrados = busq.trim()
-  ? prospectos.filter(p =>
-      (p.nombre || "").toLowerCase().includes(busq.toLowerCase()) ||
-      (p.impresion||"").toLowerCase().includes(busq.toLowerCase()) ||
-      (p.celular||"").includes(busq) ||
-      (p.ciudad||"").toLowerCase().includes(busq.toLowerCase())
-    )
-  : prospectos;
+    ? prospectos.filter(p =>
+        (p.nombre || "").toLowerCase().includes(busq.toLowerCase()) ||
+        (p.impresion||"").toLowerCase().includes(busq.toLowerCase()) ||
+        (p.celular||"").includes(busq) ||
+        (p.ciudad||"").toLowerCase().includes(busq.toLowerCase())
+      )
+    : prospectos;
 
   return (
-    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.82)", zIndex:300, display:"flex", alignItems:"center", justifyContent:"center", padding:20 }}
-      onClick={onClose}>
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.82)", zIndex:300, display:"flex", alignItems:"center", justifyContent:"center", padding:20 }}>
       <div onClick={e=>e.stopPropagation()}
-        style={{ background:"#141414", border:"1px solid #2A2A2A", borderRadius:14, width:"100%", maxWidth:820, maxHeight:"90vh", display:"flex", flexDirection:"column", overflow:"hidden", boxShadow:"0 24px 60px rgba(0,0,0,.85)" }}>
+        style={{
+          background:"#141414", border:"1px solid #2A2A2A", borderRadius:14,
+          width:"90vw", maxWidth:1100, maxHeight:"90vh",
+          display:"flex", flexDirection:"column", overflow:"hidden",
+          boxShadow:"0 24px 60px rgba(0,0,0,.85)",
+        }}>
 
         <div style={{ background:"#0D0D0D", borderBottom:"2px solid #C9922A", padding:"14px 20px", display:"flex", alignItems:"center", justifyContent:"space-between", flexShrink:0 }}>
           <div style={{ display:"flex", alignItems:"center", gap:10 }}>
@@ -386,7 +389,7 @@ export default function RegistroCliente({
   cotizacionesCount,
   onAbrirLista,
 }: Props) {
-  const navigate = useNavigate();  // ← NUEVO
+  const navigate = useNavigate();
 
   const [modalProspectos, setModalProspectos] = useState(false);
   const [guardando,       setGuardando]       = useState(false);
@@ -467,11 +470,19 @@ export default function RegistroCliente({
     <>
       <div
         style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.7)", zIndex:200, display:"flex", alignItems:"center", justifyContent:"center", padding:mob?0:20 }}
-        onClick={clienteGuardado ? onCerrar : undefined}
       >
         <div
           onClick={e=>e.stopPropagation()}
-          style={{ background:"#141414", border:"1px solid #2A2A2A", borderRadius:mob?0:14, width:"100%", maxWidth:mob?"100%":820, maxHeight:mob?"100vh":"92vh", height:mob?"100vh":undefined, display:"flex", flexDirection:"column", overflow:"hidden", boxShadow:"0 24px 60px rgba(0,0,0,.8)" }}
+          style={{
+            background:"#141414", border:"1px solid #2A2A2A",
+            borderRadius:mob?0:14,
+            width:"100%",
+            maxWidth: mob ? "100%" : "90vw",
+            maxHeight: mob ? "100vh" : "92vh",
+            height: mob ? "100vh" : undefined,
+            display:"flex", flexDirection:"column", overflow:"hidden",
+            boxShadow:"0 24px 60px rgba(0,0,0,.8)",
+          }}
         >
           {/* Header */}
           <div style={{ background:"#0D0D0D", borderBottom:"2px solid #C9922A", padding:"12px 20px", display:"flex", alignItems:"center", justifyContent:"space-between", flexShrink:0 }}>
@@ -483,7 +494,6 @@ export default function RegistroCliente({
               </div>
             </div>
             <div style={{ display:"flex", gap:8, alignItems:"center" }}>
-              {/* ← NUEVO: botón regresar a SIGEB */}
               <button
                 onClick={() => navigate("/home")}
                 style={{ background:"transparent", border:"1px solid #333", color:"#666", fontSize:11, fontWeight:600, padding:"6px 12px", borderRadius:6, cursor:"pointer", display:"flex", alignItems:"center", gap:5 }}

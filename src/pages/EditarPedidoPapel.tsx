@@ -9,6 +9,7 @@ import {
   getOpcionesProductoPapel,
   getFoils,
   getTexturas,
+  getColoresAsa,
 } from "../services/papel/papelCotizacionService";
 import type {
   ProductoPapelBusqueda,
@@ -34,57 +35,59 @@ import api from "../services/api";
 
 // ─── Tipos internos ───────────────────────────────────────────────────────────
 interface DetalleEdit {
-  iddetalle:       number | null;
-  cantidad:        string;
+  iddetalle: number | null;
+  cantidad: string;
   precio_unitario: string;
-  precio_total:    string;
-  modo_cantidad:   "unidad";
+  precio_total: string;
+  modo_cantidad: "unidad";
 }
 
 type MetodoHojeadoPapel = "hojeado" | "guillotina";
 
 interface ProductoPapelEdit {
   idsolicitud_producto: number;
-  tipo_material:        "papel";
-  _eliminado:           boolean;
+  tipo_material: "papel";
+  _eliminado: boolean;
 
   // Producto
-  idproducto_papel:  number;
-  nombre:            string;
-  medida:            string;
+  idproducto_papel: number;
+  nombre: string;
+  medida: string;
 
   // Grupo
-  idgrupo_papel:     number | null;
+  idgrupo_papel: number | null;
   grupo_descripcion: string;
 
   // Opciones
-  opcionesGrupos:    GrupoOpcion[];
-  opcionesAsas:      AsaOpcion[];
+  opcionesGrupos: GrupoOpcion[];
+  opcionesAsas: AsaOpcion[];
   opcionesLaminados: LaminadoOpcion[];
-  opcionesFoils:     FoilOpcion[];
-  opcionesTexturas:  TexturaOpcion[];
+  opcionesFoils: FoilOpcion[];
+  opcionesTexturas: TexturaOpcion[];
 
   // Tintas exteriores
-  tintasId:    number | null;
-  tintas:      number;
-  pantones:    string;   // CSV: "AZU-009, ROJ-990"
+  tintasId: number | null;
+  tintas: number;
+  pantones: string;   // CSV: "AZU-009, ROJ-990"
 
   // Tintas interiores
   tintasDentroId: number | null;
-  tintasDentro:   number;
+  tintasDentro: number;
   pantonesDentro: string;
 
   carasId: number | null;
-  caras:   number;
+  caras: number;
 
-  id_asa:         number | null;
-  idcat_laminado: number | null;
-  idfoil:         number | null;
-  idcat_textura:  number | null;
-  uv:             boolean;
-  alto_relieve:   boolean;
+  id_asa: number | null;
+
+  idcat_laminado: number | null; id_color: number | null;
+  color_asa_nombre: string | null;
+  idfoil: number | null;
+  idcat_textura: number | null;
+  uv: boolean;
+  alto_relieve: boolean;
   metodo_hojeado: MetodoHojeadoPapel | null;
-  lleva_armado:   boolean;
+  lleva_armado: boolean;
   maquinaria_seleccionada: Record<
     string,
     { id: number; nombre: string } | null
@@ -103,11 +106,11 @@ interface ProductoPapelEdit {
 interface CatItem { id: number; cantidad: number; }
 
 // ─── Utils ────────────────────────────────────────────────────────────────────
-const fmt      = (n: number) =>
+const fmt = (n: number) =>
   n.toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const parseSafe = (v: string) => { const n = parseFloat(v); return isNaN(n) ? 0 : n; };
 const esDecimal = (v: string) => /^\d*\.?\d{0,4}$/.test(v);
-const esEntero  = (v: string) => /^\d*$/.test(v);
+const esEntero = (v: string) => /^\d*$/.test(v);
 const tintasPapel = (items: CatItem[]) =>
   items.filter(t => t.cantidad >= 1 && t.cantidad <= 6);
 
@@ -152,9 +155,9 @@ const resolverGrupoSeleccionado = (
   const descNorm = normalizarGrupo(descripcionGuardada);
   const grupoPorDescripcion = descNorm
     ? opcionesGrupos.find(g => {
-        const etiquetaNorm = normalizarGrupo(g.etiqueta);
-        return etiquetaNorm === descNorm || etiquetaNorm.includes(descNorm) || descNorm.includes(etiquetaNorm);
-      })
+      const etiquetaNorm = normalizarGrupo(g.etiqueta);
+      return etiquetaNorm === descNorm || etiquetaNorm.includes(descNorm) || descNorm.includes(etiquetaNorm);
+    })
     : undefined;
 
   // Si el pedido viejo no trae id de grupo, usamos el primer grupo real del producto.
@@ -175,14 +178,14 @@ function BuscadorProductoPapel({
   onCerrar,
 }: {
   onSeleccionar: (prod: ProductoPapelBusqueda) => void;
-  onCreado:      (idproducto_papel: number, nombre: string, medida: string) => void;
-  onCerrar:      () => void;
+  onCreado: (idproducto_papel: number, nombre: string, medida: string) => void;
+  onCerrar: () => void;
 }) {
-  const [vista,    setVista]    = useState<"buscar" | "crear">("buscar");
-  const [query,    setQuery]    = useState("");
-  const [lista,    setLista]    = useState<ProductoPapelBusqueda[]>([]);
+  const [vista, setVista] = useState<"buscar" | "crear">("buscar");
+  const [query, setQuery] = useState("");
+  const [lista, setLista] = useState<ProductoPapelBusqueda[]>([]);
   const [cargando, setCargando] = useState(true);
-  const [saving,   setSaving]   = useState(false);
+  const [saving, setSaving] = useState(false);
   const [errorAlt, setErrorAlt] = useState<string | null>(null);
 
   useEffect(() => {
@@ -283,10 +286,10 @@ function BuscadorProductoPapel({
                     >
                       <p className="text-sm font-semibold text-gray-900">{p.tipo_producto}</p>
                       <div className="flex flex-wrap gap-x-3 mt-0.5 text-xs text-gray-400">
-                        {p.descripcion_papel  && <span>{p.descripcion_papel}</span>}
-                        {p.medida             && <span>📐 {p.medida}</span>}
-                        {p.primer_tipo_papel  && <span>📄 {p.primer_tipo_papel}</span>}
-                        {p.primer_calibre     && <span>Cal. {p.primer_calibre}</span>}
+                        {p.descripcion_papel && <span>{p.descripcion_papel}</span>}
+                        {p.medida && <span>📐 {p.medida}</span>}
+                        {p.primer_tipo_papel && <span>📄 {p.primer_tipo_papel}</span>}
+                        {p.primer_calibre && <span>Cal. {p.primer_calibre}</span>}
                       </div>
                     </button>
                   ))}
@@ -339,6 +342,7 @@ function ProductoPapelEditable({
   catalogoCaras,
   idTipoPanton,
   idTipoPantonesDentro,
+  coloresAsa,
   onChange,
   onDetalleChange,
   onAgregarDetalle,
@@ -347,20 +351,21 @@ function ProductoPapelEditable({
   onCambiarProducto,
   onAbrirModalInsumo,
 }: {
-  prod:                ProductoPapelEdit;
-  pi:                  number;
-  displayIndex:        number;
-  catalogoTintas:      CatItem[];
-  catalogoCaras:       CatItem[];
-  idTipoPanton:        number | null;
+  prod: ProductoPapelEdit;
+  pi: number;
+  displayIndex: number;
+  catalogoTintas: CatItem[];
+  catalogoCaras: CatItem[];
+  idTipoPanton: number | null;
   idTipoPantonesDentro: number | null;
-  onChange:            (pi: number, k: keyof ProductoPapelEdit, v: any) => void;
-  onDetalleChange:     (pi: number, di: number, k: keyof DetalleEdit, v: string) => void;
-  onAgregarDetalle:    (pi: number) => void;
-  onEliminarDetalle:   (pi: number, di: number) => void;
-  onEliminar:          (pi: number) => void;
-  onCambiarProducto:   (pi: number) => void;
-  onAbrirModalInsumo:  (tipoId: number, nombre: string, pi: number, campo: "ext" | "int", indice: number) => void;
+  coloresAsa: { id_color: number; color: string }[];  // ← agregar aquí
+  onChange: (pi: number, k: keyof ProductoPapelEdit, v: any) => void;
+  onDetalleChange: (pi: number, di: number, k: keyof DetalleEdit, v: string) => void;
+  onAgregarDetalle: (pi: number) => void;
+  onEliminarDetalle: (pi: number, di: number) => void;
+  onEliminar: (pi: number) => void;
+  onCambiarProducto: (pi: number) => void;
+  onAbrirModalInsumo: (tipoId: number, nombre: string, pi: number, campo: "ext" | "int", indice: number) => void;
 }) {
   const catalogoTintasValidas = tintasPapel(catalogoTintas);
   const subtotal =
@@ -368,7 +373,7 @@ function ProductoPapelEditable({
     + parseSafe(prod.herramental_precio);
 
   const recalcularTotal = (di: number, cantidad: string, precioUnit: string) => {
-    const c  = parseSafe(cantidad);
+    const c = parseSafe(cantidad);
     const pu = parseSafe(precioUnit);
     if (c > 0 && pu > 0) {
       onDetalleChange(pi, di, "precio_total", (Math.round(c * pu * 100) / 100).toFixed(2));
@@ -434,7 +439,7 @@ function ProductoPapelEditable({
                 <span className="text-xs px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded-full font-medium">📄 Papel</span>
               </div>
               <div className="flex flex-wrap gap-x-3 mt-0.5 text-xs text-gray-400">
-                {prod.medida            && <span>📐 {prod.medida}</span>}
+                {prod.medida && <span>📐 {prod.medida}</span>}
                 {prod.grupo_descripcion && <span>{prod.grupo_descripcion}</span>}
               </div>
             </div>
@@ -475,9 +480,9 @@ function ProductoPapelEditable({
           <select
             value={prod.idgrupo_papel ?? ""}
             onChange={e => {
-              const id    = e.target.value ? Number(e.target.value) : null;
+              const id = e.target.value ? Number(e.target.value) : null;
               const grupo = opcionesGruposSelect.find(g => Number(g.idgrupo_papel) === id);
-              onChange(pi, "idgrupo_papel",     id);
+              onChange(pi, "idgrupo_papel", id);
               onChange(pi, "grupo_descripcion", grupo?.etiqueta ?? "");
             }}
             className="w-full px-3 py-2 border border-amber-200 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-amber-400"
@@ -498,9 +503,9 @@ function ProductoPapelEditable({
             <select
               value={prod.tintas}
               onChange={e => {
-                const n   = Number(e.target.value);
+                const n = Number(e.target.value);
                 const cat = catalogoTintasValidas.find(t => t.cantidad === n);
-                onChange(pi, "tintas",   n);
+                onChange(pi, "tintas", n);
                 onChange(pi, "tintasId", cat?.id ?? null);
                 // Limpiar pantones que sobren
                 const arr = prod.pantones
@@ -512,7 +517,7 @@ function ProductoPapelEditable({
             >
               {(catalogoTintasValidas.length > 0
                 ? catalogoTintasValidas
-                : [1,2,3,4,5,6].map(n => ({ id: n, cantidad: n }))
+                : [1, 2, 3, 4, 5, 6].map(n => ({ id: n, cantidad: n }))
               ).map(t => (
                 <option key={t.id} value={t.cantidad}>{t.cantidad} tinta{t.cantidad > 1 ? "s" : ""}</option>
               ))}
@@ -525,9 +530,9 @@ function ProductoPapelEditable({
             <select
               value={prod.caras}
               onChange={e => {
-                const n   = Number(e.target.value);
+                const n = Number(e.target.value);
                 const cat = catalogoCaras.find(c => c.cantidad === n);
-                onChange(pi, "caras",   n);
+                onChange(pi, "caras", n);
                 onChange(pi, "carasId", cat?.id ?? null);
               }}
               className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-blue-500"
@@ -583,9 +588,9 @@ function ProductoPapelEditable({
           <select
             value={prod.tintasDentro}
             onChange={e => {
-              const n   = Number(e.target.value);
+              const n = Number(e.target.value);
               const cat = catalogoTintasValidas.find(t => t.cantidad === n);
-              onChange(pi, "tintasDentro",   n);
+              onChange(pi, "tintasDentro", n);
               onChange(pi, "tintasDentroId", n > 0 ? (cat?.id ?? null) : null);
               if (n === 0) onChange(pi, "pantonesDentro", "");
             }}
@@ -594,7 +599,7 @@ function ProductoPapelEditable({
             <option value={0}>Sin tintas interiores</option>
             {(catalogoTintasValidas.length > 0
               ? catalogoTintasValidas
-              : [1,2,3,4,5,6].map(n => ({ id: n, cantidad: n }))
+              : [1, 2, 3, 4, 5, 6].map(n => ({ id: n, cantidad: n }))
             ).map(t => (
               <option key={t.id} value={t.cantidad}>{t.cantidad} tinta{t.cantidad > 1 ? "s" : ""}</option>
             ))}
@@ -651,6 +656,27 @@ function ProductoPapelEditable({
               <option value="">Sin asa</option>
               {prod.opcionesAsas.map(a => (
                 <option key={a.idcat_tipo_asa} value={a.idcat_tipo_asa}>{a.nombre}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+              Color de Asa
+            </label>
+            <select
+              value={prod.id_color ?? ""}
+              onChange={e => {
+                const id = e.target.value ? Number(e.target.value) : null;
+                const color = coloresAsa.find((c: any) => c.id_color === id)?.color ?? null;
+                onChange(pi, "id_color", id);
+                onChange(pi, "color_asa_nombre", color);
+              }}
+              disabled={!prod.id_asa}
+              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-blue-400"
+            >
+              <option value="">Sin color</option>
+              {coloresAsa.map((c: any) => (
+                <option key={c.id_color} value={c.id_color}>{c.color}</option>
               ))}
             </select>
           </div>
@@ -873,20 +899,21 @@ function ProductoPapelEditable({
 
 // ─── Página principal ─────────────────────────────────────────────────────────
 export default function EditarPedidoPapel() {
+  const [coloresAsa, setColoresAsa] = useState<{ id_color: number; color: string }[]>([]);
   const { noPedido } = useParams<{ noPedido: string }>();
-  const navigate     = useNavigate();
+  const navigate = useNavigate();
 
-  const [cargando,     setCargando]     = useState(true);
-  const [guardando,    setGuardando]    = useState(false);
-  const [error,        setError]        = useState<string | null>(null);
+  const [cargando, setCargando] = useState(true);
+  const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [errorGuardar, setErrorGuardar] = useState<string | null>(null);
-  const [exito,        setExito]        = useState(false);
-  const [pedidoOrig,   setPedidoOrig]   = useState<Pedido | null>(null);
-  const [productos,    setProductos]    = useState<ProductoPapelEdit[]>([]);
+  const [exito, setExito] = useState(false);
+  const [pedidoOrig, setPedidoOrig] = useState<Pedido | null>(null);
+  const [productos, setProductos] = useState<ProductoPapelEdit[]>([]);
 
   const [catalogoTintas, setCatalogoTintas] = useState<CatItem[]>([]);
-  const [catalogoCaras,  setCatalogoCaras]  = useState<CatItem[]>([]);
-  const [foilsGlobales,  setFoilsGlobales]  = useState<FoilOpcion[]>([]);
+  const [catalogoCaras, setCatalogoCaras] = useState<CatItem[]>([]);
+  const [foilsGlobales, setFoilsGlobales] = useState<FoilOpcion[]>([]);
   const [texturasGlobal, setTexturasGlobal] = useState<TexturaOpcion[]>([]);
 
   // Tipos de insumo para pantones
@@ -894,12 +921,12 @@ export default function EditarPedidoPapel() {
 
   // Modal registrar insumo
   const [modalInsumo, setModalInsumo] = useState<{
-    abierto:   boolean;
-    tipoId:    number;
-    nombre:    string;
-    piOrigen:  number;
-    campo:     "ext" | "int";
-    indice:    number;
+    abierto: boolean;
+    tipoId: number;
+    nombre: string;
+    piOrigen: number;
+    campo: "ext" | "int";
+    indice: number;
   }>({ abierto: false, tipoId: 0, nombre: "", piOrigen: -1, campo: "ext", indice: 0 });
 
   // Modal cambiar producto
@@ -916,12 +943,13 @@ export default function EditarPedidoPapel() {
     if (!noPedido) return;
     (async () => {
       try {
-        const [catalogosRes, foilsRes, texturasRes, tiposInsumo, todos] = await Promise.all([
+        const [catalogosRes, foilsRes, texturasRes, tiposInsumo, todos, coloresRes] = await Promise.all([
           api.get("/catalogos-produccion"),
           getFoils(),
           getTexturas(),
           getTiposInsumo(),
           getPedidos() as Promise<Pedido[]>,
+          getColoresAsa(),
         ]);
 
         setCatalogoTintas(
@@ -934,6 +962,7 @@ export default function EditarPedidoPapel() {
         );
         setFoilsGlobales(foilsRes);
         setTexturasGlobal(texturasRes);
+        setColoresAsa(coloresRes);
 
         const panton = tiposInsumo.find((t: any) => t.nombre === "Pantón");
         if (panton) setIdTipoPanton(panton.idtipo_insumo);
@@ -948,66 +977,68 @@ export default function EditarPedidoPapel() {
 
         const prodsEdit: ProductoPapelEdit[] = await Promise.all(
           prodsPapel.map(async (p: any) => {
-            let opcionesGrupos:    GrupoOpcion[]    = [];
-            let opcionesAsas:      AsaOpcion[]      = [];
+            let opcionesGrupos: GrupoOpcion[] = [];
+            let opcionesAsas: AsaOpcion[] = [];
             let opcionesLaminados: LaminadoOpcion[] = [];
 
             try {
               const opciones = await getOpcionesProductoPapel(p.idproducto_papel);
-              opcionesGrupos    = opciones.grupos;
-              opcionesAsas      = opciones.asas;
+              opcionesGrupos = opciones.grupos;
+              opcionesAsas = opciones.asas;
               opcionesLaminados = opciones.laminados;
             } catch { /* sin opciones */ }
 
-            const tintasNum     = typeof p.tintas      === "number" ? p.tintas      : 1;
+            const tintasNum = typeof p.tintas === "number" ? p.tintas : 1;
             const tintasDentroN = typeof p.tintasDentro === "number" ? p.tintasDentro : 0;
-            const carasNum      = typeof p.caras       === "number" ? p.caras       : 1;
+            const carasNum = typeof p.caras === "number" ? p.caras : 1;
             const catalogoTintasPapel = tintasPapel(catalogosRes.data.tintas || []);
 
-            const catTinta       = catalogoTintasPapel.find((t: any) => t.cantidad === tintasNum);
+            const catTinta = catalogoTintasPapel.find((t: any) => t.cantidad === tintasNum);
             const catTintaDentro = catalogoTintasPapel.find((t: any) => t.cantidad === tintasDentroN);
-            const catCara        = catalogosRes.data.caras?.find((c: any)  => c.cantidad === carasNum);
+            const catCara = catalogosRes.data.caras?.find((c: any) => c.cantidad === carasNum);
             const grupoSeleccionado = resolverGrupoSeleccionado(p, opcionesGrupos);
 
             return {
               idsolicitud_producto: p.idsolicitud_producto ?? p.idcotizacion_producto,
-              tipo_material:        "papel" as const,
-              _eliminado:           false,
+              tipo_material: "papel" as const,
+              _eliminado: false,
 
-              idproducto_papel:  p.idproducto_papel,
-              nombre:            p.nombre || "Producto papel",
-              medida:            p.medida || "",
+              idproducto_papel: p.idproducto_papel,
+              nombre: p.nombre || "Producto papel",
+              medida: p.medida || "",
 
-              idgrupo_papel:     grupoSeleccionado.idgrupo_papel,
+              idgrupo_papel: grupoSeleccionado.idgrupo_papel,
               grupo_descripcion: grupoSeleccionado.grupo_descripcion,
 
               opcionesGrupos,
               opcionesAsas,
               opcionesLaminados,
-              opcionesFoils:    foilsRes,
+              opcionesFoils: foilsRes,
               opcionesTexturas: texturasRes,
 
-              tintasId:    p.tintasId ?? catTinta?.id ?? null,
-              tintas:      tintasNum,
-              pantones:    typeof p.pantones === "string"
+              tintasId: p.tintasId ?? catTinta?.id ?? null,
+              tintas: tintasNum,
+              pantones: typeof p.pantones === "string"
                 ? p.pantones
                 : Array.isArray(p.pantones) ? p.pantones.join(", ") : "",
 
               tintasDentroId: p.tintasDentroId ?? catTintaDentro?.id ?? null,
-              tintasDentro:   tintasDentroN,
+              tintasDentro: tintasDentroN,
               pantonesDentro: p.pantonesDentro ?? "",
 
               carasId: p.carasId ?? catCara?.id ?? null,
-              caras:   carasNum,
+              caras: carasNum,
 
-              id_asa:         p.id_asa         ?? null,
-              idcat_laminado: p.idcat_laminado  ?? null,
-              idfoil:         p.idfoil          ?? null,
-              idcat_textura:  p.idcat_textura   ?? null,
-              uv:             p.uv         === true,
-              alto_relieve:   p.alto_relieve === true,
+              id_asa: p.id_asa ?? null,
+              id_color: p.id_color ?? null,
+              color_asa_nombre: p.color_asa_nombre ?? null,
+              idcat_laminado: p.idcat_laminado ?? null,
+              idfoil: p.idfoil ?? null,
+              idcat_textura: p.idcat_textura ?? null,
+              uv: p.uv === true,
+              alto_relieve: p.alto_relieve === true,
               metodo_hojeado: p.metodo_hojeado ?? null,
-              lleva_armado:   p.lleva_armado ?? true,
+              lleva_armado: p.lleva_armado ?? true,
               maquinaria_seleccionada: p.maquinaria_seleccionada ?? {},
 
               observacion: p.observacion ?? "",
@@ -1023,11 +1054,11 @@ export default function EditarPedidoPapel() {
                     ? String(Math.round((d.precio_total / d.cantidad) * 10000) / 10000)
                     : "";
                 return {
-                  iddetalle:       d.iddetalle ?? null,
-                  cantidad:        String(d.cantidad ?? ""),
+                  iddetalle: d.iddetalle ?? null,
+                  cantidad: String(d.cantidad ?? ""),
                   precio_unitario: precioUnit,
-                  precio_total:    String(d.precio_total ?? ""),
-                  modo_cantidad:   "unidad" as const,
+                  precio_total: String(d.precio_total ?? ""),
+                  modo_cantidad: "unidad" as const,
                 };
               }),
             };
@@ -1113,13 +1144,13 @@ export default function EditarPedidoPapel() {
           idproducto_papel,
           nombre,
           medida,
-          idgrupo_papel:     opciones.grupos[0]?.idgrupo_papel ?? null,
+          idgrupo_papel: opciones.grupos[0]?.idgrupo_papel ?? null,
           grupo_descripcion: opciones.grupos[0]?.etiqueta ?? "",
-          opcionesGrupos:    opciones.grupos,
-          opcionesAsas:      opciones.asas,
+          opcionesGrupos: opciones.grupos,
+          opcionesAsas: opciones.asas,
           opcionesLaminados: opciones.laminados,
-          opcionesFoils:     foilsGlobales,
-          opcionesTexturas:  texturasGlobal,
+          opcionesFoils: foilsGlobales,
+          opcionesTexturas: texturasGlobal,
           id_asa: null, idcat_laminado: null, idfoil: null, idcat_textura: null,
           uv: false, alto_relieve: false,
           metodo_hojeado: null, lleva_armado: true,
@@ -1224,38 +1255,39 @@ export default function EditarPedidoPapel() {
       const payload = {
         productos: productos.map(p => ({
           idsolicitud_producto: p.idsolicitud_producto,
-          eliminado:            p._eliminado,
-          tipo_material:        "papel" as const,
-          idproducto_papel:     p.idproducto_papel,
-          idgrupo_papel:        p.idgrupo_papel ?? null,
-          grupo_descripcion:    p.grupo_descripcion || null,
-          tintasId:             p.tintasId,
-          carasId:              p.carasId,
-          pantones:             p.pantones || null,
-          pantonesDentro:       p.pantonesDentro || null,
-          tintasDentroId:       p.tintasDentro > 0 ? p.tintasDentroId : null,
-          id_asa:               p.id_asa         ?? null,
-          idcat_laminado:       p.idcat_laminado  ?? null,
-          idfoil:               p.idfoil          ?? null,
-          idcat_textura:        p.idcat_textura   ?? null,
-          uv:                   p.uv,
-          alto_relieve:         p.alto_relieve,
-          metodo_hojeado:       p.metodo_hojeado,
-          lleva_armado:         p.lleva_armado,
+          eliminado: p._eliminado,
+          tipo_material: "papel" as const,
+          idproducto_papel: p.idproducto_papel,
+          idgrupo_papel: p.idgrupo_papel ?? null,
+          grupo_descripcion: p.grupo_descripcion || null,
+          tintasId: p.tintasId,
+          carasId: p.carasId,
+          pantones: p.pantones || null,
+          pantonesDentro: p.pantonesDentro || null,
+          tintasDentroId: p.tintasDentro > 0 ? p.tintasDentroId : null,
+          id_asa: p.id_asa ?? null,
+          id_color: p.id_color ?? null,
+          idcat_laminado: p.idcat_laminado ?? null,
+          idfoil: p.idfoil ?? null,
+          idcat_textura: p.idcat_textura ?? null,
+          uv: p.uv,
+          alto_relieve: p.alto_relieve,
+          metodo_hojeado: p.metodo_hojeado,
+          lleva_armado: p.lleva_armado,
           maquinaria_seleccionada: p.maquinaria_seleccionada,
-          observacion:          p.observacion || null,
-          descripcion:          p.descripcion || null,
+          observacion: p.observacion || null,
+          descripcion: p.descripcion || null,
           herramental_descripcion: p.herramental_descripcion || null,
-          herramental_precio:      p.herramental_precio !== "" ? parseSafe(p.herramental_precio) : null,
-          herramental_aprobado:    p.herramental_aprobado ?? null,
+          herramental_precio: p.herramental_precio !== "" ? parseSafe(p.herramental_precio) : null,
+          herramental_aprobado: p.herramental_aprobado ?? null,
           detalles: p.detalles
             .map(d => ({
-              iddetalle:       d.iddetalle,
-              cantidad:        parseSafe(d.cantidad),
-              precio_total:    parseSafe(d.precio_total),
+              iddetalle: d.iddetalle,
+              cantidad: parseSafe(d.cantidad),
+              precio_total: parseSafe(d.precio_total),
               precio_unitario: parseSafe(d.precio_unitario) || null,
-              kilogramos:      null,
-              modo_cantidad:   "unidad" as const,
+              kilogramos: null,
+              modo_cantidad: "unidad" as const,
             }))
             .filter(d => d.cantidad > 0),
         })),
@@ -1421,6 +1453,7 @@ export default function EditarPedidoPapel() {
                 catalogoCaras={catalogoCaras}
                 idTipoPanton={idTipoPanton}
                 idTipoPantonesDentro={idTipoPanton}
+                coloresAsa={coloresAsa}
                 onChange={onChange}
                 onDetalleChange={onDetalleChange}
                 onAgregarDetalle={onAgregarDetalle}
@@ -1546,11 +1579,11 @@ export default function EditarPedidoPapel() {
             {guardando
               ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Guardando...</>
               : <>
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                  Guardar cambios
-                </>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                Guardar cambios
+              </>
             }
           </button>
         </div>

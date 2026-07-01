@@ -4,6 +4,7 @@ import {
   CATS, CLIENTE_VACIO, filaDesdeProducto, sumarTotales, claveProducto,
   mapearCatalogoExpoAProducto, mapearPlasticoSistemaAProducto, mapearPapelSistemaAProducto,
 } from "../../types/expo/expo.types";
+import { getOpcionesProductoPapel } from "../../services/papel/papelCotizacionService";
 import type { Producto, FilaProducto, ClienteExpo, CotizacionGuardada, ItemPedidoAprobado } from "../../types/expo/expo.types";
 import api from "../../services/api";
 
@@ -307,10 +308,37 @@ export default function Expo() {
 
   // ── Filas ─────────────────────────────────────────────────────────────────
   const LIMITE_PRODUCTOS = 5;
-  const addProd = useCallback((p: Producto) => {
+  const addProd = useCallback(async (p: Producto) => {
     setFilas(prev => {
       if (prev.length >= LIMITE_PRODUCTOS) { alert(`Máximo ${LIMITE_PRODUCTOS} productos por cotización.`); return prev; }
-      return [...prev, filaDesdeProducto(p)];
+      return prev; // reservamos el slot, lo llenamos abajo
+    });
+
+    // Verificar límite antes de continuar
+    const yaAlcanzado = await new Promise<boolean>(resolve => {
+      setFilas(prev => { resolve(prev.length >= LIMITE_PRODUCTOS); return prev; });
+    });
+    if (yaAlcanzado) return;
+
+    // Armar la fila base
+    const filaBase = filaDesdeProducto(p);
+
+    // Si es papel del sistema, fetchear las opciones filtradas (asas y laminados)
+    // que fueron configuradas al dar de alta el producto en SIGEB
+    if (p.fuente === "sistema" && p.categoria === "papel" && p.idproducto_papel) {
+      try {
+        const opciones = await getOpcionesProductoPapel(p.idproducto_papel);
+        filaBase.asasPermitidas      = opciones.asas.length > 0 ? opciones.asas : null;
+        filaBase.laminadosPermitidos = opciones.laminados.length > 0 ? opciones.laminados : null;
+      } catch (err) {
+        console.error("[EXPO] No se pudieron cargar opciones del producto de papel:", err);
+        // Si falla el fetch, dejamos null y FilaTabla usará el catálogo completo como fallback
+      }
+    }
+
+    setFilas(prev => {
+      if (prev.length >= LIMITE_PRODUCTOS) return prev;
+      return [...prev, filaBase];
     });
     setAddedId(p.id);
     setTimeout(() => setAddedId(null), 1000);
@@ -487,7 +515,8 @@ export default function Expo() {
   const propsCatalogo = {
     mob, tab, desk, catalogo, sistemaProductos, expanded, sistemaOpen, addedId,
     busquedaTick, setBusquedaTick, toggleExp, setSistemaOpen,
-    onDragStart, onDragEnd, addProd, abrirEditar, eliminarProd, loadingCatalogo,
+    onDragStart, onDragEnd,
+    addProd, abrirEditar, eliminarProd, loadingCatalogo,
   };
 
   const propsHoja = {
@@ -604,7 +633,7 @@ export default function Expo() {
             <div style={{ flex: 1, overflowY: "auto", padding: "12px 0" }}>
               <HojaCotizacion {...propsHoja} />
             </div>
-            {drawerOpen && <div className="drawer-overlay" onClick={() => setDrawerOpen(false)} />}
+            {drawerOpen && <div className="drawer-overlay" />}
             <div className={`drawer ${drawerOpen ? "open" : "closed"}`}>
               <DrawerHeader label="SELECCIONA UN PRODUCTO" />
               <Catalogo grid {...propsCatalogo} />
@@ -638,9 +667,9 @@ export default function Expo() {
             <div style={{ flex: 1, overflowY: "auto", padding: "16px" }}>
               <HojaCotizacion {...propsHoja} />
             </div>
-            {drawerOpen && <div className="drawer-overlay" onClick={() => setDrawerOpen(false)} />}
+            {drawerOpen && <div className="drawer-overlay" />}
             <div className={`drawer ${drawerOpen ? "open" : "closed"}`} style={{ maxHeight: "65vh" }}>
-              <DrawerHeader label="CATÁLOGO — TAP PARA AGREGAR" />
+              <DrawerHeader label="CATÁLOGO — DOBLE TOQUE PARA AGREGAR" />
               <Catalogo grid {...propsCatalogo} />
             </div>
             <div className="no-print" style={{ position: "fixed", bottom: 24, right: 24, zIndex: 40, display: "flex", flexDirection: "column", gap: 12 }}>

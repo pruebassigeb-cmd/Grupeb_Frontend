@@ -20,7 +20,7 @@ interface Props {
   catalogosPlast: CatalogosPlastico;
   pigmentosDB:    PigmentoDB[];
   coloresAsa:     { id: number; nombre: string }[];
-  suajesPlast:    { id: number; tipo: string }[];   // ← NUEVO
+  suajesPlast:    { id: number; tipo: string }[];
   asesor:         string;
   setCliente:(v:string)=>void; setComent:(v:string)=>void;
   setCant1:(v:string)=>void; setCant2:(v:string)=>void; setCant3:(v:string)=>void;
@@ -41,8 +41,42 @@ export default function HojaCotizacion({
   const alcanzoLimite = filas.length >= LIMITE_PRODUCTOS;
   const filasVaciasBlanco = Math.max(0, LIMITE_PRODUCTOS - filas.length - (alcanzoLimite ? 0 : 1));
 
+  // La zona de drop cubre todo el tablero en desktop
+  const dropProps = desk && !alcanzoLimite ? {
+    onDrop,
+    onDragOver: (e: React.DragEvent) => { e.preventDefault(); setOver(true); },
+    onDragLeave: () => setOver(false),
+  } : {};
+
   return(
-    <div className="hoja" style={{width:"100%",background:"#F5EFE3",...(desk?{maxWidth:1100,borderRadius:8,boxShadow:"0 8px 40px rgba(0,0,0,.5)"}:{borderRadius:0})}}>
+    <div
+      className="hoja"
+      style={{
+        width:"100%", background:"#F5EFE3", position:"relative",
+        ...(desk ? { maxWidth:1100, borderRadius:8, boxShadow:"0 8px 40px rgba(0,0,0,.5)" } : { borderRadius:0 }),
+        // Resalte sutil cuando se arrastra algo encima
+        outline: over && desk ? "2px dashed #C9922A" : "2px dashed transparent",
+        transition: "outline .15s",
+      }}
+      {...dropProps}
+    >
+      {/* Overlay visual cuando se arrastra — cubre todo el tablero */}
+      {over && desk && !alcanzoLimite && (
+        <div style={{
+          position:"absolute", inset:0, zIndex:10, borderRadius:8,
+          background:"rgba(201,146,42,.06)",
+          display:"flex", alignItems:"center", justifyContent:"center",
+          pointerEvents:"none",
+        }}>
+          <div style={{
+            background:"rgba(26,26,26,.9)", border:"2px dashed #C9922A",
+            borderRadius:10, padding:"14px 32px",
+            color:"#C9922A", fontSize:14, fontWeight:700, letterSpacing:.5,
+          }}>
+            📋 Suelta aquí para agregar
+          </div>
+        </div>
+      )}
 
       {/* ── HEADER ── */}
       <div style={{display:"grid",gridTemplateColumns:mob?"1fr":tab?"150px 1fr 140px":"200px 1fr 175px",background:"#F5EFE3"}}>
@@ -167,6 +201,8 @@ export default function HojaCotizacion({
                   pigmentosDB={pigmentosDB}
                   coloresAsa={coloresAsa}
                   suajesPlast={suajesPlast}
+                  asasPermitidas={f.asasPermitidas}
+                  laminadosPermitidos={f.laminadosPermitidos}
                 />
               ))}
               {!alcanzoLimite && (
@@ -183,17 +219,23 @@ export default function HojaCotizacion({
           </table>
         </div>
 
-        {!mob&&(
-          <div className="drop-zone-el"
-            style={{border:`1.5px dashed ${alcanzoLimite?"#B8A880":over?"#C9922A":"#D4C9B8"}`,borderRadius:6,padding:12,textAlign:"center",transition:"all .2s",margin:"4px 0",background:over&&!alcanzoLimite?"rgba(201,146,42,.05)":"transparent"}}
-            onDrop={alcanzoLimite?undefined:onDrop} onDragOver={e=>{e.preventDefault();if(!alcanzoLimite)setOver(true);}} onDragLeave={()=>setOver(false)}>
-            <p style={{color:"#9A8E7F",fontSize:11}}>
+        {/* Indicador de drop — solo cuando se arrastra activamente */}
+        {desk && (
+          <div className="drop-zone-el" style={{
+            border:`1.5px dashed ${alcanzoLimite?"#B8A880":over?"#C9922A":"#D4C9B8"}`,
+            borderRadius:6, padding:"8px 12px", textAlign:"center",
+            transition:"all .2s", margin:"4px 0",
+            background: over&&!alcanzoLimite ? "rgba(201,146,42,.05)" : "transparent",
+            opacity: over ? 1 : 0.6,
+          }}>
+            <p style={{color:over?"#C9922A":"#9A8E7F",fontSize:11,margin:0}}>
               {alcanzoLimite
-                ? "✓ Límite de 5 productos alcanzado — elimina uno para agregar otro"
-                : over?"📋 Suelta aquí":"⬇ Arrastra productos del catálogo aquí, o haz click en una fila vacía"}
+                ? "✓ Límite de 5 productos — elimina uno para agregar otro"
+                : over ? "📋 Suelta aquí" : "⬇ Arrastra productos del catálogo sobre la hoja"}
             </p>
           </div>
         )}
+
         {mob&&(
           <button onClick={alcanzoLimite?undefined:onAbrirDrawer} className="no-print" disabled={alcanzoLimite}
             style={{width:"100%",margin:"8px 0 4px",background:alcanzoLimite?"#1A1A1A88":"#1A1A1A",border:`1.5px dashed ${alcanzoLimite?"#666":"#C9922A"}`,borderRadius:8,padding:"13px",color:alcanzoLimite?"#666":"#C9922A",fontSize:14,fontWeight:700,cursor:alcanzoLimite?"not-allowed":"pointer",fontFamily:"'Inter',sans-serif"}}>

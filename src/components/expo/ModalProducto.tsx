@@ -374,10 +374,9 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
   const opCals  = calibresDB.map(c => ({ id:c.id, label:String(c.valor)+(c.gramos?` (${c.gramos}g)`:"") }));
   const configMedidas = CONFIG_MEDIDAS[tipoPlastNom] || null;
 
-  return (
-    <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,.75)",zIndex:100,display:"flex",alignItems:"center",justifyContent:"center",padding:16 }}
-      onClick={onClose}>
-      <div style={{ background:"#1A1A1A",border:"1px solid #333",borderRadius:12,width:"100%",maxWidth:600,maxHeight:"92vh",overflowY:"auto",padding:24 }}
+ return (
+    <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,.75)",zIndex:100,display:"flex",alignItems:"center",justifyContent:"center",padding:16 }}>
+      <div style={{ background:"#1A1A1A",border:"1px solid #333",borderRadius:12,width:"90vw",maxWidth:"90vw",maxHeight:"92vh",overflowY:"auto",padding:24 }}
         onClick={e=>e.stopPropagation()}>
 
         {/* Header */}
@@ -412,7 +411,7 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
 
         {/* ── PAPEL / CARTÓN ── */}
         {esPapelCarton && (<>
-          <div style={ROW2}>
+          <div style={ROW3}>
             <div>
               <label style={LS}>Tipo</label>
               <select style={IS} value={form.tipo||""} onChange={e=>setF("tipo",e.target.value)}>
@@ -427,20 +426,20 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
                 {catalogs.tipo_papel.map(item=><option key={item.id} value={item.nombre}>{item.nombre}</option>)}
               </select>
             </div>
-          </div>
-          <div style={{ marginBottom:14 }}>
-            <label style={LS}>Medida</label>
-            <MedidaSelectModal
-              opciones={form.categoria==="carton"?MEDIDAS_CARTON:(MEDIDAS_PAPEL[form.tipo||"default"]||MEDIDAS_PAPEL["default"])}
-              value={form.medida||""}
-              onChange={v=>{
-                setF("medida",v);
-                const m3=v.match(/^([\d.]+)x([\d.]+)x([\d.]+)/);
-                const m2=v.match(/^([\d.]+)x([\d.]+)/);
-                if(m3){setF("ancho",m3[1]);setF("fuelle",m3[2]);setF("altura",m3[3]);}
-                else if(m2){setF("ancho",m2[1]);setF("altura",m2[2]);setF("fuelle","0");}
-              }}
-            />
+            <div>
+              <label style={LS}>Medida</label>
+              <MedidaSelectModal
+                opciones={form.categoria==="carton"?MEDIDAS_CARTON:(MEDIDAS_PAPEL[form.tipo||"default"]||MEDIDAS_PAPEL["default"])}
+                value={form.medida||""}
+                onChange={v=>{
+                  setF("medida",v);
+                  const m3=v.match(/^([\d.]+)x([\d.]+)x([\d.]+)/);
+                  const m2=v.match(/^([\d.]+)x([\d.]+)/);
+                  if(m3){setF("ancho",m3[1]);setF("fuelle",m3[2]);setF("altura",m3[3]);}
+                  else if(m2){setF("ancho",m2[1]);setF("altura",m2[2]);setF("fuelle","0");}
+                }}
+              />
+            </div>
           </div>
           <div style={ROW3}>
             <div><label style={LS}>Ancho (cm)</label><input style={IS} type="text" inputMode="decimal" value={form.ancho||""} onChange={e=>{setF("ancho",soloNums(e.target.value));setF("medida","");}} placeholder="20" /></div>
@@ -452,7 +451,7 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
               📐 Medida: {form.ancho||"?"}x{form.fuelle||"0"}x{form.altura||"?"} cm
             </div>
           )}
-          <div style={ROW2}>
+          <div style={ROW3}>
             <div>
               <label style={LS}>Calibre</label>
               <select style={IS} value={form.calibre||""} onChange={e=>setF("calibre",e.target.value)}>
@@ -464,8 +463,6 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
               <label style={LS}>Tintas</label>
               <TintasSelectModal value={form.tintas||""} onChange={v=>setF("tintas",v)} />
             </div>
-          </div>
-          <div style={ROW2}>
             <div>
               <label style={LS}>Asa</label>
               <select style={IS} value={form.tipoAsa||""} onChange={e=>{ setF("tipoAsa",e.target.value); setF("asa",e.target.value!==""); }}>
@@ -473,6 +470,8 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
                 {(form.categoria==="plastico" ? coloresAsa : catalogs.tipo_asa).map(item=><option key={item.id} value={item.nombre}>{item.nombre}</option>)}
               </select>
             </div>
+          </div>
+          <div style={ROW3}>
             <div>
               <label style={LS}>Laminado</label>
               <select style={IS} value={form.laminacion?(form.tipoLaminado||""):""} onChange={e=>{ setF("laminacion",e.target.value!==""); setF("tipoLaminado",e.target.value); }}>
@@ -480,8 +479,6 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
                 {catalogs.laminado.map(item=><option key={item.id} value={item.nombre}>{item.nombre}</option>)}
               </select>
             </div>
-          </div>
-          <div style={ROW2}>
             <div>
               <label style={LS}>Textura</label>
               <select style={IS} value={form.textura?(form.tipoTextura||""):""} onChange={e=>{ setF("textura",e.target.value!==""); setF("tipoTextura",e.target.value); }}>
@@ -611,7 +608,7 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
           {form.imagen && <button onClick={()=>setF("imagen","")} style={{ marginTop:6,background:"transparent",border:"none",color:"#666",fontSize:11,cursor:"pointer",textDecoration:"underline" }}>✕ Quitar imagen</button>}
         </div>
 
-        {/* Acciones */}
+       {/* Acciones */}
         <div style={{ display:"flex",gap:10,justifyContent:"flex-end" }}>
           <button onClick={onClose} style={{ background:"transparent",border:"1px solid #444",color:"#888",fontSize:12,fontWeight:600,padding:"9px 18px",borderRadius:7,cursor:"pointer" }}>
             Cancelar
