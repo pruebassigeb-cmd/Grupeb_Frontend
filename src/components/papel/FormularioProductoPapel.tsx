@@ -1,6 +1,7 @@
 // src/components/papel/FormularioProductoPapel.tsx
 import { useState, useEffect } from "react";
 import ComboboxInsumo from "../ComboboxInsumo";
+import ModalRegistrarInsumo from "../ModalRegistrarInsumo";
 import {
   getProductosPapel,
   getProductoPapelDetalle,
@@ -20,6 +21,7 @@ import type {
   ColorAsaOpcion,
   ProductoPapelCotizacion,
 } from "../../types/papel/cotizacion-papel.types";
+import type { Insumo } from "../../services/proveedoresService";
 import FormularioProductoPapelAlta from "./FormularioProductoPapelAlta";
 import type { ArchivoPendiente } from "./FormularioProductoPapelAlta";
 import type { ProductoPapelForm } from "../../types/papel/papel.types";
@@ -128,6 +130,15 @@ const [loadingColores, setLoadingColores] = useState(true);
   const [herramentalExpandido, setHerramentalExpandido] = useState(false);
   const [herramentalDescripcion, setHerramentalDescripcion] = useState("");
   const [herramentalPrecioTexto, setHerramentalPrecioTexto] = useState("");
+
+  // ── Modal registrar insumo (pantones) ───────────────────────────────────
+  // Autocontenido: no depende de onRegistrarPanton del padre.
+  const [modalInsumo, setModalInsumo] = useState<{
+    abierto: boolean;
+    nombre: string;
+    indice: number | null;
+    esDentro: boolean;
+  }>({ abierto: false, nombre: "", indice: null, esDentro: false });
 
   const herramentalTieneData =
     !!herramentalDescripcion.trim() ||
@@ -618,6 +629,30 @@ useEffect(() => {
     }));
   };
 
+  // ── Modal registrar insumo (pantones frente / interior) ─────────────────
+  const abrirModalInsumo = (nombre: string, indice: number, esDentro: boolean) => {
+    setModalInsumo({ abierto: true, nombre, indice, esDentro });
+  };
+
+  const handleInsumoRegistrado = (item: Insumo) => {
+    // Si el insumo quedó con un solo proveedor, usamos su código; si tiene
+    // varios (o ninguno), no hay un código único que mostrar en el texto.
+    const codigo =
+      item.proveedores && item.proveedores.length === 1
+        ? item.proveedores[0].codigo
+        : null;
+    const texto = codigo ? `${item.nombre} (${codigo})` : item.nombre;
+
+    if (modalInsumo.indice !== null) {
+      if (modalInsumo.esDentro) {
+        handlePantoneDentro(modalInsumo.indice, texto);
+      } else {
+        handlePantone(modalInsumo.indice, texto);
+      }
+    }
+    setModalInsumo({ abierto: false, nombre: "", indice: null, esDentro: false });
+  };
+
   const handleCantidad = (i: number, v: string) => {
     if (!/^\d*$/.test(v)) return;
     const t = [...cantidadesTexto] as [string, string, string];
@@ -754,6 +789,7 @@ useEffect(() => {
   const celdasPantone = (
     lista: string[],
     onChange: (i: number, v: string) => void,
+    onRegistrarNuevo: (nombre: string, i: number) => void,
   ) => (
     <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 space-y-2">
       {lista.map((valor, i) => (
@@ -767,15 +803,18 @@ useEffect(() => {
               placeholder={`Tinta ${i + 1}...`}
               value={valor}
               onChange={(val: string) => onChange(i, val)}
-              onSeleccionar={(item: any) =>
-                onChange(
-                  i,
-                  item.codigo ? `${item.nombre} (${item.codigo})` : item.nombre,
-                )
-              }
-              onRegistrarNuevo={(nombre: string) =>
-                onRegistrarPanton?.(nombre, i)
-              }
+              onSeleccionar={(item: any) => {
+                // buscarInsumos ahora agrupa por insumo — un mismo pantón
+                // puede tener varios proveedores. Si solo tiene uno,
+                // mostramos su código; si tiene varios (o ninguno), solo
+                // el nombre, ya que no hay un código único que mostrar.
+                const codigo =
+                  item.proveedores && item.proveedores.length === 1
+                    ? item.proveedores[0].codigo
+                    : null;
+                onChange(i, codigo ? `${item.nombre} (${codigo})` : item.nombre);
+              }}
+              onRegistrarNuevo={(nombre: string) => onRegistrarNuevo(nombre, i)}
             />
           </div>
         </div>
@@ -923,7 +962,7 @@ useEffect(() => {
                 </svg>
               </button>
             </div>
-            <div className="flex-1 min-h-0 overflow-hidden">
+            <div className="flex-1 min-h-0 overflow-y-auto">
               <FormularioProductoPapelAlta
                 onSave={handleGuardarNuevo}
                 onCancel={() => setMostrarModalNuevo(false)}
@@ -932,6 +971,18 @@ useEffect(() => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ── Modal registrar insumo nuevo (pantones) ── */}
+      {modalInsumo.abierto && (
+        <ModalRegistrarInsumo
+          tipoInsumoInicial={idTipoPanton ?? 0}
+          nombreInicial={modalInsumo.nombre}
+          onRegistrado={handleInsumoRegistrado}
+          onCancelar={() =>
+            setModalInsumo({ abierto: false, nombre: "", indice: null, esDentro: false })
+          }
+        />
       )}
 
       <div className="pr-1">
@@ -1186,7 +1237,9 @@ useEffect(() => {
                     ({specs.tintas} tinta{specs.tintas > 1 ? "s" : ""})
                   </span>
                 </label>
-                {celdasPantone(inputsPantones, handlePantone)}
+                {celdasPantone(inputsPantones, handlePantone, (nombre, i) =>
+                  abrirModalInsumo(nombre, i, false),
+                )}
                 {specs.pantones && (
                   <p className="text-xs text-purple-500 mt-1">
                     Guardado:{" "}
@@ -1249,7 +1302,11 @@ useEffect(() => {
                           ({specs.tintasDentro})
                         </span>
                       </label>
-                      {celdasPantone(inputsPantonesDentro, handlePantoneDentro)}
+                      {celdasPantone(
+                        inputsPantonesDentro,
+                        handlePantoneDentro,
+                        (nombre, i) => abrirModalInsumo(nombre, i, true),
+                      )}
                       {specs.pantonesDentro && (
                         <p className="text-xs text-purple-500 mt-1">
                           Guardado:{" "}

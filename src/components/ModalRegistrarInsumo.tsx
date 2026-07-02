@@ -5,15 +5,15 @@ import {
   buscarInsumos,
   registrarInsumoRapido,
   type TipoInsumo,
-  type ProductoProveedor,
+  type Insumo,
   type Proveedor,
 } from "../services/proveedoresService";
 import { showAlert } from "./CustomAlert";
 
 interface Props {
-  tipoInsumoInicial: number;  // id del tipo (pantón o pigmento)
-  nombreInicial:     string;  // lo que escribió el usuario
-  onRegistrado:      (item: ProductoProveedor) => void;
+  tipoInsumoInicial: number;
+  nombreInicial:     string;
+  onRegistrado:      (item: Insumo) => void;
   onCancelar:        () => void;
 }
 
@@ -30,11 +30,11 @@ export default function ModalRegistrarInsumo({
   const [duplicado, setDuplicado]     = useState<string | null>(null);
 
   const [form, setForm] = useState({
-    tipo_insumo_id:        tipoInsumoInicial,
-    nombre:                nombreInicial,
-    codigo:                "",
-    proveedor_idproveedor: "" as string | number,
+    tipo_insumo_id: tipoInsumoInicial,
+    nombre:         nombreInicial,
+    codigo:         "",
   });
+  const [proveedoresSeleccionados, setProveedoresSeleccionados] = useState<number[]>([]);
 
   useEffect(() => {
     const cargar = async () => {
@@ -49,17 +49,20 @@ export default function ModalRegistrarInsumo({
     cargar();
   }, []);
 
-  // Verificar duplicado en tiempo real
   useEffect(() => {
     if (!form.nombre.trim()) { setDuplicado(null); return; }
     const t = setTimeout(async () => {
       setVerificando(true);
       try {
         const resultados = await buscarInsumos(form.tipo_insumo_id, form.nombre.trim());
-        const exacto = resultados.find((r: ProductoProveedor) => r.nombre.toLowerCase() === form.nombre.trim().toLowerCase());
+        const exacto = resultados.find((r) => r.nombre.toLowerCase() === form.nombre.trim().toLowerCase());
         setDuplicado(
           exacto
-            ? `Ya existe "${exacto.nombre}"${exacto.proveedor_nombre ? ` — ${exacto.proveedor_nombre}` : ""}`
+            ? `Ya existe "${exacto.nombre}"${
+                exacto.proveedores.length > 0
+                  ? ` — ${exacto.proveedores.map((p) => p.proveedor_nombre).join(", ")}`
+                  : ""
+              }`
             : null
         );
       } catch {
@@ -74,6 +77,12 @@ export default function ModalRegistrarInsumo({
   const set = (field: string, value: any) =>
     setForm(prev => ({ ...prev, [field]: value }));
 
+  const toggleProveedor = (idproveedor: number) => {
+    setProveedoresSeleccionados(prev =>
+      prev.includes(idproveedor) ? prev.filter(id => id !== idproveedor) : [...prev, idproveedor]
+    );
+  };
+
   const handleGuardar = async () => {
     if (!form.nombre.trim()) { showAlert("El nombre es requerido", "warning"); return; }
     if (duplicado)           { showAlert("Corrige el duplicado antes de guardar", "warning"); return; }
@@ -81,10 +90,10 @@ export default function ModalRegistrarInsumo({
     setGuardando(true);
     try {
       const resultado = await registrarInsumoRapido({
-        tipo_insumo_id:        form.tipo_insumo_id,
-        nombre:                form.nombre.trim(),
-        codigo:                form.codigo.trim() || null,
-        proveedor_idproveedor: form.proveedor_idproveedor ? Number(form.proveedor_idproveedor) : null,
+        tipo_insumo_id: form.tipo_insumo_id,
+        nombre:         form.nombre.trim(),
+        codigo:         form.codigo.trim() || null,
+        proveedores_ids: proveedoresSeleccionados,
       });
       showAlert(`Insumo "${resultado.nombre}" registrado`, "success");
       onRegistrado(resultado);
@@ -173,21 +182,37 @@ export default function ModalRegistrarInsumo({
             <input type="text" value={form.codigo}
               onChange={e => set("codigo", e.target.value)}
               placeholder="PMS-485" className={inputClass} maxLength={80} />
+            {proveedoresSeleccionados.length > 1 && (
+              <p className="text-xs text-gray-400 mt-1">Se usará el mismo código para todos los proveedores marcados.</p>
+            )}
           </div>
 
-          {/* Proveedor */}
+          {/* Proveedores — selección múltiple */}
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1.5">
-              Proveedor <span className="text-xs text-gray-400 font-normal">(opcional)</span>
+              Proveedores <span className="text-xs text-gray-400 font-normal">(opcional — puedes marcar varios)</span>
             </label>
-            <select value={form.proveedor_idproveedor}
-              onChange={e => set("proveedor_idproveedor", e.target.value)}
-              className={inputClass}>
-              <option value="">Sin proveedor asignado</option>
-              {proveedores.map(p => (
-                <option key={p.idproveedor} value={p.idproveedor}>{p.nombre}</option>
-              ))}
-            </select>
+            <div className="border border-gray-300 rounded-lg max-h-40 overflow-y-auto divide-y divide-gray-100">
+              {proveedores.length === 0 ? (
+                <p className="text-xs text-gray-400 px-3 py-3">No hay proveedores registrados.</p>
+              ) : (
+                proveedores.map(p => (
+                  <label key={p.idproveedor}
+                    className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 cursor-pointer select-none">
+                    <input type="checkbox"
+                      checked={proveedoresSeleccionados.includes(p.idproveedor)}
+                      onChange={() => toggleProveedor(p.idproveedor)}
+                      className="w-4 h-4 rounded border-gray-400 text-purple-600 focus:ring-purple-400" />
+                    {p.nombre}
+                  </label>
+                ))
+              )}
+            </div>
+            {proveedoresSeleccionados.length > 0 && (
+              <p className="text-xs text-purple-600 mt-1 font-medium">
+                ✓ {proveedoresSeleccionados.length} proveedor{proveedoresSeleccionados.length > 1 ? "es" : ""} seleccionado{proveedoresSeleccionados.length > 1 ? "s" : ""}
+              </p>
+            )}
           </div>
 
           {duplicado && (

@@ -91,6 +91,38 @@ function PresentacionesInput({ value, onChange }: {
   );
 }
 
+// ── Selector múltiple de proveedores ──────────────────────────────────────
+function ProveedoresMultiSelect({ proveedores, seleccionados, onToggle }: {
+  proveedores: { idproveedor: number; nombre: string }[];
+  seleccionados: number[];
+  onToggle: (idproveedor: number) => void;
+}) {
+  return (
+    <div>
+      <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "#6B7280", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+        Proveedores <span style={{ fontWeight: 400, textTransform: "none", color: "#9CA3AF" }}>(puedes marcar varios)</span>
+      </label>
+      <div style={{ border: "1px solid #D1D5DB", borderRadius: 6, maxHeight: 140, overflowY: "auto", background: "#fff" }}>
+        {proveedores.length === 0 ? (
+          <p style={{ fontSize: 12, color: "#9CA3AF", padding: "10px 12px", margin: 0 }}>No hay proveedores registrados.</p>
+        ) : proveedores.map((p, i) => (
+          <label key={p.idproveedor}
+            style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 12px", fontSize: 13, color: "#374151", cursor: "pointer", borderTop: i > 0 ? "1px solid #F3F4F6" : "none" }}>
+            <input type="checkbox" checked={seleccionados.includes(p.idproveedor)} onChange={() => onToggle(p.idproveedor)}
+              style={{ width: 15, height: 15, cursor: "pointer" }} />
+            {p.nombre}
+          </label>
+        ))}
+      </div>
+      {seleccionados.length > 0 && (
+        <p style={{ fontSize: 11, color: "#1D4ED8", fontWeight: 600, margin: "5px 0 0" }}>
+          ✓ {seleccionados.length} proveedor{seleccionados.length > 1 ? "es" : ""} seleccionado{seleccionados.length > 1 ? "s" : ""}
+        </p>
+      )}
+    </div>
+  );
+}
+
 // ── Formulario ────────────────────────────────────────────────────────────
 function FoilFormPanel({ initial, proveedores, onSave, onCancel, saving }: {
   initial?: Foil;
@@ -101,21 +133,32 @@ function FoilFormPanel({ initial, proveedores, onSave, onCancel, saving }: {
 }) {
   const [form, setForm] = useState<FoilForm>(
     initial ? {
-      colorfoil:            initial.colorfoil,
-      codigofoil:           initial.codigofoil ?? "",
-      precio:               initial.precio != null ? String(initial.precio) : "",
-      notas:                initial.notas ?? "",
-      minimo_compra:        initial.minimo_compra != null ? String(initial.minimo_compra) : "",
-      unidad:               initial.unidad ?? "",
-      proveedor_idproveedor: initial.idproveedor ?? null,
-      presentaciones:       initial.presentaciones.map(p => p.presentacion),
+      colorfoil:        initial.colorfoil,
+      codigofoil:       initial.codigofoil ?? "",
+      // Si el foil ya tenía varios proveedores con distinto precio/código,
+      // aquí solo mostramos el del primero como punto de partida editable.
+      precio:           initial.proveedores[0]?.precio != null ? String(initial.proveedores[0].precio) : "",
+      notas:            initial.proveedores[0]?.notas ?? "",
+      minimo_compra:    initial.proveedores[0]?.minimo_compra != null ? String(initial.proveedores[0].minimo_compra) : "",
+      unidad:           initial.proveedores[0]?.unidad ?? "",
+      proveedores_ids:  initial.proveedores.map(p => p.idproveedor),
+      presentaciones:   initial.presentaciones.map(p => p.presentacion),
     } : newFoilForm()
   );
 
   const upd = (patch: Partial<FoilForm>) => setForm(prev => ({ ...prev, ...patch }));
 
-  // Preview de clave
-  const prov = proveedores.find(p => p.idproveedor === form.proveedor_idproveedor);
+  const toggleProveedor = (idproveedor: number) => {
+    setForm(prev => ({
+      ...prev,
+      proveedores_ids: prev.proveedores_ids.includes(idproveedor)
+        ? prev.proveedores_ids.filter(id => id !== idproveedor)
+        : [...prev.proveedores_ids, idproveedor],
+    }));
+  };
+
+  // Preview de clave — usa el primer proveedor seleccionado
+  const prov = proveedores.find(p => p.idproveedor === form.proveedores_ids[0]);
   const clavePreview = prov && form.colorfoil
     ? `${prov.nombre.substring(0, 2).toUpperCase()}${form.colorfoil.substring(0, 3).toUpperCase()}${form.codigofoil}`
     : "";
@@ -127,25 +170,13 @@ function FoilFormPanel({ initial, proveedores, onSave, onCancel, saving }: {
       </p>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "10px 14px", marginBottom: 12 }}>
-        {/* Proveedor */}
         <div style={{ gridColumn: "span 3" }}>
-          <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "#6B7280", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.05em" }}>Proveedor</label>
-          <select
-            value={form.proveedor_idproveedor ?? ""}
-            onChange={e => upd({ proveedor_idproveedor: Number(e.target.value) || null })}
-            style={{ width: "100%", height: 36, padding: "0 10px", border: "1px solid #D1D5DB", borderRadius: 6, fontSize: 13, color: "#111827", background: "#fff", outline: "none" }}
-          >
-            <option value="">Seleccionar proveedor…</option>
-            {proveedores.map(p => (
-              <option key={p.idproveedor} value={p.idproveedor}>{p.nombre}</option>
-            ))}
-          </select>
+          <ProveedoresMultiSelect proveedores={proveedores} seleccionados={form.proveedores_ids} onToggle={toggleProveedor} />
         </div>
 
         <Inp label="Color" value={form.colorfoil} onChange={v => upd({ colorfoil: v })} placeholder="ej: Dorado" />
         <Inp label="Código" value={form.codigofoil} onChange={v => upd({ codigofoil: v })} placeholder="ej: FOI-001" />
 
-        {/* Clave preview */}
         <div>
           <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "#6B7280", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.05em" }}>Clave (auto)</label>
           <div style={{ height: 36, padding: "0 10px", border: "1px solid #E5E7EB", borderRadius: 6, fontSize: 13, color: "#6B7280", background: "#F3F4F6", display: "flex", alignItems: "center", fontFamily: "monospace" }}>
@@ -156,6 +187,14 @@ function FoilFormPanel({ initial, proveedores, onSave, onCancel, saving }: {
         <Inp label="Precio" value={form.precio} onChange={v => upd({ precio: v })} placeholder="0.00" type="number" />
         <Inp label="Mínimo compra" value={form.minimo_compra} onChange={v => upd({ minimo_compra: v })} placeholder="ej: 100" />
         <Inp label="Unidad" value={form.unidad} onChange={v => upd({ unidad: v })} placeholder="ej: metros" />
+
+        {form.proveedores_ids.length > 1 && (
+          <div style={{ gridColumn: "span 3" }}>
+            <p style={{ fontSize: 11, color: "#9CA3AF", margin: 0 }}>
+              Precio, código, mínimo de compra y unidad se guardarán igual para los {form.proveedores_ids.length} proveedores marcados.
+            </p>
+          </div>
+        )}
 
         <div style={{ gridColumn: "span 3" }}>
           <Inp label="Notas" value={form.notas} onChange={v => upd({ notas: v })} placeholder="Observaciones opcionales…" />
@@ -185,7 +224,8 @@ export default function FoilPanel() {
   const [search, setSearch]         = useState("");
   const [vista, setVista]           = useState<"tabla" | "nuevo" | "editar">("tabla");
   const [editTarget, setEditTarget] = useState<Foil | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<Foil | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ foil: Foil; idproveedor: number } | null>(null);
+  const [errorCarga, setErrorCarga] = useState<string | null>(null);
   const BASE = import.meta.env.VITE_API_URL;
 
   useEffect(() => {
@@ -194,6 +234,7 @@ export default function FoilPanel() {
 
   const cargarDatos = async () => {
     setLoading(true);
+    setErrorCarga(null);
     try {
       const [foilsData, provData] = await Promise.all([
         fetchFoils(),
@@ -203,22 +244,24 @@ export default function FoilPanel() {
       ]);
       setFoils(foilsData);
       setProveedores(provData.map((p: any) => ({ idproveedor: p.idproveedor, nombre: p.nombre })));
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
+      setErrorCarga("No se pudieron cargar los foils. Revisa la consola para más detalle.");
     } finally {
       setLoading(false);
     }
   };
 
   const handleSave = async (form: FoilForm) => {
-    if (!form.proveedor_idproveedor) { alert("Selecciona un proveedor"); return; }
+    if (form.proveedores_ids.length === 0) { alert("Selecciona al menos un proveedor"); return; }
     if (!form.colorfoil.trim()) { alert("El color es requerido"); return; }
     setSaving(true);
     try {
       if (vista === "editar" && editTarget) {
-        await actualizarFoil(editTarget.idproveedor!, editTarget.idfoil, form);
+        const idProveedorRuta = editTarget.proveedores[0]?.idproveedor ?? form.proveedores_ids[0];
+        await actualizarFoil(idProveedorRuta, editTarget.idfoil, form);
       } else {
-        await crearFoil(form.proveedor_idproveedor, form);
+        await crearFoil(form);
       }
       await cargarDatos();
       setVista("tabla");
@@ -233,7 +276,7 @@ export default function FoilPanel() {
   const handleEliminar = async () => {
     if (!deleteTarget) return;
     try {
-      await eliminarFoil(deleteTarget.idproveedor!, deleteTarget.idfoil);
+      await eliminarFoil(deleteTarget.idproveedor, deleteTarget.foil.idfoil);
       await cargarDatos();
     } catch (e: any) {
       alert(e.message);
@@ -246,7 +289,7 @@ export default function FoilPanel() {
     f.colorfoil.toLowerCase().includes(search.toLowerCase()) ||
     (f.codigofoil ?? "").toLowerCase().includes(search.toLowerCase()) ||
     (f.clavefoil ?? "").toLowerCase().includes(search.toLowerCase()) ||
-    (f.proveedor_nombre ?? "").toLowerCase().includes(search.toLowerCase())
+    f.proveedores.some(p => p.proveedor_nombre.toLowerCase().includes(search.toLowerCase()))
   );
 
   if (loading) return (
@@ -255,15 +298,26 @@ export default function FoilPanel() {
 
   return (
     <div>
+      {errorCarga && (
+        <div style={{ background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 8, padding: "10px 14px", marginBottom: 14, fontSize: 12, color: "#DC2626" }}>
+          ⚠️ {errorCarga}
+        </div>
+      )}
+
       {/* Modal eliminar */}
       {deleteTarget && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.35)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
-          <div style={{ background: "#fff", borderRadius: 12, padding: "28px 32px", maxWidth: 360, width: "90%", boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
-            <p style={{ fontSize: 15, color: "#111827", margin: "0 0 6px", fontWeight: 600 }}>¿Eliminar foil?</p>
-            <p style={{ fontSize: 12, color: "#6B7280", margin: "0 0 20px" }}>{deleteTarget.clavefoil} — {deleteTarget.colorfoil}</p>
+          <div style={{ background: "#fff", borderRadius: 12, padding: "28px 32px", maxWidth: 380, width: "90%", boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
+            <p style={{ fontSize: 15, color: "#111827", margin: "0 0 6px", fontWeight: 600 }}>¿Desvincular este proveedor del foil?</p>
+            <p style={{ fontSize: 12, color: "#6B7280", margin: "0 0 20px" }}>
+              {deleteTarget.foil.clavefoil} — {deleteTarget.foil.colorfoil}
+              {deleteTarget.foil.proveedores.length > 1 && (
+                <> · El foil seguirá disponible para los otros {deleteTarget.foil.proveedores.length - 1} proveedor(es).</>
+              )}
+            </p>
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
               <Btn variant="ghost" onClick={() => setDeleteTarget(null)}>Cancelar</Btn>
-              <Btn variant="danger" onClick={handleEliminar}>Eliminar</Btn>
+              <Btn variant="danger" onClick={handleEliminar}>Desvincular</Btn>
             </div>
           </div>
         </div>
@@ -298,8 +352,8 @@ export default function FoilPanel() {
 
       {/* Tabla */}
       <div style={{ border: "1px solid #E5E7EB", borderRadius: 9, overflow: "hidden" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 100px 140px 1fr auto", background: "#F9FAFB", borderBottom: "1px solid #E5E7EB", padding: "0 16px" }}>
-          {["Color / Clave", "Código", "Proveedor", "Presentaciones", ""].map((h, i) => (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 100px 1.3fr 1fr auto", background: "#F9FAFB", borderBottom: "1px solid #E5E7EB", padding: "0 16px" }}>
+          {["Color / Clave", "Código", "Proveedores", "Presentaciones", ""].map((h, i) => (
             <div key={i} style={{ padding: "10px 0", fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#6B7280" }}>{h}</div>
           ))}
         </div>
@@ -309,13 +363,22 @@ export default function FoilPanel() {
             {search ? "Sin resultados." : "No hay foils registrados."}
           </div>
         ) : filtered.map((f, idx) => (
-          <div key={f.idfoil} style={{ display: "grid", gridTemplateColumns: "1fr 100px 140px 1fr auto", padding: "0 16px", alignItems: "center", minHeight: 52, background: idx % 2 === 0 ? "#fff" : "#FAFAFA", borderBottom: idx < filtered.length - 1 ? "1px solid #F3F4F6" : "none" }}>
+          <div key={f.idfoil} style={{ display: "grid", gridTemplateColumns: "1fr 100px 1.3fr 1fr auto", padding: "0 16px", alignItems: "center", minHeight: 52, background: idx % 2 === 0 ? "#fff" : "#FAFAFA", borderBottom: idx < filtered.length - 1 ? "1px solid #F3F4F6" : "none" }}>
             <div>
               <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: "#111827" }}>{f.colorfoil}</p>
               {f.clavefoil && <p style={{ margin: 0, fontSize: 11, color: "#6B7280", fontFamily: "monospace" }}>{f.clavefoil}</p>}
             </div>
             <span style={{ fontSize: 12, color: "#374151" }}>{f.codigofoil ?? "—"}</span>
-            <span style={{ fontSize: 12, color: "#374151" }}>{f.proveedor_nombre ?? "—"}</span>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+              {f.proveedores.length === 0
+                ? <span style={{ fontSize: 11, color: "#9CA3AF" }}>Sin proveedor</span>
+                : f.proveedores.map(p => (
+                  <span key={p.idfoil_proveedor} style={{ fontSize: 11, background: "#EFF6FF", border: "1px solid #BFDBFE", borderRadius: 10, padding: "2px 8px", color: "#1D4ED8", fontWeight: 500 }}>
+                    {p.proveedor_nombre}
+                  </span>
+                ))
+              }
+            </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
               {f.presentaciones.length === 0
                 ? <span style={{ fontSize: 11, color: "#9CA3AF" }}>—</span>
@@ -326,7 +389,9 @@ export default function FoilPanel() {
             </div>
             <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
               <Btn variant="secondary" small onClick={() => { setEditTarget(f); setVista("editar"); }}>✎ Editar</Btn>
-              <Btn variant="danger" small onClick={() => setDeleteTarget(f)}>× Eliminar</Btn>
+              {f.proveedores.length > 0 && (
+                <Btn variant="danger" small onClick={() => setDeleteTarget({ foil: f, idproveedor: f.proveedores[0].idproveedor })}>× Quitar</Btn>
+              )}
             </div>
           </div>
         ))}

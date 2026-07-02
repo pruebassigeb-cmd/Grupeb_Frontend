@@ -527,16 +527,11 @@ interface FilaVaciaProps {
 }
 export function FilaVacia({ onElegir, catalogoPropio, catalogs }: FilaVaciaProps) {
   const [open, setOpen] = useState(false);
-  const vaciarYElegir = (p: Producto) => {
-    const soloIdentidad: Producto = {
-      id: p.id, fuente: p.fuente, nombre: p.nombre, categoria: p.categoria, imagen: p.imagen,
-      medida: "", material: "", calibre: "", tintas: "",
-      laminacion: false, hs: false, ar: false, textura: false, uv: false, asa: false, otro: "",
-      precio500: "", precio1000: "", precio3000: "",
-      tipo:         p.tipo,
-      tipoProducto: p.tipoProducto,
-    };
-    onElegir(soloIdentidad);
+  // Al elegir un producto del catálogo expo, va COMPLETO (con su medida,
+  // material y calibre registrados) — igual que si se arrastrara del catálogo.
+  // Solo los productos creados desde cero (sin fuente) nacen editables.
+  const elegirProducto = (p: Producto) => {
+    onElegir(p);
     setOpen(false);
   };
   return (
@@ -554,7 +549,7 @@ export function FilaVacia({ onElegir, catalogoPropio, catalogs }: FilaVaciaProps
         <BuscadorProductoModal
           catalogoPropio={catalogoPropio}
           onClose={() => setOpen(false)}
-          onElegir={vaciarYElegir}
+          onElegir={elegirProducto}
           catalogs={catalogs}
         />
       )}
@@ -590,6 +585,11 @@ export const FilaTabla = memo(function FilaTabla({
   const { uid, producto: p } = fila;
   const pre = `r${rowIdx}`;
   const esPlastico = p.categoria === "plastico";
+
+  // Productos del sistema SIGEB o del catálogo expo ya están registrados:
+  // medida, material y calibre son fijos. Solo los productos tablero
+  // (creados en blanco, sin fuente) permiten editarlos.
+  const esRegistrado = p.fuente === "sistema" || p.fuente === "expo";
 
   const [nombre,     setNombre]     = useState(p.nombre);
   const [medida,     setMedida]     = useState(fila.medida || p.medida);
@@ -688,54 +688,68 @@ export const FilaTabla = memo(function FilaTabla({
         <span className="print-only">{nombre}</span>
       </td>
 
-      {/* Medida */}
-      <td style={{ ...TD, cursor: "pointer" }}>
-        <span className="no-print-show">
-          <MedidaSelect id={`${pre}-med`} value={medida} categoria={p.categoria} onChange={v => { setMedida(v); propagar("medida", v); }} />
-        </span>
-        <span className="print-only">{medida || "—"}</span>
+      {/* Medida — fija para productos registrados (sistema/expo), editable en tablero */}
+      <td style={{ ...TD, cursor: esRegistrado ? "default" : "pointer" }}
+        title={esRegistrado ? "Producto registrado — medida fija" : undefined}>
+        {esRegistrado ? (
+          <span style={{ fontSize: 9, color: "#1A1A1A", fontWeight: 600 }}>{medida || "—"}</span>
+        ) : (
+          <>
+            <span className="no-print-show">
+              <MedidaSelect id={`${pre}-med`} value={medida} categoria={p.categoria} onChange={v => { setMedida(v); propagar("medida", v); }} />
+            </span>
+            <span className="print-only">{medida || "—"}</span>
+          </>
+        )}
       </td>
 
-      {/* Material / Calibre */}
-      <td style={{ ...TD, lineHeight: 1.4 }}>
-        <div className="no-print-show">
-          {esPlastico ? (
-            <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-              <select style={{ ...iSel, fontSize: 8 }} value={matPlastNom}
-                onChange={e => {
-                  const nom = e.target.value;
-                  setMatPlastNom(nom); setCalPlastNom("");
-                  propagar("material", nom); propagar("calibre", "");
-                }}>
-                <option value="">Material</option>
-                {matPlastOpts.map(o => <option key={o.id} value={o.nombre}>{o.nombre}</option>)}
-              </select>
-              <select style={{ ...iSel, fontSize: 7.5 }} value={calPlastNom} disabled={!matPlastNom}
-                onChange={e => { setCalPlastNom(e.target.value); propagar("calibre", e.target.value); }}>
-                <option value="">{matPlastNom ? "Calibre" : "—"}</option>
-                {calibresFila.map(o => (
-                  <option key={o.id} value={String(o.valor)}>
-                    {o.valor}{o.gramos ? ` (${o.gramos}g)` : ""}
-                  </option>
-                ))}
-              </select>
+      {/* Material / Calibre — fijos para productos registrados, editables en tablero */}
+      <td style={{ ...TD, lineHeight: 1.4 }}
+        title={esRegistrado ? "Producto registrado — material y calibre fijos" : undefined}>
+        {esRegistrado ? (
+          <span style={{ fontSize: 8.5, color: "#1A1A1A", fontWeight: 600 }}>{matCalPrint}</span>
+        ) : (
+          <>
+            <div className="no-print-show">
+              {esPlastico ? (
+                <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                  <select style={{ ...iSel, fontSize: 8 }} value={matPlastNom}
+                    onChange={e => {
+                      const nom = e.target.value;
+                      setMatPlastNom(nom); setCalPlastNom("");
+                      propagar("material", nom); propagar("calibre", "");
+                    }}>
+                    <option value="">Material</option>
+                    {matPlastOpts.map(o => <option key={o.id} value={o.nombre}>{o.nombre}</option>)}
+                  </select>
+                  <select style={{ ...iSel, fontSize: 7.5 }} value={calPlastNom} disabled={!matPlastNom}
+                    onChange={e => { setCalPlastNom(e.target.value); propagar("calibre", e.target.value); }}>
+                    <option value="">{matPlastNom ? "Calibre" : "—"}</option>
+                    {calibresFila.map(o => (
+                      <option key={o.id} value={String(o.valor)}>
+                        {o.valor}{o.gramos ? ` (${o.gramos}g)` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                  <select style={{ ...iSel, fontSize: 8 }} value={matPapelNom}
+                    onChange={e => { setMatPapelNom(e.target.value); propagar("material", e.target.value); }}>
+                    <option value="">Material</option>
+                    {matPapelOpts.map(o => <option key={o.id} value={o.nombre}>{o.nombre}</option>)}
+                  </select>
+                  <select style={{ ...iSel, fontSize: 7.5 }} value={calPapelNom}
+                    onChange={e => { setCalPapelNom(e.target.value); propagar("calibre", e.target.value); }}>
+                    <option value="">Calibre</option>
+                    {calPapelOpts.map(o => <option key={o.id} value={o.nombre}>{o.nombre}</option>)}
+                  </select>
+                </div>
+              )}
             </div>
-          ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-              <select style={{ ...iSel, fontSize: 8 }} value={matPapelNom}
-                onChange={e => { setMatPapelNom(e.target.value); propagar("material", e.target.value); }}>
-                <option value="">Material</option>
-                {matPapelOpts.map(o => <option key={o.id} value={o.nombre}>{o.nombre}</option>)}
-              </select>
-              <select style={{ ...iSel, fontSize: 7.5 }} value={calPapelNom}
-                onChange={e => { setCalPapelNom(e.target.value); propagar("calibre", e.target.value); }}>
-                <option value="">Calibre</option>
-                {calPapelOpts.map(o => <option key={o.id} value={o.nombre}>{o.nombre}</option>)}
-              </select>
-            </div>
-          )}
-        </div>
-        <span className="print-only">{matCalPrint}</span>
+            <span className="print-only">{matCalPrint}</span>
+          </>
+        )}
       </td>
 
       {/* Tintas */}

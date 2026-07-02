@@ -17,8 +17,42 @@ import {
   normalizarOrdenProduccionPapelData,
   obtenerRegistroProcesoPapel,
   primeraLinea,
+  redondear,
   validarProductoPapelParaPdf,
 } from "./papel/ordenProduccionPapelPdf.helpers";
+
+// ────────────────────────────────────────────────────────────────────────
+// CAMPO "ENTREGADAS" POR PROCESO — mismo mapeo que CAMPO_PRINCIPAL_FINAL_PAPEL
+// en ModalProcesoIndividualPapel.tsx. Es el campo del registro de CADA
+// proceso que representa lo que ese proceso entregó realmente. Sirve para
+// encadenar: la "entrada" de un proceso es SIEMPRE lo "entregado" del
+// proceso anterior (nunca un campo de entrada propio) — así lo confirmó
+// el usuario: la 3ra celda (Entregadas) de un proceso alimenta tanto la
+// celda de "entrada" del bloque derecho del SIGUIENTE proceso, como el
+// número grande del bloque izquierdo (Maquina) de ese mismo siguiente
+// proceso.
+// ────────────────────────────────────────────────────────────────────────
+const CAMPO_ENTREGADA_POR_PROCESO: Record<NombreProcesoOrdenPapel, string> = {
+  hojeado_papel: "cantidad_entregada",
+  guillotina_papel: "cantidad_entregada",
+  impresion_papel: "pliegos_entregados",
+  laminacion_papel: "pliegos_entregados",
+  barniz_uv_papel: "pliegos_entregados",
+  hot_stamping_papel: "pliegos_entregados",
+  texturizado_papel: "pliegos_entregados",
+  alto_relieve_papel: "pliegos_entregados",
+  suaje_produccion_papel: "pliegos_entregados",
+  armado_papel: "bolsas_entregadas",
+  empaque_papel: "bolsas_entregadas_final",
+};
+
+function obtenerCantidadEntregadaProceso(
+  key: NombreProcesoOrdenPapel,
+  registro: ProcesoPapelRuntime | null
+): number | null {
+  const reg = (registro ?? {}) as Record<string, unknown>;
+  return n(reg[CAMPO_ENTREGADA_POR_PROCESO[key]]);
+}
 
 const BLACK: [number, number, number] = [0, 0, 0];
 const WHITE: [number, number, number] = [255, 255, 255];
@@ -251,10 +285,15 @@ function tintasConPantones(cantidad: unknown, pantones: unknown): string {
   return pant;
 }
 
-function entradaProceso(registroValor: unknown, ...estimados: unknown[]): string {
-  return primeraLinea(fmtNum(registroValor), ...estimados.map((v) => fmtNum(v)));
-}
-
+// ────────────────────────────────────────────────────────────────────────
+// CORREGIDO: se elimina el fallback a los estimados (pliegos_impresion_
+// estimados / cantidad_hojeada_calculada) en la entrada de TODOS los
+// procesos salvo Hojeado/Guillotina (que usan procesoPreparacionBlock y sí
+// muestran su calculado como referencia). El resto de los procesos ahora
+// solo muestra el dato REAL capturado en el registro (reg.pliegos_entrada,
+// etc.), quedando en blanco hasta que el operador lo registre desde el
+// módulo de seguimiento (SeccionAvancesPapel / finalizarProcesoPapel).
+// ────────────────────────────────────────────────────────────────────────
 function datosProceso(
   key: NombreProcesoOrdenPapel,
   data: OrdenProduccionPapelData,
@@ -264,57 +303,35 @@ function datosProceso(
   const merma = fmtNum(reg.merma);
 
   switch (key) {
+    // hojeado_papel y guillotina_papel ya no se dibujan con datosProceso
+    // (usan procesoPreparacionBlock directamente en la fila ancha), pero
+    // se dejan estos casos por completitud de tipos.
     case "hojeado_papel":
       return {
         tituloEntrada: "Cantidad hojeado",
-        entrada: primeraLinea(
-          fmtNum(reg.cantidad_hojeado),
-          fmtNum(data.cantidad_hojeada_calculada),
-          fmtCantidad(data)
-        ),
+        entrada: fmtNum(reg.cantidad_hojeado),
         unidadEntrada: "Pliegos",
         merma,
         entregadas: fmtNum(reg.cantidad_entregada),
         unidad: "Pliegos",
-        extra: [
-          `Bobina: ${primeraLinea(data.hoj_bobina, data.bobina_cm)} cm`,
-          `Hojeado: ${primeraLinea(data.hoj_hilo)}`,
-          `Rend. Hojeado: ${primeraLinea(data.hoj_rendimiento, data.rendimiento)}`,
-          `Pliego Hojeado: ${primeraLinea(data.pliego_hojeado, data.hoj_corte)}`,
-        ].filter((x) => !x.endsWith(": ") && !x.endsWith(":  cm")),
+        extra: [],
       };
 
     case "guillotina_papel":
       return {
         tituloEntrada: "Pliegos/Guillotina",
-        entrada: primeraLinea(
-          fmtNum(reg.pliegos),
-          f(data.hoj_guillotina),
-          f(data.pliegos_guillotina),
-          fmtNum(data.pliegos_impresion_estimados),
-          fmtCantidad(data)
-        ),
+        entrada: fmtNum(reg.pliegos),
         unidadEntrada: "Pliegos",
         merma,
         entregadas: fmtNum(reg.cantidad_entregada),
         unidad: "Pliegos",
-        extra: [
-          `Pliego: ${primeraLinea(data.pliego)}`,
-          `Pliegos: ${primeraLinea(data.hoj_guillotina, data.pliegos_guillotina, reg.pliegos)}`,
-          `Rend. Guillotina: ${primeraLinea(data.rendimiento, data.hoj_rendimiento)}`,
-          `Corte: ${primeraLinea(data.corte, data.corte_guillotina)}`,
-          `Cortes: ${primeraLinea(reg.cortes)}`,
-        ].filter((x) => !x.endsWith(": ")),
+        extra: [],
       };
 
     case "impresion_papel":
       return {
         tituloEntrada: "Hojas impresas",
-        entrada: entradaProceso(
-          reg.pliegos_entrada,
-          data.pliegos_impresion_estimados,
-          data.cantidad_hojeada_calculada
-        ),
+        entrada: fmtNum(reg.pliegos_entrada),
         unidadEntrada: "",
         merma,
         entregadas: fmtNum(reg.pliegos_entregados),
@@ -332,15 +349,15 @@ function datosProceso(
     case "laminacion_papel":
       return {
         tituloEntrada: "Hojas Laminadas",
-        entrada: entradaProceso(reg.pliegos_entrada, data.pliegos_impresion_estimados),
+        entrada: fmtNum(reg.pliegos_entrada),
         unidadEntrada: "Pliegos",
         merma,
         entregadas: fmtNum(reg.pliegos_entregados),
         unidad: "Pliegos",
         extra: [
           primeraLinea(data.laminado_acabado, data.laminado_nombre, data.laminado),
-          `Metros: ${primeraLinea(fmtNum(reg.metros), fmtNum(data.metros_laminacion_estimados))}`,
-          `Rollos: ${primeraLinea(fmtNum(reg.rollos, 2), fmtNum(data.rollos_laminacion_estimados, 2))}`,
+          `Metros: ${fmtNum(reg.metros)}`,
+          `Rollos: ${fmtNum(reg.rollos, 2)}`,
           `Desarrollo: ${primeraLinea(reg.desarrollo_mm, data.desarrollo_laminacion_mm, data.desarrollo_mm)} mm`,
           `CTES/Mod: ${primeraLinea(reg.ctes_mod, data.ctes_mod_laminacion, data.ctes_mod)}`,
           `Bobina: ${primeraLinea(reg.bobina_cm, data.bobina_laminacion_cm, data.bobina_cm)} cm`,
@@ -350,7 +367,7 @@ function datosProceso(
     case "barniz_uv_papel":
       return {
         tituloEntrada: "Hojas UV",
-        entrada: entradaProceso(reg.pliegos_entrada, data.pliegos_impresion_estimados),
+        entrada: fmtNum(reg.pliegos_entrada),
         unidadEntrada: "Pliegos",
         merma,
         entregadas: fmtNum(reg.pliegos_entregados),
@@ -361,7 +378,7 @@ function datosProceso(
     case "hot_stamping_papel":
       return {
         tituloEntrada: "Hojas Estampadas",
-        entrada: entradaProceso(reg.pliegos_entrada, data.pliegos_impresion_estimados),
+        entrada: fmtNum(reg.pliegos_entrada),
         unidadEntrada: "Pliegos",
         merma,
         entregadas: fmtNum(reg.pliegos_entregados),
@@ -372,7 +389,7 @@ function datosProceso(
     case "texturizado_papel":
       return {
         tituloEntrada: "Hojas Texturizadas",
-        entrada: entradaProceso(reg.pliegos_entrada, data.pliegos_impresion_estimados),
+        entrada: fmtNum(reg.pliegos_entrada),
         unidadEntrada: "Pliegos",
         merma,
         entregadas: fmtNum(reg.pliegos_entregados),
@@ -383,7 +400,7 @@ function datosProceso(
     case "alto_relieve_papel":
       return {
         tituloEntrada: "Hojas Alto Relieve",
-        entrada: entradaProceso(reg.pliegos_entrada, data.pliegos_impresion_estimados),
+        entrada: fmtNum(reg.pliegos_entrada),
         unidadEntrada: "Pliegos",
         merma,
         entregadas: fmtNum(reg.pliegos_entregados),
@@ -394,7 +411,7 @@ function datosProceso(
     case "suaje_produccion_papel":
       return {
         tituloEntrada: "Hojas Suaje",
-        entrada: entradaProceso(reg.pliegos_entrada, data.pliegos_impresion_estimados),
+        entrada: fmtNum(reg.pliegos_entrada),
         unidadEntrada: "Pliegos",
         merma,
         entregadas: fmtNum(reg.pliegos_entregados),
@@ -406,27 +423,31 @@ function datosProceso(
       };
 
     case "armado_papel":
+      // El bloque izquierdo de Armado ya NO usa `extra` (ver
+      // armadoBlockIzquierdo más abajo, que dibuja su propia mini-tabla
+      // de Tipo Pegado / Pegamento / Asa / Refuerzo-Base). Aquí solo se
+      // dejan tituloEntrada/merma/entregadas/unidad, que sí usa el
+      // bloque derecho (procesoBlockDerecho).
       return {
         tituloEntrada: "Pliegos",
-        entrada: entradaProceso(reg.pliegos_entrada, data.pliegos_impresion_estimados),
+        entrada: fmtNum(reg.pliegos_entrada),
         unidadEntrada: "",
         merma,
         entregadas: fmtNum(reg.bolsas_entregadas),
         unidad: "Bolsas",
-        extra: [
-          `Bolsas: ${primeraLinea(fmtNum(reg.bolsas_armadas), fmtNum(data.bolsas_armadas_calculadas))}`,
-          `Tipo Pegado: ${primeraLinea(data.tipo_pegue, data.tipo_pegado)}`,
-          `Pegamento: ${f(data.pegamento)}`,
-          `Asa: ${primeraLinea(data.asa_descripcion, [primeraLinea(data.asa_tipo, data.asa, data.asa_suaje), primeraLinea(data.color_asa_nombre, data.asa_color), primeraLinea(data.asa_medida, data.medida_asa)].filter(Boolean).join(" "))}`,
-          `Refuerzo: ${[data.refuerzo_material, data.refuerzo_medida, data.refuerzo].map(f).filter(Boolean).join(" ")}`,
-          `Base: ${primeraLinea(data.base_medida, data.base)}`,
-        ].filter((x) => !x.endsWith(": ")),
+        extra: [],
       };
 
     case "empaque_papel":
+      // TODO: aquí es donde debe ir el cálculo final = pliegos/bolsas
+      // entregadas en Hojeado/Guillotina * rendimiento de hojeado
+      // (multiplicación, no división). Pendiente de confirmar la fuente
+      // exacta (¿registro de hojeado_papel.cantidad_entregada?) antes de
+      // implementar esta fórmula. Por ahora la entrada solo lee el
+      // registro real de empaque, sin fallback calculado.
       return {
         tituloEntrada: "Revision",
-        entrada: primeraLinea(fmtNum(reg.bolsas_entrada), fmtNum(data.bolsas_armadas_calculadas)),
+        entrada: fmtNum(reg.bolsas_entrada),
         unidadEntrada: "",
         merma: fmtNum(reg.revision ?? reg.merma),
         entregadas: fmtNum(reg.bolsas_entregadas_final),
@@ -441,57 +462,40 @@ function datosProceso(
 
 // Mini-celda con etiqueta arriba (gris) y valor abajo (negro, centrado),
 // usada dentro de la fila ancha de preparación de material (Hojeado/Guillotina).
-
 function miniCelda(doc: jsPDF, label: string, value: string, x: number, y: number, w: number, h: number, sufijo = "") {
   rect(doc, x, y, w, h);
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(5.1);
+  doc.setFontSize(4.6);
   doc.setTextColor(GRAY_DARK[0], GRAY_DARK[1], GRAY_DARK[2]);
-  lineText(doc, label, x + w / 2, y + 2.8, w - 1.2, 5.1, false, "center", 1);
+  lineText(doc, label, x + w / 2, y + 2.4, w - 1.2, 4.6, false, "center", 1);
   doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(7.5);
+  doc.setFontSize(6.8);
   const texto = sufijo && f(value) ? `${value} ${sufijo}` : value;
-  lineText(doc, texto, x + w / 2, y + h - 2.5, w - 1.4, 7.5, true, "center", 1);
+  lineText(doc, texto, x + w / 2, y + h - 2.1, w - 1.4, 6.8, true, "center", 1);
 }
 
-// Ícono simple de bobina de papel, dibujado con primitivas de jsPDF (sin
-// depender de un PNG externo) para el bloque de Hojeado.
-function iconoBobina(doc: jsPDF, x: number, y: number, w: number, h: number) {
-  rect(doc, x, y, w, h);
-  setBlack(doc);
-  doc.setLineWidth(0.3);
-  const cx = x + w * 0.32;
-  const cy = y + h / 2;
-  const rOut = Math.min(w, h) * 0.32;
-  doc.circle(cx, cy, rOut);
-  doc.circle(cx, cy, rOut * 0.4);
-  doc.setLineWidth(0.22);
-  doc.rect(x + w * 0.52, y + h * 0.22, w * 0.4, h * 0.56);
-}
-
-// Ícono simple de guillotina/corte, dibujado con primitivas de jsPDF.
-function iconoGuillotina(doc: jsPDF, x: number, y: number, w: number, h: number) {
-  rect(doc, x, y, w, h);
-  setBlack(doc);
-  doc.setLineWidth(0.25);
-  const px = x + w * 0.18;
-  const py = y + h * 0.28;
-  const pw = w * 0.64;
-  const ph = h * 0.44;
-  doc.rect(px, py, pw, ph);
-  doc.setLineWidth(0.4);
-  doc.setLineDashPattern([1, 0.8], 0);
-  doc.line(x + w / 2, y + h * 0.14, x + w / 2, y + h * 0.86);
-  doc.setLineDashPattern([], 0);
-  doc.setLineWidth(0.22);
-}
-
+// ────────────────────────────────────────────────────────────────────────
 // Fila ancha de preparación de material (Hojeado o Guillotina, son
-// excluyentes entre sí). No lleva columna de Merma/Entregadas/Firma porque
-// en este paso no se reporta merma; es solo informativo de cómo se preparó
-// el material, tal como en el documento de referencia.
-
+// excluyentes entre sí). No lleva las columnas de Observaciones/Firma que
+// sí llevan los demás procesos; en cambio, integra sus propias celdas de
+// Merma/Entregadas dentro de la misma fila, tal como pidió el usuario:
+//
+//   Hojeado    → Bobina | Hojeado | Rend. Hojeado | Pliego Hojeado |
+//                Cantidad Calculada | Merma | Entregadas   (7 celdas)
+//   Guillotina → Pliego | Rend. Guillotina | Corte |
+//                Cantidad Calculada | Cortes | Merma | Entregadas (7 celdas)
+//
+// "Cantidad Calculada" = cantidad pedida / rendimiento (dato de
+// REFERENCIA, calculado con calcularCantidadHojeada ya corregido a
+// división). "Merma" y "Entregadas" (y "Cortes" en Guillotina) son datos
+// REALES capturados por el operador en el módulo de seguimiento — SIN
+// fallback calculado, quedan en blanco hasta que se registren.
+//
+// Los íconos de bobina/guillotina que existían antes (iconoBobina /
+// iconoGuillotina) se eliminaron para liberar espacio y poder mostrar las
+// 7 celdas sin que se vean apretadas.
+// ────────────────────────────────────────────────────────────────────────
 function procesoPreparacionBlock(
   doc: jsPDF,
   proceso: ProcesoOrdenPapelPdf,
@@ -503,26 +507,33 @@ function procesoPreparacionBlock(
   h: number
 ) {
   const leftW = 8;
-  const iconW = 17;
   const mainX = x + leftW;
   const mainW = w - leftW;
-  const celdasX = mainX + iconW;
-  const celdasW = mainW - iconW;
   const reg = registro ?? {};
   const anyData = data as any;
 
   headerCellVertical(doc, proceso.etiqueta, x, y, leftW, h, 5.8);
 
-  if (proceso.key === "hojeado_papel") {
-    iconoBobina(doc, mainX, y, iconW, h);
+  // Entrada calculada = cantidad pedida / rendimiento. Dato de
+  // REFERENCIA, no capturado por el operador.
+  const entradaCalculada =
+    proceso.key === "hojeado_papel"
+      ? primeraLinea(fmtNum(anyData.cantidad_hojeada_calculada), fmtCantidad(data))
+      : primeraLinea(fmtNum(anyData.pliegos_impresion_estimados), fmtCantidad(data));
 
-    // Hojeado: bobina, hojeado, rendimiento de hojeado,
-    // pliego hojeado y cantidad hojeada.
-    const pesos = [0.95, 1.05, 1.18, 1.25, 1.35];
+  // Merma y Entregadas: SIEMPRE del registro real capturado en el módulo
+  // de seguimiento (SeccionAvancesPapel / finalizarProcesoPapel). Sin
+  // fallback calculado — quedan en blanco hasta que el operador las
+  // registre, igual que en el resto de los procesos del PDF.
+  const merma = fmtNum(reg.merma);
+  const entregadas = fmtNum(reg.cantidad_entregada);
+
+  if (proceso.key === "hojeado_papel") {
+    const pesos = [0.85, 0.95, 0.85, 1.05, 1.0, 0.85, 1.0];
     const total = pesos.reduce((a, b) => a + b, 0);
-    let cx = celdasX;
+    let cx = mainX;
     const draw = (label: string, value: string, peso: number, sufijo = "") => {
-      const cw = celdasW * (peso / total);
+      const cw = mainW * (peso / total);
       miniCelda(doc, label, value, cx, y, cw, h, sufijo);
       cx += cw;
     };
@@ -531,40 +542,54 @@ function procesoPreparacionBlock(
     draw("Hojeado", primeraLinea(anyData.hojeado, data.hoj_corte, data.pliego_hojeado), pesos[1]);
     draw("Rend. Hojeado", primeraLinea(data.hoj_rendimiento, anyData.rendimiento_hojeado), pesos[2]);
     draw("Pliego Hojeado", primeraLinea(data.pliego_hojeado, data.hoj_corte, data.pliego), pesos[3]);
-    draw("Cantidad Hojeada", primeraLinea(fmtNum(reg.cantidad_hojeado), fmtNum(anyData.cantidad_hojeada_calculada), fmtCantidad(data)), pesos[4]);
+    draw("Cantidad Calculada", entradaCalculada, pesos[4]);
+    draw("Merma", merma, pesos[5]);
+    draw("Entregadas", entregadas, pesos[6]);
     return;
   }
 
-  // Guillotina: pliego, pliegos, rendimiento de guillotina,
-  // corte y cortes. Es un bloque distinto a Hojeado, porque no comparten
-  // los mismos datos operativos.
-  iconoGuillotina(doc, mainX, y, iconW, h);
+  // Guillotina: "Cortes" se mantiene como celda propia (dato de
+  // referencia = número de cortes realizados), separada de "Entregadas"
+  // (pliegos finales que salieron de este proceso, editable a mano por
+  // si hay discrepancia con lo calculado).
+  const cortes = fmtNum(reg.cortes);
 
-  const pesos = [1.05, 1.05, 1.28, 1.1, 0.95];
+  const pesos = [0.85, 0.85, 0.85, 1.0, 0.85, 0.85, 1.0];
   const total = pesos.reduce((a, b) => a + b, 0);
-  let cx = celdasX;
+  let cx = mainX;
   const draw = (label: string, value: string, peso: number) => {
-    const cw = celdasW * (peso / total);
+    const cw = mainW * (peso / total);
     miniCelda(doc, label, value, cx, y, cw, h);
     cx += cw;
   };
 
   draw("Pliego", primeraLinea(data.pliego, data.pliegos_guillotina), pesos[0]);
-  draw("Pliegos", primeraLinea(anyData.hoj_guillotina, anyData.pliegos_guillotina, fmtNum(reg.pliegos), fmtNum(anyData.pliegos_impresion_estimados), fmtCantidad(data)), pesos[1]);
-  draw("Rend. Guillotina", primeraLinea(anyData.rendimiento_guillotina, data.rendimiento), pesos[2]);
-  draw("Corte", primeraLinea(data.corte, anyData.corte_guillotina), pesos[3]);
-  draw("Cortes", primeraLinea(anyData.cortes, reg.cortes), pesos[4]);
+  draw("Rend. Guillotina", primeraLinea(anyData.rendimiento_guillotina, data.rendimiento), pesos[1]);
+  draw("Corte", primeraLinea(data.corte, anyData.corte_guillotina), pesos[2]);
+  draw("Cantidad Calculada", entradaCalculada, pesos[3]);
+  draw("Cortes", cortes, pesos[4]);
+  draw("Merma", merma, pesos[5]);
+  draw("Entregadas", entregadas, pesos[6]);
 }
 
-// Bloque IZQUIERDO: etiqueta vertical + máquina + datos técnicos/entrada,
-// equivalente a las cajas "Hojeado / Impresión / Laminación..." del PDF
-// de referencia.
+// Bloque IZQUIERDO: etiqueta vertical + máquina + número grande de
+// entrada + datos técnicos, equivalente a las cajas "Hojeado / Impresión /
+// Laminación..." del PDF de referencia.
+//
+// IMPORTANTE: `entradaTexto` NUNCA es un campo de entrada propio del
+// proceso — es lo que "Entregadas" registró el proceso ANTERIOR (ver
+// obtenerCantidadEntregadaProceso en el render principal). Este mismo
+// valor es el que también se dibuja como primera celda del bloque
+// derecho, para que el operario lo vea reforzado en dos lugares: el
+// número grande (vista rápida) y la celda con nombre de proceso (registro
+// formal junto a Merma/Entregadas).
 function procesoBlockIzquierdo(
   doc: jsPDF,
   proceso: ProcesoOrdenPapelPdf,
   data: OrdenProduccionPapelData,
   registro: ProcesoPapelRuntime | null,
   datos: DatosProceso,
+  entradaTexto: string,
   x: number,
   y: number,
   w: number,
@@ -587,11 +612,12 @@ function procesoBlockIzquierdo(
     : valorMaquina(proceso, registro);
   lineText(doc, maquinaTexto, mainX + 1.4, y + 6.4, mainW - 26, 7.5, true, "left", 1);
 
-  // Valor de entrada destacado, alineado a la derecha del bloque.
-  if (datos.entrada) {
+  // Valor de entrada destacado, alineado a la derecha del bloque. Mismo
+  // dato que la 1ra celda del bloque derecho (ver arriba).
+  if (entradaTexto) {
     doc.setFont("helvetica", "bold");
     doc.setFontSize(12);
-    doc.text(datos.entrada, mainX + mainW - 2, y + 6.3, { align: "right" });
+    doc.text(entradaTexto, mainX + mainW - 2, y + 6.3, { align: "right" });
     if (datos.unidadEntrada) {
       doc.setFont("helvetica", "normal");
       doc.setFontSize(5.5);
@@ -612,14 +638,133 @@ function procesoBlockIzquierdo(
   }
 }
 
-// Bloque DERECHO: Merma / Entregadas arriba, y abajo Observaciones + una
-// casilla independiente de Firma y Fecha por proceso (como en el PDF de
-// referencia, donde cada proceso lleva su propio espacio de firma).
+// Segmento label:valor horizontal (label chico gris a la izquierda, valor
+// bold negro a la derecha, todo en una sola línea). Usado dentro de la
+// tabla de specs de Armado (Tipo Pegado / Pegamento / Asa / Refuerzo).
+function segmentoEtiquetaValor(doc: jsPDF, x: number, y: number, w: number, h: number, label: string, value: string) {
+  const midY = y + h / 2 + 1.4;
+  let offsetX = 0;
+  if (label) {
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(5.2);
+    doc.setTextColor(GRAY_DARK[0], GRAY_DARK[1], GRAY_DARK[2]);
+    doc.text(label, x, midY);
+    doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);
+    offsetX = doc.getStringUnitWidth(label) * 5.2 * 0.352778 + 2.2;
+  }
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(7);
+  lineText(doc, value, x + offsetX, midY, Math.max(w - offsetX, 4), 7, true, "left", 1);
+}
+
+// ────────────────────────────────────────────────────────────────────────
+// Bloque IZQUIERDO específico de Armado (reemplaza a procesoBlockIzquierdo
+// solo para esta clave). Diseño pedido explícitamente por el usuario:
+//
+//   Armado | Maquina/Manual | Pliegos 6,055  | Tipo Pegado   Fuelle
+//          |                | Bolsas 3,027   | Pegamento     393 + Hot melt
+//          |                |                | Asa  Cordel Negro    45cm
+//          |                |                | Refuerzo 4x10  Base  39.5x14.5
+//
+// "Pliegos" = entradaTexto (lo entregado por el proceso anterior, Suaje).
+// "Bolsas" = reg.bolsas_armadas (dato propio de este proceso, capturado
+// por el operador). Las specs de la tabla (Tipo Pegado, Pegamento, Asa,
+// Refuerzo/Base) vienen de la ficha del producto, igual que antes, solo
+// que ahora en tabla en vez de una sola línea con "|".
+// ────────────────────────────────────────────────────────────────────────
+function armadoBlockIzquierdo(
+  doc: jsPDF,
+  proceso: ProcesoOrdenPapelPdf,
+  data: OrdenProduccionPapelData,
+  registro: ProcesoPapelRuntime | null,
+  entradaTexto: string,
+  x: number,
+  y: number,
+  w: number,
+  h: number
+) {
+  const leftW = 9;
+  const mainX = x + leftW;
+  const mainW = w - leftW;
+
+  headerCellVertical(doc, proceso.etiqueta, x, y, leftW, h, 6);
+
+  const maquinaW = mainW * 0.30;
+  const cantW = mainW * 0.18;
+  const tablaW = mainW - maquinaW - cantW;
+  const maquinaX = mainX;
+  const cantX = maquinaX + maquinaW;
+  const tablaX = cantX + cantW;
+
+  const maquinaTexto = primeraLinea((data as any).maquina_armado_pdf, registro?.maquina, "Manual");
+  labelCell(doc, "Maquina", maquinaTexto, maquinaX, y, maquinaW, h, 10, true);
+
+  const reg = (registro ?? {}) as Record<string, unknown>;
+  labelCell(doc, "Pliegos", entradaTexto, cantX, y, cantW, h / 2, 9, true);
+  labelCell(doc, "Bolsas", fmtNum(reg.bolsas_armadas), cantX, y + h / 2, cantW, h / 2, 9, true);
+
+  rect(doc, tablaX, y, tablaW, h);
+  const rowH4 = h / 4;
+
+  const tipoPegado = primeraLinea(data.tipo_pegue, data.tipo_pegado);
+  const pegamento = f(data.pegamento);
+  const asaValor = primeraLinea(
+    data.asa_descripcion,
+    [primeraLinea(data.asa_tipo, data.asa, data.asa_suaje), primeraLinea(data.color_asa_nombre, data.asa_color)]
+      .filter(Boolean)
+      .join(" ")
+  );
+  const asaMedida = primeraLinea(data.asa_medida, data.medida_asa);
+  // Mismo fix que Refuerzo del bloque genérico: prioriza el campo YA
+  // normalizado antes de reconstruirlo, para no duplicar el texto.
+  const refuerzoValor = primeraLinea(
+    data.refuerzo,
+    [data.refuerzo_material, data.refuerzo_medida].map(f).filter(Boolean).join(" ")
+  );
+  const baseValor = primeraLinea(data.base_medida, data.base);
+
+  const filas: Array<{ segmentos: Array<{ label: string; value: string; peso: number }> }> = [
+    { segmentos: [{ label: "Tipo Pegado", value: tipoPegado, peso: 1 }] },
+    { segmentos: [{ label: "Pegamento", value: pegamento, peso: 1 }] },
+    { segmentos: [
+      { label: "Asa", value: asaValor, peso: 0.72 },
+      { label: "", value: asaMedida, peso: 0.28 },
+    ] },
+    { segmentos: [
+      { label: "Refuerzo", value: refuerzoValor, peso: 0.45 },
+      { label: "Base", value: baseValor, peso: 0.55 },
+    ] },
+  ];
+
+  filas.forEach((fila, i) => {
+    const ry = y + rowH4 * i;
+    if (i > 0) doc.line(tablaX, ry, tablaX + tablaW, ry);
+
+    let sx = tablaX;
+    fila.segmentos.forEach((seg, si) => {
+      const segW = tablaW * seg.peso;
+      if (si > 0) doc.line(sx, ry, sx, ry + rowH4);
+      segmentoEtiquetaValor(doc, sx + 1.4, ry, segW - 1.8, rowH4, seg.label, seg.value);
+      sx += segW;
+    });
+  });
+}
+
+
+// Bloque DERECHO: ahora 3 columnas arriba en vez de 2 —
+//   [Entrada: nombre del proceso, piezas que salieron del anterior] |
+//   [Merma: lo que se perdió en este proceso] |
+//   [Entregadas: lo que este proceso realmente entregó]
+// — y abajo Observaciones + una casilla independiente de Firma y Fecha
+// por proceso (como en el PDF de referencia). "Entregadas" de este bloque
+// es, a su vez, la que alimentará la celda de "Entrada" del SIGUIENTE
+// proceso (tanto aquí como en su bloque izquierdo).
 function procesoBlockDerecho(
   doc: jsPDF,
   proceso: ProcesoOrdenPapelPdf,
   registro: ProcesoPapelRuntime | null,
   datos: DatosProceso,
+  entradaTexto: string,
   x: number,
   y: number,
   w: number,
@@ -627,13 +772,18 @@ function procesoBlockDerecho(
 ) {
   const topH = h * 0.42;
   const bottomH = h - topH;
-  const colW = w / 2;
+  const colW = w / 3;
 
-  labelCell(doc, "Merma", datos.merma, x, y, colW, topH, 10, true);
-  labelCell(doc, "Entregadas", datos.entregadas, x + colW, y, colW, topH, 10, true);
+  labelCell(doc, datos.tituloEntrada || "Entrada", entradaTexto, x, y, colW, topH, 9, true);
+  labelCell(doc, "Merma", datos.merma, x + colW, y, colW, topH, 9, true);
+  labelCell(doc, "Entregadas", datos.entregadas, x + colW * 2, y, colW, topH, 9, true);
 
   const obsY = y + topH;
-  const firmaW = w * 0.34;
+  // "Firma y Fecha" usa exactamente el mismo ancho que la columna
+  // "Entregadas" (colW), y "Observaciones" el mismo ancho que
+  // "Entrada + Merma" juntas (colW * 2), para que ambas filas queden
+  // alineadas verticalmente tal como se pidió.
+  const firmaW = colW;
   const obsW = w - firmaW;
 
   // Observaciones.
@@ -857,16 +1007,18 @@ export async function generarPdfOrdenProduccionPapel(
   attrs.forEach(([label, value], i) => labelCell(doc, label, value, M + aw * i, y, aw, attrsH, 8, true));
   y += attrsH + 1;
 
-  // Bloques de proceso. Hojeado/Guillotina son excluyentes entre sí y no
-  // llevan Merma/Entregadas (es un paso solo informativo de cómo se preparó
-  // el material), por lo que se dibujan en una fila ancha aparte con el
-  // formato de mini-celdas del documento de referencia. El resto de los
+  // Bloques de proceso. Hojeado/Guillotina son excluyentes entre sí y
+  // llevan su propio esquema de 7 mini-celdas (specs de ficha + Cantidad
+  // Calculada + Merma/Entregadas, y Cortes en Guillotina), dibujado con
+  // procesoPreparacionBlock en una fila ancha aparte. El resto de los
   // procesos sigue el esquema de 2 columnas paralelas (specs / merma-
   // entregadas-observaciones-firma).
   const preparacion = procesos.find((p) => p.key === "hojeado_papel" || p.key === "guillotina_papel");
   const procesosDosColumnas = procesos.filter((p) => p.key !== "hojeado_papel" && p.key !== "guillotina_papel");
 
-  const prepRowH = 14;
+  // 15mm (antes 17mm): se compacta la altura de las 7 mini-celdas de
+  // Hojeado/Guillotina, como pidió el usuario ("acortar el tamaño").
+  const prepRowH = 15;
   if (preparacion) {
     const registro = obtenerRegistroProcesoPapel(data, preparacion.key);
     procesoPreparacionBlock(doc, preparacion, data, registro, M, y, CW, prepRowH);
@@ -878,18 +1030,59 @@ export async function generarPdfOrdenProduccionPapel(
   const rightColW = CW - leftColW - gap;
   const rightX = M + leftColW + gap;
   const rowH = 15.5;
+  // Armado necesita más alto porque su bloque izquierdo ahora es una
+  // mini-tabla de 4 filas (Tipo Pegado / Pegamento / Asa / Refuerzo-Base)
+  // en vez de una sola línea de texto con "|".
+  const rowHArmado = 21;
   const rowGap = 1;
+
+  // Rendimiento de hojeado/guillotina, usado únicamente para la fórmula
+  // especial de Empaque (ver más abajo).
+  const rendimientoPrep = n((data as any).rendimiento) ?? n((data as any).hoj_rendimiento);
+
+  let filaY = y;
 
   procesosDosColumnas.forEach((proceso, idx) => {
     const registro = obtenerRegistroProcesoPapel(data, proceso.key);
     const datos = datosProceso(proceso.key, data, registro);
-    const by = y + idx * (rowH + rowGap);
+    const alturaFila = proceso.key === "armado_papel" ? rowHArmado : rowH;
+    const by = filaY;
 
-    procesoBlockIzquierdo(doc, proceso, data, registro, datos, M, by, leftColW, rowH);
-    procesoBlockDerecho(doc, proceso, registro, datos, rightX, by, rightColW, rowH);
+    // ── Entrada encadenada ──────────────────────────────────────────
+    // La entrada de ESTE proceso es SIEMPRE lo "Entregado" del proceso
+    // ANTERIOR (nunca un campo de entrada propio). El anterior puede ser
+    // el bloque de preparación (Hojeado/Guillotina) si este es el primer
+    // proceso de la cadena de 2 columnas, o el proceso previo del array.
+    const anterior = idx === 0 ? preparacion ?? null : procesosDosColumnas[idx - 1];
+    let entradaNum: number | null = null;
+    if (anterior) {
+      const registroAnterior = obtenerRegistroProcesoPapel(data, anterior.key);
+      entradaNum = obtenerCantidadEntregadaProceso(anterior.key, registroAnterior);
+    }
+
+    // ── Caso especial: Empaque ──────────────────────────────────────
+    // Durante todos los procesos intermedios se trabaja con el resultado
+    // de la DIVISIÓN del rendimiento (pliegos). Empaque es el único punto
+    // donde ya se necesita el resultado REAL: se multiplica lo entregado
+    // por Armado por el rendimiento, en vez de solo heredar el número tal
+    // cual como hacen los demás procesos.
+    if (proceso.key === "empaque_papel" && entradaNum !== null && rendimientoPrep !== null && rendimientoPrep > 0) {
+      entradaNum = redondear(entradaNum * rendimientoPrep);
+    }
+
+    const entradaTexto = entradaNum !== null ? fmtNum(entradaNum) : "";
+
+    if (proceso.key === "armado_papel") {
+      armadoBlockIzquierdo(doc, proceso, data, registro, entradaTexto, M, by, leftColW, alturaFila);
+    } else {
+      procesoBlockIzquierdo(doc, proceso, data, registro, datos, entradaTexto, M, by, leftColW, alturaFila);
+    }
+    procesoBlockDerecho(doc, proceso, registro, datos, entradaTexto, rightX, by, rightColW, alturaFila);
+
+    filaY += alturaFila + rowGap;
   });
 
-  y += procesosDosColumnas.length * (rowH + rowGap);
+  y = filaY;
 
   // Almacén / Empaque final, con el mismo esquema visual que los demás
   // procesos (ver almacenBlockIzquierdo/Derecho).

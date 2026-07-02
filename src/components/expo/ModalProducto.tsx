@@ -4,6 +4,7 @@ import type { Producto } from "../../types/expo/expo.types";
 import type { Catalogs } from "../../types/papel/papel.types";
 import type { FoilOpcion, TexturaOpcion } from "../../types/papel/cotizacion-papel.types";
 import api from "../../services/api";
+import { subirArchivo } from "../../services/archivos.service";
 
 // ─── Tipos catálogos plástico ─────────────────────────────────────────────────
 interface TipoProducto { id: number; nombre: string; }
@@ -230,6 +231,12 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
 
   const [formCat, setFormCat] = useState<"papel"|"plastico"|"carton">(editando?.categoria ?? catInicial);
 
+  // ─── Foto: archivo pendiente de subir a S3 ────────────────────────────────
+  // form.imagen guarda solo el PREVIEW (base64) mientras hay archivo pendiente;
+  // al guardar, se sube a S3 y se sustituye por la URL permanente /archivos/:id/ver
+  const [archivoFoto,  setArchivoFoto]  = useState<File | null>(null);
+  const [subiendoFoto, setSubiendoFoto] = useState(false);
+
   // ─── Catálogos plástico desde DB ─────────────────────────────────────────
   const [tiposProducto, setTiposProducto] = useState<TipoProducto[]>([]);
   const [materiales,    setMateriales]    = useState<Material[]>([]);
@@ -343,13 +350,39 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
     return `${v.join("+")}x${h.join("+")}`;
   };
 
-  const guardar = () => {
+  // ─── Subir foto pendiente a S3 y regresar la URL final ────────────────────
+  // Regresa la URL permanente /archivos/:id/ver (redirige a presigned fresca),
+  // o la imagen actual del form si no hay archivo nuevo (URL previa o base64 legacy).
+const resolverImagen = async (): Promise<string | null> => {
+    if (!archivoFoto) return form.imagen || "";
+    setSubiendoFoto(true);
+    try {
+      const subcarpetaCatalogo = form.categoria === "plastico" ? "plastico"
+                                : form.categoria === "carton"   ? "carton"
+                                : "papel";
+      const archivo = await subirArchivo(archivoFoto, "catalogoproductos", subcarpetaCatalogo);
+      const base = (api.defaults.baseURL || "").replace(/\/$/, "");
+      return `${base}/archivos/${archivo.id_archivo}/ver`;
+    } catch (e) {
+      console.error("❌ No se pudo subir la imagen a S3:", e);
+      alert("No se pudo subir la imagen. Intenta de nuevo.");
+      return null;
+    } finally {
+      setSubiendoFoto(false);
+    }
+  };
+
+  const guardar = async () => {
     if (!form.nombre?.trim()) return;
+
+    const imagenFinal = await resolverImagen();
+    if (imagenFinal === null) return; // falló la subida — no guardar el producto
+
     if (esPapelCarton) {
       let medida = form.medida || "";
       if (form.ancho && form.altura)
         medida = `${form.ancho}x${form.fuelle||"0"}x${form.altura} cm`;
-      onGuardar({ ...(form as Producto), id: editando?.id??0, fuente:"expo", medida });
+      onGuardar({ ...(form as Producto), id: editando?.id??0, fuente:"expo", medida, imagen: imagenFinal });
     } else {
       const medida = construirMedida();
       onGuardar({
@@ -365,6 +398,7 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
         ancho:        medidas.ancho,
         fuelFondo:    medidas.fuelleFondo,
         fuelLateral:  medidas.fuelleLateral1,
+        imagen:       imagenFinal,
       });
     }
   };
@@ -373,6 +407,8 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
   const opMats  = materiales.map(m => ({ id:m.id, label:m.nombre }));
   const opCals  = calibresDB.map(c => ({ id:c.id, label:String(c.valor)+(c.gramos?` (${c.gramos}g)`:"") }));
   const configMedidas = CONFIG_MEDIDAS[tipoPlastNom] || null;
+
+  const ocupado = saving || subiendoFoto;
 
  return (
     <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,.75)",zIndex:100,display:"flex",alignItems:"center",justifyContent:"center",padding:16 }}>
@@ -597,15 +633,25 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
             onMouseEnter={e=>(e.currentTarget.style.borderColor="#C9922A")}
             onMouseLeave={e=>(e.currentTarget.style.borderColor="#444")}>
             {form.imagen ? <img src={form.imagen} alt="preview" style={{ width:80,height:80,objectFit:"cover",borderRadius:6,border:"1px solid #333" }} /> : <span style={{ fontSize:28 }}>📷</span>}
-            <span style={{ color:"#888",fontSize:11 }}>{form.imagen?"Cambiar imagen":"Subir imagen (JPG, PNG, WEBP)"}</span>
+            <span style={{ color:"#888",fontSize:11 }}>
+              {form.imagen ? "Cambiar imagen" : "Subir imagen (JPG, PNG, WEBP)"}
+            </span>
+            {archivoFoto && (
+              <span style={{ color:"#C9922A",fontSize:10 }}>
+                📎 {archivoFoto.name} — se sube a S3 al guardar
+              </span>
+            )}
             <input type="file" accept="image/*" style={{ display:"none" }} onChange={e=>{
               const file=e.target.files?.[0]; if(!file) return;
+              // El archivo se sube a S3 hasta que se guarda el producto;
+              // mientras, el base64 solo sirve como preview local.
+              setArchivoFoto(file);
               const reader=new FileReader();
               reader.onload=ev=>setF("imagen",ev.target?.result as string);
               reader.readAsDataURL(file);
             }} />
           </label>
-          {form.imagen && <button onClick={()=>setF("imagen","")} style={{ marginTop:6,background:"transparent",border:"none",color:"#666",fontSize:11,cursor:"pointer",textDecoration:"underline" }}>✕ Quitar imagen</button>}
+          {form.imagen && <button onClick={()=>{ setF("imagen",""); setArchivoFoto(null); }} style={{ marginTop:6,background:"transparent",border:"none",color:"#666",fontSize:11,cursor:"pointer",textDecoration:"underline" }}>✕ Quitar imagen</button>}
         </div>
 
        {/* Acciones */}
@@ -613,9 +659,9 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
           <button onClick={onClose} style={{ background:"transparent",border:"1px solid #444",color:"#888",fontSize:12,fontWeight:600,padding:"9px 18px",borderRadius:7,cursor:"pointer" }}>
             Cancelar
           </button>
-          <button onClick={guardar} disabled={!form.nombre?.trim()||saving}
-            style={{ background:form.nombre?.trim()&&!saving?"#C9922A":"#4A3A1A",border:"none",color:form.nombre?.trim()&&!saving?"#1A1A1A":"#666",fontSize:12,fontWeight:700,padding:"9px 24px",borderRadius:7,cursor:form.nombre?.trim()&&!saving?"pointer":"not-allowed" }}>
-            {saving?"Guardando...":editando?"Guardar cambios":"Agregar al catálogo"}
+          <button onClick={guardar} disabled={!form.nombre?.trim()||ocupado}
+            style={{ background:form.nombre?.trim()&&!ocupado?"#C9922A":"#4A3A1A",border:"none",color:form.nombre?.trim()&&!ocupado?"#1A1A1A":"#666",fontSize:12,fontWeight:700,padding:"9px 24px",borderRadius:7,cursor:form.nombre?.trim()&&!ocupado?"pointer":"not-allowed" }}>
+            {subiendoFoto?"Subiendo imagen...":saving?"Guardando...":editando?"Guardar cambios":"Agregar al catálogo"}
           </button>
         </div>
       </div>

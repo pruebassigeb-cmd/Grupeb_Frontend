@@ -565,7 +565,7 @@ export function dibujarCajasPie(
     "* En Bolsas impresas, existen cargos adicionales (negativos, diseño, etc.) que deberán cubrirse a contra entrega.",
     "* Flete por cuenta del Cliente.",
     "* Su pedido puede tener una variación de un 20% más o un 20% menos en la cantidad final.",
-    "* Tiempo de entrega: 30-35 días hábiles después de autorizado el diseño y anticipo.",
+    "* Tiempo de entrega: 25 días hábiles después de autorizado el diseño y anticipo.",
   ];
   doc.setFont("helvetica", "normal"); doc.setFontSize(6.5); doc.setTextColor(...BLACK);
   const maxLy = F2_Y + F2_H - 2;

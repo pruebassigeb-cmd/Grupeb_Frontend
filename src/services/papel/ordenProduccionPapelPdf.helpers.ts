@@ -199,6 +199,16 @@ export function ultimaMedidaCm(...values: unknown[]): number | null {
   return null;
 }
 
+// ────────────────────────────────────────────────────────────────────────
+// CORREGIDO: la fórmula estaba multiplicando cantidad * rendimiento, lo
+// cual da un número absurdamente grande. La fórmula correcta es una
+// DIVISIÓN: pliegos necesarios = cantidad pedida / rendimiento de
+// hojeado o guillotina. Esta función solo calcula el dato de REFERENCIA
+// (cuántos pliegos hacen falta hojear/cortar para cubrir el pedido); la
+// multiplicación (pliegos entregados * rendimiento) se hace en otro
+// punto del flujo, en el paso de Empaque, sobre los pliegos REALMENTE
+// entregados por Hojeado/Guillotina — no aquí.
+// ────────────────────────────────────────────────────────────────────────
 export function calcularCantidadHojeada(
   cantidad: unknown,
   rendimiento: unknown
@@ -208,7 +218,7 @@ export function calcularCantidadHojeada(
   if (cantidadNum === null || rendimientoNum === null || rendimientoNum <= 0) {
     return null;
   }
-  return redondear(cantidadNum * rendimientoNum);
+  return redondear(cantidadNum / rendimientoNum);
 }
 
 export function calcularBolsasArmadas(
@@ -226,6 +236,36 @@ export function calcularBolsasArmadas(
 export function calcularDesarrolloMm(...medidas: unknown[]): number | null {
   const largoCm = ultimaMedidaCm(...medidas);
   return largoCm === null ? null : redondear(largoCm * 10);
+}
+
+// ────────────────────────────────────────────────────────────────────────
+// NUEVO: el desarrollo (y por lo tanto los metros de laminación) no
+// siempre debe calcularse con la medida de "hojeado" — depende de cómo
+// entra el pliego a la laminadora, que se define desde el ALTA del
+// producto (campo `desarrollo_base`, por ahora leído de forma laxa con
+// `as any` porque el tipo OrdenProduccionPapelData todavía no lo declara
+// — pendiente agregarlo ahí cuando se construya el selector en el
+// formulario de alta).
+//
+//   desarrollo_base === "bobina"   → usa hoj_bobina / bobina_cm
+//   desarrollo_base === "hojeado"  → usa pliego_hojeado / hoj_corte /
+//                                     pliego / medida (comportamiento
+//                                     ORIGINAL, y también el que se usa
+//                                     por default si el campo no viene)
+//
+// Mientras el alta de producto no mande `desarrollo_base`, esta función
+// se comporta EXACTAMENTE igual que antes (usa hojeado), para no romper
+// órdenes ya generadas.
+// ────────────────────────────────────────────────────────────────────────
+export function calcularDesarrolloMmPorBase(data: OrdenProduccionPapelData): number | null {
+  const base = f((data as any).desarrollo_base).toLowerCase();
+
+  if (base === "bobina") {
+    return calcularDesarrolloMm(data.hoj_bobina, data.bobina_cm);
+  }
+
+  // "hojeado" o cualquier otro valor (incluye vacío/no definido): default.
+  return calcularDesarrolloMm(data.pliego_hojeado, data.hoj_corte, data.pliego, data.medida);
 }
 
 export function calcularCtesMod(...medidas: unknown[]): string | null {
@@ -407,22 +447,34 @@ export function refuerzoTexto(data: OrdenProduccionPapelData): string {
 }
 
 export function getValoresCalculadosPapel(data: OrdenProduccionPapelData): Partial<OrdenProduccionPapelData> {
-  const pliegos =
-    n(data.pliegos_impresion_estimados) ??
-    calcularCantidadHojeada(data.cantidad, data.rendimiento);
+  // ────────────────────────────────────────────────────────────────────
+  // CORREGIDO: antes se priorizaba n(data.pliegos_impresion_estimados)
+  // (el valor que manda el backend) sobre el cálculo del cliente. Ese
+  // campo del backend fue generado con la fórmula VIEJA (multiplicando
+  // cantidad * rendimiento), así que aunque calcularCantidadHojeada ya
+  // estaba corregida a división, el "??" nunca llegaba a usarla porque
+  // el campo del backend ya traía un número (incorrecto). Ahora se
+  // invierte la prioridad: el cálculo del cliente (correcto, división)
+  // gana siempre que haya cantidad y rendimiento disponibles; el valor
+  // del backend solo se usa como último respaldo si el cliente no puede
+  // calcularlo (p. ej. falta el rendimiento).
+  // ────────────────────────────────────────────────────────────────────
+  const pliegosCalculado = calcularCantidadHojeada(data.cantidad, data.rendimiento);
+  const pliegos = pliegosCalculado ?? n(data.pliegos_impresion_estimados);
 
   const desarrollo =
     n(data.desarrollo_laminacion_mm) ??
     n(data.desarrollo_mm) ??
-    calcularDesarrolloMm(data.pliego_hojeado, data.hoj_corte, data.pliego, data.medida);
+    calcularDesarrolloMmPorBase(data);
 
   const metros =
     n(data.metros_laminacion_estimados) ??
     calcularMetrosLaminacion(pliegos, desarrollo);
 
   return {
-    cantidad_hojeada_calculada:
-      n(data.cantidad_hojeada_calculada) ?? pliegos,
+    // Mismo criterio: el recalculado (pliegos, ya correcto) gana sobre
+    // cualquier cantidad_hojeada_calculada que haya llegado del backend.
+    cantidad_hojeada_calculada: pliegosCalculado ?? n(data.cantidad_hojeada_calculada) ?? pliegos,
     pliegos_impresion_estimados: pliegos,
     desarrollo_laminacion_mm: desarrollo,
     desarrollo_mm: n(data.desarrollo_mm) ?? desarrollo,

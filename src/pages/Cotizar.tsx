@@ -571,6 +571,9 @@ export default function Cotizaciones() {
                       {cot.no_pedido && (
                         <span className="ml-2 text-xs text-blue-600 font-normal">→ {cot.no_pedido}</span>
                       )}
+                      {cot.origen_expo && (
+                        <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-yellow-50 text-yellow-700 border border-yellow-200">⭐ Expo</span>
+                      )}
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-500 whitespace-nowrap">{formatFecha(cot.fecha)}</td>
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -634,6 +637,9 @@ export default function Cotizaciones() {
                                     {papel && (
                                       <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-700 border border-amber-200">📄 Papel</span>
                                     )}
+                                    {(cot.origen_expo || p.tipo_material === "expo") && (
+                                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-yellow-50 text-yellow-700 border border-yellow-200">⭐ Expo</span>
+                                    )}
                                     {!papel && productoTieneKilos(p) && (
                                       <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-emerald-100 text-emerald-700">Incluye kg</span>
                                     )}
@@ -663,6 +669,11 @@ export default function Cotizaciones() {
                                   ) : (
                                     // ── Detalle de PLÁSTICO (igual que antes) ──
                                     <>
+                                    {p.tipo_material === "expo" && (p.tipo_producto || p.material || p.calibre) && (
+                                        <p className="text-xs text-gray-500 mt-0.5">
+                                          {[p.tipo_producto, p.material, p.calibre].filter(Boolean).join(" · ")}
+                                        </p>
+                                      )}
                                       {p.medidasFormateadas && <p className="text-xs text-gray-400 mt-0.5">Medidas: {p.medidasFormateadas}</p>}
                                       {p.pantones && <p className="text-xs text-purple-600 mt-0.5">🎨 {Array.isArray(p.pantones) ? p.pantones.join(", ") : p.pantones}</p>}
                                       {p.asa_suaje && (

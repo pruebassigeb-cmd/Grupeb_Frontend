@@ -1,23 +1,28 @@
-export interface Foil {
-  idfoil: number;
-  colorfoil: string;
-  codigofoil: string | null;
-  clavefoil: string | null;
+export interface FoilProveedorInfo {
+  idfoil_proveedor: number;
+  idproveedor: number;
+  proveedor_nombre: string;
+  codigo: string | null;
   precio: number | null;
   notas: string | null;
   minimo_compra: number | null;
   unidad: string | null;
-  activo: boolean;
-  created_at: string;
-  idproveedor_producto: number;
-  proveedor_nombre?: string;
-  idproveedor?: number;
-  presentaciones: FoilPresentacion[];
 }
 
 export interface FoilPresentacion {
   idfoil_presentacion?: number;
   presentacion: string;
+}
+
+export interface Foil {
+  idfoil: number;
+  colorfoil: string;
+  codigofoil: string | null;
+  clavefoil: string | null;
+  activo: boolean;
+  created_at: string;
+  presentaciones: FoilPresentacion[];
+  proveedores: FoilProveedorInfo[];
 }
 
 export interface FoilForm {
@@ -27,7 +32,7 @@ export interface FoilForm {
   notas: string;
   minimo_compra: string;
   unidad: string;
-  proveedor_idproveedor: number | null;
+  proveedores_ids: number[];
   presentaciones: string[];
 }
 
@@ -38,6 +43,6 @@ export const newFoilForm = (): FoilForm => ({
   notas: "",
   minimo_compra: "",
   unidad: "",
-  proveedor_idproveedor: null,
+  proveedores_ids: [],
   presentaciones: [],
 });

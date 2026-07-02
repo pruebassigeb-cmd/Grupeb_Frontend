@@ -378,6 +378,7 @@ export const mapearPlasticoSistemaAProducto = (p: {
 export const mapearPapelSistemaAProducto = (p: {
   id: number; nombre: string; medida: string | null;
   descripcion_papel: string | null; primer_material?: string | null;
+  primer_calibre?: string | null;
   ancho?: number | null; fuelle?: number | null; altura?: number | null;
 }): Producto => ({
   id:           p.id,
@@ -388,7 +389,7 @@ export const mapearPapelSistemaAProducto = (p: {
   categoria:    "papel",
   medida:       p.medida || "",
   material:     p.primer_material || "",
-  calibre:      "",
+  calibre:      p.primer_calibre || "",
   tintas:       "1x0",
   laminacion:   false,
   tipoLaminado: "",

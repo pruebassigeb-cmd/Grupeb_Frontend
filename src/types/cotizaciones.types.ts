@@ -151,6 +151,7 @@ export interface Cotizacion extends DatosClientePdf {
   productos: ProductoCotizacion[];
   total: number;
   sin_iva?: boolean;
+  origen_expo?: boolean;
 }
 
 export interface Pedido extends DatosClientePdf {

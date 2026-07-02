@@ -133,6 +133,7 @@ function DetalleProducto({ prod, seleccion, onChange, esPedido }: DetalleProduct
       <div style={{ display: "grid", gridTemplateColumns: esPedido ? "1fr 1fr" : "1fr 1fr 1fr", gap: 10, alignItems: "start" }}>
         <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            {prod.tipo_producto && <Dato label="Tipo" value={prod.tipo_producto} />}
             {prod.medida && <Dato label="Medida" value={prod.medida} />}
             {prod.material && <Dato label="Material" value={prod.material} />}
             {prod.grupo_descripcion && <Dato label="Material" value={prod.grupo_descripcion} />}

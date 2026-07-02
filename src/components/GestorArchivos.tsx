@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
-import type { Archivo, CarpetaFrontend, Estadisticas, SubcarpetaPDF, SubcarpetaSuaje } from "../services/archivos.service";
-import { subirArchivo, listarArchivos, eliminarArchivo, CARPETAS_LABELS, obtenerEstadisticas, SUBCARPETAS_PDF, SUBCARPETAS_SUAJE } from "../services/archivos.service";
+import type { Archivo, CarpetaFrontend, Estadisticas, SubcarpetaPDF, SubcarpetaSuaje, SubcarpetaCatalogo } from "../services/archivos.service";
+import { subirArchivo, listarArchivos, eliminarArchivo, CARPETAS_LABELS, obtenerEstadisticas, SUBCARPETAS_PDF, SUBCARPETAS_SUAJE, SUBCARPETAS_CATALOGO } from "../services/archivos.service";
 import { verificarCodigo } from "../services/backup.service";
 import Dashboard from "../layouts/Sidebar";
 import { showAlert } from './CustomAlert';
@@ -17,13 +17,13 @@ const CARPETAS_OPTIONS: { value: CarpetaFrontend; label: string }[] = [
   { value: "fotos-envios", label: "Fotos de Envíos" },
   { value: "backups", label: "Backups BD" },
   { value: "suaje", label: "Suajes" }, 
+  { value: "catalogoproductos", label: "Catálogo de Productos" },
 ];
 
 const CARPETAS_PROTEGIDAS: CarpetaFrontend[] = ["backups"];
 
 // Carpetas que tienen subcarpetas y deben mostrar la vista intermedia
-const CARPETAS_CON_SUBCARPETAS: CarpetaFrontend[] = ["pdfs", "suaje"]; // ← suaje agregado
-
+const CARPETAS_CON_SUBCARPETAS: CarpetaFrontend[] = ["pdfs", "suaje", "catalogoproductos"];
 const ORDEN_OPTIONS: { value: OrdenTipo; label: string }[] = [
   { value: "fecha_desc", label: "Fecha: más reciente" },
   { value: "fecha_asc", label: "Fecha: más antiguo" },
@@ -198,6 +198,7 @@ const agruparArchivos = (archivos: Archivo[], agrupacion: AgrupaTipo): { clave: 
 const getSubcarpetasDeCarpeta = (carpeta: CarpetaFrontend) => {
   if (carpeta === "pdfs") return SUBCARPETAS_PDF;
   if (carpeta === "suaje") return SUBCARPETAS_SUAJE;
+  if (carpeta === "catalogoproductos") return SUBCARPETAS_CATALOGO;
   return [];
 };
 
@@ -231,9 +232,9 @@ export default function GestorArchivos() {
   const [eliminando, setEliminando] = useState(false);
   const [vista, setVista] = useState<Vista>("carpetas");
   const [carpetaActiva, setCarpetaActiva] = useState<CarpetaFrontend | null>(null);
-  const [subcarpetaActiva, setSubcarpetaActiva] = useState<SubcarpetaPDF | SubcarpetaSuaje | null>(null);
+const [subcarpetaActiva, setSubcarpetaActiva] = useState<SubcarpetaPDF | SubcarpetaSuaje | SubcarpetaCatalogo | null>(null);
   const [carpetaSeleccion, setCarpetaSeleccion] = useState<CarpetaFrontend>("disenos");
-  const [subcarpetaSeleccion, setSubcarpetaSeleccion] = useState<SubcarpetaPDF | SubcarpetaSuaje | null>(null);
+  const [subcarpetaSeleccion, setSubcarpetaSeleccion] = useState<SubcarpetaPDF | SubcarpetaSuaje | SubcarpetaCatalogo | null>(null);
   const [modalSubir, setModalSubir] = useState(false);
   const [modalEliminar, setModalEliminar] = useState(false);
   const [confirmTexto, setConfirmTexto] = useState("");
@@ -464,8 +465,10 @@ export default function GestorArchivos() {
   const agrupaActualLabel = AGRUPA_OPTIONS.find(o => o.value === agrupacion)?.label ?? "Agrupar";
 
   // Label de subcarpeta activa (busca en PDF y Suaje)
-  const subcarpetaLabel = carpetaActiva === "suaje"
+const subcarpetaLabel = carpetaActiva === "suaje"
     ? SUBCARPETAS_SUAJE.find(s => s.value === subcarpetaActiva)?.label ?? ""
+    : carpetaActiva === "catalogoproductos"
+    ? SUBCARPETAS_CATALOGO.find(s => s.value === subcarpetaActiva)?.label ?? ""
     : SUBCARPETAS_PDF.find(s => s.value === subcarpetaActiva)?.label ?? "";
 
   // Subcarpetas para el modal de subida según carpeta seleccionada
@@ -504,12 +507,13 @@ export default function GestorArchivos() {
   };
 
   const renderIconoCarpeta = (carpeta: CarpetaFrontend) => {
-    const colores: Record<CarpetaFrontend, string> = {
+const colores: Record<CarpetaFrontend, string> = {
       "disenos": "text-blue-400",
       "pdfs": "text-red-400",
       "fotos-envios": "text-green-400",
       "backups": "text-gray-400",
-      "suaje": "text-purple-400", // ← color para suaje
+      "suaje": "text-purple-400",
+      "catalogoproductos": "text-amber-400",
     };
     return (
       <svg className={`w-16 h-16 ${colores[carpeta]}`} fill="currentColor" viewBox="0 0 24 24">
@@ -623,9 +627,10 @@ export default function GestorArchivos() {
   };
 
   // Número de subcarpetas para mostrar en el badge de la carpeta
-  const getNumSubcarpetas = (carpeta: CarpetaFrontend) => {
+const getNumSubcarpetas = (carpeta: CarpetaFrontend) => {
     if (carpeta === "pdfs") return SUBCARPETAS_PDF.length;
     if (carpeta === "suaje") return SUBCARPETAS_SUAJE.length;
+    if (carpeta === "catalogoproductos") return SUBCARPETAS_CATALOGO.length;
     return 0;
   };
 

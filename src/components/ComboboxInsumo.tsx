@@ -1,14 +1,14 @@
 // src/components/ComboboxInsumo.tsx
 import { useState, useEffect, useRef, useCallback } from "react";
 import { buscarInsumos } from "../services/proveedoresService";
-import type { ProductoProveedor } from "../services/proveedoresService";
+import type { Insumo } from "../services/proveedoresService";
 
 interface ComboboxInsumoProps {
   tipoId: number | null;
   placeholder?: string;
   value: string;
   onChange: (value: string) => void;
-  onSeleccionar: (item: ProductoProveedor) => void;
+  onSeleccionar: (item: Insumo) => void;
   onRegistrarNuevo?: (nombre: string) => void;
   disabled?: boolean;
   className?: string;
@@ -25,8 +25,8 @@ export default function ComboboxInsumo({
   className = "",
 }: ComboboxInsumoProps) {
   const [abierto, setAbierto] = useState(false);
-  const [todos, setTodos] = useState<ProductoProveedor[]>([]);
-  const [filtrados, setFiltrados] = useState<ProductoProveedor[]>([]);
+  const [todos, setTodos] = useState<Insumo[]>([]);
+  const [filtrados, setFiltrados] = useState<Insumo[]>([]);
   const [cargando, setCargando] = useState(false);
   const [highlightIndex, setHighlightIndex] = useState(-1);
 
@@ -34,7 +34,6 @@ export default function ComboboxInsumo({
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
 
-  // ── Cargar todos los insumos del tipo al montar o cuando cambia tipoId ──
   useEffect(() => {
     if (!tipoId) return;
     setCargando(true);
@@ -47,7 +46,6 @@ export default function ComboboxInsumo({
       .finally(() => setCargando(false));
   }, [tipoId]);
 
-  // ── Filtrar localmente conforme escribe ──
   useEffect(() => {
     const q = value.trim().toLowerCase();
     if (!q) {
@@ -57,15 +55,17 @@ export default function ComboboxInsumo({
         todos.filter(
           (item) =>
             item.nombre.toLowerCase().includes(q) ||
-            (item.codigo ?? "").toLowerCase().includes(q) ||
-            (item.proveedor_nombre ?? "").toLowerCase().includes(q)
+            item.proveedores.some(
+              (p) =>
+                (p.codigo ?? "").toLowerCase().includes(q) ||
+                (p.proveedor_nombre ?? "").toLowerCase().includes(q)
+            )
         )
       );
     }
     setHighlightIndex(-1);
   }, [value, todos]);
 
-  // ── Cerrar al hacer click fuera ──
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
@@ -76,7 +76,6 @@ export default function ComboboxInsumo({
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  // ── Scroll al item resaltado ──
   useEffect(() => {
     if (highlightIndex >= 0 && listRef.current) {
       const item = listRef.current.children[highlightIndex] as HTMLElement;
@@ -109,7 +108,7 @@ export default function ComboboxInsumo({
   };
 
   const seleccionar = useCallback(
-    (item: ProductoProveedor) => {
+    (item: Insumo) => {
       onSeleccionar(item);
       setAbierto(false);
       setHighlightIndex(-1);
@@ -126,7 +125,6 @@ export default function ComboboxInsumo({
 
   return (
     <div ref={containerRef} className={`relative ${className}`}>
-      {/* ── Input con ícono de lupa y chevron ── */}
       <div
         className={`flex items-center gap-2 w-full px-3 py-2 border-2 rounded-lg bg-white transition-all cursor-text ${
           disabled
@@ -139,7 +137,6 @@ export default function ComboboxInsumo({
         }`}
         onClick={() => { if (!disabled) { setAbierto(true); inputRef.current?.focus(); } }}
       >
-        {/* Lupa */}
         <svg
           className={`w-4 h-4 flex-shrink-0 ${disabled ? "text-gray-300" : "text-gray-400"}`}
           fill="none" stroke="currentColor" viewBox="0 0 24 24"
@@ -162,7 +159,6 @@ export default function ComboboxInsumo({
           }`}
         />
 
-        {/* Limpiar */}
         {value && !disabled && (
           <button
             type="button"
@@ -175,7 +171,6 @@ export default function ComboboxInsumo({
           </button>
         )}
 
-        {/* Chevron */}
         <svg
           className={`w-4 h-4 flex-shrink-0 transition-transform duration-200 ${
             disabled ? "text-gray-200" : "text-gray-400"
@@ -186,10 +181,8 @@ export default function ComboboxInsumo({
         </svg>
       </div>
 
-      {/* ── Dropdown ── */}
       {abierto && !disabled && (
         <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-40 overflow-hidden">
-          {/* Contador */}
           <div className="px-3 py-1.5 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
             <span className="text-xs text-gray-400">
               {cargando ? "Cargando..." : `${filtrados.length} resultado${filtrados.length !== 1 ? "s" : ""}`}
@@ -201,7 +194,6 @@ export default function ComboboxInsumo({
             )}
           </div>
 
-          {/* Lista */}
           {cargando ? (
             <div className="flex items-center justify-center py-6 gap-2 text-gray-400">
               <div className="animate-spin rounded-full h-4 w-4 border-2 border-purple-400 border-t-transparent" />
@@ -211,25 +203,33 @@ export default function ComboboxInsumo({
             <ul ref={listRef} className="max-h-52 overflow-y-auto">
               {filtrados.map((item, i) => (
                 <li
-                  key={item.idproveedor_producto}
+                  key={item.idinsumo}
                   onMouseDown={(e) => { e.preventDefault(); seleccionar(item); }}
                   onMouseEnter={() => setHighlightIndex(i)}
                   className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer border-b border-gray-50 last:border-0 transition-colors ${
                     i === highlightIndex ? "bg-purple-50" : "hover:bg-gray-50"
                   }`}
                 >
-                  {/* Chip proveedor */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-medium text-sm text-gray-900 truncate">{item.nombre}</span>
-                      {item.codigo && (
+                      {item.proveedores.length === 1 && item.proveedores[0].codigo && (
                         <code className="px-1.5 py-0.5 bg-gray-100 rounded text-xs font-mono text-gray-600 flex-shrink-0">
-                          {item.codigo}
+                          {item.proveedores[0].codigo}
                         </code>
                       )}
                     </div>
-                    {item.proveedor_nombre && (
-                      <span className="text-xs text-gray-400">{item.proveedor_nombre}</span>
+                    {item.proveedores.length > 0 ? (
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {item.proveedores.map((p) => (
+                          <span key={p.idinsumo_proveedor}
+                            className="text-[11px] px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded-full">
+                            {p.proveedor_nombre}{p.codigo ? ` · ${p.codigo}` : ""}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="text-xs text-gray-300 italic">Sin proveedor asignado</span>
                     )}
                   </div>
                   {i === highlightIndex && (
@@ -246,7 +246,6 @@ export default function ComboboxInsumo({
             </div>
           )}
 
-          {/* Registrar nuevo */}
           {mostrarRegistrar && (
             <div className="border-t border-gray-100">
               <button

@@ -103,8 +103,28 @@ export interface FacturacionProveedor {
   convenio: string;
   nombre_cuenta: string;
   condicion_compra: string;
-  dias_credito?: number | null;   // ← agrega esto
+  dias_credito?: number | null;  
+
 }
+
+export interface InsumoProveedorInfo {
+  idinsumo_proveedor: number;
+  idproveedor: number;
+  proveedor_nombre: string;
+  codigo: string | null;
+  precio: number | null;
+}
+
+export interface Insumo {
+  idinsumo: number;
+  nombre: string;
+  clave_producto: string | null;
+  unidad: string | null;
+  idtipo_insumo: number;
+  tipo_insumo_nombre: string;
+ proveedores: InsumoProveedorInfo[];
+}
+
 
 // ── Catálogos ─────────────────────────────────────────────────────────────────
 
@@ -183,23 +203,22 @@ export const eliminarProductoProveedor = async (
 export const buscarInsumos = async (
   tipoId: number,
   q?: string
-): Promise<ProductoProveedor[]> => {
+): Promise<Insumo[]> => {
   const { data } = await api.get("/proveedores/insumos", { params: { tipo: tipoId, q } });
   return data;
 };
 
-// ── Registrar insumo rápido ───────────────────────────────────────────────────
-
+// ── Registrar insumo rápido — AHORA con selección múltiple de proveedores ───
 export interface RegistrarInsumoRapidoDto {
   tipo_insumo_id: number;
   nombre: string;
   codigo?: string | null;
-  proveedor_idproveedor?: number | null;
+  proveedores_ids?: number[];
 }
 
 export const registrarInsumoRapido = async (
   dto: RegistrarInsumoRapidoDto
-): Promise<ProductoProveedor> => {
+): Promise<Insumo> => {
   const { data } = await api.post("/proveedores/insumos/registrar-rapido", dto);
   return data.producto;
 };

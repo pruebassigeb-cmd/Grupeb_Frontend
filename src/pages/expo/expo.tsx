@@ -27,7 +27,7 @@ import { useCatalogosPapel } from "../../hooks/papel/useCatalogosPapel";
 import { getFoils, getTexturas } from "../../services/papel/papelCotizacionService";
 import type { FoilOpcion, TexturaOpcion } from "../../types/papel/cotizacion-papel.types";
 import type { CatalogosPlastico, PigmentoDB } from "../../components/expo/Tablacontroles";
-import { getTiposInsumo, buscarInsumos } from "../../services/proveedoresService";
+import { getTiposInsumo, buscarInsumos, type Insumo } from "../../services/proveedoresService";
 import { useAuth } from "../../context/AuthContext";
 import { generarPdfCotizacionExpo } from "../../utils/expo/generarPdfCotizacionExpo";
 
@@ -105,15 +105,21 @@ export default function Expo() {
   }, []);
 
   // ── Pigmentos desde DB ────────────────────────────────────────────────────
-  useEffect(() => {
-    getTiposInsumo().then(tipos => {
-      const pig = tipos.find(t => t.nombre === "Pigmento");
-      if (!pig) return;
-      buscarInsumos(pig.idtipo_insumo, "").then(items =>
-        setPigmentosDB(items.map(i => ({ id: i.idproveedor_producto, nombre: i.nombre, codigo: i.codigo })))
-      ).catch(console.error);
-    }).catch(console.error);
-  }, []);
+useEffect(() => {
+  getTiposInsumo().then(tipos => {
+    const pig = tipos.find(t => t.nombre === "Pigmento");
+    if (!pig) return;
+    buscarInsumos(pig.idtipo_insumo, "").then(items =>
+      setPigmentosDB(items.map(i => ({
+        id: i.idinsumo,
+        nombre: i.nombre,
+        // Si el pigmento tiene un solo proveedor, usamos su código;
+        // si tiene varios (o ninguno), no hay un código único que mostrar.
+        codigo: i.proveedores.length === 1 ? i.proveedores[0].codigo : null,
+      })))
+    ).catch(console.error);
+  }).catch(console.error);
+}, []);
 
   // ── Catálogos plástico desde DB ───────────────────────────────────────────
   useEffect(() => {
@@ -352,8 +358,11 @@ export default function Expo() {
 
   const delFila = useCallback((uid: string) => setFilas(p => p.filter(f => f.uid !== uid)), []);
 
-  const limpiar = () => { setFilas([]); setCliente(""); setComent(""); setFolioActual(null); };
-
+// Limpia solo el tablero (productos, comentarios y folio).
+  // Conserva al prospecto en curso: borrar solo el nombre dejaba
+  // clienteIdReal apuntando al prospecto anterior y la siguiente
+  // cotización se registraba al cliente equivocado.
+  const limpiar = () => { setFilas([]); setComent(""); setFolioActual(null); };
   // ── prepararFilas ─────────────────────────────────────────────────────────
   const prepararFilas = async (filasActuales: FilaProducto[]): Promise<FilaProducto[]> => {
     const resultado: FilaProducto[] = [];

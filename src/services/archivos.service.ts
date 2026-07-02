@@ -16,7 +16,16 @@ export interface Archivo {
   created_at: string;
 }
 
-export type CarpetaFrontend = "disenos" | "pdfs" | "fotos-envios" | "backups" | "suaje";
+export type CarpetaFrontend = "disenos" | "pdfs" | "fotos-envios" | "backups" | "suaje" | "catalogoproductos";
+
+export type SubcarpetaCatalogo = "papel" | "plastico" | "carton";
+
+export const SUBCARPETAS_CATALOGO: { value: SubcarpetaCatalogo; label: string }[] = [
+  { value: "papel",    label: "Papel"    },
+  { value: "plastico", label: "Plástico" },
+  { value: "carton",   label: "Cartón"   },
+];
+
 
 export type SubcarpetaPDF =
   | "cotizaciones"
@@ -32,11 +41,12 @@ export type SubcarpetaPDF =
 export type SubcarpetaSuaje = "catalogo" | "imagen" | "rendimiento";
 
 export const CARPETAS_LABELS: Record<CarpetaFrontend, string> = {
-  "disenos":      "Diseños",
-  "pdfs":         "PDFs",
-  "fotos-envios": "Fotos de Envíos",
-  "backups":      "Backups BD",
-  "suaje":        "Suaje",
+  "disenos":            "Diseños",
+  "pdfs":               "PDFs",
+  "fotos-envios":       "Fotos de Envíos",
+  "backups":            "Backups BD",
+  "suaje":              "Suaje",
+  "catalogoproductos":  "Catálogo de Productos",
 };
 
 export const SUBCARPETAS_PDF: { value: SubcarpetaPDF; label: string }[] = [
@@ -61,7 +71,7 @@ export const SUBCARPETAS_SUAJE: { value: SubcarpetaSuaje; label: string }[] = [
 export const subirArchivo = async (
   file: File,
   carpeta: CarpetaFrontend,
-  subcarpeta?: SubcarpetaPDF | SubcarpetaSuaje,
+  subcarpeta?: SubcarpetaPDF | SubcarpetaSuaje | SubcarpetaCatalogo,
   envio_id?: number,
   nota_id?: number,
 ): Promise<Archivo> => {
@@ -113,11 +123,12 @@ export interface Estadisticas {
     porcentaje: number;
   };
   por_carpeta: {
-    disenos:      number;
-    pdfs:         number;
-    fotos_envios: number;
-    backups:      number;
-    suaje:        number;
+    disenos:       number;
+    pdfs:          number;
+    fotos_envios:  number;
+    backups:       number;
+    suaje:         number;
+    catalogo_expo: number;
   };
 }
 

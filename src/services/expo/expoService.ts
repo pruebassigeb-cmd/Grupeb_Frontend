@@ -301,7 +301,7 @@ export const mapearProductoAPayload = (
   cant3: string = "3,000",
 ): any => {
   const p = fila.producto;
-    console.log("[PAYLOAD] fuente:", p.fuente, "categoria:", p.categoria, "nombre:", p.nombre); // ← AQUÍ
+    console.log("[PAYLOAD] fuente:", p.fuente, "categoria:", p.categoria, "nombre:", p.nombre); // ← AQUÍ
 
   const parseP = (s: string) => parseFloat(s.replace(/[^0-9.]/g, "")) || 0;
 
@@ -335,7 +335,9 @@ export const mapearProductoAPayload = (
       idcat_textura:   fila.idTextura  ?? null,
       uv:              fila.uv,
       alto_relieve:    fila.ar,
-      observacion:     fila.otro       ?? null,
+      // Los comentarios de la cotización viajan como `comentarios` en el POST;
+      // el back los aplica como observación de cada producto (obsGeneral).
+      observacion:     null,
       descripcion:     p.nombre        ?? null,
       cantidades: [c1, c2, c3] as [number, number, number],
       precios:    [p1, p2, p3] as [number, number, number],
@@ -354,7 +356,8 @@ export const mapearProductoAPayload = (
       categoria:       p.categoria,
       nombre:          p.nombre || null,
       tintas_cantidad: fila.tintas || p.tintas || 1,
-      observacion:     fila.otro  || null,
+      // Comentarios generales → observación (los aplica el back)
+      observacion:     null,
       tipoLaminado:  fila.tipoLaminado || null,
       tipoHs:        fila.tipoHs       || null,
       tipoTextura:   fila.tipoTextura  || null,
@@ -378,7 +381,9 @@ export const mapearProductoAPayload = (
     configuracion_plastico_id: p.fuente === "sistema" ? (p.configuracion_plastico_id ?? p.id) : null,
     tintas_cantidad:           fila.tintas || p.tintas || 1,
     nombre:                    p.nombre   || null,
-    observacion:               fila.otro  || null,
+    // OJO: fila.otro en plástico trae el TIPO de bolsa (el select lo propaga ahí),
+    // no una observación — mandarlo tapaba el comentario general en el back.
+    observacion:               null,
     id_laminado: fila.idLaminado ?? null,
     idfoil:      fila.idFoil     ?? null,
     id_textura:  fila.idTextura  ?? null,

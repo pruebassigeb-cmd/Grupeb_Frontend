@@ -96,6 +96,20 @@ const LABEL_SIZE = 7;
 const f = (v: any) =>
   v === null || v === undefined || String(v).trim() === "" ? "" : String(v).trim();
 
+ const soloColorPigmento = (v: any): string => {
+  const texto = f(v);
+  if (!texto) return "";
+
+  // Caso normal: "Azul 2935 (AL-BC-05-20)" → nos quedamos con lo de antes del "("
+  const antesDelParentesis = texto.replace(/\s*\(.*$/, "").trim();
+  if (antesDelParentesis) return antesDelParentesis;
+
+  // Caso invertido: "(AL-BC-05-20) Azul 2935" o el color quedó dentro del
+  // paréntesis → extraemos el contenido interno como respaldo.
+  const match = texto.match(/\(([^)]+)\)/);
+  return match ? match[1].trim() : texto;
+};
+
 const formatKilos = (n: number) =>
   n.toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -242,10 +256,23 @@ function celdaLabel(
   doc.setFontSize(labelSize);
   doc.setTextColor(GRAY_DARK[0], GRAY_DARK[1], GRAY_DARK[2]);
   doc.text(label, x + 1.5, y + 4.5);
+
+  const texto = f(value);
   doc.setFont("helvetica", bold ? "bold" : "normal");
-  doc.setFontSize(valueSize);
+
+  // Auto-ajuste: si el texto no cabe en el ancho de la celda con el
+  // tamaño solicitado, se reduce progresivamente (mínimo 6pt) para que
+  // nunca se encime con las celdas vecinas.
+  let tamanoFinal = valueSize;
+  const anchoDisponible = w - 3; // padding aprox. 1.5mm por lado
+  doc.setFontSize(tamanoFinal);
+  while (tamanoFinal > 6 && doc.getTextWidth(texto) > anchoDisponible) {
+    tamanoFinal -= 0.5;
+    doc.setFontSize(tamanoFinal);
+  }
+
   doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);
-  doc.text(f(value), x + w / 2, y + h - 3, { align: "center" });
+  doc.text(texto, x + w / 2, y + h - 3, { align: "center" });
 }
 
 function celdaHeader(
@@ -671,7 +698,7 @@ doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);  celdaLabel(doc, "Cantidad", can
   // ── FILA 4 — Medidas / Material / Calibre / Pigmento / Caras ──
   const fila5H = 14;
   const medidasW = CW - kilos4W;
-
+ 
   const cols5 = [
     { label: "Ancho Pel.", value: anchoPelicula, w: medidasW * 0.09 },
     { label: "Altura", value: f(data.altura), w: medidasW * 0.08 },
@@ -682,8 +709,7 @@ doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);  celdaLabel(doc, "Cantidad", can
     { label: "Fuelle Lat", value: f(data.fuelle_lat_de), w: medidasW * 0.09 },
     { label: "Material", value: f(data.material), w: medidasW * 0.17 },
     { label: "Calibre", value: f(data.calibre), w: medidasW * 0.08 },
-    { label: "Pigmento", value: f(data.pigmentos), w: medidasW * 0.08 },
-    {
+{ label: "Pigmento", value: soloColorPigmento(data.pigmentos), w: medidasW * 0.08 },    {
       label: "Caras", value: f(data.caras),
       w: medidasW - medidasW * (0.09 + 0.08 + 0.09 + 0.08 + 0.09 + 0.09 + 0.09 + 0.17 + 0.08 + 0.08)
     },
