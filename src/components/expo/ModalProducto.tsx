@@ -58,65 +58,57 @@ const parsearMedidaAInputs = (medida: string): Record<MedidaKey, string> => {
   };
 };
 
-// ─── Comprimir imagen antes de guardarla/subirla ─────────────────────────────
-// Las fotos de cámara pueden pesar 5-10 MB; convertirlas a base64 completas
-// o subirlas sin comprimir puede saturar memoria y provocar que el navegador
-// mate la pestaña (sobre todo en Android al abrir la cámara). Las redimensionamos
-// a máx 1600px de lado mayor y comprimimos a JPEG ~0.8 antes de tocarlas más.
-const comprimirImagen = (file: File, maxDim = 1600, calidad = 0.8): Promise<File> => {
-  return new Promise((resolve) => {
-    const img = new Image();
-    const url = URL.createObjectURL(file);
-    img.onload = () => {
-      URL.revokeObjectURL(url);
-      let { width, height } = img;
-      if (width > maxDim || height > maxDim) {
-        if (width > height) { height = Math.round((height * maxDim) / width); width = maxDim; }
-        else { width = Math.round((width * maxDim) / height); height = maxDim; }
-      }
-      const canvas = document.createElement("canvas");
-      canvas.width = width; canvas.height = height;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) { resolve(file); return; }
-      ctx.drawImage(img, 0, 0, width, height);
-      canvas.toBlob(blob => {
-        if (!blob) { resolve(file); return; }
-        resolve(new File([blob], file.name.replace(/\.[^/.]+$/, "") + ".jpg", { type: "image/jpeg" }));
-      }, "image/jpeg", calidad);
-    };
-    img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
-    img.src = url;
-  });
-};
-
 // ─── Draft de imagen en sessionStorage ───────────────────────────────────────
-// Al tomar una foto, el navegador puede reiniciar la pestaña por presión de
-// memoria mientras la cámara está abierta (le pasa sobre todo a Android).
-// Por eso subimos la imagen a S3 DE INMEDIATO (no hasta el botón "Guardar")
-// y guardamos la URL resultante aquí, para poder recuperarla si el modal se
-// vuelve a montar después de un reinicio inesperado.
-const DRAFT_KEY = "modalProducto_imagenDraft";
+// Al tomar una foto, capture="environment" saca al usuario de la pestaña
+// hacia la app de cámara nativa. Android suele recortar la memoria de la
+// pestaña mientras está en segundo plano, y ahí es donde vive el riesgo real:
+// decodificar/comprimir la foto en el navegador justo al regresar es lo que
+// mataba la pestaña (confirmado: solo pasa al usar la cámara, nunca al subir
+// desde archivos). Por eso YA NO comprimimos en el cliente — subimos el
+// archivo tal cual, igual que hace SubirRender.tsx (que nunca ha fallado).
+// La compresión, si se necesita, debe vivir en el backend (sharp) donde no
+// hay riesgo de que el SO mate el proceso a media conversión.
+//
+// Guardamos la URL final en sessionStorage para poder recuperarla si el
+// modal se vuelve a montar después de un reinicio inesperado. La key es
+// específica por producto (nuevo vs. editando id X).
+const DRAFT_KEY_BASE = "modalProducto_imagenDraft";
+const draftKeyFor = (editando: Producto | null) =>
+  editando ? `${DRAFT_KEY_BASE}_edit_${editando.id}` : `${DRAFT_KEY_BASE}_nuevo`;
+
+// Bandera "hay una subida en curso" — se marca ANTES de subir la foto, para
+// poder avisarle al usuario si la pestaña muere a medio proceso en vez de
+// dejarlo confundido sin saber qué pasó.
+const FLAG_KEY_BASE = "modalProducto_subiendoFlag";
+const flagKeyFor = (editando: Producto | null) =>
+  editando ? `${FLAG_KEY_BASE}_edit_${editando.id}` : `${FLAG_KEY_BASE}_nuevo`;
 
 const subirFotoInmediato = async (
   file: File,
   categoria: "papel" | "plastico" | "carton" | undefined,
   setF: (k: keyof Producto, v: unknown) => void,
   setSubiendoFoto: (v: boolean) => void,
+  editando: Producto | null,
 ) => {
+  const draftKey = draftKeyFor(editando);
+  const flagKey  = flagKeyFor(editando);
   setSubiendoFoto(true);
+  sessionStorage.setItem(flagKey, "1");
   try {
-    const comprimido = await comprimirImagen(file);
     const subcarpeta  = categoria === "plastico" ? "plastico"
                        : categoria === "carton"   ? "carton"
                        : "papel";
-    const archivo = await subirArchivo(comprimido, "catalogoproductos", subcarpeta);
+    // Archivo crudo, sin tocar — la compresión se hace en el backend.
+    const archivo = await subirArchivo(file, "catalogoproductos", subcarpeta);
     const base = (api.defaults.baseURL || "").replace(/\/$/, "");
     const url = `${base}/archivos/${archivo.id_archivo}/ver`;
     setF("imagen", url);
-    sessionStorage.setItem(DRAFT_KEY, url); // sobrevive a un reload de la pestaña
+    sessionStorage.setItem(draftKey, url); // sobrevive a un reload de la pestaña
+    sessionStorage.removeItem(flagKey);
   } catch (e) {
     console.error("❌ No se pudo subir la imagen:", e);
     alert("No se pudo subir la imagen. Intenta de nuevo.");
+    sessionStorage.removeItem(flagKey);
   } finally {
     setSubiendoFoto(false);
   }
@@ -275,7 +267,7 @@ interface Props {
   catInicial?: "papel" | "plastico" | "carton";
   saving:      boolean;
   onClose:     () => void;
-  onGuardar:   (p: Producto) => void;
+  onGuardar:   (p: Producto) => Promise<void>;
   catalogs:    Catalogs;
   foils:       FoilOpcion[];
   texturas:    TexturaOpcion[];
@@ -299,15 +291,31 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
   // form.imagen guarda directamente la URL final una vez subida.
   const [subiendoFoto, setSubiendoFoto] = useState(false);
 
+  // ─── Aviso de que se recuperó una foto pendiente de una sesión anterior ───
+  const [draftRecuperado, setDraftRecuperado] = useState(false);
+  // ─── Aviso de que una subida se perdió (la pestaña murió antes de subir) ──
+  const [intentoFallido, setIntentoFallido] = useState(false);
+
   // ─── Recuperar draft de imagen si el modal se remonta tras un reinicio ────
-  // (por ejemplo, si el navegador mató la pestaña al abrir la cámara y el
-  // usuario volvió a abrir "Nuevo producto" después de que la app recargó).
+  // Aplica tanto a "nuevo producto" como a "editar producto X", cada uno con
+  // su propia key (ver draftKeyFor). Así no se mezclan drafts entre productos.
+  // Si no hay draft pero sí quedó la bandera de "subida en curso" (ver
+  // flagKeyFor), significa que la pestaña murió DURANTE el procesamiento de
+  // la foto, antes de que llegara a subirse — en ese caso no hay nada que
+  // recuperar, pero sí avisamos para que no quede la duda de qué pasó.
   useEffect(() => {
-    if (editando) return; // solo aplica a "nuevo producto"
-    const draft = sessionStorage.getItem(DRAFT_KEY);
-    if (draft && !form.imagen) {
+    const draftKey = draftKeyFor(editando);
+    const flagKey  = flagKeyFor(editando);
+    const draft = sessionStorage.getItem(draftKey);
+    const huboIntentoFallido = sessionStorage.getItem(flagKey) === "1";
+
+    if (draft && draft !== form.imagen) {
       setForm(prev => ({ ...prev, imagen: draft }));
+      setDraftRecuperado(true);
+    } else if (huboIntentoFallido) {
+      setIntentoFallido(true);
     }
+    sessionStorage.removeItem(flagKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -437,31 +445,51 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
 
     const imagenFinal = await resolverImagen();
     if (imagenFinal === null) return; // falló la subida — no guardar el producto
-    sessionStorage.removeItem(DRAFT_KEY);
 
-    if (esPapelCarton) {
-      let medida = form.medida || "";
-      if (form.ancho && form.altura)
-        medida = `${form.ancho}x${form.fuelle||"0"}x${form.altura} cm`;
-      onGuardar({ ...(form as Producto), id: editando?.id??0, fuente:"expo", medida, imagen: imagenFinal });
-    } else {
-      const medida = construirMedida();
-      onGuardar({
-        ...(form as Producto),
-        id:           editando?.id ?? 0,
-        fuente:       "expo",
-        categoria:    "plastico",
-        tipoProducto: tipoPlastNom,
-        material:     materialNom,
-        calibre:      calibreNom,
-        medida,
-        altura:       medidas.altura,
-        ancho:        medidas.ancho,
-        fuelFondo:    medidas.fuelleFondo,
-        fuelLateral:  medidas.fuelleLateral1,
-        imagen:       imagenFinal,
-      });
+    const draftKey = draftKeyFor(editando);
+
+    try {
+      if (esPapelCarton) {
+        let medida = form.medida || "";
+        if (form.ancho && form.altura)
+          medida = `${form.ancho}x${form.fuelle||"0"}x${form.altura} cm`;
+        await onGuardar({ ...(form as Producto), id: editando?.id??0, fuente:"expo", medida, imagen: imagenFinal });
+      } else {
+        const medida = construirMedida();
+        await onGuardar({
+          ...(form as Producto),
+          id:           editando?.id ?? 0,
+          fuente:       "expo",
+          categoria:    "plastico",
+          tipoProducto: tipoPlastNom,
+          material:     materialNom,
+          calibre:      calibreNom,
+          medida,
+          altura:       medidas.altura,
+          ancho:        medidas.ancho,
+          fuelFondo:    medidas.fuelleFondo,
+          fuelLateral:  medidas.fuelleLateral1,
+          imagen:       imagenFinal,
+        });
+      }
+      // Solo si el guardado en BD terminó con éxito borramos el draft.
+      // Si guardar() lanza (falló el request, o la pestaña muere a medias
+      // y nunca llegamos aquí), el draft se queda disponible para
+      // recuperarlo la próxima vez que se edite este mismo producto.
+      sessionStorage.removeItem(draftKey);
+    } catch {
+      // onGuardar ya mostró su propio alert con el error — aquí no hacemos
+      // nada más que NO borrar el draft, a propósito.
     }
+  };
+
+  // ─── Cerrar sin guardar (✕ o "Cancelar") ───────────────────────────────────
+  // Es una decisión explícita del usuario de descartar la edición, así que
+  // aquí sí limpiamos el draft para que no reaparezca una foto vieja la
+  // próxima vez que abra este producto.
+  const cerrarSinGuardar = () => {
+    sessionStorage.removeItem(draftKeyFor(editando));
+    onClose();
   };
 
   const opTipos = tiposProducto.map(t => ({ id:t.id, label:t.nombre }));
@@ -482,7 +510,7 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
             <div style={{ color:"#C9922A",fontSize:13,fontWeight:700,letterSpacing:1,textTransform:"uppercase" }}>{editando?"Editar producto":"Nuevo producto"}</div>
             <div style={{ color:"#666",fontSize:11,marginTop:2 }}>{editando?editando.nombre:"Completa los campos"}</div>
           </div>
-          <button onClick={onClose} style={{ background:"#2A2A2A",border:"none",color:"#AAA",width:30,height:30,borderRadius:"50%",cursor:"pointer",fontSize:18 }}>✕</button>
+          <button onClick={cerrarSinGuardar} style={{ background:"#2A2A2A",border:"none",color:"#AAA",width:30,height:30,borderRadius:"50%",cursor:"pointer",fontSize:18 }}>✕</button>
         </div>
 
         {/* Selector categoría */}
@@ -691,6 +719,18 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
         <div style={{ marginBottom:20 }}>
           <label style={LS}>Imagen del producto</label>
 
+          {draftRecuperado && (
+            <div style={{ background:"#3A2A0D", border:"1px solid #C9922A55", borderRadius:6, padding:"8px 10px", marginBottom:10, fontSize:11, color:"#E0B96A", lineHeight:1.4 }}>
+              📸 Recuperamos una foto que se quedó pendiente de una sesión anterior (ya está subida). Revísala y no olvides darle a "Guardar" para que quede en el catálogo.
+            </div>
+          )}
+
+          {intentoFallido && (
+            <div style={{ background:"#3A0D0D", border:"1px solid #C9556655", borderRadius:6, padding:"8px 10px", marginBottom:10, fontSize:11, color:"#E08A8A", lineHeight:1.4 }}>
+              ⚠️ La página se reinició mientras se procesaba una foto y no llegó a subirse. Intenta subirla de nuevo.
+            </div>
+          )}
+
           {form.imagen && (
             <div style={{ display:"flex", justifyContent:"center", marginBottom:10 }}>
               <img src={form.imagen} alt="preview" style={{ width:90,height:90,objectFit:"cover",borderRadius:6,border:"1px solid #333" }} />
@@ -708,7 +748,9 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
               </span>
               <input type="file" accept="image/*" disabled={subiendoFoto} style={{ display:"none" }} onChange={e=>{
                 const file=e.target.files?.[0]; if(!file) return;
-                subirFotoInmediato(file, form.categoria, setF, setSubiendoFoto);
+                setDraftRecuperado(false);
+                setIntentoFallido(false);
+                subirFotoInmediato(file, form.categoria, setF, setSubiendoFoto, editando);
               }} />
             </label>
 
@@ -722,7 +764,9 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
               </span>
               <input type="file" accept="image/*" capture="environment" disabled={subiendoFoto} style={{ display:"none" }} onChange={e=>{
                 const file=e.target.files?.[0]; if(!file) return;
-                subirFotoInmediato(file, form.categoria, setF, setSubiendoFoto);
+                setDraftRecuperado(false);
+                setIntentoFallido(false);
+                subirFotoInmediato(file, form.categoria, setF, setSubiendoFoto, editando);
               }} />
             </label>
           </div>
@@ -735,14 +779,14 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
 
           {form.imagen && !subiendoFoto && (
             <div style={{ textAlign:"center", marginTop:6 }}>
-              <button onClick={()=>{ setF("imagen",""); sessionStorage.removeItem(DRAFT_KEY); }} style={{ background:"transparent",border:"none",color:"#666",fontSize:11,cursor:"pointer",textDecoration:"underline" }}>✕ Quitar imagen</button>
+              <button onClick={()=>{ setF("imagen",""); sessionStorage.removeItem(draftKeyFor(editando)); setDraftRecuperado(false); }} style={{ background:"transparent",border:"none",color:"#666",fontSize:11,cursor:"pointer",textDecoration:"underline" }}>✕ Quitar imagen</button>
             </div>
           )}
         </div>
 
        {/* Acciones */}
         <div style={{ display:"flex",gap:10,justifyContent:"flex-end" }}>
-          <button onClick={onClose} style={{ background:"transparent",border:"1px solid #444",color:"#888",fontSize:12,fontWeight:600,padding:"9px 18px",borderRadius:7,cursor:"pointer" }}>
+          <button onClick={cerrarSinGuardar} style={{ background:"transparent",border:"1px solid #444",color:"#888",fontSize:12,fontWeight:600,padding:"9px 18px",borderRadius:7,cursor:"pointer" }}>
             Cancelar
           </button>
           <button onClick={guardar} disabled={!form.nombre?.trim()||ocupado}

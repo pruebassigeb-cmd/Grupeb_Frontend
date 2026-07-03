@@ -16,6 +16,7 @@ import {
   n,
   normalizarOrdenProduccionPapelData,
   obtenerRegistroProcesoPapel,
+  PROCESOS_ORDEN_PAPEL,
   primeraLinea,
   redondear,
   validarProductoPapelParaPdf,
@@ -152,7 +153,15 @@ function headerCellVertical(doc: jsPDF, label: string, x: number, y: number, w: 
     size -= 0.3;
   }
   doc.setFontSize(size);
-  doc.text(label, x + w / 2 + size * 0.32, y + h - (h - disponible) / 2, {
+  // CORREGIDO: antes el texto rotado arrancaba cerca del borde inferior
+  // de la celda con un offset fijo, sin importar cuánto medía el label —
+  // en celdas altas (que ahora varían de alto por proceso) quedaba
+  // descentrado hacia abajo. Ahora se calcula el ancho real del texto
+  // (que al rotar 90° se vuelve su extensión vertical) para centrarlo de
+  // verdad dentro del alto disponible de la celda.
+  const anchoTextoMm = doc.getStringUnitWidth(label) * size * 0.352778;
+  const startY = y + h / 2 + anchoTextoMm / 2;
+  doc.text(label, x + w / 2 + size * 0.32, startY, {
     align: "left",
     angle: 90,
   });
@@ -169,7 +178,8 @@ function labelCell(
   h: number,
   valueSize = 10,
   bold = true,
-  align: Align = "center"
+  align: Align = "center",
+  raise = 0
 ) {
   rect(doc, x, y, w, h);
   doc.setFont("helvetica", "normal");
@@ -180,7 +190,9 @@ function labelCell(
   doc.setFont("helvetica", bold ? "bold" : "normal");
   doc.setFontSize(valueSize);
   const lines = doc.splitTextToSize(f(value), w - 3) as string[];
-  const baseY = y + h - Math.max(2.2, (lines.length - 1) * valueSize * 0.35 + 2.2);
+  // `raise` sube el texto del valor (útil cuando se agranda la fuente,
+  // para que no quede pegado al borde inferior de la celda).
+  const baseY = y + h - Math.max(2.2, (lines.length - 1) * valueSize * 0.35 + 2.2) - raise;
   doc.text(lines.slice(0, 2), align === "left" ? x + 1.5 : x + w / 2, baseY, { align });
 }
 
@@ -197,18 +209,24 @@ function simpleField(doc: jsPDF, label: string, value: string, x: number, y: num
 
 function processTagRow(
   doc: jsPDF,
-  procesos: ProcesoOrdenPapelPdf[],
+  todosLosProcesos: Array<{ key: NombreProcesoOrdenPapel; etiqueta: string }>,
+  aplicanKeys: Set<NombreProcesoOrdenPapel>,
   x: number,
   y: number,
   w: number,
   h: number
 ) {
-  // La lista ya viene filtrada desde construirProcesosOrdenPapelPdf(data):
-  // aquí NO se dibujan procesos que no aplican. Solo compactamos el visual.
+  // CORREGIDO: antes se recibía la lista ya filtrada (solo los que
+  // aplican), así que el recuadro solo mostraba esos — perdiendo el
+  // catálogo completo que sí tenía el PDF de referencia (Hojeo, Guillo,
+  // Offset, Lam, HS, AR, UV, Textu, Suaje, Armado, Rev, Empaque...). Ahora
+  // se dibuja SIEMPRE el catálogo completo de procesos del sistema, y solo
+  // se marca con "X" el que realmente aplica a esta orden — igual que en
+  // el PDF de referencia.
   rect(doc, x, y, w, h);
-  if (procesos.length === 0) return;
+  if (todosLosProcesos.length === 0) return;
 
-  const etiquetaCorta = (p: ProcesoOrdenPapelPdf): string => {
+  const etiquetaCorta = (p: { key: NombreProcesoOrdenPapel }): string => {
     const mapa: Partial<Record<NombreProcesoOrdenPapel, string>> = {
       hojeado_papel: "Hoj",
       guillotina_papel: "Gui",
@@ -222,20 +240,20 @@ function processTagRow(
       armado_papel: "Arm",
       empaque_papel: "Emp",
     };
-    return mapa[p.key as NombreProcesoOrdenPapel] ?? p.etiqueta;
+    return mapa[p.key] ?? p.key;
   };
 
-  const cellW = w / procesos.length;
+  const cellW = w / todosLosProcesos.length;
   let labelSize = 4.4;
   doc.setFont("helvetica", "bold");
-  procesos.forEach((p) => {
+  todosLosProcesos.forEach((p) => {
     const etiqueta = etiquetaCorta(p);
     while (labelSize > 3.0 && doc.getStringUnitWidth(etiqueta) * labelSize * 0.352778 > cellW - 0.8) {
       labelSize -= 0.2;
     }
   });
 
-  procesos.forEach((p, i) => {
+  todosLosProcesos.forEach((p, i) => {
     const cx = x + cellW * i;
     if (i > 0) doc.line(cx, y, cx, y + h);
 
@@ -243,9 +261,23 @@ function processTagRow(
     doc.setFontSize(labelSize);
     doc.text(etiquetaCorta(p), cx + cellW / 2, y + h * 0.42, { align: "center" });
 
-    doc.setFontSize(Math.min(5.4, h - 2.4));
-    doc.text("X", cx + cellW / 2, y + h - 1, { align: "center" });
+    if (aplicanKeys.has(p.key)) {
+      doc.setFontSize(Math.min(8, h - 1.5)); // antes: Math.min(5.4, h - 2.4)
+      doc.setFont("helvetica", "bold"); // opcional, para que resalte más
+      doc.text("X", cx + cellW / 2, y + h - 0.8, { align: "center" });
+    }
   });
+}
+
+// ────────────────────────────────────────────────────────────────────────
+// Quita ".00" de medidas que no tienen decimales reales (ej. "12.00" →
+// "12", "12.00+7.00x14.00" → "12+7x14"), sin tocar medidas que sí tienen
+// decimales significativos (ej. "12.50" se deja igual). Puramente
+// estético — no cambia el valor numérico, solo cómo se muestra.
+// ────────────────────────────────────────────────────────────────────────
+function sinDecimalesInnecesarios(texto: string): string {
+  if (!texto) return texto;
+  return texto.replace(/(\d+)\.0+(?!\d)/g, "$1");
 }
 
 function fmtCantidad(data: OrdenProduccionPapelData): string {
@@ -255,6 +287,24 @@ function fmtCantidad(data: OrdenProduccionPapelData): string {
     return `${fmtNum(kg, 2)} kg`;
   }
   return cant !== null ? fmtNum(cant) : "";
+}
+
+// ────────────────────────────────────────────────────────────────────────
+// CORREGIDO: "Pliego Hojeado" NO es un campo único en la base de datos —
+// "bobina" (ancho de la bobina) y "hojeado" (medida del corte) se guardan
+// SEPARADOS. El PDF tiene que CONSTRUIR la unión "bobina x hojeado" (ej.
+// "61x45"), no leer un campo ya combinado (por eso antes solo se veía
+// "45": ese es el valor real del campo de hojeado, nunca tuvo el "61x"
+// porque ese dato vive en otro campo). Ambos valores salen de la ficha
+// del producto (data.hoj_bobina/bobina_cm y data.pliego_hojeado/
+// hoj_corte/pliego) — nada hardcodeado.
+// ────────────────────────────────────────────────────────────────────────
+function pliegoHojeadoTexto(data: OrdenProduccionPapelData): string {
+  const bobina = primeraLinea(data.hoj_bobina, data.bobina_cm);
+  const hojeado = primeraLinea(data.pliego_hojeado, data.hoj_corte, data.pliego);
+
+  if (bobina && hojeado) return `${bobina}x${hojeado}`;
+  return primeraLinea(hojeado, bobina);
 }
 
 function valorMaquina(proceso: ProcesoOrdenPapelPdf, registro: ProcesoPapelRuntime | null): string {
@@ -269,6 +319,24 @@ interface DatosProceso {
   entregadas: string;
   unidad: string;
   extra: string[];
+}
+
+// ────────────────────────────────────────────────────────────────────────
+// Alto dinámico por proceso, según cuántas líneas de specs traiga
+// `datos.extra`. Antes todas las filas usaban un alto fijo (15.5mm),
+// obligando a apretar/recortar procesos con mucha info (Laminación, 6
+// líneas) y dejando espacio de sobra en los que traen poca (UV, HS con
+// 0-1 línea). Ahora, igual que en el PDF de referencia, cada fila mide
+// justo lo que necesita su contenido: compacta si trae poco texto, más
+// alta si trae varias líneas.
+// ────────────────────────────────────────────────────────────────────────
+const ALTURA_BASE_PROCESO = 11; // header + Maquina + número + línea divisoria + margen
+const ALTURA_MINIMA_PROCESO = 12.5;
+const ALTO_POR_LINEA_EXTRA = 2.6;
+
+function alturaFilaProceso(datos: DatosProceso): number {
+  const lineas = datos.extra.filter(Boolean).length;
+  return Math.max(ALTURA_BASE_PROCESO + lineas * ALTO_POR_LINEA_EXTRA, ALTURA_MINIMA_PROCESO);
 }
 
 function arrTexto(value: unknown): string {
@@ -288,11 +356,12 @@ function tintasConPantones(cantidad: unknown, pantones: unknown): string {
 // ────────────────────────────────────────────────────────────────────────
 // CORREGIDO: se elimina el fallback a los estimados (pliegos_impresion_
 // estimados / cantidad_hojeada_calculada) en la entrada de TODOS los
-// procesos salvo Hojeado/Guillotina (que usan procesoPreparacionBlock y sí
-// muestran su calculado como referencia). El resto de los procesos ahora
-// solo muestra el dato REAL capturado en el registro (reg.pliegos_entrada,
-// etc.), quedando en blanco hasta que el operador lo registre desde el
-// módulo de seguimiento (SeccionAvancesPapel / finalizarProcesoPapel).
+// procesos salvo Hojeado/Guillotina (que sí muestran su "Cantidad
+// Calculada" como entrada — son el primer proceso de la cadena, no
+// heredan de nadie). El resto de los procesos ahora solo muestra el dato
+// REAL capturado en el registro (reg.pliegos_entrada, etc.), quedando en
+// blanco hasta que el operador lo registre desde el módulo de
+// seguimiento (SeccionAvancesPapel / finalizarProcesoPapel).
 // ────────────────────────────────────────────────────────────────────────
 function datosProceso(
   key: NombreProcesoOrdenPapel,
@@ -303,30 +372,48 @@ function datosProceso(
   const merma = fmtNum(reg.merma);
 
   switch (key) {
-    // hojeado_papel y guillotina_papel ya no se dibujan con datosProceso
-    // (usan procesoPreparacionBlock directamente en la fila ancha), pero
-    // se dejan estos casos por completitud de tipos.
-    case "hojeado_papel":
+    // Hojeado y Guillotina ahora usan el MISMO formato genérico que el
+    // resto de los procesos (columna izquierda: Máquina + specs en
+    // líneas separadas + "Cantidad Calculada"; columna derecha: Merma /
+    // Entregadas / Observaciones / Firma). "Cantidad Calculada" es el
+    // primer proceso de la cadena, así que su entrada NO se hereda de
+    // nadie (se calcula desde cantidad/rendimiento — ver el loop
+    // principal, sección "Entrada encadenada").
+    case "hojeado_papel": {
+      const anyData = data as any;
       return {
-        tituloEntrada: "Cantidad hojeado",
-        entrada: fmtNum(reg.cantidad_hojeado),
+        tituloEntrada: "Cantidad Calculada",
+        entrada: fmtNum(anyData.cantidad_hojeada_calculada),
         unidadEntrada: "Pliegos",
         merma,
         entregadas: fmtNum(reg.cantidad_entregada),
         unidad: "Pliegos",
-        extra: [],
+        extra: [
+          `Bobina: ${primeraLinea(data.hoj_bobina, data.bobina_cm)}cm`,
+          `Hojeado: ${primeraLinea(data.pliego_hojeado, data.hoj_corte, data.pliego)}`,
+          `Rend. Hojeado: ${primeraLinea(data.hoj_rendimiento, data.rendimiento)}`,
+          `Pliego Hojeado: ${pliegoHojeadoTexto(data)}`,
+        ].filter((x) => x && !x.endsWith(": ") && !x.endsWith(":cm")),
       };
+    }
 
-    case "guillotina_papel":
+    case "guillotina_papel": {
+      const anyData = data as any;
       return {
-        tituloEntrada: "Pliegos/Guillotina",
-        entrada: fmtNum(reg.pliegos),
+        tituloEntrada: "Cantidad Calculada",
+        entrada: fmtNum(anyData.pliegos_impresion_estimados),
         unidadEntrada: "Pliegos",
         merma,
         entregadas: fmtNum(reg.cantidad_entregada),
         unidad: "Pliegos",
-        extra: [],
+        extra: [
+          `Pliego: ${primeraLinea(data.pliego, data.pliegos_guillotina)}`,
+          `Rend. Guillotina: ${primeraLinea(data.rendimiento, data.hoj_rendimiento)}`,
+          `Corte: ${primeraLinea(data.corte, data.corte_guillotina)}`,
+          `Cortes: ${fmtNum(reg.cortes)}`,
+        ].filter((x) => x && !x.endsWith(": ")),
       };
+    }
 
     case "impresion_papel":
       return {
@@ -460,117 +547,10 @@ function datosProceso(
   }
 }
 
-// Mini-celda con etiqueta arriba (gris) y valor abajo (negro, centrado),
-// usada dentro de la fila ancha de preparación de material (Hojeado/Guillotina).
-function miniCelda(doc: jsPDF, label: string, value: string, x: number, y: number, w: number, h: number, sufijo = "") {
-  rect(doc, x, y, w, h);
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(4.6);
-  doc.setTextColor(GRAY_DARK[0], GRAY_DARK[1], GRAY_DARK[2]);
-  lineText(doc, label, x + w / 2, y + 2.4, w - 1.2, 4.6, false, "center", 1);
-  doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(6.8);
-  const texto = sufijo && f(value) ? `${value} ${sufijo}` : value;
-  lineText(doc, texto, x + w / 2, y + h - 2.1, w - 1.4, 6.8, true, "center", 1);
-}
-
-// ────────────────────────────────────────────────────────────────────────
-// Fila ancha de preparación de material (Hojeado o Guillotina, son
-// excluyentes entre sí). No lleva las columnas de Observaciones/Firma que
-// sí llevan los demás procesos; en cambio, integra sus propias celdas de
-// Merma/Entregadas dentro de la misma fila, tal como pidió el usuario:
-//
-//   Hojeado    → Bobina | Hojeado | Rend. Hojeado | Pliego Hojeado |
-//                Cantidad Calculada | Merma | Entregadas   (7 celdas)
-//   Guillotina → Pliego | Rend. Guillotina | Corte |
-//                Cantidad Calculada | Cortes | Merma | Entregadas (7 celdas)
-//
-// "Cantidad Calculada" = cantidad pedida / rendimiento (dato de
-// REFERENCIA, calculado con calcularCantidadHojeada ya corregido a
-// división). "Merma" y "Entregadas" (y "Cortes" en Guillotina) son datos
-// REALES capturados por el operador en el módulo de seguimiento — SIN
-// fallback calculado, quedan en blanco hasta que se registren.
-//
-// Los íconos de bobina/guillotina que existían antes (iconoBobina /
-// iconoGuillotina) se eliminaron para liberar espacio y poder mostrar las
-// 7 celdas sin que se vean apretadas.
-// ────────────────────────────────────────────────────────────────────────
-function procesoPreparacionBlock(
-  doc: jsPDF,
-  proceso: ProcesoOrdenPapelPdf,
-  data: OrdenProduccionPapelData,
-  registro: ProcesoPapelRuntime | null,
-  x: number,
-  y: number,
-  w: number,
-  h: number
-) {
-  const leftW = 8;
-  const mainX = x + leftW;
-  const mainW = w - leftW;
-  const reg = registro ?? {};
-  const anyData = data as any;
-
-  headerCellVertical(doc, proceso.etiqueta, x, y, leftW, h, 5.8);
-
-  // Entrada calculada = cantidad pedida / rendimiento. Dato de
-  // REFERENCIA, no capturado por el operador.
-  const entradaCalculada =
-    proceso.key === "hojeado_papel"
-      ? primeraLinea(fmtNum(anyData.cantidad_hojeada_calculada), fmtCantidad(data))
-      : primeraLinea(fmtNum(anyData.pliegos_impresion_estimados), fmtCantidad(data));
-
-  // Merma y Entregadas: SIEMPRE del registro real capturado en el módulo
-  // de seguimiento (SeccionAvancesPapel / finalizarProcesoPapel). Sin
-  // fallback calculado — quedan en blanco hasta que el operador las
-  // registre, igual que en el resto de los procesos del PDF.
-  const merma = fmtNum(reg.merma);
-  const entregadas = fmtNum(reg.cantidad_entregada);
-
-  if (proceso.key === "hojeado_papel") {
-    const pesos = [0.85, 0.95, 0.85, 1.05, 1.0, 0.85, 1.0];
-    const total = pesos.reduce((a, b) => a + b, 0);
-    let cx = mainX;
-    const draw = (label: string, value: string, peso: number, sufijo = "") => {
-      const cw = mainW * (peso / total);
-      miniCelda(doc, label, value, cx, y, cw, h, sufijo);
-      cx += cw;
-    };
-
-    draw("Bobina", primeraLinea(data.hoj_bobina, data.bobina_cm), pesos[0], "cm");
-    draw("Hojeado", primeraLinea(anyData.hojeado, data.hoj_corte, data.pliego_hojeado), pesos[1]);
-    draw("Rend. Hojeado", primeraLinea(data.hoj_rendimiento, anyData.rendimiento_hojeado), pesos[2]);
-    draw("Pliego Hojeado", primeraLinea(data.pliego_hojeado, data.hoj_corte, data.pliego), pesos[3]);
-    draw("Cantidad Calculada", entradaCalculada, pesos[4]);
-    draw("Merma", merma, pesos[5]);
-    draw("Entregadas", entregadas, pesos[6]);
-    return;
-  }
-
-  // Guillotina: "Cortes" se mantiene como celda propia (dato de
-  // referencia = número de cortes realizados), separada de "Entregadas"
-  // (pliegos finales que salieron de este proceso, editable a mano por
-  // si hay discrepancia con lo calculado).
-  const cortes = fmtNum(reg.cortes);
-
-  const pesos = [0.85, 0.85, 0.85, 1.0, 0.85, 0.85, 1.0];
-  const total = pesos.reduce((a, b) => a + b, 0);
-  let cx = mainX;
-  const draw = (label: string, value: string, peso: number) => {
-    const cw = mainW * (peso / total);
-    miniCelda(doc, label, value, cx, y, cw, h);
-    cx += cw;
-  };
-
-  draw("Pliego", primeraLinea(data.pliego, data.pliegos_guillotina), pesos[0]);
-  draw("Rend. Guillotina", primeraLinea(anyData.rendimiento_guillotina, data.rendimiento), pesos[1]);
-  draw("Corte", primeraLinea(data.corte, anyData.corte_guillotina), pesos[2]);
-  draw("Cantidad Calculada", entradaCalculada, pesos[3]);
-  draw("Cortes", cortes, pesos[4]);
-  draw("Merma", merma, pesos[5]);
-  draw("Entregadas", entregadas, pesos[6]);
-}
+// (Se eliminaron miniCelda() y procesoPreparacionBlock(): Hojeado y
+// Guillotina ahora usan el mismo bloque genérico de 2 columnas que el
+// resto de los procesos — procesoBlockIzquierdo / procesoBlockDerecho —
+// en vez de una fila ancha aparte con mini-celdas.)
 
 // Bloque IZQUIERDO: etiqueta vertical + máquina + número grande de
 // entrada + datos técnicos, equivalente a las cajas "Hojeado / Impresión /
@@ -629,13 +609,123 @@ function procesoBlockIzquierdo(
 
   doc.line(mainX, y + 8.8, mainX + mainW, y + 8.8);
 
-  // Las specs técnicas se unen con separador. No se recorta a 3 elementos
-  // porque Laminación necesita mostrar tipo, metros, rollos, desarrollo,
-  // CTES/mod y bobina.
-  const extra = datos.extra.join("  |  ");
-  if (extra) {
-    lineText(doc, extra, mainX + 1.4, y + 11.4, mainW - 3, 6, false, "left", 2);
+  // ── Specs en líneas separadas ────────────────────────────────────────
+  // ANTES se unían con " | " en un solo párrafo que se recortaba a 2
+  // líneas (se veía apretado y difícil de leer, sobre todo en Laminación
+  // con 6 datos). AHORA cada dato de `datos.extra` va en su propia línea,
+  // igual que en el PDF de referencia (Metros / Desarrollo / CTES-Mod
+  // cada uno aparte). El alto de la fila ya no es fijo: se calcula según
+  // cuántas líneas trae cada proceso (ver alturaFilaProceso en el loop
+  // principal), así que aquí simplemente se dibujan todas sin recorte.
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(5.8);
+  doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);
+  let ly = y + 11.6;
+  const lineHExtra = 2.6;
+  datos.extra.filter(Boolean).forEach((linea) => {
+    lineText(doc, linea, mainX + 1.4, ly, mainW - 3, 5.8, false, "left", 1);
+    ly += lineHExtra;
+  });
+}
+
+// Celda de la cuadrícula 2x2 (Hojeado/Guillotina): borde propio, label
+// chico gris arriba y valor BOLD más grande centrado abajo — más legible
+// que una línea de texto plano, y con espacio para agrandar el valor.
+function celdaGridInfo(doc: jsPDF, label: string, value: string, x: number, y: number, w: number, h: number) {
+  rect(doc, x, y, w, h);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(5.6);
+  doc.setTextColor(GRAY_DARK[0], GRAY_DARK[1], GRAY_DARK[2]);
+  // "sube" el label (más cerca del borde superior) para que quede más
+  // separado del valor de abajo — antes se veían pegados.
+  lineText(doc, label, x + w / 2, y + 2.4, w - 2, 5.6, false, "center", 1);
+  doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9.5);
+  lineText(doc, value, x + w / 2, y + h - 2, w - 2.4, 9.5, true, "center", 1);
+}
+
+// ────────────────────────────────────────────────────────────────────────
+// Bloque IZQUIERDO específico de Hojeado/Guillotina: mismo header que el
+// bloque genérico (Maquina + número de "Cantidad Calculada"), pero sus 4
+// datos técnicos ya no van en líneas de texto — van en una CUADRÍCULA
+// 2x2 de celdas con borde propio, en negritas y con letra más grande,
+// como pidió el usuario ("celdas de 2 y 2").
+//
+//   Hojeado    → Bobina | Hojeado
+//                Rend. Hojeado | Pliego Hojeado
+//   Guillotina → Pliego | Rend. Guillotina
+//                Corte | Cortes
+// ────────────────────────────────────────────────────────────────────────
+function prepBlockIzquierdo(
+  doc: jsPDF,
+  proceso: ProcesoOrdenPapelPdf,
+  data: OrdenProduccionPapelData,
+  registro: ProcesoPapelRuntime | null,
+  entradaTexto: string,
+  x: number,
+  y: number,
+  w: number,
+  h: number
+) {
+  const leftW = 9;
+  const mainX = x + leftW;
+  const mainW = w - leftW;
+
+  headerCellVertical(doc, proceso.etiqueta, x, y, leftW, h, 6);
+  rect(doc, mainX, y, mainW, h);
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(LABEL);
+  doc.setTextColor(GRAY_DARK[0], GRAY_DARK[1], GRAY_DARK[2]);
+  doc.text("Maquina", mainX + 1.4, y + 3);
+  doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);
+  const maquinaTexto = valorMaquina(proceso, registro);
+  lineText(doc, maquinaTexto, mainX + 1.4, y + 6.4, mainW - 26, 7.5, true, "left", 1);
+
+  if (entradaTexto) {
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(12);
+    doc.text(entradaTexto, mainX + mainW - 2, y + 6.3, { align: "right" });
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(5.5);
+    doc.setTextColor(GRAY_DARK[0], GRAY_DARK[1], GRAY_DARK[2]);
+    doc.text("Pliegos", mainX + mainW - 2, y + 8.3, { align: "right" });
+    doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);
   }
+
+  doc.line(mainX, y + 8.8, mainX + mainW, y + 8.8);
+
+  const reg = (registro ?? {}) as Record<string, unknown>;
+  const items = proceso.key === "hojeado_papel"
+    ? [
+      {
+        label: "Bobina", value: (() => {
+          const v = primeraLinea(data.hoj_bobina, data.bobina_cm);
+          return v ? `${v}cm` : "";
+        })()
+      },
+      { label: "Hojeado", value: primeraLinea(data.pliego_hojeado, data.hoj_corte, data.pliego) },
+      { label: "Rend. Hojeado", value: primeraLinea(data.hoj_rendimiento, data.rendimiento) },
+      { label: "Pliego Hojeado", value: pliegoHojeadoTexto(data) },
+    ]
+    : [
+      { label: "Pliego", value: primeraLinea(data.pliego, data.pliegos_guillotina) },
+      { label: "Rend. Guillotina", value: primeraLinea(data.rendimiento, data.hoj_rendimiento) },
+      { label: "Corte", value: primeraLinea(data.corte, data.corte_guillotina) },
+      { label: "Cortes", value: fmtNum(reg.cortes) },
+    ];
+
+  const gridY = y + 8.8;
+  const gridH = h - 8.8;
+  const cellW = mainW / 2;
+  const cellH = gridH / 2;
+
+  items.forEach((item, i) => {
+    const col = i % 2;
+    const row = Math.floor(i / 2);
+    celdaGridInfo(doc, item.label, item.value, mainX + col * cellW, gridY + row * cellH, cellW, cellH);
+  });
 }
 
 // Segmento label:valor horizontal (label chico gris a la izquierda, valor
@@ -655,6 +745,257 @@ function segmentoEtiquetaValor(doc: jsPDF, x: number, y: number, w: number, h: n
   doc.setFont("helvetica", "bold");
   doc.setFontSize(7);
   lineText(doc, value, x + offsetX, midY, Math.max(w - offsetX, 4), 7, true, "left", 1);
+}
+
+interface ExtraLabelValor {
+  label: string;
+  value: string;
+}
+
+// Alto de fila para bloqueProcesoSimple, según cuántos datos extra traiga
+// (0 = UV/AR, compacto; 1 = HS/Textura; 2 = Suaje, un poco más alto).
+function alturaBloqueSimple(extras: ExtraLabelValor[]): number {
+  if (extras.length === 0) return 11;
+  if (extras.length === 1) return 12.5;
+  return 15;
+}
+
+// ────────────────────────────────────────────────────────────────────────
+// Bloque IZQUIERDO reutilizable para procesos que solo llevan Máquina +
+// cantidad entregada, con 0, 1 o 2 datos extra (Suaje/Matrix, Textura,
+// Foil). Reemplaza a procesoBlockIzquierdo (genérico) para UV, HS,
+// Textura, AR y Suaje, según el diseño exacto pedido:
+//
+//   UV / AR        → 2 casillas: Maquina | Numero + "Pliegos"
+//   HS             → 3 casillas: Maquina | Numero + "Pliegos" | Foil (bold, sin label)
+//   Textura        → 3 casillas: Maquina | Numero + "Pliegos" | "Textura" / valor (apilado)
+//   Suaje          → 3 casillas: Maquina | Numero + "Pliegos" | "Suaje X" / "Matrix Y" (en línea)
+// ────────────────────────────────────────────────────────────────────────
+function bloqueProcesoSimple(
+  doc: jsPDF,
+  proceso: ProcesoOrdenPapelPdf,
+  registro: ProcesoPapelRuntime | null,
+  entradaTexto: string,
+  unidadEntrada: string,
+  extras: ExtraLabelValor[],
+  x: number,
+  y: number,
+  w: number,
+  h: number
+) {
+  const leftW = 9;
+  const mainX = x + leftW;
+  const mainW = w - leftW;
+
+  headerCellVertical(doc, proceso.etiqueta, x, y, leftW, h, 6);
+
+  const tieneExtras = extras.length > 0;
+  // Se le quita medio centímetro (5mm) a la caja de Máquina y se le suma
+  // a la caja del medio (Pliegos), que se veía muy angosta con espacio
+  // en blanco alrededor del número.
+  const AJUSTE_MM = 5;
+  const box1W = mainW * (tieneExtras ? 0.36 : 0.42) - AJUSTE_MM;
+  const box2W = mainW * (tieneExtras ? 0.34 : 0.58) + AJUSTE_MM;
+  const box3W = mainW - box1W - box2W;
+
+  // Caja 1: Máquina.
+  rect(doc, mainX, y, box1W, h);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(LABEL);
+  doc.setTextColor(GRAY_DARK[0], GRAY_DARK[1], GRAY_DARK[2]);
+  doc.text("Maquina", mainX + 1.4, y + 3);
+  doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);
+  const maquinaTexto = primeraLinea(registro?.maquina, proceso.maquina);
+  lineText(doc, maquinaTexto, mainX + 1.4, y + h / 2 + 2, box1W - 2.6, 8, true, "left", 2);
+
+  // Caja 2: número grande + unidad (siempre "Pliegos", encadenado desde
+  // el proceso anterior).
+  const box2X = mainX + box1W;
+  rect(doc, box2X, y, box2W, h);
+  if (entradaTexto) {
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(13);
+    doc.text(entradaTexto, box2X + box2W * 0.42, y + h / 2 + 2, { align: "center" });
+  }
+  if (unidadEntrada) {
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7);
+    doc.text(unidadEntrada, box2X + box2W * 0.68, y + h / 2 + 2, { align: "left" });
+  }
+
+  // Caja 3 (opcional): datos extra.
+  if (tieneExtras) {
+    const box3X = box2X + box2W;
+    rect(doc, box3X, y, box3W, h);
+
+    if (extras.length === 1 && !extras[0].label) {
+      // HS: solo el valor, en bold, centrado (sin label — el foil no
+      // lleva etiqueta visible en la referencia).
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(8);
+      lineText(doc, extras[0].value, box3X + box3W / 2, y + h / 2 + 1.5, box3W - 2.4, 8, true, "center", 2);
+    } else if (extras.length === 1) {
+      // Textura: label arriba (chico, gris), valor abajo (bold, centrado)
+      // — apilado, como en la referencia.
+      labelCell(doc, extras[0].label, extras[0].value, box3X, y, box3W, h, 8, true, "center");
+    } else {
+      // Suaje: 2 renglones "label  valor" en línea, apilados.
+      const lineasH = h / extras.length;
+      extras.forEach((extra, i) => {
+        const ey = y + lineasH * i;
+        if (i > 0) doc.line(box3X, ey, box3X + box3W, ey);
+        segmentoEtiquetaValor(doc, box3X + 1.4, ey, box3W - 1.8, lineasH, extra.label, extra.value);
+      });
+    }
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────────
+// Bloque IZQUIERDO específico de Laminación. 3 casillas:
+//   1. Máquina + 3 líneas de specs (Metros/Rollos, Desarrollo, CTES/Mod)
+//   2. Número grande (pliegos que entraron) + "Pliegos"
+//   3. Tipo de laminado (Mate/Brillante/etc.) + "Bobina: Xcm"
+// ────────────────────────────────────────────────────────────────────────
+function laminacionBlockIzquierdo(
+  doc: jsPDF,
+  proceso: ProcesoOrdenPapelPdf,
+  data: OrdenProduccionPapelData,
+  registro: ProcesoPapelRuntime | null,
+  entradaTexto: string,
+  x: number,
+  y: number,
+  w: number,
+  h: number
+) {
+  const leftW = 9;
+  const mainX = x + leftW;
+  const mainW = w - leftW;
+  const reg = (registro ?? {}) as Record<string, unknown>;
+  const anyData = data as any;
+
+  headerCellVertical(doc, proceso.etiqueta, x, y, leftW, h, 6);
+
+  const box1W = mainW * 0.52;
+
+  // Caja 1: Máquina + specs.
+  rect(doc, mainX, y, box1W, h);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(LABEL);
+  doc.setTextColor(GRAY_DARK[0], GRAY_DARK[1], GRAY_DARK[2]);
+  doc.text("Maquina", mainX + 1.4, y + 3);
+  doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);
+  const maquinaTexto = primeraLinea(registro?.maquina, proceso.maquina);
+  lineText(doc, maquinaTexto, mainX + 1.4, y + 6.4, box1W - 2.8, 7.5, true, "left", 1);
+
+  doc.line(mainX, y + 8.6, mainX + box1W, y + 8.6);
+
+  const metros = fmtNum(reg.metros ?? anyData.metros_laminacion_estimados);
+  const rollos = fmtNum(reg.rollos ?? anyData.rollos_laminacion_estimados, 2);
+  const desarrollo = primeraLinea(reg.desarrollo_mm, anyData.desarrollo_laminacion_mm, anyData.desarrollo_mm);
+  const ctesMod = primeraLinea(reg.ctes_mod, anyData.ctes_mod_laminacion, anyData.ctes_mod);
+
+  const specs = [
+    metros ? `Metros: ${metros} mts${rollos ? `   ${rollos} rollos` : ""}` : "",
+    desarrollo ? `Desarrollo: ${desarrollo} mm` : "",
+    ctesMod ? `CTES/Mod: ${ctesMod}` : "",
+  ].filter(Boolean);
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(6.6);
+  let ly = y + 11.6;
+  specs.forEach((linea) => {
+    lineText(doc, linea, mainX + 1.4, ly, box1W - 3, 6.6, true, "left", 1);
+    ly += 3.0;
+  });
+
+  // CORREGIDO: antes "número + Pliegos" y "tipo + Bobina" eran 2
+  // columnas separadas lado a lado. Ahora van en la MISMA columna
+  // derecha, apiladas una arriba de la otra (separador horizontal), tal
+  // como en el PDF de referencia. La línea divisoria usa el MISMO offset
+  // (8.6) que la línea de box1 (Maquina/specs), para que ambas líneas
+  // queden alineadas horizontalmente en toda la fila.
+  const box2W = mainW - box1W;
+  const box2X = mainX + box1W;
+  const filaSupH = 8.6;
+  const filaInfH = h - filaSupH;
+
+  // Fila superior: número grande (entrada) + "Pliegos".
+  rect(doc, box2X, y, box2W, filaSupH);
+  if (entradaTexto) {
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    doc.text(entradaTexto, box2X + box2W * 0.4, y + filaSupH / 2 + 1.6, { align: "center" });
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(6.5);
+    doc.text("Pliegos", box2X + box2W * 0.65, y + filaSupH / 2 + 1.6, { align: "left" });
+  }
+
+  // Fila inferior: tipo de laminado + bobina.
+  const box3Y = y + filaSupH;
+  rect(doc, box2X, box3Y, box2W, filaInfH);
+  const tipoLaminado = primeraLinea(data.laminado_acabado, data.laminado_nombre, data.laminado);
+  // La bobina que debe mostrarse aquí es la del proceso de HOJEADO
+  // (data.hoj_bobina / data.bobina_cm — el mismo dato que ya se ve en la
+  // celda "Bobina" del bloque de Hojeado), no un campo propio de
+  // laminación. Se deja el registro/estimado de laminación como respaldo
+  // solo por si el producto no llevó hojeado (p. ej. entró por guillotina).
+  const bobina = primeraLinea(data.hoj_bobina, data.bobina_cm, reg.bobina_cm, anyData.bobina_laminacion_cm);
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9);
+  lineText(doc, tipoLaminado, box2X + 1.4, box3Y + filaInfH / 2 - 0.5, box2W * 0.5, 9, true, "left", 1);
+  if (bobina) {
+    segmentoEtiquetaValor(doc, box2X + box2W * 0.5, box3Y, box2W * 0.48, filaInfH, "Bobina:", `${bobina}cm`);
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────────
+// Bloque IZQUIERDO específico de Empaque. 2 casillas:
+//   1. Máquina
+//   2. Tipo de caja seleccionada (bold, grande) + "Cantidad Xpz"
+// No muestra el número de entrada aquí — ese vive en el bloque derecho
+// (procesoBlockDerecho), que ya trae la cantidad real encadenada
+// (entregadas de Armado × rendimiento).
+// ────────────────────────────────────────────────────────────────────────
+function empaqueBlockIzquierdo(
+  doc: jsPDF,
+  proceso: ProcesoOrdenPapelPdf,
+  data: OrdenProduccionPapelData,
+  registro: ProcesoPapelRuntime | null,
+  x: number,
+  y: number,
+  w: number,
+  h: number
+) {
+  const leftW = 9;
+  const mainX = x + leftW;
+  const mainW = w - leftW;
+
+  headerCellVertical(doc, proceso.etiqueta, x, y, leftW, h, 6);
+
+  const box1W = mainW * 0.3;
+  rect(doc, mainX, y, box1W, h);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(LABEL);
+  doc.setTextColor(GRAY_DARK[0], GRAY_DARK[1], GRAY_DARK[2]);
+  doc.text("Maquina", mainX + 1.4, y + 3);
+  doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);
+  const maquinaTexto = primeraLinea((data as any).maquina_armado_pdf, registro?.maquina, "Manual");
+  lineText(doc, maquinaTexto, mainX + 1.4, y + h / 2 + 2, box1W - 2.6, 9, true, "left", 1);
+
+  const box2X = mainX + box1W;
+  const box2W = mainW - box1W;
+  rect(doc, box2X, y, box2W, h);
+
+  const tipoCaja = primeraLinea(data.tipo_caja, data.empaque);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(10.5);
+  lineText(doc, tipoCaja, box2X + box2W * 0.36, y + h / 2 + 1.2, box2W * 0.66, 10.5, true, "center", 1);
+
+  const cantidad = primeraLinea(data.cantidad_por_caja, data.pzs_caja);
+  if (cantidad) {
+    segmentoEtiquetaValor(doc, box2X + box2W * 0.68, y, box2W * 0.3, h, "Cantidad", `${cantidad}pz`);
+  }
 }
 
 // ────────────────────────────────────────────────────────────────────────
@@ -708,13 +1049,17 @@ function armadoBlockIzquierdo(
 
   const tipoPegado = primeraLinea(data.tipo_pegue, data.tipo_pegado);
   const pegamento = f(data.pegamento);
-  const asaValor = primeraLinea(
-    data.asa_descripcion,
-    [primeraLinea(data.asa_tipo, data.asa, data.asa_suaje), primeraLinea(data.color_asa_nombre, data.asa_color)]
-      .filter(Boolean)
-      .join(" ")
-  );
-  const asaMedida = primeraLinea(data.asa_medida, data.medida_asa);
+  // CORREGIDO: antes usaba data.asa_descripcion como primera opción, pero
+  // ese campo normalizado YA incluye la medida al final ("Listón satinado
+  // negro 12"), y el segmento angosto de al lado volvía a mostrar la
+  // medida por separado — de ahí el "12" duplicado. Ahora se construye
+  // SOLO con tipo + color (sin medida), dejando la medida únicamente en
+  // el segmento angosto de la derecha.
+  const asaValor = primeraLinea(data.asa_tipo, data.asa, data.asa_suaje) +
+    (primeraLinea(data.color_asa_nombre, data.asa_color) ? ` ${primeraLinea(data.color_asa_nombre, data.asa_color)}` : "");
+  // Con sufijo "cm" — antes se mostraba el número solo.
+  const asaMedidaValor = primeraLinea(data.asa_medida, data.medida_asa);
+  const asaMedida = asaMedidaValor ? `${asaMedidaValor}cm` : "";
   // Mismo fix que Refuerzo del bloque genérico: prioriza el campo YA
   // normalizado antes de reconstruirlo, para no duplicar el texto.
   const refuerzoValor = primeraLinea(
@@ -726,14 +1071,18 @@ function armadoBlockIzquierdo(
   const filas: Array<{ segmentos: Array<{ label: string; value: string; peso: number }> }> = [
     { segmentos: [{ label: "Tipo Pegado", value: tipoPegado, peso: 1 }] },
     { segmentos: [{ label: "Pegamento", value: pegamento, peso: 1 }] },
-    { segmentos: [
-      { label: "Asa", value: asaValor, peso: 0.72 },
-      { label: "", value: asaMedida, peso: 0.28 },
-    ] },
-    { segmentos: [
-      { label: "Refuerzo", value: refuerzoValor, peso: 0.45 },
-      { label: "Base", value: baseValor, peso: 0.55 },
-    ] },
+    {
+      segmentos: [
+        { label: "Asa", value: asaValor, peso: 0.72 },
+        { label: "", value: asaMedida, peso: 0.28 },
+      ]
+    },
+    {
+      segmentos: [
+        { label: "Refuerzo", value: refuerzoValor, peso: 0.45 },
+        { label: "Base", value: baseValor, peso: 0.55 },
+      ]
+    },
   ];
 
   filas.forEach((fila, i) => {
@@ -747,6 +1096,139 @@ function armadoBlockIzquierdo(
       segmentoEtiquetaValor(doc, sx + 1.4, ry, segW - 1.8, rowH4, seg.label, seg.value);
       sx += segW;
     });
+  });
+}
+
+// (Se eliminó el catálogo MAQUINAS_IMPRESION: ya no se usa un checklist
+// de 3 máquinas posibles — ahora Impresión solo muestra la máquina
+// realmente usada, igual que el resto de los procesos.)
+
+
+// ────────────────────────────────────────────────────────────────────────
+// Bloque IZQUIERDO específico de Impresión (reemplaza a
+// procesoBlockIzquierdo solo para esta clave). Diseño pedido explícitamente
+// por el usuario, con 3 secciones:
+//
+//   1. Checklist de máquina (Heidelberg SM / Heidelberg MO / KBA), con la
+//      usada realmente marcada.
+//   2. Número grande = lo que entregó Hojeado/Guillotina (entradaTexto,
+//      ya encadenado), + tipo de papel, calibre y medida de bobina x
+//      hojeado (pliego hojeado).
+//   3. Pantones, en formato "tintas frente x tintas vuelta" (ej. "5x1"),
+//      seguido de las tintas de frente (F:) y vuelta (V:) con sus
+//      pantones.
+// ────────────────────────────────────────────────────────────────────────
+function impresionBlockIzquierdo(
+  doc: jsPDF,
+  proceso: ProcesoOrdenPapelPdf,
+  data: OrdenProduccionPapelData,
+  registro: ProcesoPapelRuntime | null,
+  entradaTexto: string,
+  x: number,
+  y: number,
+  w: number,
+  h: number
+) {
+  const leftW = 9;
+  const mainX = x + leftW;
+  const mainW = w - leftW;
+
+  headerCellVertical(doc, proceso.etiqueta, x, y, leftW, h, 6);
+
+  // CORREGIDO: antes topH/bottomH eran proporciones de h, y la posición
+  // del número + "Maquina" (topH*0.42 + 3.2) caía casi exactamente en la
+  // misma Y que el texto de material (topH - 3) — ambos números daban
+  // ~7.6mm cuando topH≈10.6mm. El material (dibujado después, en negritas)
+  // tapaba la palabra "Maquina", por eso no se veía. Ahora se usan
+  // offsets FIJOS (no proporcionales) para número/label/material, con
+  // separación garantizada entre cada uno.
+  const topH = 15;
+  const bottomH = h - topH;
+  // CORREGIDO: ya no se lista el catálogo de 3 máquinas con checkbox
+  // (sobraba info y además desbordaba la caja, encimándose con
+  // "Pantones"). Ahora, igual que el resto de los bloques, solo se
+  // muestra la máquina REALMENTE usada.
+  const box1W = mainW * 0.3;
+  const box2W = mainW - box1W;
+
+  // ── Sección 1: Máquina (solo la seleccionada, sin checklist) ────────
+  rect(doc, mainX, y, box1W, topH);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(LABEL);
+  doc.setTextColor(GRAY_DARK[0], GRAY_DARK[1], GRAY_DARK[2]);
+  doc.text("Maquina", mainX + 1.4, y + 3);
+  doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);
+  const maquinaTexto = primeraLinea(registro?.maquina, proceso.maquina);
+  lineText(doc, maquinaTexto, mainX + 1.4, y + topH / 2 + 3, box1W - 2.6, 8, true, "left", 2);
+
+  // ── Sección 2: número (entrada encadenada) + ficha técnica ──────────
+  const box2X = mainX + box1W;
+  rect(doc, box2X, y, box2W, topH);
+
+  if (entradaTexto) {
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(13);
+    doc.text(entradaTexto, box2X + box2W / 2, y + 5.5, { align: "center" });
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(6);
+    doc.setTextColor(GRAY_DARK[0], GRAY_DARK[1], GRAY_DARK[2]);
+    // En Impresión la cantidad entregada se etiqueta "Maquina" (no
+    // "Pliegos" como el resto de los procesos) — confirmado por el
+    // usuario, coincide con el PDF de referencia original.
+    doc.text("Maquina", box2X + box2W / 2, y + 8.5, { align: "center" });
+    doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);
+  }
+
+  // Línea divisoria entre el número y el material, para que quede clara
+  // la separación (mismo criterio visual que el resto de los bloques).
+  doc.line(box2X, y + 10, box2X + box2W, y + 10);
+
+  // Se quitó `data.medida` del fallback — traía solo "45" en vez de la
+  // medida completa. Usa exactamente los mismos campos (en el mismo
+  // orden) que ya funcionan bien en el bloque de Hojeado ("Pliego
+  // Hojeado: 61x45 cm"), así que el dato queda consistente entre ambos.
+  const materialTexto = primeraLinea(
+    data.material_impresion,
+    [primeraLinea(data.material), primeraLinea(data.calibre), pliegoHojeadoTexto(data)]
+      .filter(Boolean)
+      .join("  ")
+  );
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(7.5);
+  lineText(doc, materialTexto, box2X + box2W / 2, y + 13, box2W - 3, 7.5, true, "center", 2);
+
+  // ── Sección 3: Pantones (formato tintas frente x tintas vuelta) ─────
+  rect(doc, mainX, y + topH, mainW, bottomH);
+
+  const tintasFrenteNum = n(data.tintas_frente ?? data.tintas);
+  const tintasVueltaNum = n(data.tintas_reverso ?? data.tintas_dentro ?? data.tintasDentro);
+  const formatoTintas = tintasFrenteNum !== null || tintasVueltaNum !== null
+    ? `${tintasFrenteNum ?? 0}x${tintasVueltaNum ?? 0}`
+    : "";
+
+  // Más tamaño, negritas y espaciado (antes quedaba muy pegado al borde
+  // superior — "al ras").
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(6.5);
+  doc.setTextColor(GRAY_DARK[0], GRAY_DARK[1], GRAY_DARK[2]);
+  doc.text("Pantones", mainX + 1.8, y + topH + 2.6);
+  doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);
+  if (formatoTintas) {
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8.5);
+    doc.text(formatoTintas, mainX + 17, y + topH + 2.6);
+  }
+
+  const fTexto = `F: ${tintasConPantones(data.tintas_frente ?? data.tintas, data.pantones_frente ?? data.pantones)}`;
+  const vTexto = `V: ${tintasConPantones(data.tintas_reverso ?? data.tintas_dentro ?? data.tintasDentro, data.pantones_reverso ?? data.pantones_dentro ?? data.pantonesDentro)}`;
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(7);
+  let py = y + topH + 6.2;
+  [fTexto, vTexto].forEach((linea) => {
+    if (linea.endsWith(": ")) return;
+    lineText(doc, linea, mainX + 1.8, py, mainW - 3.6, 7, true, "left", 1);
+    py += 3.3;
   });
 }
 
@@ -940,16 +1422,23 @@ export async function generarPdfOrdenProduccionPapel(
   }
 
   rect(doc, M + logoW, y, titleW, headerH);
+
+  // El título va arriba, centrado en el espacio disponible.
   doc.setFont("helvetica", "bold");
   doc.setFontSize(15);
-  doc.text("Orden de Producción Papel", M + logoW + titleW / 2, y + 9, { align: "center" });
+  doc.text("Orden de Producción Papel", M + logoW + titleW / 2, y + 10, { align: "center" });
 
-  // Fila de tags compacta. Solo muestra procesos que realmente aplican.
-  const tagsW = titleW - 10;
-  const tagsH = 6.5;
-  const tagsX = M + logoW + (titleW - tagsW) / 2;
-  const tagsY = y + 13.2;
-  processTagRow(doc, procesos, tagsX, tagsY, tagsW, tagsH);
+  // ── Fila de tags: ABAJO (no arriba), pegada al borde INFERIOR de la
+  // celda del título, de lado a lado SIN márgenes (mismo ancho exacto que
+  // la celda, arrancando en el mismo borde izquierdo). Muestra el
+  // catálogo COMPLETO de procesos del sistema, marcando con "X" solo los
+  // que aplican a esta orden.
+  const tagsW = titleW;
+  const tagsH = 8;
+  const tagsX = M + logoW;
+  const tagsY = y + headerH - tagsH;
+  const aplicanKeys = new Set(procesos.map((p) => p.key as NombreProcesoOrdenPapel));
+  processTagRow(doc, PROCESOS_ORDEN_PAPEL, aplicanKeys, tagsX, tagsY, tagsW, tagsH);
 
   const ox = M + logoW + titleW;
   headerCell(doc, "ORDEN", ox, y, ordenW, 6, 10);
@@ -985,77 +1474,127 @@ export async function generarPdfOrdenProduccionPapel(
   const calW = CW - prodW - cantW - medW - matW;
   labelCell(doc, "Producto", primeraLinea(data.nombre_producto, data.descripcion), M, y, prodW, prodH, 12, true);
   labelCell(doc, "Cantidad", fmtCantidad(data), M + prodW, y, cantW, prodH, 13, true);
-  labelCell(doc, "Medida", f(data.medida), M + prodW + cantW, y, medW, prodH, 12, true);
+  labelCell(doc, "Medida", sinDecimalesInnecesarios(f(data.medida)), M + prodW + cantW, y, medW, prodH, 12, true);
   labelCell(doc, "Material", primeraLinea(data.material, data.grupo_descripcion), M + prodW + cantW + medW, y, matW, prodH, 11, true);
   labelCell(doc, "Calibre", f(data.calibre), M + prodW + cantW + medW + matW, y, calW, prodH, 11, true);
   y += prodH;
 
   const attrsH = 11;
-  const attrs = [
-    ["Ancho", primeraLinea(data.ancho)],
-    ["Fuelle", primeraLinea(data.fuelle, data.fuelle_fondo)],
-    ["Altura", primeraLinea(data.altura)],
-    ["Asa", primeraLinea(data.asa_tipo, data.asa, data.asa_suaje)],
-    ["Color", primeraLinea(data.color_asa_nombre, data.asa_color)],
-    ["Tamaño", primeraLinea(data.asa_medida, data.medida_asa)],
-    ["Pegamento", f(data.pegamento)],
-    ["Tipo pegue", primeraLinea(data.tipo_pegue, data.tipo_pegado)],
-    ["Suaje", primeraLinea(data.suaje_nombre, data.suaje)],
-    ["Rend.", primeraLinea(data.rendimiento, data.hoj_rendimiento)],
+  // Tercer elemento: true = "crecer" (Ancho/Fuelle/Altura/Tamaño/Suaje/
+  // Rend., pedido explícitamente), false = tamaño normal (Asa/Color/
+  // Pegamento/Tipo pegue, que ya se veían bien).
+  const attrs: Array<[string, string, boolean]> = [
+    ["Ancho", sinDecimalesInnecesarios(primeraLinea(data.ancho)), true],
+    ["Fuelle", sinDecimalesInnecesarios(primeraLinea(data.fuelle, data.fuelle_fondo)), true],
+    ["Altura", sinDecimalesInnecesarios(primeraLinea(data.altura)), true],
+    ["Asa", primeraLinea(data.asa_tipo, data.asa, data.asa_suaje), false],
+    ["Color", primeraLinea(data.color_asa_nombre, data.asa_color), false],
+    ["Tamaño", primeraLinea(data.asa_medida, data.medida_asa), true],
+    ["Pegamento", f(data.pegamento), false],
+    ["Tipo pegue", primeraLinea(data.tipo_pegue, data.tipo_pegado), false],
+    ["Suaje", primeraLinea(data.suaje_nombre, data.suaje), true],
+    ["Rend.", primeraLinea(data.rendimiento, data.hoj_rendimiento), true],
   ];
   const aw = CW / attrs.length;
-  attrs.forEach(([label, value], i) => labelCell(doc, label, value, M + aw * i, y, aw, attrsH, 8, true));
+  attrs.forEach(([label, value, crecer], i) => {
+    // "sube un poco, no tanto porque si no quedarían fuera": raise
+    // pequeño (1.3mm) solo en las celdas agrandadas, para que el valor
+    // más grande no quede pegado al borde inferior sin salirse del cell.
+    labelCell(doc, label, value, M + aw * i, y, aw, attrsH, crecer ? 10.5 : 8, true, "center", crecer ? 1.3 : 0);
+  });
   y += attrsH + 1;
 
-  // Bloques de proceso. Hojeado/Guillotina son excluyentes entre sí y
-  // llevan su propio esquema de 7 mini-celdas (specs de ficha + Cantidad
-  // Calculada + Merma/Entregadas, y Cortes en Guillotina), dibujado con
-  // procesoPreparacionBlock en una fila ancha aparte. El resto de los
-  // procesos sigue el esquema de 2 columnas paralelas (specs / merma-
-  // entregadas-observaciones-firma).
-  const preparacion = procesos.find((p) => p.key === "hojeado_papel" || p.key === "guillotina_papel");
-  const procesosDosColumnas = procesos.filter((p) => p.key !== "hojeado_papel" && p.key !== "guillotina_papel");
-
-  // 15mm (antes 17mm): se compacta la altura de las 7 mini-celdas de
-  // Hojeado/Guillotina, como pidió el usuario ("acortar el tamaño").
-  const prepRowH = 15;
-  if (preparacion) {
-    const registro = obtenerRegistroProcesoPapel(data, preparacion.key);
-    procesoPreparacionBlock(doc, preparacion, data, registro, M, y, CW, prepRowH);
-    y += prepRowH + 1;
-  }
-
-  const gap = 9;
-  const leftColW = CW * 0.53;
+  // Bloques de proceso. Hojeado/Guillotina ahora usan el MISMO esquema
+  // de 2 columnas paralelas que el resto (specs / merma-entregadas-
+  // observaciones-firma) — ya no llevan una fila ancha aparte con
+  // mini-celdas.
+  const gap = 14;
+  const leftColW = CW * 0.53 - 5;
   const rightColW = CW - leftColW - gap;
   const rightX = M + leftColW + gap;
-  const rowH = 15.5;
   // Armado necesita más alto porque su bloque izquierdo ahora es una
   // mini-tabla de 4 filas (Tipo Pegado / Pegamento / Asa / Refuerzo-Base)
-  // en vez de una sola línea de texto con "|".
+  // en vez de una sola línea de texto con "|". El resto de los procesos
+  // usa alturaFilaProceso() para calcular su alto según cuántas líneas de
+  // specs traigan (ver definición arriba).
   const rowHArmado = 21;
+  // Impresión necesita alto fijo: 3 filas de checklist de máquina +
+  // encabezado de pantones + 2 líneas (F/V), no depende de `datos.extra`
+  // porque ahora usa su propio bloque bespoke (impresionBlockIzquierdo).
+  const rowHImpresion = 26;
+  // Laminación necesita alto fijo: 3 líneas de specs (Metros/Rollos,
+  // Desarrollo, CTES/Mod) + número + tipo/bobina.
+  const rowHLaminacion = 22;
+  // Empaque: 2 casillas simples, sin specs extra.
+  const rowHEmpaque = 11.5;
+  // Hojeado/Guillotina: header (8.8mm) + cuadrícula 2x2 de celdas más
+  // grandes (2 filas de ~8mm cada una para que quepa el valor en bold 9.5pt).
+  const rowHPrep = 27;
   const rowGap = 1;
 
   // Rendimiento de hojeado/guillotina, usado únicamente para la fórmula
   // especial de Empaque (ver más abajo).
   const rendimientoPrep = n((data as any).rendimiento) ?? n((data as any).hoj_rendimiento);
 
+  // Datos extra por proceso para bloqueProcesoSimple (UV/HS/Textura/AR/Suaje).
+  // Igual que el resto del rediseño, se leen directo de la ficha/registro
+  // en vez de reconstruirse desde `datos.extra` (que ya no se usa aquí).
+  const extrasPorProceso = (key: NombreProcesoOrdenPapel, registro: ProcesoPapelRuntime | null): ExtraLabelValor[] => {
+    const reg = (registro ?? {}) as Record<string, unknown>;
+    switch (key) {
+      case "hot_stamping_papel":
+        return [{ label: "", value: primeraLinea(data.foil_nombre, data.foil) }].filter((e) => e.value);
+      case "texturizado_papel":
+        return [{ label: "Textura", value: primeraLinea(data.textura_nombre, data.textura) }].filter((e) => e.value);
+      case "suaje_produccion_papel": {
+        const suaje = primeraLinea(data.numero_suaje, data.suaje_nombre, data.suaje, reg.suaje_idsuaje_papel as any);
+        // CORREGIDO: antes solo leía data.matrix (ficha). Se amplía la
+        // cadena de respaldo — igual que ya se hace con "suaje" arriba —
+        // para revisar también el registro y el nombre alterno de ficha,
+        // ya que el dato puede venir capturado en cualquiera de esos
+        // lugares según el flujo con el que se haya dado de alta/avanzado
+        // el producto.
+        const matrix = primeraLinea(reg.matrix as any, data.matrix, (data as any).matrix_nombre);
+        const extras: ExtraLabelValor[] = [];
+        if (suaje) extras.push({ label: "Suaje", value: suaje });
+        if (matrix) extras.push({ label: "Matrix", value: matrix });
+        return extras;
+      }
+      default:
+        return [];
+    }
+  };
+
   let filaY = y;
 
-  procesosDosColumnas.forEach((proceso, idx) => {
+  procesos.forEach((proceso, idx) => {
     const registro = obtenerRegistroProcesoPapel(data, proceso.key);
     const datos = datosProceso(proceso.key, data, registro);
-    const alturaFila = proceso.key === "armado_papel" ? rowHArmado : rowH;
+    const extrasSimple = extrasPorProceso(proceso.key, registro);
+
+    const alturaFila =
+      proceso.key === "armado_papel" ? rowHArmado :
+        proceso.key === "impresion_papel" ? rowHImpresion :
+          proceso.key === "laminacion_papel" ? rowHLaminacion :
+            proceso.key === "empaque_papel" ? rowHEmpaque :
+              (proceso.key === "hojeado_papel" || proceso.key === "guillotina_papel") ? rowHPrep :
+                (proceso.key === "barniz_uv_papel" || proceso.key === "hot_stamping_papel" ||
+                  proceso.key === "texturizado_papel" || proceso.key === "alto_relieve_papel" ||
+                  proceso.key === "suaje_produccion_papel") ? alturaBloqueSimple(extrasSimple) :
+                  alturaFilaProceso(datos);
     const by = filaY;
 
     // ── Entrada encadenada ──────────────────────────────────────────
     // La entrada de ESTE proceso es SIEMPRE lo "Entregado" del proceso
-    // ANTERIOR (nunca un campo de entrada propio). El anterior puede ser
-    // el bloque de preparación (Hojeado/Guillotina) si este es el primer
-    // proceso de la cadena de 2 columnas, o el proceso previo del array.
-    const anterior = idx === 0 ? preparacion ?? null : procesosDosColumnas[idx - 1];
+    // ANTERIOR — EXCEPTO Hojeado/Guillotina, que son el primer proceso de
+    // la cadena y no heredan de nadie: su entrada es la "Cantidad
+    // Calculada" (cantidad pedida / rendimiento), ya resuelta en
+    // datosProceso() como `datos.entrada`.
     let entradaNum: number | null = null;
-    if (anterior) {
+    if (proceso.key === "hojeado_papel" || proceso.key === "guillotina_papel") {
+      entradaNum = n(datos.entrada);
+    } else if (idx > 0) {
+      const anterior = procesos[idx - 1];
       const registroAnterior = obtenerRegistroProcesoPapel(data, anterior.key);
       entradaNum = obtenerCantidadEntregadaProceso(anterior.key, registroAnterior);
     }
@@ -1074,6 +1613,20 @@ export async function generarPdfOrdenProduccionPapel(
 
     if (proceso.key === "armado_papel") {
       armadoBlockIzquierdo(doc, proceso, data, registro, entradaTexto, M, by, leftColW, alturaFila);
+    } else if (proceso.key === "impresion_papel") {
+      impresionBlockIzquierdo(doc, proceso, data, registro, entradaTexto, M, by, leftColW, alturaFila);
+    } else if (proceso.key === "laminacion_papel") {
+      laminacionBlockIzquierdo(doc, proceso, data, registro, entradaTexto, M, by, leftColW, alturaFila);
+    } else if (proceso.key === "empaque_papel") {
+      empaqueBlockIzquierdo(doc, proceso, data, registro, M, by, leftColW, alturaFila);
+    } else if (proceso.key === "hojeado_papel" || proceso.key === "guillotina_papel") {
+      prepBlockIzquierdo(doc, proceso, data, registro, entradaTexto, M, by, leftColW, alturaFila);
+    } else if (
+      proceso.key === "barniz_uv_papel" || proceso.key === "hot_stamping_papel" ||
+      proceso.key === "texturizado_papel" || proceso.key === "alto_relieve_papel" ||
+      proceso.key === "suaje_produccion_papel"
+    ) {
+      bloqueProcesoSimple(doc, proceso, registro, entradaTexto, datos.unidad, extrasSimple, M, by, leftColW, alturaFila);
     } else {
       procesoBlockIzquierdo(doc, proceso, data, registro, datos, entradaTexto, M, by, leftColW, alturaFila);
     }

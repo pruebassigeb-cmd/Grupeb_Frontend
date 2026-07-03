@@ -306,9 +306,19 @@ export const mapearProductoAPayload = (
   const parseP = (s: string) => parseFloat(s.replace(/[^0-9.]/g, "")) || 0;
 
   const extraNum = fila.modoExtra === "precio" ? (parseP(fila.extra || "0")) : 0;
-  const p1 = parseP(precio1) + extraNum;
-  const p2 = parseP(precio2) + extraNum;
-  const p3 = parseP(precio3) + extraNum;
+  // El cargo extra por pieza solo aplica a columnas que YA tienen un precio
+  // base capturado. Antes se sumaba parejo a las 3 columnas, así que una
+  // fila con solo el precio1 lleno pero con un extra activo terminaba
+  // "registrando" precio2/precio3 fantasma (extraNum > 0 hacía que p2/p3
+  // quedaran > 0 aunque el usuario nunca los haya llenado ni se vieran
+  // en pantalla — esto coincidía exactamente con "dejo solo la cantidad 1
+  // pero se registran las 3").
+  const p1raw = parseP(precio1);
+  const p2raw = parseP(precio2);
+  const p3raw = parseP(precio3);
+  const p1 = p1raw > 0 ? p1raw + extraNum : 0;
+  const p2 = p2raw > 0 ? p2raw + extraNum : 0;
+  const p3 = p3raw > 0 ? p3raw + extraNum : 0;
 
   const parseCant = (s: string) => parseInt(s.replace(/,/g, ""), 10) || 0;
   const c1 = parseCant(cant1);

@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import {
   FilaTabla, FilaVacia, CantidadSelect,
   TH, TH2, THD, TD,
@@ -31,6 +32,29 @@ interface Props {
   onAgregarProducto:(p:Producto)=>void;
 }
 
+// Botón redondo chiquito reutilizado para el +/× de columnas de precio.
+function BotonColPrecio({ label, title, onClick, variante }: { label: string; title: string; onClick: () => void; variante: "add" | "remove" }) {
+  const esAdd = variante === "add";
+  return (
+    <button
+      className="no-print"
+      onClick={onClick}
+      title={title}
+      style={{
+        background: esAdd ? "#C9922A22" : "#88888822",
+        border: `1px solid ${esAdd ? "#C9922A66" : "#88888866"}`,
+        color: esAdd ? "#C9922A" : "#999",
+        width: 14, height: 14, borderRadius: "50%",
+        fontSize: 9, lineHeight: 1, cursor: "pointer", padding: 0,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        flexShrink: 0,
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
 export default function HojaCotizacion({
   filas,cliente,coment,folio,cant1,cant2,cant3,mob,tab,desk,over,catalogoPropio,
   catalogs, foils, texturas, catalogosPlast, pigmentosDB, coloresAsa, suajesPlast, asesor,
@@ -40,6 +64,44 @@ export default function HojaCotizacion({
   const LIMITE_PRODUCTOS = 5;
   const alcanzoLimite = filas.length >= LIMITE_PRODUCTOS;
   const filasVaciasBlanco = Math.max(0, LIMITE_PRODUCTOS - filas.length - (alcanzoLimite ? 0 : 1));
+
+  // ── Columnas de precio visibles (1, 2 o 3) ──────────────────────────────
+  // El 80% de las cotizaciones solo necesitan una cantidad, así que arranca
+  // colapsado en 1 columna. El "+" junto al header revela la siguiente.
+  // Todo el resto del comportamiento (cálculo de totales, mapeo al backend,
+  // generación del PDF) sigue exactamente igual — solo cambia cuántas
+  // columnas se ven en pantalla.
+  const [columnasPrecio, setColumnasPrecio] = useState<1 | 2 | 3>(1);
+
+  // Al ocultar una columna, limpiamos su precio en TODAS las filas para que
+  // nunca quede un precio "fantasma" guardado en una columna oculta que se
+  // cuele al PDF o al backend sin que se vea en pantalla — así el endpoint
+  // siempre manda exactamente lo que está plasmado en la hoja.
+  const agregarColumnaPrecio = () => setColumnasPrecio(c => (c < 3 ? (c + 1) as 1 | 2 | 3 : c));
+  const quitarColumnaPrecio = (columna: 2 | 3) => {
+    const campo: keyof FilaProducto = columna === 2 ? "precio2" : "precio3";
+    filas.forEach(f => onEdit(f.uid, campo, ""));
+    setColumnasPrecio(columna === 2 ? 1 : 2);
+  };
+
+  // Guardia extra: si una fila trae precio2/precio3 ya con valor al momento
+  // de agregarse (por ejemplo, un producto del catálogo con precios
+  // por defecto ya capturados en 500/1,000/3,000, o un cargo "extra" por
+  // pieza que se suma a las 3 columnas parejo), esos valores quedarían
+  // "fantasma" en una columna oculta y se colarían al guardar/PDF aunque
+  // nunca se vieran en pantalla. Este efecto los limpia apenas aparecen,
+  // no solo cuando el usuario da clic en "×".
+  useEffect(() => {
+    filas.forEach(f => {
+      if (columnasPrecio < 2 && f.precio2) onEdit(f.uid, "precio2", "");
+      if (columnasPrecio < 3 && f.precio3) onEdit(f.uid, "precio3", "");
+    });
+  }, [filas, columnasPrecio, onEdit]);
+
+  // Total de columnas de la tabla — usado para el colgroup y las filas en
+  // blanco de relleno, que deben coincidir siempre con la cantidad real de
+  // columnas renderizadas (12 fijas + las de precio visibles).
+  const totalCols = 12 + columnasPrecio;
 
   // La zona de drop cubre todo el tablero en desktop
   const dropProps = desk && !alcanzoLimite ? {
@@ -162,8 +224,11 @@ export default function HojaCotizacion({
               <col style={{width:"14%"}}/><col style={{width:"8%"}}/><col style={{width:"8%"}}/>
               <col style={{width:"6%"}}/><col style={{width:"7%"}}/><col style={{width:"7%"}}/>
               <col style={{width:"4%"}}/><col style={{width:"7%"}}/><col style={{width:"4%"}}/>
-              <col style={{width:"6%"}}/><col style={{width:"5%"}}/><col style={{width:"7%"}}/>
-              <col style={{width:"7%"}}/><col style={{width:"7%"}}/><col style={{width:"3%"}}/>
+              <col style={{width:"6%"}}/><col style={{width:"5%"}}/>
+              {Array.from({ length: columnasPrecio }).map((_, i) => (
+                <col key={`col-precio-${i}`} style={{ width: "7%" }} />
+              ))}
+              <col style={{width:"3%"}}/>
             </colgroup>
             <thead>
               <tr>
@@ -172,7 +237,7 @@ export default function HojaCotizacion({
                 <th style={{...TH,lineHeight:1.2,paddingBottom:4}}>Material<br/><span style={{color:"#888",fontSize:7.5,fontWeight:400}}>Calibre</span></th>
                 <th style={TH}>Tintas</th>
                 <th colSpan={7} style={{...TH,color:"#C9922A",borderBottom:"1px solid #C9922A"}}>Acabados</th>
-                <th colSpan={3} style={{...TH,color:"#C9922A",borderBottom:"1px solid #C9922A"}}>Precio unitario</th>
+                <th colSpan={columnasPrecio} style={{...TH,color:"#C9922A",borderBottom:"1px solid #C9922A"}}>Precio unitario</th>
                 <th rowSpan={2} style={TH} className="no-print"/>
               </tr>
               <tr>
@@ -180,9 +245,33 @@ export default function HojaCotizacion({
                 <th style={TH2}>Lam./Tipo</th><th style={TH2}>Foil</th><th style={TH2}>AR</th>
                 <th style={TH2}>Textura</th><th style={TH2}>UV</th><th style={TH2}>Asa</th>
                 <th style={TH2}>$/pig</th>
-                <th style={THD}><CantidadSelect id="cant1" value={cant1} onChange={setCant1}/></th>
-                <th style={THD}><CantidadSelect id="cant2" value={cant2} onChange={setCant2}/></th>
-                <th style={THD}><CantidadSelect id="cant3" value={cant3} onChange={setCant3}/></th>
+                <th style={THD}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }}>
+                    <CantidadSelect id="cant1" value={cant1} onChange={setCant1}/>
+                    {columnasPrecio === 1 && (
+                      <BotonColPrecio label="+" title="Agregar otra cantidad" variante="add" onClick={agregarColumnaPrecio} />
+                    )}
+                  </div>
+                </th>
+                {columnasPrecio >= 2 && (
+                  <th style={THD}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }}>
+                      <CantidadSelect id="cant2" value={cant2} onChange={setCant2}/>
+                      {columnasPrecio === 2 && (
+                        <BotonColPrecio label="+" title="Agregar otra cantidad" variante="add" onClick={agregarColumnaPrecio} />
+                      )}
+                      <BotonColPrecio label="×" title="Quitar esta cantidad" variante="remove" onClick={() => quitarColumnaPrecio(2)} />
+                    </div>
+                  </th>
+                )}
+                {columnasPrecio >= 3 && (
+                  <th style={THD}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }}>
+                      <CantidadSelect id="cant3" value={cant3} onChange={setCant3}/>
+                      <BotonColPrecio label="×" title="Quitar esta cantidad" variante="remove" onClick={() => quitarColumnaPrecio(3)} />
+                    </div>
+                  </th>
+                )}
               </tr>
             </thead>
             <tbody>
@@ -203,6 +292,7 @@ export default function HojaCotizacion({
                   suajesPlast={suajesPlast}
                   asasPermitidas={f.asasPermitidas}
                   laminadosPermitidos={f.laminadosPermitidos}
+                  columnasPrecio={columnasPrecio}
                 />
               ))}
               {!alcanzoLimite && (
@@ -210,10 +300,11 @@ export default function HojaCotizacion({
                   onElegir={onAgregarProducto}
                   catalogoPropio={catalogoPropio}
                   catalogs={catalogs}
+                  columnasPrecio={columnasPrecio}
                 />
               )}
               {Array.from({length:filasVaciasBlanco}).map((_,i)=>(
-                <tr key={`blank${i}`}>{Array.from({length:15}).map((_,j)=><td key={j} style={{...TD,height:22}}/>)}</tr>
+                <tr key={`blank${i}`}>{Array.from({length:totalCols}).map((_,j)=><td key={j} style={{...TD,height:22}}/>)}</tr>
               ))}
             </tbody>
           </table>

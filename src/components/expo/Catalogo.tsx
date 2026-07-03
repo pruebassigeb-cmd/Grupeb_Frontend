@@ -278,6 +278,13 @@ function TarjetaProducto({
     marginBottom: compacto ? 5 : 0,
     touchAction: mob || tab ? "manipulation" : "auto",
     boxShadow: seleccionado ? "0 0 0 1px rgba(201,146,42,.35)" : undefined,
+    // ── Aligerar memoria/render en listas largas ──────────────────────────
+    // content-visibility le dice al navegador que no calcule layout/paint
+    // de tarjetas fuera de pantalla hasta que estén cerca de hacerse
+    // visibles — es una especie de virtualización "gratis" sin necesitar
+    // una librería ni reescribir la lista en páginas.
+    contentVisibility: "auto",
+    containIntrinsicSize: compacto ? "0 54px" : (grid ? "0 130px" : "0 66px"),
   };
 
   const indicador = (mob || tab) && (
@@ -286,15 +293,20 @@ function TarjetaProducto({
     </div>
   );
 
+  // loading="lazy" + decoding="async": el navegador no descarga ni decodifica
+  // estas imágenes hasta que están por entrar a pantalla. Con catálogos de
+  // 18+ productos esto evita mantener decenas de imágenes decodificadas en
+  // memoria a la vez, que es justo lo que puede hacer que Android mate la
+  // pestaña más seguido en tablets con poca RAM.
   const imagen = compacto ? (
     p.imagen
-      ? <img src={p.imagen} alt={p.nombre} style={{ width:38, height:38, objectFit:"cover", borderRadius:4, flexShrink:0, border:"1px solid #222" }} />
+      ? <img src={p.imagen} alt={p.nombre} loading="lazy" decoding="async" style={{ width:38, height:38, objectFit:"cover", borderRadius:4, flexShrink:0, border:"1px solid #222" }} />
       : <div style={{ width:38, height:38, borderRadius:4, flexShrink:0, border:"1px solid #222", background:"#222", display:"flex", alignItems:"center", justifyContent:"center", fontSize:16 }}>
           {p.categoria==="papel"?"📄":p.categoria==="plastico"?"🧴":"📦"}
         </div>
   ) : (
     p.imagen
-      ? <img src={p.imagen} alt={p.nombre} style={{ width:grid?"100%":46, height:grid?72:46, objectFit:"cover", borderRadius:5, flexShrink:0, border:"1px solid #333" }} />
+      ? <img src={p.imagen} alt={p.nombre} loading="lazy" decoding="async" style={{ width:grid?"100%":46, height:grid?72:46, objectFit:"cover", borderRadius:5, flexShrink:0, border:"1px solid #333" }} />
       : <div style={{ width:grid?"100%":46, height:grid?72:46, borderRadius:5, flexShrink:0, border:"1px solid #333", background:"#2A2A2A", display:"flex", alignItems:"center", justifyContent:"center", fontSize:grid?28:20 }}>
           {p.categoria==="papel"?"📄":p.categoria==="plastico"?"🧴":"📦"}
         </div>

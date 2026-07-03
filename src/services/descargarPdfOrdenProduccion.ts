@@ -434,6 +434,7 @@ export async function descargarPdfOrdenProduccionUniversal(
   // contexto lo advierte). Solo se cae a la referencia si por alguna
   // razón el producto no se reconoció como papel arriba.
   if (esPapel) {
+    console.log("PRODUCTO ORDEN COMPLETO", JSON.stringify(productoOrden, null, 2));
     const dataPapel = construirDataPapel(data, productoOrden, opciones, imagenes);
 
     // Debug temporal: confirma qué llega antes de dibujar. Comenta/quita

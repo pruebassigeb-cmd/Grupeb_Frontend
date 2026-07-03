@@ -13,6 +13,11 @@ interface Props {
   setClienteData: React.Dispatch<React.SetStateAction<ClienteExpo>>;
   clienteGuardado: ClienteExpo | null;
   mob:            boolean;
+  // Si ya existe un cliente registrado en esta sesión (id real en la BD),
+  // el formulario arranca en modo resumen/solo-lectura en vez de editable,
+  // para no volver a crear un cliente duplicado cada vez que se regresa
+  // a esta pantalla a revisar los datos.
+  clienteIdReal:  number | null;
   onCotizar:      (clienteId?: number, nombre?: string) => void;
   onCerrar:       () => void;
   cotizacionesCount: number;
@@ -40,6 +45,61 @@ function Campo({ label, value }: { label:string; value:string }) {
     <div>
       <div style={{ color:"#555", fontSize:8.5, textTransform:"uppercase", letterSpacing:.5, marginBottom:1 }}>{label}</div>
       <div style={{ color:"#DDD", fontSize:10.5, fontWeight:600 }}>{value||"—"}</div>
+    </div>
+  );
+}
+
+// ─── Resumen de solo lectura para un cliente ya registrado ────────────────────
+// Se muestra en vez del formulario editable cuando ya existe un clienteIdReal
+// para esta sesión, así el usuario ve sus datos de un vistazo y solo entra a
+// modo edición si de verdad necesita corregir algo.
+function ResumenCliente({ clienteData, onEditar }: { clienteData: ClienteExpo; onEditar: () => void }) {
+  const correo = clienteData.correoUsuario
+    ? `${clienteData.correoUsuario}@${clienteData.correoExt === "__otro__" ? (clienteData.correoExtCustom || "") : clienteData.correoExt}`
+    : "";
+  const claseColor = CLASE_COLOR[clienteData.clase || ""] || "#444";
+
+  return (
+    <div style={{ background:"#1A1A1A", border:"1px solid #222", borderRadius:10, padding:16 }}>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14 }}>
+        <div style={{ color:"#22C55E", fontSize:9, fontWeight:700, letterSpacing:2, textTransform:"uppercase", display:"flex", alignItems:"center", gap:6 }}>
+          <span>✓</span> Prospecto ya registrado — solo lectura
+        </div>
+        <button onClick={onEditar}
+          style={{ background:"transparent", border:"1px solid #C9922A55", color:"#C9922A", fontSize:11, fontWeight:600, padding:"6px 14px", borderRadius:6, cursor:"pointer" }}>
+          ✎ Editar datos
+        </button>
+      </div>
+
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:14, marginBottom:14 }}>
+        <Campo label="Nombre"  value={clienteData.nombre} />
+        <Campo label="Celular" value={clienteData.celular} />
+        <Campo label="Correo"  value={correo} />
+      </div>
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:14, marginBottom:14 }}>
+        <Campo label="Empresa" value={clienteData.impresion} />
+        <Campo label="Ciudad"  value={clienteData.ciudad} />
+        <Campo label="Estado"  value={clienteData.estado} />
+      </div>
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(2,1fr)", gap:14, marginBottom: clienteData.observaciones ? 14 : 0 }}>
+        <div>
+          <div style={{ color:"#555", fontSize:8.5, textTransform:"uppercase", letterSpacing:.5, marginBottom:5 }}>Clasificación</div>
+          {clienteData.clase
+            ? <span style={{ fontSize:10, fontWeight:700, padding:"3px 9px", borderRadius:8, background:`${claseColor}18`, color:claseColor, border:`1px solid ${claseColor}44` }}>{clienteData.clase}</span>
+            : <span style={{ color:"#DDD", fontSize:10.5 }}>—</span>}
+        </div>
+        <div>
+          <div style={{ color:"#555", fontSize:8.5, textTransform:"uppercase", letterSpacing:.5, marginBottom:5 }}>Le interesa</div>
+          <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+            {clienteData.intereses.length > 0
+              ? clienteData.intereses.map(i => (
+                <span key={i} style={{ fontSize:10, color:"#C9922A", background:"#C9922A14", border:"1px solid #C9922A44", borderRadius:6, padding:"2px 8px" }}>{i}</span>
+              ))
+              : <span style={{ color:"#DDD", fontSize:10.5 }}>—</span>}
+          </div>
+        </div>
+      </div>
+      {clienteData.observaciones && <Campo label="Observaciones" value={clienteData.observaciones} />}
     </div>
   );
 }
@@ -385,7 +445,7 @@ function ModalProspectos({ onSeleccionar, onClose }: ModalProspectosProps) {
 
 export default function RegistroCliente({
   clienteData, setClienteData, clienteGuardado,
-  mob, onCotizar, onCerrar,
+  mob, clienteIdReal, onCotizar, onCerrar,
   cotizacionesCount,
   onAbrirLista,
 }: Props) {
@@ -394,6 +454,13 @@ export default function RegistroCliente({
   const [modalProspectos, setModalProspectos] = useState(false);
   const [guardando,       setGuardando]       = useState(false);
   const [error,           setError]           = useState<string|null>(null);
+
+  // Si ya hay un cliente registrado (clienteIdReal), arrancamos en modo
+  // resumen/solo-lectura. Se inicializa una sola vez al montar: como
+  // RegistroCliente se desmonta/remonta cada vez que Expo.tsx cambia de
+  // vista, esto siempre refleja correctamente si veníamos de un cliente
+  // ya guardado o de un registro nuevo.
+  const [modoEdicion, setModoEdicion] = useState(clienteIdReal === null);
 
   const setCF = (k: keyof ClienteExpo, v: unknown) =>
     setClienteData(prev => ({ ...prev, [k]: v }));
@@ -406,13 +473,23 @@ export default function RegistroCliente({
         : [...prev.intereses, i],
     }));
 
+  // ── Registrar y cotizar ─────────────────────────────────────────────────
+  // Si ya existe clienteIdReal, ACTUALIZAMOS ese cliente (PUT) en vez de
+  // crear uno nuevo — antes esto siempre hacía POST, así que volver a dar
+  // clic aquí generaba un cliente duplicado cada vez.
   const guardarYCotizar = async () => {
     if (!clienteData.nombre.trim()) return;
     setGuardando(true);
     setError(null);
     try {
-      const resultado = await crearClienteExpo(clienteData);
-      onCotizar(resultado.id, clienteData.nombre.trim());
+      if (clienteIdReal) {
+        await actualizarClienteExpo(clienteIdReal, clienteData);
+        setModoEdicion(false);
+        onCotizar(clienteIdReal, clienteData.nombre.trim());
+      } else {
+        const resultado = await crearClienteExpo(clienteData);
+        onCotizar(resultado.id, clienteData.nombre.trim());
+      }
     } catch (err: any) {
       setError(err?.response?.data?.error || "No se pudo registrar el prospecto.");
     } finally {
@@ -425,14 +502,27 @@ export default function RegistroCliente({
     setGuardando(true);
     setError(null);
     try {
-      const resultado = await crearClienteExpo(clienteData);
-      setClienteData(CLIENTE_VACIO);
-      alert(`✅ Prospecto "${clienteData.nombre}" registrado (#${resultado.id})`);
+      if (clienteIdReal) {
+        await actualizarClienteExpo(clienteIdReal, clienteData);
+        setModoEdicion(false);
+        alert(`✅ Datos de "${clienteData.nombre}" actualizados.`);
+      } else {
+        const resultado = await crearClienteExpo(clienteData);
+        setClienteData(CLIENTE_VACIO);
+        alert(`✅ Prospecto "${clienteData.nombre}" registrado (#${resultado.id})`);
+      }
     } catch (err: any) {
       setError(err?.response?.data?.error || "No se pudo registrar el prospecto.");
     } finally {
       setGuardando(false);
     }
+  };
+
+  // Continuar directo al tablero sin tocar el backend — no hay nada que
+  // guardar porque no se editó nada, así que no tiene caso hacer un PUT.
+  const continuarSinCambios = () => {
+    if (!clienteIdReal) return;
+    onCotizar(clienteIdReal, clienteData.nombre.trim());
   };
 
   const seleccionarProspecto = (p: ClienteExpoAPI) => {
@@ -465,6 +555,8 @@ export default function RegistroCliente({
   };
 
   const puedeAvanzar = clienteData.nombre.trim().length > 0 && !guardando;
+  // Ya hay un cliente guardado y no estamos editando -> mostrar resumen
+  const mostrarResumen = !modoEdicion && clienteIdReal !== null;
 
   return (
     <>
@@ -489,8 +581,12 @@ export default function RegistroCliente({
             <div style={{ display:"flex", alignItems:"center", gap:12 }}>
               <div style={{ color:"#C9922A", fontSize:22, fontWeight:700, fontFamily:"Georgia,serif" }}>EB</div>
               <div>
-                <div style={{ color:"#FFF", fontSize:12, fontWeight:700, letterSpacing:1 }}>Nuevo prospecto</div>
-                <div style={{ color:"#555", fontSize:9, letterSpacing:.5 }}>Registra los datos antes de cotizar</div>
+                <div style={{ color:"#FFF", fontSize:12, fontWeight:700, letterSpacing:1 }}>
+                  {mostrarResumen ? "Prospecto" : "Nuevo prospecto"}
+                </div>
+                <div style={{ color:"#555", fontSize:9, letterSpacing:.5 }}>
+                  {mostrarResumen ? "Revisa los datos antes de cotizar" : "Registra los datos antes de cotizar"}
+                </div>
               </div>
             </div>
             <div style={{ display:"flex", gap:8, alignItems:"center" }}>
@@ -532,6 +628,9 @@ export default function RegistroCliente({
 
           {/* Body */}
           <div style={{ flex:1, overflow:"auto", padding:mob?"14px":"20px 24px" }}>
+            {mostrarResumen ? (
+              <ResumenCliente clienteData={clienteData} onEditar={() => setModoEdicion(true)} />
+            ) : (
             <div style={{ display:"grid", gridTemplateColumns:mob?"1fr":"1fr 1fr", gap:mob?12:16 }}>
 
               {/* Col izquierda */}
@@ -634,18 +733,34 @@ export default function RegistroCliente({
                 </div>
               </div>
             </div>
+            )}
           </div>
 
           {/* Footer */}
           <div style={{ borderTop:"1px solid #222", padding:"14px 24px", display:"flex", gap:12, flexDirection:mob?"column":"row", flexShrink:0, background:"#0D0D0D" }}>
-            <button onClick={soloGuardar} disabled={!puedeAvanzar}
-              style={{ flex:1, padding:"11px", background:"transparent", border:`2px solid ${puedeAvanzar?"#C9922A":"#2A2A2A"}`, borderRadius:9, color:puedeAvanzar?"#C9922A":"#444", fontSize:13, fontWeight:700, cursor:puedeAvanzar?"pointer":"not-allowed", display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}>
-              {guardando?"Registrando...":"💾 Solo guardar prospecto"}
-            </button>
-            <button onClick={guardarYCotizar} disabled={!puedeAvanzar}
-              style={{ flex:1, padding:"11px", background:puedeAvanzar?"#C9922A":"#1A1000", border:"none", borderRadius:9, color:puedeAvanzar?"#1A1A1A":"#444", fontSize:13, fontWeight:700, cursor:puedeAvanzar?"pointer":"not-allowed", display:"flex", alignItems:"center", justifyContent:"center", gap:8, boxShadow:puedeAvanzar?"0 4px 20px rgba(201,146,42,.3)":"none" }}>
-              {guardando?"Registrando...":"📋 Registrar y cotizar →"}
-            </button>
+            {mostrarResumen ? (
+              <button onClick={continuarSinCambios}
+                style={{ flex:1, padding:"11px", background:"#C9922A", border:"none", borderRadius:9, color:"#1A1A1A", fontSize:13, fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:8, boxShadow:"0 4px 20px rgba(201,146,42,.3)" }}>
+                📋 Continuar a cotización →
+              </button>
+            ) : (
+              <>
+                {clienteIdReal && (
+                  <button onClick={() => setModoEdicion(false)}
+                    style={{ flex: mob ? undefined : "0 0 auto", padding:"11px 20px", background:"transparent", border:"1px solid #444", borderRadius:9, color:"#888", fontSize:13, fontWeight:600, cursor:"pointer" }}>
+                    Cancelar
+                  </button>
+                )}
+                <button onClick={soloGuardar} disabled={!puedeAvanzar}
+                  style={{ flex:1, padding:"11px", background:"transparent", border:`2px solid ${puedeAvanzar?"#C9922A":"#2A2A2A"}`, borderRadius:9, color:puedeAvanzar?"#C9922A":"#444", fontSize:13, fontWeight:700, cursor:puedeAvanzar?"pointer":"not-allowed", display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}>
+                  {guardando ? "Guardando..." : clienteIdReal ? "💾 Guardar cambios" : "💾 Solo guardar prospecto"}
+                </button>
+                <button onClick={guardarYCotizar} disabled={!puedeAvanzar}
+                  style={{ flex:1, padding:"11px", background:puedeAvanzar?"#C9922A":"#1A1000", border:"none", borderRadius:9, color:puedeAvanzar?"#1A1A1A":"#444", fontSize:13, fontWeight:700, cursor:puedeAvanzar?"pointer":"not-allowed", display:"flex", alignItems:"center", justifyContent:"center", gap:8, boxShadow:puedeAvanzar?"0 4px 20px rgba(201,146,42,.3)":"none" }}>
+                  {guardando ? "Guardando..." : clienteIdReal ? "📋 Guardar y cotizar →" : "📋 Registrar y cotizar →"}
+                </button>
+              </>
+            )}
           </div>
         </div>
       </div>

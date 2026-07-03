@@ -274,6 +274,24 @@ export function calcularCtesMod(...medidas: unknown[]): string | null {
   return `${redondear((largoCm - 0.5) * 0.3937)}"`;
 }
 
+// ────────────────────────────────────────────────────────────────────────
+// NUEVO: mismo criterio que calcularDesarrolloMmPorBase — CTES/Mod debe
+// calcularse sobre la MISMA medida que se usó como "desarrollo" (bobina u
+// hojeado), no siempre sobre hojeado. La fórmula en sí (calcularCtesMod)
+// ya era correcta: resta 0.5cm, convierte a mm y divide entre 25.4mm para
+// sacar pulgadas — solo hacía falta alimentarla con la medida correcta
+// según lo que se haya seleccionado al dar de alta el producto.
+// ────────────────────────────────────────────────────────────────────────
+export function calcularCtesModPorBase(data: OrdenProduccionPapelData): string | null {
+  const base = f((data as any).desarrollo_base).toLowerCase();
+
+  if (base === "bobina") {
+    return calcularCtesMod(data.hoj_bobina, data.bobina_cm);
+  }
+
+  return calcularCtesMod(data.pliego_hojeado, data.hoj_corte, data.pliego, data.medida);
+}
+
 export function calcularMetrosLaminacion(
   pliegos: unknown,
   desarrolloMm: unknown
@@ -462,14 +480,22 @@ export function getValoresCalculadosPapel(data: OrdenProduccionPapelData): Parti
   const pliegosCalculado = calcularCantidadHojeada(data.cantidad, data.rendimiento);
   const pliegos = pliegosCalculado ?? n(data.pliegos_impresion_estimados);
 
+  // CORREGIDO: mismo bug de prioridad que ya se arregló en `pliegos` y
+  // `ctes_mod_laminacion` — antes n(data.desarrollo_laminacion_mm) (dato
+  // del backend) ganaba primero, así que calcularDesarrolloMmPorBase()
+  // nunca se llegaba a ejecutar aunque ya estuviera corregida. Se invierte
+  // la prioridad: el cálculo del cliente gana siempre que pueda
+  // calcularse; el valor de la ficha solo se usa como último respaldo.
   const desarrollo =
+    calcularDesarrolloMmPorBase(data) ??
     n(data.desarrollo_laminacion_mm) ??
-    n(data.desarrollo_mm) ??
-    calcularDesarrolloMmPorBase(data);
+    n(data.desarrollo_mm);
 
+  // CORREGIDO: mismo problema — n(data.metros_laminacion_estimados) del
+  // backend ganaba antes que el cálculo real (pliegos × desarrollo / 1000).
   const metros =
-    n(data.metros_laminacion_estimados) ??
-    calcularMetrosLaminacion(pliegos, desarrollo);
+    calcularMetrosLaminacion(pliegos, desarrollo) ??
+    n(data.metros_laminacion_estimados);
 
   return {
     // Mismo criterio: el recalculado (pliegos, ya correcto) gana sobre
@@ -478,13 +504,19 @@ export function getValoresCalculadosPapel(data: OrdenProduccionPapelData): Parti
     pliegos_impresion_estimados: pliegos,
     desarrollo_laminacion_mm: desarrollo,
     desarrollo_mm: n(data.desarrollo_mm) ?? desarrollo,
+    // CORREGIDO: mismo criterio que `pliegos` arriba — el cálculo del
+    // cliente (ahora con la base seleccionable bobina/hojeado) gana
+    // primero; el valor que traiga la ficha solo se usa si el cliente no
+    // pudo calcularlo.
     ctes_mod_laminacion:
+      calcularCtesModPorBase(data) ??
       data.ctes_mod_laminacion ??
-      data.ctes_mod ??
-      calcularCtesMod(data.pliego_hojeado, data.hoj_corte, data.pliego, data.medida),
+      data.ctes_mod,
     metros_laminacion_estimados: metros,
+    // CORREGIDO: mismo patrón — el cálculo (metros/3000) gana sobre el
+    // dato viejo de la ficha.
     rollos_laminacion_estimados:
-      n(data.rollos_laminacion_estimados) ?? calcularRollosLaminacion(metros),
+      calcularRollosLaminacion(metros) ?? n(data.rollos_laminacion_estimados),
     bolsas_armadas_calculadas:
       n(data.bolsas_armadas_calculadas) ?? calcularBolsasArmadas(pliegos, data.rendimiento),
     bobina_laminacion_cm:

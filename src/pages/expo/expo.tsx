@@ -237,6 +237,7 @@ useEffect(() => {
     }
   };
 
+  // ── guardarProd ──────────────────────────────────────────────────────────
   const guardarProd = async (p: Producto) => {
     setSavingModal(true);
     try {
@@ -291,17 +292,13 @@ useEffect(() => {
     } catch (err: any) {
       console.error("Error al guardar producto:", err);
       alert("No se pudo guardar: " + (err?.response?.data?.error || err.message));
+      throw err;
     } finally {
       setSavingModal(false);
     }
   };
 
   // ── Drag & drop ───────────────────────────────────────────────────────────
-  // Usamos una clave compuesta (fuente:categoria:id) en vez del id puro porque
-  // configuracion_plastico.id y producto_papel.id son autoincrementales
-  // independientes y pueden colisionar (ej: plástico id=7 y papel id=7).
-  // Buscar solo por id causaba que se agregara el producto equivocado
-  // cuando ambas tablas crecían lo suficiente para repetir un id.
   const onDragStart = (e: React.DragEvent, p: Producto) =>
     e.dataTransfer.setData("pkey", claveProducto(p));
   const onDragEnd = () => {};
@@ -317,20 +314,16 @@ useEffect(() => {
   const addProd = useCallback(async (p: Producto) => {
     setFilas(prev => {
       if (prev.length >= LIMITE_PRODUCTOS) { alert(`Máximo ${LIMITE_PRODUCTOS} productos por cotización.`); return prev; }
-      return prev; // reservamos el slot, lo llenamos abajo
+      return prev;
     });
 
-    // Verificar límite antes de continuar
     const yaAlcanzado = await new Promise<boolean>(resolve => {
       setFilas(prev => { resolve(prev.length >= LIMITE_PRODUCTOS); return prev; });
     });
     if (yaAlcanzado) return;
 
-    // Armar la fila base
     const filaBase = filaDesdeProducto(p);
 
-    // Si es papel del sistema, fetchear las opciones filtradas (asas y laminados)
-    // que fueron configuradas al dar de alta el producto en SIGEB
     if (p.fuente === "sistema" && p.categoria === "papel" && p.idproducto_papel) {
       try {
         const opciones = await getOpcionesProductoPapel(p.idproducto_papel);
@@ -338,7 +331,6 @@ useEffect(() => {
         filaBase.laminadosPermitidos = opciones.laminados.length > 0 ? opciones.laminados : null;
       } catch (err) {
         console.error("[EXPO] No se pudieron cargar opciones del producto de papel:", err);
-        // Si falla el fetch, dejamos null y FilaTabla usará el catálogo completo como fallback
       }
     }
 
@@ -358,12 +350,8 @@ useEffect(() => {
 
   const delFila = useCallback((uid: string) => setFilas(p => p.filter(f => f.uid !== uid)), []);
 
-// Limpia solo el tablero (productos, comentarios y folio).
-  // Conserva al prospecto en curso: borrar solo el nombre dejaba
-  // clienteIdReal apuntando al prospecto anterior y la siguiente
-  // cotización se registraba al cliente equivocado.
   const limpiar = () => { setFilas([]); setComent(""); setFolioActual(null); };
-  // ── prepararFilas ─────────────────────────────────────────────────────────
+
   const prepararFilas = async (filasActuales: FilaProducto[]): Promise<FilaProducto[]> => {
     const resultado: FilaProducto[] = [];
     for (const fila of filasActuales) {
@@ -445,9 +433,12 @@ useEffect(() => {
         productos: filasListas.map(f => {
           const parseP   = (s: string) => parseFloat(s.replace(/[^0-9.]/g, "")) || 0;
           const extraNum = f.modoExtra === "precio" ? parseP(f.extra || "0") : 0;
-          const p1 = parseP(f.precio1) + extraNum;
-          const p2 = parseP(f.precio2) + extraNum;
-          const p3 = parseP(f.precio3) + extraNum;
+          const p1raw = parseP(f.precio1);
+          const p2raw = parseP(f.precio2);
+          const p3raw = parseP(f.precio3);
+          const p1 = p1raw > 0 ? p1raw + extraNum : 0;
+          const p2 = p2raw > 0 ? p2raw + extraNum : 0;
+          const p3 = p3raw > 0 ? p3raw + extraNum : 0;
           const parseCant = (s: string) => parseInt(s.replace(/,/g, ""), 10) || 0;
           const c1 = parseCant(cant1);
           const c2 = parseCant(cant2);
@@ -566,6 +557,17 @@ useEffect(() => {
     </div>
   );
 
+  const BotonesNuevoProducto = () => (
+    <div style={{ display: "flex", gap: 6, padding: "0 16px 10px", position: "sticky", top: 52, background: "#111", zIndex: 1 }}>
+      {CATS.map(c => (
+        <button key={c.key} onClick={() => abrirNuevo(c.key as "papel" | "plastico" | "carton")}
+          style={{ flex: 1, background: `${c.color}18`, border: `1px solid ${c.color}44`, color: c.color, fontSize: 10, fontWeight: 700, padding: "7px 4px", borderRadius: 6, cursor: "pointer", letterSpacing: .3 }}>
+          {c.emoji} +{c.label}
+        </button>
+      ))}
+    </div>
+  );
+
   const BadgeContador = ({ size }: { size: number }) =>
     cotizaciones.length > 0 ? (
       <span style={{ position: "absolute", top: -4, right: -4, background: "#C9922A", color: "#0D0D0D", fontSize: 10, fontWeight: 700, borderRadius: "50%", width: size === 44 ? 17 : 20, height: size === 44 ? 17 : 20, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -613,6 +615,7 @@ useEffect(() => {
         <RegistroCliente
           clienteData={clienteData} setClienteData={setClienteData}
           clienteGuardado={clienteGuardado} mob={mob}
+          clienteIdReal={clienteIdReal}
           onCotizar={irACotizar} onCerrar={() => setVista("cotizacion")}
           cotizacionesCount={cotizaciones.length}
           onAbrirLista={() => setListaAbierta(true)}
@@ -645,6 +648,7 @@ useEffect(() => {
             {drawerOpen && <div className="drawer-overlay" />}
             <div className={`drawer ${drawerOpen ? "open" : "closed"}`}>
               <DrawerHeader label="SELECCIONA UN PRODUCTO" />
+              <BotonesNuevoProducto />
               <Catalogo grid {...propsCatalogo} />
             </div>
             <div className="no-print" style={{ position: "fixed", bottom: 20, right: 20, zIndex: 40, display: "flex", flexDirection: "column", gap: 10 }}>
@@ -679,6 +683,7 @@ useEffect(() => {
             {drawerOpen && <div className="drawer-overlay" />}
             <div className={`drawer ${drawerOpen ? "open" : "closed"}`} style={{ maxHeight: "65vh" }}>
               <DrawerHeader label="CATÁLOGO — DOBLE TOQUE PARA AGREGAR" />
+              <BotonesNuevoProducto />
               <Catalogo grid {...propsCatalogo} />
             </div>
             <div className="no-print" style={{ position: "fixed", bottom: 24, right: 24, zIndex: 40, display: "flex", flexDirection: "column", gap: 12 }}>
@@ -696,12 +701,22 @@ useEffect(() => {
                 {catOpen && <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase" }}>Catálogo</span>}
                 <span style={{ fontSize: 15 }}>{catOpen ? "◀" : "▶"}</span>
               </button>
-              {catOpen && (
+              {catOpen ? (
                 <div style={{ padding: "8px 8px 4px", borderBottom: "1px solid #222", display: "flex", gap: 6, flexShrink: 0 }}>
                   {CATS.map(c => (
                     <button key={c.key} onClick={() => abrirNuevo(c.key as "papel" | "plastico" | "carton")}
                       style={{ flex: 1, background: `${c.color}18`, border: `1px solid ${c.color}44`, color: c.color, fontSize: 9, fontWeight: 700, padding: "5px 4px", borderRadius: 5, cursor: "pointer", letterSpacing: .5 }}>
                       {c.emoji} +{c.label}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ padding: "8px 4px", borderBottom: "1px solid #222", display: "flex", flexDirection: "column", gap: 6, alignItems: "center", flexShrink: 0 }}>
+                  {CATS.map(c => (
+                    <button key={c.key} onClick={() => abrirNuevo(c.key as "papel" | "plastico" | "carton")}
+                      title={`Nuevo producto de ${c.label}`}
+                      style={{ width: 28, height: 28, background: `${c.color}18`, border: `1px solid ${c.color}44`, color: c.color, borderRadius: 6, cursor: "pointer", fontSize: 13, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                      {c.emoji}
                     </button>
                   ))}
                 </div>

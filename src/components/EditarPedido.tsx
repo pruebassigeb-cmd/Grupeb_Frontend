@@ -3,6 +3,10 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import Dashboard from "../layouts/Sidebar";
 import { getPedidos, actualizarPedido } from "../services/pedidosService";
+import type {
+  ProductoPlasticoActualizar,
+  ProductoNuevoPlastico,
+} from "../services/pedidosService";
 import type { Pedido } from "../types/cotizaciones.types";
 import { usePreciosBatch } from "../hooks/usePrecioCalculado";
 import api from "../services/api";
@@ -39,6 +43,8 @@ interface ProductoEdit {
   herramental_aprobado: boolean | null;
   detalles: DetalleEdit[];
   _eliminado: boolean;
+  // Marca productos agregados en esta sesión de edición (aún no existen en BD)
+  _esNuevo?: boolean;
   // Cuando el usuario cambia el producto desde el modal, se actualiza
   // el configuracion_plastico en lugar de eliminar+crear.
   _configuracionCambiada?: boolean;
@@ -233,6 +239,11 @@ function ProductoEditable({
                 {esProductoCambiado && (
                   <span className="flex-shrink-0 text-xs px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded-full font-medium">
                     Cambiado
+                  </span>
+                )}
+                {prod._esNuevo && (
+                  <span className="flex-shrink-0 text-xs px-1.5 py-0.5 bg-green-100 text-green-700 rounded-full font-medium">
+                    Nuevo
                   </span>
                 )}
               </div>
@@ -675,10 +686,13 @@ export default function EditarPedido() {
   const [catalogoTintas, setCatalogoTintas] = useState<any[]>([]);
 
   // ── Estado del modal ──────────────────────────────────────────────────────
+  // modo "cambiar": reemplaza el producto en piOrigen
+  // modo "agregar": crea un producto nuevo al final de la lista
   const [modal, setModal] = useState<{
     abierto: boolean;
     piOrigen: number;
-  }>({ abierto: false, piOrigen: -1 });
+    modo: "cambiar" | "agregar";
+  }>({ abierto: false, piOrigen: -1, modo: "cambiar" });
 
   useEffect(() => {
     if (!noPedido) return;
@@ -800,12 +814,74 @@ export default function EditarPedido() {
       ...p, detalles: p.detalles.filter((_, j) => j !== di),
     }));
 
-  // ── Abrir modal ────────────────────────────────────────────────────────────
+  // ── Abrir modal (cambiar / agregar) ───────────────────────────────────────
   const handleCambiarProducto = (pi: number) =>
-    setModal({ abierto: true, piOrigen: pi });
+    setModal({ abierto: true, piOrigen: pi, modo: "cambiar" });
 
-  // ── Confirmar reemplazo desde modal ───────────────────────────────────────
+  const handleAgregarProducto = () =>
+    setModal({ abierto: true, piOrigen: -1, modo: "agregar" });
+
+  // Construye un ProductoEdit nuevo desde cero a partir de lo elegido en el modal.
+  const crearProductoDesdeReemplazo = (reemplazo: ProductoReemplazo): ProductoEdit => {
+    const tempId = -Date.now(); // id temporal: aún no existe en BD
+
+    return {
+      idsolicitud_producto: tempId,
+      nombre: reemplazo.nombre,
+      material: reemplazo.material,
+      calibre: reemplazo.calibre,
+      medidasFormateadas: reemplazo.medidasFormateadas,
+      tintas: 1,
+      tintasId: catalogoTintas.find((t: any) => t.cantidad === 1)?.id ?? 1,
+      caras: 1,
+      por_kilo: reemplazo.por_kilo,
+      pantones: "",
+      pigmentos: "",
+      observacion: "",
+      descripcion: "",
+      perforacion: false,
+      herramental_descripcion: "",
+      herramental_precio: "",
+      herramental_aprobado: null,
+      detalles: [{
+        iddetalle: null,
+        cantidad: "",
+        precio_total: "",
+        precio_unitario: "",
+        kilogramos: "",
+        modo_cantidad: "unidad" as const,
+      }],
+      _eliminado: false,
+      _esNuevo: true,
+      // Id de configuración con el que se crea el producto (no es un "cambio",
+      // es la configuración inicial del producto nuevo)
+      nuevo_configuracion_id: reemplazo.configuracion_plastico_id,
+      idsuaje: null,
+      suaje_tipo: null,
+      id_color: null,
+      color_asa_nombre: null,
+      id_medidatro: null,
+      medida_troquel: null,
+      // IDs de catálogo — importantes si luego el usuario quiere "cambiar" este producto de nuevo.
+      // Si ProductoReemplazo no expone estos campos, quedan en 0 y el modal de
+      // "cambiar producto" para este ítem abrirá en blanco la próxima vez.
+      tipo_producto_id: (reemplazo as any).tipo_producto_id ?? 0,
+      tipo_producto_nombre: (reemplazo as any).tipo_producto_nombre ?? reemplazo.nombre,
+      material_id: (reemplazo as any).material_id ?? 0,
+      calibre_id: (reemplazo as any).calibre_id ?? 0,
+      medidas: reemplazo.medidas,
+    };
+  };
+
+  // ── Confirmar selección desde modal (cambiar o agregar) ───────────────────
   const handleConfirmarModal = (reemplazo: ProductoReemplazo) => {
+    if (modal.modo === "agregar") {
+      const nuevo = crearProductoDesdeReemplazo(reemplazo);
+      setProductos(prev => [...prev, nuevo]);
+      setModal({ abierto: false, piOrigen: -1, modo: "cambiar" });
+      return;
+    }
+
     const pi = modal.piOrigen;
 
     // En lugar de eliminar el original y crear uno nuevo,
@@ -836,7 +912,7 @@ export default function EditarPedido() {
       };
     }));
 
-    setModal({ abierto: false, piOrigen: -1 });
+    setModal({ abierto: false, piOrigen: -1, modo: "cambiar" });
   };
 
   // ── Cálculos de totales ────────────────────────────────────────────────────
@@ -864,13 +940,34 @@ export default function EditarPedido() {
     };
   };
 
+  // Igual que mapearDetalle, pero sin iddetalle: los detalles de un producto
+  // nuevo nunca tienen id todavía (el backend los inserta, no los actualiza).
+  const mapearDetalleNuevo = (d: DetalleEdit, porKilo: string) => {
+    const { iddetalle, ...resto } = mapearDetalle(d, porKilo);
+    return resto;
+  };
+
   const handleGuardar = async () => {
     if (!pedidoOrig) return;
-    setGuardando(true);
     setErrorGuardar(null);
+
+    // Un producto nuevo sin configuracion_plastico_id no se puede insertar:
+    // el backend no sabría qué producto crear.
+    const productoNuevoSinConfiguracion = productos.find(
+      p => !!p._esNuevo && !p._eliminado && !p.nuevo_configuracion_id
+    );
+    if (productoNuevoSinConfiguracion) {
+      setErrorGuardar(
+        `No se pudo determinar la configuración de "${productoNuevoSinConfiguracion.nombre}". Vuelve a seleccionarlo con "Cambiar producto".`
+      );
+      return;
+    }
+
+    setGuardando(true);
     try {
-      const payload = {
-        productos: (productos as ProductoEdit[]).map(p => ({
+      const productosExistentes: ProductoPlasticoActualizar[] = productos
+        .filter(p => !p._esNuevo)
+        .map(p => ({
           idsolicitud_producto: p.idsolicitud_producto,
           eliminado: p._eliminado,
           // Si cambió la configuración, enviar el nuevo id
@@ -889,7 +986,31 @@ export default function EditarPedido() {
           id_color: p.id_color ?? null,
           id_medidatro: p.id_medidatro ?? null,
           detalles: p.detalles.map(d => mapearDetalle(d, p.por_kilo)),
-        })),
+        }));
+
+      const productosNuevos: ProductoNuevoPlastico[] = productos
+        .filter(p => !!p._esNuevo && !p._eliminado)
+        .map(p => ({
+          configuracion_plastico_id: p.nuevo_configuracion_id as number,
+          tintas: p.tintas,
+          caras: p.caras,
+          pantones: p.pantones || null,
+          pigmentos: esBopp(p.material, p.nombre) ? null : (p.pigmentos || null),
+          observacion: p.observacion || null,
+          descripcion: p.descripcion || null,
+          perforacion: permitePerforacion(p.nombre) ? p.perforacion : false,
+          herramental_descripcion: p.herramental_descripcion || null,
+          herramental_precio: p.herramental_precio !== "" ? parseSafe(p.herramental_precio) : null,
+          herramental_aprobado: p.herramental_aprobado ?? null,
+          idsuaje: p.idsuaje ?? null,
+          id_color: p.id_color ?? null,
+          id_medidatro: p.id_medidatro ?? null,
+          detalles: p.detalles.map(d => mapearDetalleNuevo(d, p.por_kilo)),
+        }));
+
+      const payload = {
+        productos: productosExistentes,
+        productos_nuevos: productosNuevos,
       };
 
       await actualizarPedido(pedidoOrig.no_pedido, payload);
@@ -903,7 +1024,10 @@ export default function EditarPedido() {
   };
 
   // ── datosActuales para el modal ────────────────────────────────────────────
-  const datosParaModal = modal.piOrigen >= 0 && modal.piOrigen < productos.length
+  // Cuando el modo es "agregar" no hay producto de origen: el modal debe abrir
+  // en blanco para que el usuario elija tipo/material/calibre/medidas desde cero.
+  const datosParaModal = modal.abierto && modal.modo === "cambiar"
+    && modal.piOrigen >= 0 && modal.piOrigen < productos.length
     ? (() => {
       const p = productos[modal.piOrigen];
       return {
@@ -1077,6 +1201,18 @@ export default function EditarPedido() {
           </p>
         )}
 
+        {/* Agregar nuevo producto al pedido */}
+        <button
+          type="button"
+          onClick={handleAgregarProducto}
+          className="w-full flex items-center justify-center gap-2 px-4 py-3 border-2 border-dashed border-blue-300 text-blue-600 hover:bg-blue-50 rounded-xl text-sm font-semibold transition"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+          </svg>
+          Agregar producto de plástico al pedido
+        </button>
+
         {/* Resumen */}
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
           <div className="flex items-center justify-between mb-3">
@@ -1091,6 +1227,9 @@ export default function EditarPedido() {
                   {p.nombre}
                   {p._configuracionCambiada && (
                     <span className="ml-1.5 text-xs text-amber-500">● cambiado</span>
+                  )}
+                  {p._esNuevo && (
+                    <span className="ml-1.5 text-xs text-green-500">● nuevo</span>
                   )}
                 </span>
                 <span className="font-medium text-gray-800 flex-shrink-0">${fmt(calcularTotalProducto(p))}</span>
@@ -1135,7 +1274,7 @@ export default function EditarPedido() {
       {/* Modal */}
       <ModalCambiarProducto
         abierto={modal.abierto}
-        onCerrar={() => setModal({ abierto: false, piOrigen: -1 })}
+        onCerrar={() => setModal({ abierto: false, piOrigen: -1, modo: "cambiar" })}
         onConfirmar={handleConfirmarModal}
         datosActuales={datosParaModal}
       />

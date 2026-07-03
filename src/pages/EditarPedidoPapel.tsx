@@ -1,8 +1,12 @@
 // src/pages/EditarPedidoPapel.tsx
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import Dashboard from "../layouts/Sidebar";
 import { getPedidos, actualizarPedido } from "../services/pedidosService";
+import type {
+  ProductoPapelActualizar,
+  ProductoNuevoPapel,
+} from "../services/pedidosService";
 import type { Pedido } from "../types/cotizaciones.types";
 import {
   getProductosPapel,
@@ -48,6 +52,8 @@ interface ProductoPapelEdit {
   idsolicitud_producto: number;
   tipo_material: "papel";
   _eliminado: boolean;
+  // Marca productos agregados en esta sesión de edición (aún no existen en BD)
+  _esNuevo?: boolean;
 
   // Producto
   idproducto_papel: number;
@@ -345,8 +351,6 @@ function ProductoPapelEditable({
   coloresAsa,
   onChange,
   onDetalleChange,
-  onAgregarDetalle,
-  onEliminarDetalle,
   onEliminar,
   onCambiarProducto,
   onAbrirModalInsumo,
@@ -361,8 +365,6 @@ function ProductoPapelEditable({
   coloresAsa: { id_color: number; color: string }[];  // ← agregar aquí
   onChange: (pi: number, k: keyof ProductoPapelEdit, v: any) => void;
   onDetalleChange: (pi: number, di: number, k: keyof DetalleEdit, v: string) => void;
-  onAgregarDetalle: (pi: number) => void;
-  onEliminarDetalle: (pi: number, di: number) => void;
   onEliminar: (pi: number) => void;
   onCambiarProducto: (pi: number) => void;
   onAbrirModalInsumo: (tipoId: number, nombre: string, pi: number, campo: "ext" | "int", indice: number) => void;
@@ -437,6 +439,11 @@ function ProductoPapelEditable({
               <div className="flex items-center gap-2 flex-wrap">
                 <p className="text-sm font-semibold text-gray-900">{prod.nombre}</p>
                 <span className="text-xs px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded-full font-medium">📄 Papel</span>
+                {prod._esNuevo && (
+                  <span className="text-xs px-1.5 py-0.5 bg-green-100 text-green-700 rounded-full font-medium">
+                    Nuevo
+                  </span>
+                )}
               </div>
               <div className="flex flex-wrap gap-x-3 mt-0.5 text-xs text-gray-400">
                 {prod.medida && <span>📐 {prod.medida}</span>}
@@ -527,20 +534,10 @@ function ProductoPapelEditable({
             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
               Caras
             </label>
-            <select
-              value={prod.caras}
-              onChange={e => {
-                const n = Number(e.target.value);
-                const cat = catalogoCaras.find(c => c.cantidad === n);
-                onChange(pi, "caras", n);
-                onChange(pi, "carasId", cat?.id ?? null);
-              }}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-blue-500"
-            >
-              {[1, 2].map(n => (
-                <option key={n} value={n}>{n} cara{n > 1 ? "s" : ""}</option>
-              ))}
-            </select>
+            <div className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 bg-gray-50 flex items-center justify-between">
+              <span>{prod.caras} cara{prod.caras > 1 ? "s" : ""}</span>
+              <span className="text-xs text-gray-400">automático</span>
+            </div>
           </div>
         </div>
 
@@ -594,6 +591,13 @@ function ProductoPapelEditable({
               onChange(pi, "tintasDentro", n);
               onChange(pi, "tintasDentroId", n > 0 ? (cat?.id ?? null) : null);
               if (n === 0) onChange(pi, "pantonesDentro", "");
+
+              // Caras es automático en papel: 1 si solo hay tintas al frente,
+              // 2 si además hay tintas interiores.
+              const carasCalculadas = n > 0 ? 2 : 1;
+              const catCara = catalogoCaras.find(c => c.cantidad === carasCalculadas);
+              onChange(pi, "caras", carasCalculadas);
+              onChange(pi, "carasId", catCara?.id ?? null);
             }}
             className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-blue-500"
           >
@@ -814,16 +818,8 @@ function ProductoPapelEditable({
         <div>
           <div className="flex items-center justify-between mb-3">
             <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-              Cantidades y precios
+              Cantidad y precio
             </label>
-            {prod.detalles.length < 3 && (
-              <button
-                onClick={() => onAgregarDetalle(pi)}
-                className="text-xs px-2.5 py-1.5 bg-amber-50 text-amber-600 border border-amber-200 rounded-lg hover:bg-amber-100 transition font-medium"
-              >
-                + Agregar cantidad
-              </button>
-            )}
           </div>
           <div className="space-y-3">
             {prod.detalles.map((det, di) => (
@@ -873,18 +869,6 @@ function ProductoPapelEditable({
                     </div>
                     <p className="mt-0.5 text-xs text-gray-400">Calculado</p>
                   </div>
-
-                  {/* Eliminar */}
-                  {prod.detalles.length > 1 && (
-                    <div className="flex-shrink-0 flex items-end pb-1">
-                      <button onClick={() => onEliminarDetalle(pi, di)}
-                        className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                      </button>
-                    </div>
-                  )}
                 </div>
               </div>
             ))}
@@ -913,6 +897,17 @@ export default function EditarPedidoPapel() {
   const [pedidoOrig, setPedidoOrig] = useState<Pedido | null>(null);
   const [productos, setProductos] = useState<ProductoPapelEdit[]>([]);
 
+  // Refs por producto (indexadas por posición en `productos`) para poder
+  // hacer scroll automático al producto que falla una validación al guardar.
+  const productRefs = useRef<Record<number, HTMLDivElement | null>>({});
+  const [productoResaltado, setProductoResaltado] = useState<number | null>(null);
+
+  const irAProducto = (pi: number) => {
+    setProductoResaltado(pi);
+    productRefs.current[pi]?.scrollIntoView({ behavior: "smooth", block: "center" });
+    window.setTimeout(() => setProductoResaltado(prev => (prev === pi ? null : prev)), 2500);
+  };
+
   const [catalogoTintas, setCatalogoTintas] = useState<CatItem[]>([]);
   const [catalogoCaras, setCatalogoCaras] = useState<CatItem[]>([]);
   const [foilsGlobales, setFoilsGlobales] = useState<FoilOpcion[]>([]);
@@ -931,10 +926,14 @@ export default function EditarPedidoPapel() {
     indice: number;
   }>({ abierto: false, tipoId: 0, nombre: "", piOrigen: -1, campo: "ext", indice: 0 });
 
-  // Modal cambiar producto
-  const [modalBuscador, setModalBuscador] = useState<{ abierto: boolean; piOrigen: number }>({
-    abierto: false, piOrigen: -1,
-  });
+  // Modal cambiar/agregar producto
+  // modo "cambiar": reemplaza el producto en piOrigen
+  // modo "agregar": crea un producto nuevo al final de la lista
+  const [modalBuscador, setModalBuscador] = useState<{
+    abierto: boolean;
+    piOrigen: number;
+    modo: "cambiar" | "agregar";
+  }>({ abierto: false, piOrigen: -1, modo: "cambiar" });
 
   // Modal de procesos y maquinaria por producto de papel
   const [modalMaquinaria, setModalMaquinaria] = useState<{ abierto: boolean; piOrigen: number }>({
@@ -992,7 +991,10 @@ export default function EditarPedidoPapel() {
 
             const tintasNum = typeof p.tintas === "number" ? p.tintas : 1;
             const tintasDentroN = typeof p.tintasDentro === "number" ? p.tintasDentro : 0;
-            const carasNum = typeof p.caras === "number" ? p.caras : 1;
+            // Caras es automático en papel: 1 si solo hay tintas al frente,
+            // 2 si además hay tintas interiores. Se recalcula siempre al cargar
+            // por si el pedido viene de datos antiguos con un valor distinto.
+            const carasNum = tintasDentroN > 0 ? 2 : 1;
             const catalogoTintasPapel = tintasPapel(catalogosRes.data.tintas || []);
 
             const catTinta = catalogoTintasPapel.find((t: any) => t.cantidad === tintasNum);
@@ -1028,7 +1030,7 @@ export default function EditarPedidoPapel() {
               tintasDentro: tintasDentroN,
               pantonesDentro: p.pantonesDentro ?? "",
 
-              carasId: p.carasId ?? catCara?.id ?? null,
+              carasId: catCara?.id ?? p.carasId ?? null,
               caras: carasNum,
 
               id_asa: p.id_asa ?? null,
@@ -1049,7 +1051,10 @@ export default function EditarPedidoPapel() {
               herramental_precio: p.herramental_precio != null ? String(p.herramental_precio) : "",
               herramental_aprobado: p.herramental_aprobado ?? null,
 
-              detalles: (p.detalles || []).map((d: any) => {
+              // Un pedido de papel maneja una sola cantidad. Si el dato viene con
+              // más de un detalle (p. ej. arrastrado de una cotización antigua),
+              // solo se conserva el primero.
+              detalles: (p.detalles || []).slice(0, 1).map((d: any) => {
                 const precioUnit = d.precio_unitario != null
                   ? String(d.precio_unitario)
                   : d.cantidad > 0
@@ -1086,20 +1091,6 @@ export default function EditarPedidoPapel() {
       return { ...p, detalles: p.detalles.map((d, j) => j === di ? { ...d, [k]: v } : d) };
     }));
 
-  const onAgregarDetalle = (pi: number) =>
-    setProductos(prev => prev.map((p, i) => i !== pi ? p : {
-      ...p,
-      detalles: [...p.detalles, {
-        iddetalle: null, cantidad: "", precio_unitario: "",
-        precio_total: "", modo_cantidad: "unidad" as const,
-      }],
-    }));
-
-  const onEliminarDetalle = (pi: number, di: number) =>
-    setProductos(prev => prev.map((p, i) => i !== pi ? p : {
-      ...p, detalles: p.detalles.filter((_, j) => j !== di),
-    }));
-
   const onEliminar = (pi: number) => onChange(pi, "_eliminado", true);
 
   // ─── Modal insumo ────────────────────────────────────────────────────────────
@@ -1128,9 +1119,12 @@ export default function EditarPedidoPapel() {
     setModalInsumo({ abierto: false, tipoId: 0, nombre: "", piOrigen: -1, campo: "ext", indice: 0 });
   };
 
-  // ─── Cambiar producto ────────────────────────────────────────────────────────
+  // ─── Cambiar / Agregar producto ──────────────────────────────────────────────
   const handleCambiarProducto = (pi: number) =>
-    setModalBuscador({ abierto: true, piOrigen: pi });
+    setModalBuscador({ abierto: true, piOrigen: pi, modo: "cambiar" });
+
+  const handleAgregarProducto = () =>
+    setModalBuscador({ abierto: true, piOrigen: -1, modo: "agregar" });
 
   const aplicarProductoAlPi = async (
     pi: number,
@@ -1165,10 +1159,100 @@ export default function EditarPedidoPapel() {
     } catch { /* mantener producto anterior */ }
   };
 
+  // Construye un ProductoPapelEdit nuevo desde cero, listo para agregarse al pedido.
+  const crearProductoPapelDesdeSeleccion = async (
+    idproducto_papel: number,
+    nombre: string,
+    medida: string
+  ): Promise<ProductoPapelEdit> => {
+    let opcionesGrupos: GrupoOpcion[] = [];
+    let opcionesAsas: AsaOpcion[] = [];
+    let opcionesLaminados: LaminadoOpcion[] = [];
+
+    try {
+      const opciones = await getOpcionesProductoPapel(idproducto_papel);
+      opcionesGrupos = opciones.grupos;
+      opcionesAsas = opciones.asas;
+      opcionesLaminados = opciones.laminados;
+    } catch { /* sin opciones */ }
+
+    // id temporal negativo: identifica en la UI a un producto que aún no existe en BD
+    const tempId = -Date.now();
+
+    return {
+      idsolicitud_producto: tempId,
+      tipo_material: "papel",
+      _eliminado: false,
+      _esNuevo: true,
+
+      idproducto_papel,
+      nombre,
+      medida,
+
+      idgrupo_papel: opcionesGrupos[0]?.idgrupo_papel ?? null,
+      grupo_descripcion: opcionesGrupos[0]?.etiqueta ?? "",
+
+      opcionesGrupos,
+      opcionesAsas,
+      opcionesLaminados,
+      opcionesFoils: foilsGlobales,
+      opcionesTexturas: texturasGlobal,
+
+      // Arranca en 1 tinta (frente) y resuelve su id real del catálogo, no null.
+      // Si dejamos tintasId en null, el select ya muestra "1 tinta" por defecto
+      // y si el usuario no lo toca, nunca dispara el onChange que lo llenaría.
+      tintasId: catalogoTintas.find(t => t.cantidad === 1)?.id ?? null,
+      tintas: 1,
+      pantones: "",
+
+      tintasDentroId: null,
+      tintasDentro: 0,
+      pantonesDentro: "",
+
+      // Caras es automático: producto nuevo arranca sin tintas interiores → 1 cara.
+      carasId: catalogoCaras.find(c => c.cantidad === 1)?.id ?? null,
+      caras: 1,
+
+      id_asa: null,
+      id_color: null,
+      color_asa_nombre: null,
+      idcat_laminado: null,
+      idfoil: null,
+      idcat_textura: null,
+      uv: false,
+      alto_relieve: false,
+      metodo_hojeado: null,
+      lleva_armado: true,
+      maquinaria_seleccionada: {},
+
+      observacion: "",
+      descripcion: "",
+      herramental_descripcion: "",
+      herramental_precio: "",
+      herramental_aprobado: null,
+
+      detalles: [{
+        iddetalle: null,
+        cantidad: "",
+        precio_unitario: "",
+        precio_total: "",
+        modo_cantidad: "unidad" as const,
+      }],
+    };
+  };
+
   const handleSeleccionarProducto = async (prod: ProductoPapelBusqueda) => {
-    const pi = modalBuscador.piOrigen;
-    setModalBuscador({ abierto: false, piOrigen: -1 });
-    await aplicarProductoAlPi(pi, prod.idproducto_papel, prod.tipo_producto, prod.medida ?? "");
+    const { piOrigen, modo } = modalBuscador;
+    setModalBuscador({ abierto: false, piOrigen: -1, modo: "cambiar" });
+
+    if (modo === "agregar") {
+      const nuevo = await crearProductoPapelDesdeSeleccion(
+        prod.idproducto_papel, prod.tipo_producto, prod.medida ?? ""
+      );
+      setProductos(prev => [...prev, nuevo]);
+    } else {
+      await aplicarProductoAlPi(piOrigen, prod.idproducto_papel, prod.tipo_producto, prod.medida ?? "");
+    }
   };
 
   const handleProductoCreado = async (
@@ -1176,9 +1260,15 @@ export default function EditarPedidoPapel() {
     nombre: string,
     medida: string
   ) => {
-    const pi = modalBuscador.piOrigen;
-    setModalBuscador({ abierto: false, piOrigen: -1 });
-    await aplicarProductoAlPi(pi, idproducto_papel, nombre, medida);
+    const { piOrigen, modo } = modalBuscador;
+    setModalBuscador({ abierto: false, piOrigen: -1, modo: "cambiar" });
+
+    if (modo === "agregar") {
+      const nuevo = await crearProductoPapelDesdeSeleccion(idproducto_papel, nombre, medida);
+      setProductos(prev => [...prev, nuevo]);
+    } else {
+      await aplicarProductoAlPi(piOrigen, idproducto_papel, nombre, medida);
+    }
   };
 
   // ─── Procesos y maquinaria ───────────────────────────────────────────────────
@@ -1237,9 +1327,11 @@ export default function EditarPedidoPapel() {
       p => !p._eliminado && !p.metodo_hojeado
     );
     if (productoSinMetodo) {
+      const pi = productos.indexOf(productoSinMetodo);
       setErrorGuardar(
         `Configura procesos y maquinaria para "${productoSinMetodo.nombre}" antes de guardar.`
       );
+      irAProducto(pi);
       return;
     }
 
@@ -1247,19 +1339,23 @@ export default function EditarPedidoPapel() {
       p => !p._eliminado && (!p.tintasId || p.tintas <= 0)
     );
     if (productoSinTintas) {
+      const pi = productos.indexOf(productoSinTintas);
       setErrorGuardar(
-        `Selecciona las tintas para "${productoSinTintas.nombre}". Impresión es obligatoria`
+        `Selecciona las tintas (frente) para "${productoSinTintas.nombre}". Impresión es obligatoria — las tintas interiores sí son opcionales.`
       );
+      irAProducto(pi);
       return;
     }
 
     setGuardando(true);
     try {
-      const payload = {
-        productos: productos.map(p => ({
+      const productosExistentes: ProductoPapelActualizar[] = productos
+        .filter(p => !p._esNuevo)
+        .map(p => ({
           idsolicitud_producto: p.idsolicitud_producto,
           eliminado: p._eliminado,
           tipo_material: "papel" as const,
+          tipoCotizacion: "papel" as const,
           idproducto_papel: p.idproducto_papel,
           idgrupo_papel: p.idgrupo_papel ?? null,
           grupo_descripcion: p.grupo_descripcion || null,
@@ -1293,10 +1389,54 @@ export default function EditarPedidoPapel() {
               modo_cantidad: "unidad" as const,
             }))
             .filter(d => d.cantidad > 0),
-        })),
+        }));
+
+      const productosNuevos: ProductoNuevoPapel[] = productos
+        .filter(p => !!p._esNuevo && !p._eliminado)
+        .map(p => ({
+          tipo_material: "papel" as const,
+          tipoCotizacion: "papel" as const,
+          idproducto_papel: p.idproducto_papel,
+          idgrupo_papel: p.idgrupo_papel ?? null,
+          grupo_descripcion: p.grupo_descripcion || null,
+          tintasId: p.tintasId,
+          carasId: p.carasId,
+          pantones: p.pantones || null,
+          pantonesDentro: p.pantonesDentro || null,
+          tintasDentroId: p.tintasDentro > 0 ? p.tintasDentroId : null,
+          id_asa: p.id_asa ?? null,
+          id_color: p.id_color ?? null,
+          idcat_laminado: p.idcat_laminado ?? null,
+          idfoil: p.idfoil ?? null,
+          idcat_textura: p.idcat_textura ?? null,
+          uv: p.uv,
+          alto_relieve: p.alto_relieve,
+          metodo_hojeado: p.metodo_hojeado,
+          lleva_armado: p.lleva_armado,
+          maquinaria_seleccionada: p.maquinaria_seleccionada,
+          observacion: p.observacion || null,
+          descripcion: p.descripcion || null,
+          herramental_descripcion: p.herramental_descripcion || null,
+          herramental_precio: p.herramental_precio !== "" ? parseSafe(p.herramental_precio) : null,
+          herramental_aprobado: p.herramental_aprobado ?? null,
+          detalles: p.detalles
+            .map(d => ({
+              iddetalle: null,
+              cantidad: parseSafe(d.cantidad),
+              precio_total: parseSafe(d.precio_total),
+              precio_unitario: parseSafe(d.precio_unitario) || null,
+              kilogramos: null,
+              modo_cantidad: "unidad" as const,
+            }))
+            .filter(d => d.cantidad > 0),
+        }));
+
+      const payload = {
+        productos: productosExistentes,
+        productos_nuevos: productosNuevos,
       };
 
-      await actualizarPedido(pedidoOrig.no_pedido, payload as any);
+      await actualizarPedido(pedidoOrig.no_pedido, payload);
       setExito(true);
       setTimeout(() => navigate("/pedido"), 1500);
     } catch (e: any) {
@@ -1447,27 +1587,46 @@ export default function EditarPedidoPapel() {
 
             const currentIndex = ++activeIndex;
             return (
-              <ProductoPapelEditable
+              <div
                 key={`${prod.idsolicitud_producto}-${pi}`}
-                prod={prod}
-                pi={pi}
-                displayIndex={currentIndex}
-                catalogoTintas={catalogoTintas}
-                catalogoCaras={catalogoCaras}
-                idTipoPanton={idTipoPanton}
-                idTipoPantonesDentro={idTipoPanton}
-                coloresAsa={coloresAsa}
-                onChange={onChange}
-                onDetalleChange={onDetalleChange}
-                onAgregarDetalle={onAgregarDetalle}
-                onEliminarDetalle={onEliminarDetalle}
-                onEliminar={onEliminar}
-                onCambiarProducto={handleCambiarProducto}
-                onAbrirModalInsumo={handleAbrirModalInsumo}
-              />
+                ref={el => { productRefs.current[pi] = el; }}
+                className={
+                  productoResaltado === pi
+                    ? "rounded-xl ring-2 ring-red-400 ring-offset-2 transition-shadow"
+                    : ""
+                }
+              >
+                <ProductoPapelEditable
+                  prod={prod}
+                  pi={pi}
+                  displayIndex={currentIndex}
+                  catalogoTintas={catalogoTintas}
+                  catalogoCaras={catalogoCaras}
+                  idTipoPanton={idTipoPanton}
+                  idTipoPantonesDentro={idTipoPanton}
+                  coloresAsa={coloresAsa}
+                  onChange={onChange}
+                  onDetalleChange={onDetalleChange}
+                  onEliminar={onEliminar}
+                  onCambiarProducto={handleCambiarProducto}
+                  onAbrirModalInsumo={handleAbrirModalInsumo}
+                />
+              </div>
             );
           });
         })()}
+
+        {/* Agregar nuevo producto al pedido */}
+        <button
+          type="button"
+          onClick={handleAgregarProducto}
+          className="w-full flex items-center justify-center gap-2 px-4 py-3 border-2 border-dashed border-amber-300 text-amber-600 hover:bg-amber-50 rounded-xl text-sm font-semibold transition"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+          </svg>
+          Agregar producto de papel al pedido
+        </button>
 
         {/* Procesos y maquinaria */}
         <section className="bg-white rounded-xl border border-amber-200 shadow-sm overflow-hidden">
@@ -1545,6 +1704,7 @@ export default function EditarPedidoPapel() {
                 <span className="text-gray-500 truncate flex-1 mr-2">
                   <span className="text-gray-300 mr-1">{i + 1}.</span>
                   {p.nombre}
+                  {p._esNuevo && <span className="ml-1.5 text-xs text-green-500">● nuevo</span>}
                 </span>
                 <span className="font-medium text-gray-800 flex-shrink-0">
                   ${fmt(
@@ -1606,7 +1766,7 @@ export default function EditarPedidoPapel() {
         <BuscadorProductoPapel
           onSeleccionar={handleSeleccionarProducto}
           onCreado={handleProductoCreado}
-          onCerrar={() => setModalBuscador({ abierto: false, piOrigen: -1 })}
+          onCerrar={() => setModalBuscador({ abierto: false, piOrigen: -1, modo: "cambiar" })}
         />
       )}
 

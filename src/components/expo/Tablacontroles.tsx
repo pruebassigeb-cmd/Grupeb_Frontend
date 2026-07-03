@@ -213,7 +213,7 @@ export function BuscadorProductoModal({ catalogoPropio, onElegir, onClose, catal
                     style={{ display: "flex", gap: 10, alignItems: "center", padding: "8px 10px", borderRadius: 8, cursor: "pointer", border: "1px solid transparent" }}
                     onMouseEnter={e => { e.currentTarget.style.background = "#222"; e.currentTarget.style.borderColor = "#333"; }}
                     onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.borderColor = "transparent"; }}>
-                    <img src={p.imagen} alt="" style={{ width: 36, height: 36, objectFit: "cover", borderRadius: 5, border: "1px solid #333", flexShrink: 0 }} />
+                    <img src={p.imagen} alt="" loading="lazy" decoding="async" style={{ width: 36, height: 36, objectFit: "cover", borderRadius: 5, border: "1px solid #333", flexShrink: 0 }} />
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ color: "#EEE", fontSize: 12, fontWeight: 600 }}>{p.nombre}</div>
                       <div style={{ color: "#666", fontSize: 10 }}>{p.medida} · {p.material}</div>
@@ -524,9 +524,15 @@ interface FilaVaciaProps {
   onElegir: (p: Producto) => void;
   catalogoPropio: Producto[];
   catalogs: Catalogs;
+  columnasPrecio: 1 | 2 | 3;
 }
-export function FilaVacia({ onElegir, catalogoPropio, catalogs }: FilaVaciaProps) {
+export function FilaVacia({ onElegir, catalogoPropio, catalogs, columnasPrecio }: FilaVaciaProps) {
   const [open, setOpen] = useState(false);
+  // Total de columnas reales de la tabla: 11 fijas antes del precio
+  // (Producto, Medida, Material, Tintas, Acabados x7) + 1 de eliminar
+  // + las columnas de precio visibles (1 a 3). Debe coincidir siempre con
+  // el colgroup/headers de HojaCotizacion.tsx.
+  const totalCols = 12 + columnasPrecio;
   // Al elegir un producto del catálogo expo, va COMPLETO (con su medida,
   // material y calibre registrados) — igual que si se arrastrara del catálogo.
   // Solo los productos creados desde cero (sin fuente) nacen editables.
@@ -539,7 +545,7 @@ export function FilaVacia({ onElegir, catalogoPropio, catalogs }: FilaVaciaProps
       <tr onClick={() => setOpen(true)} style={{ cursor: "pointer" }}
         onMouseEnter={e => (e.currentTarget.style.background = "#EFE6D3")}
         onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
-        {Array.from({ length: 15 }).map((_, j) => (
+        {Array.from({ length: totalCols }).map((_, j) => (
           <td key={j} style={{ ...TD, height: 22 }}>
             {j === 0 && <span style={{ color: "#B8A880", fontSize: 8, fontStyle: "italic" }}>+ elegir producto</span>}
           </td>
@@ -575,12 +581,15 @@ interface FilaProps {
   // Si vienen, se usan en lugar del catálogo completo
   asasPermitidas?:      AsaPermitida[]      | null;
   laminadosPermitidos?: LaminadoPermitido[] | null;
+  // Cuántas columnas de precio están visibles en la tabla (1, 2 o 3) —
+  // controlado desde HojaCotizacion.tsx, compartido por todas las filas.
+  columnasPrecio: 1 | 2 | 3;
 }
 
 export const FilaTabla = memo(function FilaTabla({
   fila, rowIdx, onDel, onEdit, onEditNombre,
   catalogs, foils, texturas, catalogosPlast, pigmentosDB, coloresAsa, suajesPlast,
-  asasPermitidas, laminadosPermitidos,
+  asasPermitidas, laminadosPermitidos, columnasPrecio,
 }: FilaProps) {
   const { uid, producto: p } = fila;
   const pre = `r${rowIdx}`;
@@ -914,7 +923,12 @@ export const FilaTabla = memo(function FilaTabla({
         <span className="print-only">{extraPrint}</span>
       </td>
 
-      {/* Precios */}
+      {/* Precios — solo se renderizan las columnas que estén visibles en el
+          header (controlado por columnasPrecio desde HojaCotizacion.tsx).
+          Los valores de precio2/precio3 siguen viviendo en el estado de la
+          fila aunque la columna esté oculta; HojaCotizacion se encarga de
+          limpiarlos al colapsar una columna para que nunca se cuelen datos
+          "fantasma" al backend o al PDF. */}
       <td style={TDP}>
         <input className="no-print-show" style={iP} value={precio1} placeholder="$0.00"
           onChange={e => setPrecio1(e.target.value)} onBlur={() => propagar("precio1", precio1)} />
@@ -923,22 +937,26 @@ export const FilaTabla = memo(function FilaTabla({
         )}
         <span className="print-only">{precio1ConExtra}</span>
       </td>
-      <td style={TDP}>
-        <input className="no-print-show" style={iP} value={precio2} placeholder="$0.00"
-          onChange={e => setPrecio2(e.target.value)} onBlur={() => propagar("precio2", precio2)} />
-        {extraNum > 0 && modoExtra === "precio" && (
-          <div className="no-print-show" style={{ fontSize: 7, color: "#22C55E", lineHeight: 1 }}>{precio2ConExtra}</div>
-        )}
-        <span className="print-only">{precio2ConExtra}</span>
-      </td>
-      <td style={TDP}>
-        <input className="no-print-show" style={iP} value={precio3} placeholder="$0.00"
-          onChange={e => setPrecio3(e.target.value)} onBlur={() => propagar("precio3", precio3)} />
-        {extraNum > 0 && modoExtra === "precio" && (
-          <div className="no-print-show" style={{ fontSize: 7, color: "#22C55E", lineHeight: 1 }}>{precio3ConExtra}</div>
-        )}
-        <span className="print-only">{precio3ConExtra}</span>
-      </td>
+      {columnasPrecio >= 2 && (
+        <td style={TDP}>
+          <input className="no-print-show" style={iP} value={precio2} placeholder="$0.00"
+            onChange={e => setPrecio2(e.target.value)} onBlur={() => propagar("precio2", precio2)} />
+          {extraNum > 0 && modoExtra === "precio" && (
+            <div className="no-print-show" style={{ fontSize: 7, color: "#22C55E", lineHeight: 1 }}>{precio2ConExtra}</div>
+          )}
+          <span className="print-only">{precio2ConExtra}</span>
+        </td>
+      )}
+      {columnasPrecio >= 3 && (
+        <td style={TDP}>
+          <input className="no-print-show" style={iP} value={precio3} placeholder="$0.00"
+            onChange={e => setPrecio3(e.target.value)} onBlur={() => propagar("precio3", precio3)} />
+          {extraNum > 0 && modoExtra === "precio" && (
+            <div className="no-print-show" style={{ fontSize: 7, color: "#22C55E", lineHeight: 1 }}>{precio3ConExtra}</div>
+          )}
+          <span className="print-only">{precio3ConExtra}</span>
+        </td>
+      )}
 
       {/* Eliminar */}
       <td style={TD} className="no-print">

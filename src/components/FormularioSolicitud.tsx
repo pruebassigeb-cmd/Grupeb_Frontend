@@ -18,7 +18,7 @@ import type { Producto, DatosCotizacion, FormularioCotizacionProps } from "../ty
 import { ESTADO_INICIAL_PRODUCTO_MEDIDAS } from "../constants/formulario-solicitud.constants";
 import FormularioCliente from "./FormularioCliente";
 import { getTiposInsumo } from "../services/proveedoresService";
-import type { ProductoProveedor, Insumo } from "../services/proveedoresService";
+import type { Insumo } from "../services/proveedoresService";
 import ModalRegistrarInsumo from "./ModalRegistrarInsumo";
 import ComboboxInsumo from "./ComboboxInsumo";
 import FormularioProductoPapel from "../components/papel/FormularioProductoPapel";
