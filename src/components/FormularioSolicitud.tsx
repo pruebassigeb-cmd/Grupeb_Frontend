@@ -18,7 +18,7 @@ import type { Producto, DatosCotizacion, FormularioCotizacionProps } from "../ty
 import { ESTADO_INICIAL_PRODUCTO_MEDIDAS } from "../constants/formulario-solicitud.constants";
 import FormularioCliente from "./FormularioCliente";
 import { getTiposInsumo } from "../services/proveedoresService";
-import type { ProductoProveedor } from "../services/proveedoresService";
+import type { ProductoProveedor, Insumo } from "../services/proveedoresService";
 import ModalRegistrarInsumo from "./ModalRegistrarInsumo";
 import ComboboxInsumo from "./ComboboxInsumo";
 import FormularioProductoPapel from "../components/papel/FormularioProductoPapel";
@@ -493,8 +493,9 @@ export default function FormularioSolicitud({
     setModalInsumo({ abierto: true, tipoId, nombre, indice });
   };
 
-  const handleInsumoRegistrado = (item: ProductoProveedor) => {
-    const texto = item.codigo ? `${item.nombre} (${item.codigo})` : item.nombre;
+  const handleInsumoRegistrado = (item: Insumo) => {
+    const codigo = item.proveedores[0]?.codigo;
+    const texto = codigo ? `${item.nombre} (${codigo})` : item.nombre;
     if (modalInsumo.indice !== null) {
       const indice = modalInsumo.indice;
       setInputsPantones(prev => {
@@ -1225,7 +1226,8 @@ export default function FormularioSolicitud({
                       value={productoActual.pigmentos || ""}
                       onChange={(val) => setProductoActual((p) => ({ ...p, pigmentos: sanitizarTexto(val) || null }))}
                       onSeleccionar={(item) => {
-                        const texto = item.codigo ? `${item.nombre} (${item.codigo})` : item.nombre;
+                        const codigo = item.proveedores[0]?.codigo;
+                        const texto = codigo ? `${item.nombre} (${codigo})` : item.nombre;
                         setProductoActual((p) => ({ ...p, pigmentos: texto }));
                       }}
                       onRegistrarNuevo={(nombre) => abrirModalInsumo(idTipoPigmento!, nombre, null)}
@@ -1247,7 +1249,8 @@ export default function FormularioSolicitud({
                               value={valor}
                               onChange={(val) => handlePantoneChange(i, val)}
                               onSeleccionar={(item) => {
-                                const texto = item.codigo ? `${item.nombre} (${item.codigo})` : item.nombre;
+                                const codigo = item.proveedores[0]?.codigo;
+                                const texto = codigo ? `${item.nombre} (${codigo})` : item.nombre;
                                 const nuevos = [...inputsPantones]; nuevos[i] = texto;
                                 setInputsPantones(nuevos);
                                 setProductoActual((prev) => ({ ...prev, pantones: nuevos.join(", ").replace(/^[\s,]+|[\s,]+$/g, "") || null }));

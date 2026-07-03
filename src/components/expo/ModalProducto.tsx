@@ -58,6 +58,70 @@ const parsearMedidaAInputs = (medida: string): Record<MedidaKey, string> => {
   };
 };
 
+// ─── Comprimir imagen antes de guardarla/subirla ─────────────────────────────
+// Las fotos de cámara pueden pesar 5-10 MB; convertirlas a base64 completas
+// o subirlas sin comprimir puede saturar memoria y provocar que el navegador
+// mate la pestaña (sobre todo en Android al abrir la cámara). Las redimensionamos
+// a máx 1600px de lado mayor y comprimimos a JPEG ~0.8 antes de tocarlas más.
+const comprimirImagen = (file: File, maxDim = 1600, calidad = 0.8): Promise<File> => {
+  return new Promise((resolve) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      let { width, height } = img;
+      if (width > maxDim || height > maxDim) {
+        if (width > height) { height = Math.round((height * maxDim) / width); width = maxDim; }
+        else { width = Math.round((width * maxDim) / height); height = maxDim; }
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width = width; canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) { resolve(file); return; }
+      ctx.drawImage(img, 0, 0, width, height);
+      canvas.toBlob(blob => {
+        if (!blob) { resolve(file); return; }
+        resolve(new File([blob], file.name.replace(/\.[^/.]+$/, "") + ".jpg", { type: "image/jpeg" }));
+      }, "image/jpeg", calidad);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
+    img.src = url;
+  });
+};
+
+// ─── Draft de imagen en sessionStorage ───────────────────────────────────────
+// Al tomar una foto, el navegador puede reiniciar la pestaña por presión de
+// memoria mientras la cámara está abierta (le pasa sobre todo a Android).
+// Por eso subimos la imagen a S3 DE INMEDIATO (no hasta el botón "Guardar")
+// y guardamos la URL resultante aquí, para poder recuperarla si el modal se
+// vuelve a montar después de un reinicio inesperado.
+const DRAFT_KEY = "modalProducto_imagenDraft";
+
+const subirFotoInmediato = async (
+  file: File,
+  categoria: "papel" | "plastico" | "carton" | undefined,
+  setF: (k: keyof Producto, v: unknown) => void,
+  setSubiendoFoto: (v: boolean) => void,
+) => {
+  setSubiendoFoto(true);
+  try {
+    const comprimido = await comprimirImagen(file);
+    const subcarpeta  = categoria === "plastico" ? "plastico"
+                       : categoria === "carton"   ? "carton"
+                       : "papel";
+    const archivo = await subirArchivo(comprimido, "catalogoproductos", subcarpeta);
+    const base = (api.defaults.baseURL || "").replace(/\/$/, "");
+    const url = `${base}/archivos/${archivo.id_archivo}/ver`;
+    setF("imagen", url);
+    sessionStorage.setItem(DRAFT_KEY, url); // sobrevive a un reload de la pestaña
+  } catch (e) {
+    console.error("❌ No se pudo subir la imagen:", e);
+    alert("No se pudo subir la imagen. Intenta de nuevo.");
+  } finally {
+    setSubiendoFoto(false);
+  }
+};
+
 // ─── TintasSelectModal ────────────────────────────────────────────────────────
 function TintasSelectModal({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const [open, setOpen] = useState(false);
@@ -231,11 +295,21 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
 
   const [formCat, setFormCat] = useState<"papel"|"plastico"|"carton">(editando?.categoria ?? catInicial);
 
-  // ─── Foto: archivo pendiente de subir a S3 ────────────────────────────────
-  // form.imagen guarda solo el PREVIEW (base64) mientras hay archivo pendiente;
-  // al guardar, se sube a S3 y se sustituye por la URL permanente /archivos/:id/ver
-  const [archivoFoto,  setArchivoFoto]  = useState<File | null>(null);
+  // ─── Foto: ya se sube a S3 apenas se selecciona/toma (ver subirFotoInmediato).
+  // form.imagen guarda directamente la URL final una vez subida.
   const [subiendoFoto, setSubiendoFoto] = useState(false);
+
+  // ─── Recuperar draft de imagen si el modal se remonta tras un reinicio ────
+  // (por ejemplo, si el navegador mató la pestaña al abrir la cámara y el
+  // usuario volvió a abrir "Nuevo producto" después de que la app recargó).
+  useEffect(() => {
+    if (editando) return; // solo aplica a "nuevo producto"
+    const draft = sessionStorage.getItem(DRAFT_KEY);
+    if (draft && !form.imagen) {
+      setForm(prev => ({ ...prev, imagen: draft }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ─── Catálogos plástico desde DB ─────────────────────────────────────────
   const [tiposProducto, setTiposProducto] = useState<TipoProducto[]>([]);
@@ -350,26 +424,12 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
     return `${v.join("+")}x${h.join("+")}`;
   };
 
-  // ─── Subir foto pendiente a S3 y regresar la URL final ────────────────────
-  // Regresa la URL permanente /archivos/:id/ver (redirige a presigned fresca),
-  // o la imagen actual del form si no hay archivo nuevo (URL previa o base64 legacy).
-const resolverImagen = async (): Promise<string | null> => {
-    if (!archivoFoto) return form.imagen || "";
-    setSubiendoFoto(true);
-    try {
-      const subcarpetaCatalogo = form.categoria === "plastico" ? "plastico"
-                                : form.categoria === "carton"   ? "carton"
-                                : "papel";
-      const archivo = await subirArchivo(archivoFoto, "catalogoproductos", subcarpetaCatalogo);
-      const base = (api.defaults.baseURL || "").replace(/\/$/, "");
-      return `${base}/archivos/${archivo.id_archivo}/ver`;
-    } catch (e) {
-      console.error("❌ No se pudo subir la imagen a S3:", e);
-      alert("No se pudo subir la imagen. Intenta de nuevo.");
-      return null;
-    } finally {
-      setSubiendoFoto(false);
-    }
+  // ─── Resolver imagen final al guardar ──────────────────────────────────────
+  // Ya no sube nada aquí: la foto se sube a S3 en el instante en que se toma
+  // o selecciona (ver subirFotoInmediato). Aquí solo devolvemos lo que ya
+  // quedó guardado en form.imagen (la URL final, o "" si no hay foto).
+  const resolverImagen = async (): Promise<string | null> => {
+    return form.imagen || "";
   };
 
   const guardar = async () => {
@@ -377,6 +437,7 @@ const resolverImagen = async (): Promise<string | null> => {
 
     const imagenFinal = await resolverImagen();
     if (imagenFinal === null) return; // falló la subida — no guardar el producto
+    sessionStorage.removeItem(DRAFT_KEY);
 
     if (esPapelCarton) {
       let medida = form.medida || "";
@@ -629,29 +690,54 @@ const resolverImagen = async (): Promise<string | null> => {
         {/* ── IMAGEN ── */}
         <div style={{ marginBottom:20 }}>
           <label style={LS}>Imagen del producto</label>
-          <label style={{ display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:8,border:"1.5px dashed #444",borderRadius:8,padding:"16px",cursor:"pointer",background:"#111" }}
-            onMouseEnter={e=>(e.currentTarget.style.borderColor="#C9922A")}
-            onMouseLeave={e=>(e.currentTarget.style.borderColor="#444")}>
-            {form.imagen ? <img src={form.imagen} alt="preview" style={{ width:80,height:80,objectFit:"cover",borderRadius:6,border:"1px solid #333" }} /> : <span style={{ fontSize:28 }}>📷</span>}
-            <span style={{ color:"#888",fontSize:11 }}>
-              {form.imagen ? "Cambiar imagen" : "Subir imagen (JPG, PNG, WEBP)"}
-            </span>
-            {archivoFoto && (
-              <span style={{ color:"#C9922A",fontSize:10 }}>
-                📎 {archivoFoto.name} — se sube a S3 al guardar
+
+          {form.imagen && (
+            <div style={{ display:"flex", justifyContent:"center", marginBottom:10 }}>
+              <img src={form.imagen} alt="preview" style={{ width:90,height:90,objectFit:"cover",borderRadius:6,border:"1px solid #333" }} />
+            </div>
+          )}
+
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+            {/* Subir desde archivos */}
+            <label style={{ display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:6,border:"1.5px dashed #444",borderRadius:8,padding:"14px 8px",cursor: subiendoFoto ? "not-allowed" : "pointer",background:"#111",opacity: subiendoFoto?.5:1 }}
+              onMouseEnter={e=>{ if(!subiendoFoto) e.currentTarget.style.borderColor="#C9922A"; }}
+              onMouseLeave={e=>(e.currentTarget.style.borderColor="#444")}>
+              <span style={{ fontSize:22 }}>🖼️</span>
+              <span style={{ color:"#888",fontSize:10.5,textAlign:"center" }}>
+                {form.imagen ? "Cambiar imagen" : "Subir imagen"}
               </span>
-            )}
-            <input type="file" accept="image/*" style={{ display:"none" }} onChange={e=>{
-              const file=e.target.files?.[0]; if(!file) return;
-              // El archivo se sube a S3 hasta que se guarda el producto;
-              // mientras, el base64 solo sirve como preview local.
-              setArchivoFoto(file);
-              const reader=new FileReader();
-              reader.onload=ev=>setF("imagen",ev.target?.result as string);
-              reader.readAsDataURL(file);
-            }} />
-          </label>
-          {form.imagen && <button onClick={()=>{ setF("imagen",""); setArchivoFoto(null); }} style={{ marginTop:6,background:"transparent",border:"none",color:"#666",fontSize:11,cursor:"pointer",textDecoration:"underline" }}>✕ Quitar imagen</button>}
+              <input type="file" accept="image/*" disabled={subiendoFoto} style={{ display:"none" }} onChange={e=>{
+                const file=e.target.files?.[0]; if(!file) return;
+                subirFotoInmediato(file, form.categoria, setF, setSubiendoFoto);
+              }} />
+            </label>
+
+            {/* Tomar foto con la cámara */}
+            <label style={{ display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:6,border:"1.5px dashed #444",borderRadius:8,padding:"14px 8px",cursor: subiendoFoto ? "not-allowed" : "pointer",background:"#111",opacity: subiendoFoto?.5:1 }}
+              onMouseEnter={e=>{ if(!subiendoFoto) e.currentTarget.style.borderColor="#C9922A"; }}
+              onMouseLeave={e=>(e.currentTarget.style.borderColor="#444")}>
+              <span style={{ fontSize:22 }}>📷</span>
+              <span style={{ color:"#888",fontSize:10.5,textAlign:"center" }}>
+                Tomar foto
+              </span>
+              <input type="file" accept="image/*" capture="environment" disabled={subiendoFoto} style={{ display:"none" }} onChange={e=>{
+                const file=e.target.files?.[0]; if(!file) return;
+                subirFotoInmediato(file, form.categoria, setF, setSubiendoFoto);
+              }} />
+            </label>
+          </div>
+
+          {subiendoFoto && (
+            <div style={{ marginTop:8, textAlign:"center" }}>
+              <span style={{ color:"#C9922A",fontSize:10 }}>⏳ Subiendo imagen...</span>
+            </div>
+          )}
+
+          {form.imagen && !subiendoFoto && (
+            <div style={{ textAlign:"center", marginTop:6 }}>
+              <button onClick={()=>{ setF("imagen",""); sessionStorage.removeItem(DRAFT_KEY); }} style={{ background:"transparent",border:"none",color:"#666",fontSize:11,cursor:"pointer",textDecoration:"underline" }}>✕ Quitar imagen</button>
+            </div>
+          )}
         </div>
 
        {/* Acciones */}

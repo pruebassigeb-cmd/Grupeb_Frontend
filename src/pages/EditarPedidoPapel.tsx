@@ -20,7 +20,7 @@ import type {
   TexturaOpcion,
 } from "../types/papel/cotizacion-papel.types";
 import { getTiposInsumo } from "../services/proveedoresService";
-import type { ProductoProveedor } from "../services/proveedoresService";
+import type { Insumo } from "../services/proveedoresService";
 import ComboboxInsumo from "../components/ComboboxInsumo";
 import ModalRegistrarInsumo from "../components/ModalRegistrarInsumo";
 import FormularioProductoPapelAlta, {
@@ -562,7 +562,8 @@ function ProductoPapelEditable({
                   value={pantonesArr[ti] || ""}
                   onChange={val => setPantonExt(ti, val)}
                   onSeleccionar={item => {
-                    const texto = item.codigo ? `${item.nombre} (${item.codigo})` : item.nombre;
+                    const codigo = item.proveedores[0]?.codigo;
+                    const texto = codigo ? `${item.nombre} (${codigo})` : item.nombre;
                     setPantonExt(ti, texto);
                   }}
                   onRegistrarNuevo={nombre =>
@@ -624,7 +625,8 @@ function ProductoPapelEditable({
                       value={pantonesDentroArr[ti] || ""}
                       onChange={val => setPantonInt(ti, val)}
                       onSeleccionar={item => {
-                        const texto = item.codigo ? `${item.nombre} (${item.codigo})` : item.nombre;
+                        const codigo = item.proveedores[0]?.codigo;
+                        const texto = codigo ? `${item.nombre} (${codigo})` : item.nombre;
                         setPantonInt(ti, texto);
                       }}
                       onRegistrarNuevo={nombre =>
@@ -1105,8 +1107,9 @@ export default function EditarPedidoPapel() {
     tipoId: number, nombre: string, pi: number, campo: "ext" | "int", indice: number
   ) => setModalInsumo({ abierto: true, tipoId, nombre, piOrigen: pi, campo, indice });
 
-  const handleInsumoRegistrado = (item: ProductoProveedor) => {
-    const texto = item.codigo ? `${item.nombre} (${item.codigo})` : item.nombre;
+  const handleInsumoRegistrado = (item: Insumo) => {
+    const codigo = item.proveedores[0]?.codigo;
+    const texto = codigo ? `${item.nombre} (${codigo})` : item.nombre;
     const { piOrigen, campo, indice } = modalInsumo;
 
     setProductos(prev => prev.map((p, i) => {
