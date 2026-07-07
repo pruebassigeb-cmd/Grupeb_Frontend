@@ -27,7 +27,6 @@ export default function ModalCatalogoExpo({ onClose }: Props) {
   const [catInicial, setCatInicial] = useState<"papel" | "plastico" | "carton">("papel");
   const [saving, setSaving] = useState(false);
 
-  // ── Catálogos de apoyo que necesita ModalProducto ────────────────────────
   const { catalogs } = useCatalogosPapel();
   const [foils, setFoils] = useState<FoilOpcion[]>([]);
   const [texturas, setTexturas] = useState<TexturaOpcion[]>([]);
@@ -182,26 +181,43 @@ export default function ModalCatalogoExpo({ onClose }: Props) {
           {!loading && filtrados.length > 0 && (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 10 }}>
               {filtrados.map(p => (
-                <div key={p.id} style={{ background: "#1A1A1A", border: "1px solid #222", borderRadius: 10, padding: 12, display: "flex", flexDirection: "column", gap: 6 }}>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-                    <span style={{ color: "#EEE", fontSize: 12.5, fontWeight: 700 }}>{p.nombre}</span>
-                    <span style={{ background: "#2A2A2A", color: "#888", fontSize: 8.5, padding: "2px 6px", borderRadius: 4, textTransform: "capitalize", flexShrink: 0 }}>{p.categoria}</span>
+                <div key={p.id} style={{ background: "#1A1A1A", border: "1px solid #222", borderRadius: 10, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+
+                  {/* Imagen del producto */}
+                  <div style={{ width: "100%", height: 110, background: "#0D0D0D", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    {p.imagen ? (
+                      <img
+                        src={p.imagen}
+                        alt={p.nombre}
+                        style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                        onError={e => { (e.target as HTMLImageElement).style.display = "none"; }}
+                      />
+                    ) : (
+                      <span style={{ color: "#333", fontSize: 28 }}>📦</span>
+                    )}
                   </div>
-                  {p.medida && <div style={{ color: "#666", fontSize: 10.5 }}>{p.medida}</div>}
-                  <div style={{ display: "flex", gap: 10, fontSize: 10.5, color: "#C9922A", fontWeight: 700 }}>
-                    {p.precio500 && <span>{p.precio500}</span>}
-                    {p.precio1000 && <span>{p.precio1000}</span>}
-                    {p.precio3000 && <span>{p.precio3000}</span>}
-                  </div>
-                  <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
-                    <button onClick={() => abrirEditar(p)}
-                      style={{ flex: 1, background: "transparent", border: "1px solid #C9922A55", color: "#C9922A", fontSize: 10.5, fontWeight: 600, padding: "5px", borderRadius: 6, cursor: "pointer" }}>
-                      ✎ Editar
-                    </button>
-                    <button onClick={() => eliminarProd(p.id, p.nombre)} disabled={eliminandoId === p.id}
-                      style={{ flex: 1, background: "transparent", border: "1px solid #EF444433", color: "#EF4444", fontSize: 10.5, fontWeight: 600, padding: "5px", borderRadius: 6, cursor: "pointer", opacity: eliminandoId === p.id ? .5 : 1 }}>
-                      {eliminandoId === p.id ? "..." : "🗑 Eliminar"}
-                    </button>
+
+                  <div style={{ padding: "10px 12px 12px", display: "flex", flexDirection: "column", gap: 6 }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                      <span style={{ color: "#EEE", fontSize: 12.5, fontWeight: 700 }}>{p.nombre}</span>
+                      <span style={{ background: "#2A2A2A", color: "#888", fontSize: 8.5, padding: "2px 6px", borderRadius: 4, textTransform: "capitalize", flexShrink: 0 }}>{p.categoria}</span>
+                    </div>
+                    {p.medida && <div style={{ color: "#666", fontSize: 10.5 }}>{p.medida}</div>}
+                    <div style={{ display: "flex", gap: 10, fontSize: 10.5, color: "#C9922A", fontWeight: 700 }}>
+                      {p.precio500 && <span>{p.precio500}</span>}
+                      {p.precio1000 && <span>{p.precio1000}</span>}
+                      {p.precio3000 && <span>{p.precio3000}</span>}
+                    </div>
+                    <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+                      <button onClick={() => abrirEditar(p)}
+                        style={{ flex: 1, background: "transparent", border: "1px solid #C9922A55", color: "#C9922A", fontSize: 10.5, fontWeight: 600, padding: "5px", borderRadius: 6, cursor: "pointer" }}>
+                        ✎ Editar
+                      </button>
+                      <button onClick={() => eliminarProd(p.id, p.nombre)} disabled={eliminandoId === p.id}
+                        style={{ flex: 1, background: "transparent", border: "1px solid #EF444433", color: "#EF4444", fontSize: 10.5, fontWeight: 600, padding: "5px", borderRadius: 6, cursor: "pointer", opacity: eliminandoId === p.id ? .5 : 1 }}>
+                        {eliminandoId === p.id ? "..." : "🗑 Eliminar"}
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
