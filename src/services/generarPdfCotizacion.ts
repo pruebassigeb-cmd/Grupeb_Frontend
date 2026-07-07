@@ -659,8 +659,11 @@ function renderTablaMixta(
 // ═══════════════════════════════════════════════════════════════════════════════
 // FUNCIÓN PRINCIPAL
 // ═══════════════════════════════════════════════════════════════════════════════
-export async function generarPdfCotizacion(cotizacion: CotizacionPdf, guardarEnS3 = false): Promise<void> {
-  const logoBase64 = cotizacion.logoBase64 ?? await cargarLogoBase64(logoUrl);
+export async function generarPdfCotizacion(
+  cotizacion: CotizacionPdf,
+  guardarEnS3 = false,
+  descargar = true
+): Promise<Blob> {  const logoBase64 = cotizacion.logoBase64 ?? await cargarLogoBase64(logoUrl);
   const sinIva = cotizacion.sin_iva === true;
 
   const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "letter" });
@@ -726,10 +729,11 @@ export async function generarPdfCotizacion(cotizacion: CotizacionPdf, guardarEnS
   dibujarCajasPie(doc, cotizacion.productos, condLines);
   dibujarPiePagina(doc, "COTIZACION", cotizacion.no_cotizacion, cotizacion.fecha);
 
-  const nombre = `Cotizacion_${cotizacion.no_cotizacion}.pdf`;
-  doc.save(nombre);
+const nombre = `Cotizacion_${cotizacion.no_cotizacion}.pdf`;
+  const blob = doc.output("blob");
+  if (descargar) doc.save(nombre);
   if (guardarEnS3) {
-    const blob = doc.output("blob");
     await subirPdfA3(blob, nombre, "pdfs", "cotizaciones");
   }
+  return blob;
 }

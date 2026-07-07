@@ -27,18 +27,20 @@ const X_PRODUCTO     = 70;
 const X_MEDIDA       = 106;
 const X_MATERIAL     = 130;  // material + calibre (dos líneas)
 const X_TINTAS       = 156;
-const X_LAM          = 170;  // Laminación (papel) / Tipo (plástico)
-const X_HS           = 192;  // HS (Hot Stamping / Foil)
-const X_AR           = 202;  // AR
-const X_TEX          = 212;  // Textura
-const X_UV           = 232;  // UV
-const X_ASA          = 236;  // Asa — columna propia
-const X_PIGMENTO     = 246;  // Pigmento — columna propia, entre Asa y la 1a cantidad de precio
+const X_LAM          = 166;  // Laminación (papel) / Tipo (plástico) — 4mm a la izquierda
+const X_HS           = 189;  // HS (Hot Stamping / Foil) — 3mm a la izquierda
+const X_AR           = 198;  // AR — 4mm a la izquierda
+const X_TEX          = 208;  // Textura — 4mm a la izquierda
+const X_UV           = 226;  // UV — 6mm a la izquierda
+const X_ASA          = 231;  // Asa — 5mm a la izquierda
+const X_PIGMENTO     = 242;  // Pigmento — 4mm a la izquierda
 
-// Columnas de precio — recorridas 10mm a la derecha (usando parte del margen
-// sobrante de 15mm) para dejar hueco a la columna de Pigmento
-const X_PRECIOS_INI  = 257;
-const X_PRECIOS_FIN  = 295;
+// Columnas de precio — recorridas 2mm más a la derecha, con espacio (gutter)
+// de 3mm entre cada columna de precio
+const X_PRECIOS_INI  = 259;
+const X_PRECIOS_FIN  = 297;
+const GUTTER_PRECIOS = 3;    // separación extra entre columnas de precio
+const PRECIO_Y_OFFSET = -2;  // toda la sección de precios sube 3mm — bajada 1mm
 
 // ── SECCIÓN 4: COMENTARIOS ──────────────────────────────────────────────────
 const Y_COMENTARIOS  = 155;  // bajado 10mm desde donde estaba
@@ -159,15 +161,15 @@ export function generarPdfCotizacionExpo(params: PdfCotizacionExpoParams): void 
     Math.max(...productos.map(p => p.detalles?.length || 0), 0)
   );
   const anchoPrecio = numPrecios > 0
-    ? (X_PRECIOS_FIN - X_PRECIOS_INI) / numPrecios
+    ? (X_PRECIOS_FIN - X_PRECIOS_INI - GUTTER_PRECIOS * (numPrecios - 1)) / numPrecios
     : 0;
 
   // Encabezados de cantidad (500 / 1,000 / 3,000 — tomado del primer producto)
   if (numPrecios > 0 && productos[0]?.detalles?.length > 0) {
     const detallesRef = productos[0].detalles.slice(0, numPrecios);
     detallesRef.forEach((d, i) => {
-      const xCol = X_PRECIOS_INI + i * anchoPrecio + anchoPrecio / 2;
-      txt(doc, Number(d.cantidad).toLocaleString("es-MX"), xCol, Y_TABLA - 5, 6.5, "center");
+      const xCol = X_PRECIOS_INI + i * (anchoPrecio + GUTTER_PRECIOS) + anchoPrecio / 2;
+      txt(doc, Number(d.cantidad).toLocaleString("es-MX"), xCol, Y_TABLA - 5 + PRECIO_Y_OFFSET, 6.5, "center");
     });
   }
 
@@ -202,12 +204,12 @@ export function generarPdfCotizacionExpo(params: PdfCotizacionExpoParams): void 
     // Precios — centrados en su columna, precio/pz + precio total abajo
     const detalles = (prod.detalles || []).slice(0, numPrecios);
     detalles.forEach((d, i) => {
-      const xCol = X_PRECIOS_INI + i * anchoPrecio + anchoPrecio / 2;
+      const xCol = X_PRECIOS_INI + i * (anchoPrecio + GUTTER_PRECIOS) + anchoPrecio / 2;
       const pxPz = d.precio_unitario != null
         ? Number(d.precio_unitario)
         : Number(d.precio_total) / Number(d.cantidad);
-      txt(doc, `$${pxPz.toFixed(2)}/pz`, xCol, y,     7, "center");
-      txt(doc, `±20%`,                    xCol, y + 4, 5.5, "center");
+      txt(doc, `$${pxPz.toFixed(2)}/pz`, xCol, y + PRECIO_Y_OFFSET,     7, "center");
+      txt(doc, `±20%`,                    xCol, y + 4 + PRECIO_Y_OFFSET, 5.5, "center");
     });
   });
 

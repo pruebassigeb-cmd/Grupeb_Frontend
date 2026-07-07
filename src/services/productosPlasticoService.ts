@@ -8,16 +8,13 @@ import type {
   ProductoBusqueda,
   VerificarProductoResponse,
   CatalogoCalibre,
+  CategoriaArchivoPlastico,
+  ArchivoProductoPlastico,
 } from "../types/productos-plastico.types";
 
 // ========================
 // FUNCIONES EXISTENTES
 // ========================
-/**
- * Obtener calibres según tipo (normal o BOPP)
- * @param tipo - 'normal' | 'bopp'
- * @returns Array de calibres
- */
 export const getCalibres = async (
   tipo: "normal" | "bopp" = "normal"
 ): Promise<CatalogoCalibre[]> => {
@@ -33,9 +30,7 @@ export const getCalibres = async (
     throw error;
   }
 };
-/**
- * Obtener catálogos de productos plástico
- */
+
 export const getCatalogosPlastico = async (): Promise<CatalogosPlastico> => {
   try {
     const response = await api.get("/catalogos-productos/plastico");
@@ -46,9 +41,6 @@ export const getCatalogosPlastico = async (): Promise<CatalogosPlastico> => {
   }
 };
 
-/**
- * Crear producto plástico
- */
 export const createProductoPlastico = async (
   producto: ProductoPlasticoCreate
 ): Promise<ProductoPlasticoResponse> => {
@@ -61,9 +53,6 @@ export const createProductoPlastico = async (
   }
 };
 
-/**
- * Obtener todos los productos plástico
- */
 export const getProductosPlastico = async (): Promise<ProductoPlastico[]> => {
   try {
     const response = await api.get("/productos-plastico");
@@ -74,9 +63,6 @@ export const getProductosPlastico = async (): Promise<ProductoPlastico[]> => {
   }
 };
 
-/**
- * Obtener producto plástico por ID
- */
 export const getProductoPlasticoById = async (
   id: number
 ): Promise<ProductoPlasticoDetalle> => {
@@ -89,9 +75,6 @@ export const getProductoPlasticoById = async (
   }
 };
 
-/**
- * Actualizar producto plástico
- */
 export const updateProductoPlastico = async (
   id: number,
   producto: ProductoPlasticoCreate
@@ -105,9 +88,7 @@ export const updateProductoPlastico = async (
   }
 };
 
-/**
- * Eliminar producto plástico
- */
+/** Soft-delete — el backend ahora marca activo=false, no borra el registro */
 export const deleteProductoPlastico = async (
   id: number
 ): Promise<{ message: string }> => {
@@ -120,17 +101,22 @@ export const deleteProductoPlastico = async (
   }
 };
 
-
+/** ✅ NUEVO — reactivar un producto previamente desactivado */
+export const reactivarProductoPlastico = async (
+  id: number
+): Promise<{ message: string }> => {
+  try {
+    const response = await api.patch(`/productos-plastico/${id}/reactivar`);
+    return response.data;
+  } catch (error: any) {
+    console.error("❌ Error al reactivar producto:", error);
+    throw error;
+  }
+};
 
 // ====================================
 // NUEVAS FUNCIONES PARA BÚSQUEDA
 // ====================================
-
-/**
- * Buscar productos plástico con filtro o devolver los últimos 50
- * @param query - Término de búsqueda (opcional)
- * @returns Array de productos simplificados
- */
 export const searchProductosPlastico = async (
   query?: string
 ): Promise<ProductoBusqueda[]> => {
@@ -147,11 +133,6 @@ export const searchProductosPlastico = async (
   }
 };
 
-/**
- * Verificar si un producto ya existe en la base de datos
- * @param data - Datos del producto a verificar
- * @returns Si existe y datos del producto si existe
- */
 export const verificarProductoExiste = async (data: {
   tipo_producto_id: number;
   material_id: number;
@@ -170,16 +151,10 @@ export const verificarProductoExiste = async (data: {
   }
 };
 
-/**
- * Crear producto si no existe, o devolver el existente
- * @param producto - Datos del producto
- * @returns Producto creado o existente
- */
 export const crearOObtenerProducto = async (
   producto: ProductoPlasticoCreate
 ): Promise<ProductoPlasticoResponse> => {
   try {
-    // Primero verificar si existe
     const verificacion = await verificarProductoExiste({
       tipo_producto_id: producto.tipo_producto_plastico_id,
       material_id: producto.material_plastico_id,
@@ -188,15 +163,9 @@ export const crearOObtenerProducto = async (
     });
 
     if (verificacion.existe && verificacion.producto) {
-      console.log("✅ Producto ya existe, devolviendo existente");
-      return {
-        message: "Producto encontrado",
-        producto: verificacion.producto,
-      };
+      return { message: "Producto encontrado", producto: verificacion.producto };
     }
 
-    // Si no existe, crear
-    console.log("📝 Producto no existe, creando nuevo");
     return await createProductoPlastico(producto);
   } catch (error: any) {
     console.error("❌ Error al crear/obtener producto:", error);
@@ -204,22 +173,20 @@ export const crearOObtenerProducto = async (
   }
 };
 
-// ── Agrega esto a productosPlasticoService.ts ──────────────────────────────
-
 interface CheckDuplicadoParams {
   tipo_producto_plastico_id: number;
-  material_plastico_id:      number;
-  calibre_id:                number;
-  altura:       number;
-  ancho:        number;
+  material_plastico_id: number;
+  calibre_id: number;
+  altura: number;
+  ancho: number;
   fuelle_fondo?: number;
   fuelle_latIz?: number;
   fuelle_latDe?: number;
-  refuerzo?:     number;
+  refuerzo?: number;
 }
 
 interface CheckDuplicadoResult {
-  existe:  boolean;
+  existe: boolean;
   detalle?: string;
   producto_existente?: { id: number; medida: string };
 }
@@ -233,5 +200,57 @@ export const checkProductoDuplicado = async (
       .map(([k, v]) => [k, String(v)])
   ).toString();
   const response = await api.get(`/productos-plastico/check-duplicado?${queryString}`);
+  return response.data;
+};
+
+// ====================================
+// ✅ NUEVO — ARCHIVOS (imagen / render / master)
+// Usa carpeta="catalogoproductos" y subcarpeta="plastico", que YA existen
+// en config/multer.ts del backend (CARPETAS.catalogo_productos y
+// SUBCARPETAS_CATALOGO). No requiere ningún ajuste ahí.
+// ====================================
+
+export const subirArchivoProductoPlastico = async (
+  file: File,
+  categoria: CategoriaArchivoPlastico,
+  idconfiguracion_plastico: number
+): Promise<ArchivoProductoPlastico> => {
+  const BASE = (import.meta as any).env.VITE_API_URL;
+  const fd = new FormData();
+  fd.append("archivo", file);
+  fd.append("carpeta", "catalogoproductos");
+  fd.append("subcarpeta", "plastico");
+  fd.append("categoria", categoria);
+  fd.append("idconfiguracion_plastico", String(idconfiguracion_plastico));
+
+  const res = await fetch(`${BASE}/archivos/upload`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${localStorage.getItem("token") ?? ""}` },
+    body: fd,
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error ?? "Error al subir el archivo");
+  }
+
+  return await res.json();
+};
+
+/** Elimina un archivo ya subido (imagen/render/master) */
+export const eliminarArchivoProductoPlastico = async (
+  id_archivo: number
+): Promise<{ message: string }> => {
+  const response = await api.delete(`/archivos/${id_archivo}`);
+  return response.data;
+};
+
+/** GET /archivos/producto-plastico/:idproducto (ya existe en tus rutas reales) */
+export const getArchivosProductoPlastico = async (
+  idconfiguracion_plastico: number
+): Promise<ArchivoProductoPlastico[]> => {
+  const response = await api.get(
+    `/archivos/producto-plastico/${idconfiguracion_plastico}`
+  );
   return response.data;
 };

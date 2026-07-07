@@ -488,8 +488,11 @@ function renderTablaMixtaPedido(
 // ═══════════════════════════════════════════════════════════════════════════════
 // FUNCIÓN PRINCIPAL
 // ═══════════════════════════════════════════════════════════════════════════════
-export async function generarPdfPedido(pedido: PedidoPdf, guardarEnS3 = false): Promise<void> {
-  const logoBase64 = pedido.logoBase64 ?? await cargarLogoBase64(logoUrl);
+export async function generarPdfPedido(
+  pedido: PedidoPdf,
+  guardarEnS3 = false,
+  descargar = true
+): Promise<Blob> {  const logoBase64 = pedido.logoBase64 ?? await cargarLogoBase64(logoUrl);
   const sinIva = pedido.sin_iva === true;
 
   const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "letter" });
@@ -538,10 +541,11 @@ export async function generarPdfPedido(pedido: PedidoPdf, guardarEnS3 = false): 
 
   dibujarPiePagina(doc, "PEDIDO", pedido.no_pedido, pedido.fecha);
 
-  const nombre = `Pedido_${pedido.no_pedido}.pdf`;
-  doc.save(nombre);
+ const nombre = `Pedido_${pedido.no_pedido}.pdf`;
+  const blob = doc.output("blob");
+  if (descargar) doc.save(nombre);
   if (guardarEnS3) {
-    const blob = doc.output("blob");
     await subirPdfA3(blob, nombre, "pdfs", "pedidos");
   }
+  return blob;
 }

@@ -1,5 +1,5 @@
 // ========================
-// CATÁLOGOS
+// CATÁLOGOS (selector — solo activos, sin cambios de forma)
 // ========================
 
 export interface CatalogoTipoProducto {
@@ -24,6 +24,62 @@ export interface CatalogosPlastico {
   tiposProducto: CatalogoTipoProducto[];
   materiales: CatalogoMaterial[];
   calibres: CatalogoCalibre[];
+}
+
+// ========================
+// CATÁLOGOS — ADMIN (alta / edición / desactivar / reactivar)
+// ========================
+
+export type CatKeyPlastico = "tipo_producto" | "material" | "calibre";
+
+export interface TipoProductoAdminItem {
+  id: number;
+  nombre: string;
+  activo: boolean;
+}
+
+export interface MaterialAdminItem {
+  id: number;
+  nombre: string;
+  valor: number;
+  activo: boolean;
+}
+
+export interface CalibreAdminItem {
+  id: number;
+  calibre: number;
+  calibre_bopp: number | null;
+  gramos: number | null;
+  activo: boolean;
+}
+
+// ========================
+// ARCHIVOS DE PRODUCTO PLÁSTICO (imagen / render / master)
+// ========================
+
+export type CategoriaArchivoPlastico =
+  | "imagen-producto-plastico"
+  | "render-plastico"
+  | "master-plastico";
+
+export interface ArchivoProductoPlastico {
+  id_archivo: number;
+  nombre: string;
+  categoria: CategoriaArchivoPlastico | string;
+  tipo: "image" | "pdf" | "document" | string;
+  mime_type?: string;
+  tamano_kb?: number;
+  url: string;
+}
+
+export interface ArchivoPendientePlastico {
+  uid: string;
+  file: File;
+  categoria: CategoriaArchivoPlastico;
+  previewUrl: string;
+  nombre: string;
+  tipo: "image" | "pdf" | "document";
+  pendiente: true;
 }
 
 // ========================
@@ -54,15 +110,19 @@ export interface ProductoPlastico {
   fuelle_lateral_derecho: number;
   medida: string;
   por_kilo: string;
+  identificador?: string | null;
   tipo_producto: string;
   material: string;
   calibre: number;
+  archivos_preview?: ArchivoProductoPlastico[];
 }
 
 export interface ProductoPlasticoDetalle extends ProductoPlastico {
   tipo_producto_id: number;
   material_id: number;
   calibre_id: number;
+  activo?: boolean;
+  archivos?: ArchivoProductoPlastico[];
 }
 
 export interface ProductoPlasticoResponse {
@@ -71,11 +131,12 @@ export interface ProductoPlasticoResponse {
     id: number;
     medida: string;
     por_kilo: string;
+    identificador?: string | null;
   };
 }
 
 // ====================================
-// NUEVAS INTERFACES PARA BÚSQUEDA
+// BÚSQUEDA
 // ====================================
 
 export interface ProductoBusqueda {
@@ -124,7 +185,7 @@ export interface DatosProducto {
   materialId: number;
   calibre: string;
   calibreId: number;
-  gramos?: number; // ✅ NUEVO: gramos del calibre BOPP, undefined para otros materiales
+  gramos?: number;
   medidas: Record<MedidaKey, string>;
   medidasFormateadas: string;
   nombreCompleto: string;

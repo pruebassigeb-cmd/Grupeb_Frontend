@@ -1,17 +1,16 @@
 import { useState, useEffect } from "react";
 import { generarPdfCotizacionExpo, cotizacionBackDataAPdfParams } from "../../utils/expo/generarPdfCotizacionExpo";
 import { generarPdfPedido } from "../../services/generarPdfPedido";
+import { generarPdfCotizacion } from "../../services/generarPdfCotizacion";
 import { getVentaByPedido } from "../../services/ventasservice";
+import { getCotizacionesExpo } from "../../services/expo/expoService";
+import { enviarCorreoDocumento } from "../../services/correoService";
 import type { CotizacionGuardada, ItemPedidoAprobado } from "../../types/expo/expo.types";
 import { folioAPedido } from "../../types/expo/expo.types";
+import BotonAccionesPdf from "../BotonAccionesPdf";
+import ModalConfirmarCorreo from "../ModalConfirmarCorreo";
+import { useEnvioDocumentoPdf } from "../../hooks/useEnvioDocumentoPdf";
 
-// ── Completar datos de facturación antes de convertir a pedido ─────────────
-// El registro rápido de Expo (crearClienteExpo) solo pide nombre, celular,
-// correo, impresión y clasificación — mismo cliente que usa todo SIGEB, pero
-// le faltan RFC, domicilio, régimen fiscal, etc. Justo antes de aprobar el
-// pedido es el mejor momento para completar eso, reutilizando el mismo
-// formulario completo que usa el catálogo de clientes normal.
-// AJUSTA estas dos rutas si en tu proyecto viven en otro lugar:
 import FormularioCliente from "../FormularioCliente";
 import { getClienteById, updateCliente } from "../../services/clientesService";
 import type { Cliente, UpdateClienteRequest } from "../../types/clientes.types";
@@ -20,7 +19,7 @@ interface Props {
   cotizaciones: CotizacionGuardada[];
   loading: boolean;
   aprobando: boolean;
-  onAprobar: (id: string, items: ItemPedidoAprobado[]) => Promise<void>;
+  onAprobar: (id: string, items: ItemPedidoAprobado[]) => Promise<string | null>;
   onEliminar: (folio: string) => Promise<void>;
   onClose: () => void;
   onRefresh: () => void;
@@ -213,10 +212,6 @@ function DetalleProducto({ prod, seleccion, onChange, esPedido }: DetalleProduct
   );
 }
 
-// ── Modal del formulario de cliente completo, previo a aprobar el pedido ───
-// Se muestra en su formato original (claro), igual que en el resto de
-// SIGEB donde se usa este mismo componente — nada de forzarlo a tema
-// oscuro, que terminaba ilegible.
 function ModalCompletarCliente({
   cliente, cargando, guardando, onGuardar, onCancelar,
 }: {
@@ -227,43 +222,109 @@ function ModalCompletarCliente({
   onCancelar: () => void;
 }) {
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.6)", zIndex: 500, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}
-      onClick={onCancelar}>
-      <div onClick={e => e.stopPropagation()}
-        className="bg-white rounded-2xl shadow-2xl"
-        style={{ width: "100%", maxWidth: 900, maxHeight: "92vh", overflowY: "auto", position: "relative" }}>
-
-        <div className="px-8 pt-6 pb-4 border-b border-gray-100 flex items-center justify-between">
-          <div>
-            <div className="text-lg font-bold text-gray-900">Completar datos antes de convertir a pedido</div>
-            <p className="text-sm text-gray-400 mt-1">
-              El registro rápido de Expo solo capturó lo básico. Completa RFC, domicilio y facturación
-              que falten — puedes dejar en blanco lo que no aplique.
-            </p>
+    <div
+      style={{
+        position: "fixed", inset: 0, background: "rgba(0,0,0,.78)", zIndex: 500,
+        display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
+      }}
+      onClick={guardando ? undefined : onCancelar}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          width: "100%", maxWidth: 920, maxHeight: "90vh",
+          display: "flex", flexDirection: "column",
+          background: "#141414", border: "1px solid #2A2A2A", borderRadius: 16,
+          boxShadow: "0 24px 60px rgba(0,0,0,.7)", overflow: "hidden",
+          position: "relative",
+        }}
+      >
+        {/* Header estilo Expo */}
+        <div style={{
+          background: "#0D0D0D", borderBottom: "2px solid #C9922A",
+          padding: "16px 22px", display: "flex", alignItems: "center",
+          justifyContent: "space-between", flexShrink: 0,
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={{
+              width: 38, height: 38, borderRadius: 10, background: "#C9922A18",
+              border: "1px solid #C9922A44", display: "flex", alignItems: "center",
+              justifyContent: "center", fontSize: 17, flexShrink: 0,
+            }}>
+              👤
+            </div>
+            <div>
+              <div style={{ color: "#FFF", fontSize: 14, fontWeight: 700 }}>
+                Completar datos antes de convertir a pedido
+              </div>
+              <div style={{ color: "#666", fontSize: 10.5, marginTop: 2, maxWidth: 560 }}>
+                El registro rápido de Expo solo capturó lo básico — completa RFC, domicilio y
+                facturación que falten. Puedes dejar en blanco lo que no aplique.
+              </div>
+            </div>
           </div>
-          <button onClick={onCancelar} className="text-gray-400 hover:text-gray-600 text-xl leading-none flex-shrink-0 ml-4">✕</button>
+          <button
+            onClick={onCancelar}
+            disabled={guardando}
+            style={{
+              background: "transparent", border: "1px solid #333", color: "#888",
+              width: 30, height: 30, borderRadius: 8, cursor: guardando ? "not-allowed" : "pointer",
+              fontSize: 15, flexShrink: 0, opacity: guardando ? .5 : 1,
+            }}
+          >
+            ✕
+          </button>
         </div>
 
-        <div className="px-8 py-6">
-          {cargando || !cliente ? (
-            <div className="text-center py-16 text-gray-400">Cargando datos del cliente...</div>
-          ) : (
-            <FormularioCliente
-              clienteEditar={cliente}
-              onSubmit={(datos) => onGuardar(datos as UpdateClienteRequest)}
-              onCancel={onCancelar}
-            />
-          )}
+        {/* Cuerpo — el formulario conserva su tema claro internamente (se reutiliza
+            también en Clientes.tsx en modo claro), pero ahora vive dentro de un
+            marco oscuro consistente con el resto de Expo, en vez de flotar suelto. */}
+        <div style={{ flex: 1, overflowY: "auto", background: "#1A1A1A", padding: "20px 22px" }}>
+          <div style={{
+            background: "#FFF", borderRadius: 14, padding: "28px 32px",
+            boxShadow: "0 8px 24px rgba(0,0,0,.35)",
+          }}>
+            {cargando || !cliente ? (
+              <div style={{ textAlign: "center", padding: "60px 0", color: "#999" }}>
+                <div style={{ fontSize: 24, marginBottom: 10 }}>⏳</div>
+                Cargando datos del cliente...
+              </div>
+            ) : (
+              <FormularioCliente
+                clienteEditar={cliente}
+                onSubmit={(datos) => onGuardar(datos as UpdateClienteRequest)}
+                onCancel={onCancelar}
+              />
+            )}
+          </div>
         </div>
 
+        {/* Overlay de "guardando" */}
         {guardando && (
-          <div className="absolute inset-0 bg-black/40 flex items-center justify-center rounded-2xl">
-            <div className="bg-gray-900 text-white px-5 py-3 rounded-lg text-sm font-semibold">
-              Guardando datos y convirtiendo a pedido...
+          <div style={{
+            position: "absolute", inset: 0, background: "rgba(0,0,0,.55)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            borderRadius: 16,
+          }}>
+            <div style={{
+              background: "#0D0D0D", border: "1px solid #C9922A66", color: "#C9922A",
+              padding: "12px 20px", borderRadius: 10, fontSize: 13, fontWeight: 700,
+              display: "flex", alignItems: "center", gap: 10,
+            }}>
+              <span style={{
+                width: 14, height: 14, borderRadius: "50%",
+                border: "2px solid #C9922A55", borderTopColor: "#C9922A",
+                animation: "spin-cliente .7s linear infinite",
+              }} />
+              Guardando datos del cliente...
             </div>
           </div>
         )}
       </div>
+
+      <style>{`
+        @keyframes spin-cliente { to { transform: rotate(360deg); } }
+      `}</style>
     </div>
   );
 }
@@ -278,12 +339,32 @@ export default function ListaCotizaciones({
   const [selecciones, setSelecciones] = useState<Record<string, Record<number, number | null>>>({});
   const [generandoPdf, setGenerandoPdf] = useState<string | null>(null);
 
-  // ── Estado del flujo "completar cliente antes de aprobar" ────────────────
-  const [cotPendienteAprobar, setCotPendienteAprobar] = useState<CotizacionGuardada | null>(null);
-  const [clienteIdPendiente,  setClienteIdPendiente]  = useState<number | null>(null);
-  const [clienteParaEditar,   setClienteParaEditar]   = useState<Cliente | null>(null);
-  const [cargandoCliente,     setCargandoCliente]     = useState(false);
-  const [guardandoCliente,    setGuardandoCliente]    = useState(false);
+  // ── Paso 1 del flujo de aprobación: completar datos del cliente ─────────
+  const [cotEnProceso,      setCotEnProceso]      = useState<CotizacionGuardada | null>(null);
+  const [clienteIdPendiente, setClienteIdPendiente] = useState<number | null>(null);
+  const [clienteParaEditar,  setClienteParaEditar]  = useState<Cliente | null>(null);
+  const [cargandoCliente,    setCargandoCliente]    = useState(false);
+  const [guardandoCliente,   setGuardandoCliente]   = useState(false);
+
+  // ── Paso 2 del flujo de aprobación: confirmar correo ANTES de aprobar ────
+  // Nada se compromete (no se llama a onAprobar) hasta que el usuario
+  // confirma el correo aquí — si cancela, es como si nada hubiera pasado.
+  const [modalCorreoAprobarAbierto, setModalCorreoAprobarAbierto] = useState(false);
+  const [correoAprobarDefault, setCorreoAprobarDefault] = useState("");
+  const [enviandoAprobacion, setEnviandoAprobacion] = useState(false);
+
+  // ── Hook compartido para los botones sueltos de "PDF Pedido"/"PDF cotización"
+  // (esos SÍ ejecutan primero y confirman correo después, porque ahí el
+  // documento ya existe de antemano — no hay nada que "revertir").
+  const {
+    ejecutar: ejecutarEnvio,
+    modalCorreoAbierto,
+    enviandoCorreo,
+    correoDefault,
+    nombreDocumentoModal,
+    confirmarEnvioCorreo,
+    cancelarEnvioCorreo,
+  } = useEnvioDocumentoPdf();
 
   useEffect(() => { onRefresh(); }, []);
 
@@ -299,125 +380,144 @@ export default function ListaCotizaciones({
     }));
   };
 
-  // Lo que antes disparaba directo el botón "Aprobar" — ahora se llama
-  // DESPUÉS de guardar los datos del cliente en el nuevo flujo.
-  const ejecutarAprobacion = async (cot: CotizacionGuardada) => {
+  // ── Arma los productos y datos del PEDIDO para generarPdfPedido (el bueno) ──
+  const construirPayloadPdfPedidoDesdeBackData = async (
+    backData: any,
+    folioCotizacion: string,
+    fechaCotizacion: string
+  ) => {
+    const folioPedido = backData.no_pedido || folioAPedido(folioCotizacion);
+
+    const [venta, clienteCompleto] = await Promise.all([
+      getVentaByPedido(folioPedido),
+      backData.cliente_id ? getClienteById(backData.cliente_id).catch(() => null) : Promise.resolve(null),
+    ]);
+
+    const productos = (backData.productos || []).map((p: any) => {
+      const esPapel = p.tipo_material === "papel";
+      const foilNombre = p.foil_nombre || null;
+      const asaNombre = p.asa_nombre || null;
+      if (esPapel) {
+        return {
+          tipo_material: "papel",
+          tipoCotizacion: "papel",
+          nombre: p.nombre,
+          grupo_descripcion: p.grupo_descripcion ?? "",
+          material: p.material || "",
+          calibre: p.calibre || "",
+          tintas: p.tintas ?? 0,
+          tintasDentro: 0,
+          caras: p.caras ?? 0,
+          medidasFormateadas: p.medida || "",
+          medidas: {},
+          bk: null,
+          foil: foilNombre ? true : null,
+          foil_nombre: foilNombre,
+          laminado: p.laminado_nombre ? true : null,
+          laminado_nombre: p.laminado_nombre || null,
+          asa_suaje: asaNombre || null,
+          asa_nombre: asaNombre || null,
+          uvBr: p.uv ? true : null,
+          alto_relieve: p.alto_relieve === true,
+          metodo_hojeado: p.metodo_hojeado ?? null,
+          lleva_armado: p.lleva_armado ?? true,
+          maquinaria_seleccionada: p.maquinaria_seleccionada ?? {},
+          textura_nombre: p.textura_nombre || null,
+          pigmentos: null,
+          pantones: p.pantones || null,
+          pantonesDentro: null,
+          observacion: p.observacion || null,
+          descripcion: p.descripcion || null,
+          perforacion: false,
+          por_kilo: null,
+          herramental_descripcion: null,
+          herramental_precio: null,
+          herramental_aprobado: null,
+          detalles: (p.detalles || [])
+            .filter((d: any) => d.aprobado === true)
+            .map((d: any) => ({
+              cantidad: Number(d.cantidad),
+              precio_total: Number(d.precio_total),
+              kilogramos: null,
+              modo_cantidad: "unidad",
+            })),
+        };
+      }
+      return {
+        nombre: p.nombre,
+        material: p.material || "",
+        calibre: p.calibre || "",
+        tintas: p.tintas ?? 0,
+        caras: p.caras ?? 0,
+        medidasFormateadas: p.medida || "",
+        medidas: {},
+        bk: null, foil: null, laminado: null, uvBr: null,
+        pigmentos: p.pigmentos || null,
+        pantones: p.pantones || null,
+        asa_suaje: p.suaje_tipo || null,
+        observacion: p.observacion || null,
+        descripcion: p.descripcion || null,
+        perforacion: false,
+        por_kilo: null,
+        herramental_descripcion: null,
+        herramental_precio: null,
+        herramental_aprobado: null,
+        detalles: (p.detalles || [])
+          .filter((d: any) => d.aprobado === true)
+          .map((d: any) => ({
+            cantidad: Number(d.cantidad),
+            precio_total: Number(d.precio_total),
+            kilogramos: null,
+            modo_cantidad: "unidad",
+          })),
+      };
+    });
+
+    return {
+      no_pedido: folioPedido,
+      no_cotizacion: folioCotizacion,
+      fecha: fechaCotizacion,
+      cliente: backData.cliente || "",
+      empresa: backData.impresion || "",
+      telefono: backData.celular || "",
+      correo: backData.correo || "",
+      impresion: backData.impresion ?? null,
+      celular: backData.celular ?? null,
+      razon_social: clienteCompleto?.razon_social ?? null,
+      rfc: clienteCompleto?.rfc ?? null,
+      domicilio: clienteCompleto?.domicilio ?? null,
+      numero: clienteCompleto?.numero ?? null,
+      colonia: clienteCompleto?.colonia ?? null,
+      codigo_postal: clienteCompleto?.codigo_postal ?? null,
+      poblacion: clienteCompleto?.poblacion ?? backData.ciudad ?? null,
+      estado_cliente: clienteCompleto?.estado ?? backData.estado_cliente ?? null,
+      cliente_id: backData.cliente_id ?? null,
+      identificar: backData.identificar ?? null,
+      subtotal: Number(venta.subtotal),
+      iva: Number(venta.iva),
+      total: Number(venta.total),
+      anticipo: Number(venta.anticipo),
+      saldo: Number(venta.saldo),
+      productos,
+      _correoCliente: clienteCompleto?.correo || backData.correo || "",
+    };
+  };
+
+  // ── Arma los productos y datos de la COTIZACIÓN (aún sin aprobar) para
+  // generarPdfCotizacion (el bueno) — usado solo para el correo.
+  const construirPayloadPdfCotizacion = async (cot: CotizacionGuardada) => {
     const backData = (cot as any)._backData;
-    if (!backData) return;
-    const sel = selecciones[cot.id] || {};
-    const items: ItemPedidoAprobado[] = Object.entries(sel)
-      .filter(([, detalleId]) => detalleId !== null)
-      .map(([prodId, detalleId]) => ({
-        filaUid: prodId,
-        cantidadElegida: "precio1" as const,
-        idsolicitud_producto: Number(prodId),
-        idsolicitud_detalle: detalleId as number,
-      }));
-    if (items.length === 0) {
-      alert("Selecciona al menos una cantidad en algún producto para aprobar el pedido.");
-      return;
-    }
-    await onAprobar(cot.id, items);
-    setExpandidoId(null);
-    onRefresh();
-  };
 
-  // Botón "✓ Aprobar y convertir en pedido": valida la selección de
-  // cantidades (igual que antes) y, si hay algo seleccionado, abre el
-  // formulario completo de cliente en vez de aprobar directo.
-  const iniciarFlujoAprobar = async (cot: CotizacionGuardada) => {
-    const sel = selecciones[cot.id] || {};
-    const haySel = Object.values(sel).some(v => v !== null && v !== undefined);
-    if (!haySel) {
-      alert("Selecciona al menos una cantidad en algún producto para aprobar el pedido.");
-      return;
-    }
-    const backData = (cot as any)._backData;
-    const clienteId = backData?.cliente_id;
-    if (!clienteId) {
-      alert("No se encontró el cliente asociado a esta cotización.");
-      return;
-    }
-    setCotPendienteAprobar(cot);
-    setClienteIdPendiente(clienteId);
-    setCargandoCliente(true);
-    try {
-      const cliente = await getClienteById(clienteId);
-      setClienteParaEditar(cliente);
-    } catch (e) {
-      console.error("No se pudo cargar el cliente:", e);
-      alert("No se pudieron cargar los datos del cliente.");
-      cerrarModalCliente();
-    } finally {
-      setCargandoCliente(false);
-    }
-  };
+    const clienteCompleto = backData.cliente_id
+      ? await getClienteById(backData.cliente_id).catch(() => null)
+      : null;
 
-  const cerrarModalCliente = () => {
-    setCotPendienteAprobar(null);
-    setClienteIdPendiente(null);
-    setClienteParaEditar(null);
-    setCargandoCliente(false);
-  };
-
-  // Al guardar el formulario de cliente: actualiza el cliente y, si sale
-  // bien, RECIÉN AHÍ procede con la conversión a pedido. Si falla el
-  // guardado, no se aprueba nada — el usuario puede corregir y reintentar.
-  const handleGuardarClienteYAprobar = async (datos: UpdateClienteRequest) => {
-    if (!clienteIdPendiente || !cotPendienteAprobar) return;
-    setGuardandoCliente(true);
-    try {
-      await updateCliente(clienteIdPendiente, datos);
-      const cot = cotPendienteAprobar;
-      cerrarModalCliente();
-      await ejecutarAprobacion(cot);
-    } catch (e: any) {
-      console.error("No se pudo guardar el cliente:", e);
-      alert(e?.response?.data?.error || "No se pudieron guardar los datos del cliente.");
-    } finally {
-      setGuardandoCliente(false);
-    }
-  };
-
-  const handleEliminar = async (cot: CotizacionGuardada) => {
-    if (!cot.folio) return;
-    if (!confirm(`¿Eliminar la cotización ${cot.folio}?`)) return;
-    setEliminando(cot.id);
-    try {
-      await onEliminar(cot.folio);
-      onRefresh();
-    } finally {
-      setEliminando(null);
-    }
-  };
-
-  const handleGenerarPdf = (cot: CotizacionGuardada) => {
-    const backData = (cot as any)._backData;
-    if (!backData) return;
-    const params = cotizacionBackDataAPdfParams(backData, cot.folio, cot.fecha, asesor);
-    generarPdfCotizacionExpo(params);
-  };
-
-  const handleGenerarPdfPedido = async (cot: CotizacionGuardada) => {
-    const backData = (cot as any)._backData;
-    if (!backData) return;
-    const folioPedido = cot.folioPedido || folioAPedido(cot.folio);
-    setGenerandoPdf(cot.id);
-    try {
-      const [venta, clienteCompleto] = await Promise.all([
-        getVentaByPedido(folioPedido),
-        // backData (de getCotizacionesExpo) solo trae nombre/celular/correo/
-        // ciudad — RFC, razón social y domicilio viven en la tabla clientes
-        // completa y se llenaron en el paso "Completar datos antes de
-        // pedido". Sin este fetch, el PDF los mandaba siempre en null.
-        backData.cliente_id ? getClienteById(backData.cliente_id).catch(() => null) : Promise.resolve(null),
-      ]);
-      const productos = (backData.productos || []).map((p: any) => {
-        const esPapel = p.tipo_material === "papel";
-        const foilNombre = p.foil_nombre || null;
-        const asaNombre = p.asa_nombre || null;
-        if (esPapel) {
-          return {
+    const productos = (backData.productos || []).map((p: any) => {
+      const esPapel = p.tipo_material === "papel";
+      const foilNombre = p.foil_nombre || null;
+      const asaNombre = p.asa_nombre || null;
+      const base = esPapel
+        ? {
             tipo_material: "papel",
             tipoCotizacion: "papel",
             nombre: p.nombre,
@@ -452,74 +552,259 @@ export default function ListaCotizaciones({
             herramental_descripcion: null,
             herramental_precio: null,
             herramental_aprobado: null,
-            detalles: (p.detalles || [])
-              .filter((d: any) => d.aprobado === true)
-              .map((d: any) => ({
-                cantidad: Number(d.cantidad),
-                precio_total: Number(d.precio_total),
-                kilogramos: null,
-                modo_cantidad: "unidad",
-              })),
+          }
+        : {
+            nombre: p.nombre,
+            material: p.material || "",
+            calibre: p.calibre || "",
+            tintas: p.tintas ?? 0,
+            caras: p.caras ?? 0,
+            medidasFormateadas: p.medida || "",
+            medidas: {},
+            bk: null, foil: null, laminado: null, uvBr: null,
+            pigmentos: p.pigmentos || null,
+            pantones: p.pantones || null,
+            asa_suaje: p.suaje_tipo || null,
+            observacion: p.observacion || null,
+            descripcion: p.descripcion || null,
+            perforacion: false,
+            por_kilo: null,
+            herramental_descripcion: null,
+            herramental_precio: null,
+            herramental_aprobado: null,
           };
-        }
-        // plástico / expo
-        return {
-          nombre: p.nombre,
-          material: p.material || "",
-          calibre: p.calibre || "",
-          tintas: p.tintas ?? 0,
-          caras: p.caras ?? 0,
-          medidasFormateadas: p.medida || "",
-          medidas: {},
-          bk: null, foil: null, laminado: null, uvBr: null,
-          pigmentos: p.pigmentos || null,
-          pantones: p.pantones || null,
-          asa_suaje: p.suaje_tipo || null,
-          observacion: p.observacion || null,
-          descripcion: p.descripcion || null,
-          perforacion: false,
-          por_kilo: null,
-          herramental_descripcion: null,
-          herramental_precio: null,
-          herramental_aprobado: null,
-          detalles: (p.detalles || [])
-            .filter((d: any) => d.aprobado === true)
-            .map((d: any) => ({
-              cantidad: Number(d.cantidad),
-              precio_total: Number(d.precio_total),
-              kilogramos: null,
-              modo_cantidad: "unidad",
-            })),
-        };
+
+      return {
+        ...base,
+        detalles: (p.detalles || []).map((d: any) => ({
+          cantidad: Number(d.cantidad),
+          precio_total: Number(d.precio_total),
+          kilogramos: null,
+          modo_cantidad: "unidad",
+        })),
+      };
+    });
+
+    const total = productos.reduce(
+      (sum: number, p: any) => sum + p.detalles.reduce((s: number, d: any) => s + d.precio_total, 0),
+      0
+    );
+
+    return {
+      no_cotizacion: cot.folio,
+      fecha: cot.fecha,
+      cliente: backData.cliente || "",
+      empresa: backData.impresion || "",
+      telefono: backData.celular || "",
+      correo: clienteCompleto?.correo || backData.correo || "",
+      estado: "Pendiente",
+      impresion: backData.impresion ?? null,
+      celular: backData.celular ?? null,
+      razon_social: clienteCompleto?.razon_social ?? null,
+      rfc: clienteCompleto?.rfc ?? null,
+      domicilio: clienteCompleto?.domicilio ?? null,
+      numero: clienteCompleto?.numero ?? null,
+      colonia: clienteCompleto?.colonia ?? null,
+      codigo_postal: clienteCompleto?.codigo_postal ?? null,
+      poblacion: clienteCompleto?.poblacion ?? backData.ciudad ?? null,
+      estado_cliente: clienteCompleto?.estado ?? backData.estado_cliente ?? null,
+      cliente_id: backData.cliente_id ?? null,
+      identificar: backData.identificar ?? null,
+      total,
+      productos,
+      _correoCliente: clienteCompleto?.correo || backData.correo || "",
+    };
+  };
+
+  // ── Paso 1: usuario da clic en "Aprobar" → validar selección → abrir
+  // el formulario de cliente. Nada se compromete aún.
+  const iniciarFlujoAprobar = async (cot: CotizacionGuardada) => {
+    const sel = selecciones[cot.id] || {};
+    const haySel = Object.values(sel).some(v => v !== null && v !== undefined);
+    if (!haySel) {
+      alert("Selecciona al menos una cantidad en algún producto para aprobar el pedido.");
+      return;
+    }
+    const backData = (cot as any)._backData;
+    const clienteId = backData?.cliente_id;
+    if (!clienteId) {
+      alert("No se encontró el cliente asociado a esta cotización.");
+      return;
+    }
+    setCotEnProceso(cot);
+    setClienteIdPendiente(clienteId);
+    setCargandoCliente(true);
+    try {
+      const cliente = await getClienteById(clienteId);
+      setClienteParaEditar(cliente);
+    } catch (e) {
+      console.error("No se pudo cargar el cliente:", e);
+      alert("No se pudieron cargar los datos del cliente.");
+      cancelarTodoElFlujo();
+    } finally {
+      setCargandoCliente(false);
+    }
+  };
+
+  // Cancela en cualquier punto del flujo — nada se ha comprometido todavía
+  // (no se llamó a onAprobar), así que es un "rollback" real: no queda
+  // ningún rastro de la operación.
+  const cancelarTodoElFlujo = () => {
+    setCotEnProceso(null);
+    setClienteIdPendiente(null);
+    setClienteParaEditar(null);
+    setCargandoCliente(false);
+    setModalCorreoAprobarAbierto(false);
+    setCorreoAprobarDefault("");
+  };
+
+  // ── Paso 2: se guardaron los datos del cliente → AHORA se pide confirmar
+  // el correo, ANTES de aprobar nada.
+  const handleGuardarClienteYContinuar = async (datos: UpdateClienteRequest) => {
+    if (!clienteIdPendiente || !cotEnProceso) return;
+    setGuardandoCliente(true);
+    try {
+      await updateCliente(clienteIdPendiente, datos);
+      // El correo recién guardado (o el que ya tenía el cliente) es el que
+      // se propone por defecto en el modal de confirmación.
+      setCorreoAprobarDefault((datos as any).correo || clienteParaEditar?.correo || "");
+      setModalCorreoAprobarAbierto(true);
+    } catch (e: any) {
+      console.error("No se pudo guardar el cliente:", e);
+      alert(e?.response?.data?.error || "No se pudieron guardar los datos del cliente.");
+    } finally {
+      setGuardandoCliente(false);
+    }
+  };
+
+  // ── Paso 3: el usuario confirmó el correo → AHORA sí se aprueba, se
+  // refresca, se genera el PDF y se envía el correo — todo como un solo
+  // paso final. Si algo de esto falla, ya se aprobó (eso no se puede
+  // revertir desde el front), pero el usuario ya dio su visto bueno a todo
+  // de antemano, así que no hay sorpresas a mitad del camino.
+  const confirmarCorreoYAprobar = async (correoConfirmado: string) => {
+    if (!cotEnProceso) return;
+    const cot = cotEnProceso;
+
+    setEnviandoAprobacion(true);
+    try {
+      const sel = selecciones[cot.id] || {};
+      const items: ItemPedidoAprobado[] = Object.entries(sel)
+        .filter(([, detalleId]) => detalleId !== null)
+        .map(([prodId, detalleId]) => ({
+          filaUid: prodId,
+          cantidadElegida: "precio1" as const,
+          idsolicitud_producto: Number(prodId),
+          idsolicitud_detalle: detalleId as number,
+        }));
+
+      const noPedido = await onAprobar(cot.id, items);
+      onRefresh();
+      setExpandidoId(null);
+
+      if (!noPedido) {
+        alert("No se pudo aprobar el pedido.");
+        return;
+      }
+
+      // Refrescar datos frescos (con los detalles ya marcados aprobado=true)
+      const data = await getCotizacionesExpo();
+      const backDataFresco = data.find(c => c.no_cotizacion === cot.folio);
+      if (!backDataFresco) {
+        alert("El pedido se aprobó, pero no se pudo recuperar para enviar el correo. Puedes enviarlo manualmente desde la fila del pedido.");
+        return;
+      }
+
+      const payload = await construirPayloadPdfPedidoDesdeBackData(backDataFresco, cot.folio, cot.fecha);
+      const blob = await generarPdfPedido(payload as any, false, false);
+
+      await enviarCorreoDocumento({
+        tipo: "pedido",
+        folio: payload.no_pedido,
+        cliente: payload.cliente,
+        empresa: payload.empresa,
+        destinatario: correoConfirmado,
+        pdfBlob: blob,
+        nombreArchivo: `Pedido_${payload.no_pedido}.pdf`,
       });
 
-      await generarPdfPedido({
-        no_pedido: folioPedido,
-        no_cotizacion: cot.folio,
-        fecha: cot.fecha,
-        cliente: backData.cliente || "",
-        empresa: backData.impresion || "",
-        telefono: backData.celular || "",
-        correo: backData.correo || "",
-        impresion: backData.impresion ?? null,
-        celular: backData.celular ?? null,
-        razon_social: clienteCompleto?.razon_social ?? null,
-        rfc: clienteCompleto?.rfc ?? null,
-        domicilio: clienteCompleto?.domicilio ?? null,
-        numero: clienteCompleto?.numero ?? null,
-        colonia: clienteCompleto?.colonia ?? null,
-        codigo_postal: clienteCompleto?.codigo_postal ?? null,
-        poblacion: clienteCompleto?.poblacion ?? backData.ciudad ?? null,
-        estado_cliente: clienteCompleto?.estado ?? backData.estado_cliente ?? null,
-        cliente_id: backData.cliente_id ?? null,
-        identificar: backData.identificar ?? null,
-        subtotal: Number(venta.subtotal),
-        iva: Number(venta.iva),
-        total: Number(venta.total),
-        anticipo: Number(venta.anticipo),
-        saldo: Number(venta.saldo),
-        productos,
-      }, false);
+      cancelarTodoElFlujo();
+    } catch (e: any) {
+      console.error("❌ Error en aprobación/envío:", e);
+      alert(e?.response?.data?.error || "Ocurrió un error al aprobar o enviar el correo.");
+    } finally {
+      setEnviandoAprobacion(false);
+    }
+  };
+
+  const handleEliminar = async (cot: CotizacionGuardada) => {
+    if (!cot.folio) return;
+    if (!confirm(`¿Eliminar la cotización ${cot.folio}?`)) return;
+    setEliminando(cot.id);
+    try {
+      await onEliminar(cot.folio);
+      onRefresh();
+    } finally {
+      setEliminando(null);
+    }
+  };
+
+  // ── PDF/correo de COTIZACIÓN (aún no pedido) — botón suelto en la fila ──
+  const handleAccionesPdfCotizacion = async (cot: CotizacionGuardada, opciones: { imprimir: boolean; correo: boolean }) => {
+    const backData = (cot as any)._backData;
+    if (!backData) return;
+    setGenerandoPdf(cot.id);
+    try {
+      await ejecutarEnvio(
+        {
+          paraImprimir: () => {
+            const params = cotizacionBackDataAPdfParams(backData, cot.folio, cot.fecha, asesor);
+            generarPdfCotizacionExpo(params);
+          },
+          paraCorreo: async () => {
+            const payload = await construirPayloadPdfCotizacion(cot);
+            return await generarPdfCotizacion(payload as any, false, false);
+          },
+        },
+        {
+          tipo: "cotizacion",
+          folio: cot.folio,
+          cliente: backData.cliente || "",
+          empresa: backData.impresion,
+          correoDefault: backData.correo || "",
+        },
+        opciones
+      );
+    } catch (e) {
+      console.error("❌ PDF cotización expo:", e);
+      alert("No se pudo generar/enviar el PDF de la cotización.");
+    } finally {
+      setGenerandoPdf(null);
+    }
+  };
+
+  // ── PDF/correo de PEDIDO ya existente — botón suelto en la fila ─────────
+  const handleAccionesPdfPedido = async (cot: CotizacionGuardada, opciones: { imprimir: boolean; correo: boolean }) => {
+    const backData = (cot as any)._backData;
+    if (!backData) return;
+    setGenerandoPdf(cot.id);
+    try {
+      const payload = await construirPayloadPdfPedidoDesdeBackData(backData, cot.folio, cot.fecha);
+
+      await ejecutarEnvio(
+        {
+          paraImprimir: async () => { await generarPdfPedido(payload as any, false, true); },
+          paraCorreo: async () => { return await generarPdfPedido(payload as any, false, false); },
+        },
+        {
+          tipo: "pedido",
+          folio: payload.no_pedido,
+          cliente: payload.cliente,
+          empresa: payload.empresa,
+          correoDefault: payload._correoCliente,
+        },
+        opciones
+      );
     } catch (e) {
       console.error("❌ PDF Pedido expo:", e);
       alert("No se pudo generar el PDF del pedido.");
@@ -597,7 +882,8 @@ export default function ListaCotizaciones({
                 const productos = backData?.productos || [];
                 const selCot = selecciones[cot.id] || {};
                 const haySeleccion = Object.values(selCot).some(v => v !== null && v !== undefined);
-                const cargandoEstaCliente = cargandoCliente && cotPendienteAprobar?.id === cot.id;
+                const enEsteFlujoAprobacion = cotEnProceso?.id === cot.id;
+                const procesandoEstePdf = generandoPdf === cot.id;
 
                 const total = esPedido
                   ? productos.reduce((s: number, p: any) => {
@@ -608,7 +894,7 @@ export default function ListaCotizaciones({
                     s + (p.detalles || []).reduce((ss: number, d: any) => ss + Number(d.precio_total), 0), 0);
 
                 return (
-                  <div key={cot.id} style={{ background: "#1A1A1A", border: `1px solid ${esPedido ? "#C9922A44" : "#222"}`, borderRadius: 10, overflow: "hidden" }}>
+                  <div key={cot.id} style={{ background: "#1A1A1A", border: `1px solid ${esPedido ? "#C9922A44" : "#222"}`, borderRadius: 10 }}>
 
                     <div onClick={() => setExpandidoId(abierto ? null : cot.id)}
                       style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 14px", cursor: "pointer" }}>
@@ -636,16 +922,18 @@ export default function ListaCotizaciones({
                         <div style={{ color: "#C9922A", fontSize: 13, fontWeight: 700 }}>${total.toFixed(2)}</div>
                         <div style={{ color: "#555", fontSize: 9 }}>{esPedido ? "total pedido" : "total cotizado"}</div>
                       </div>
-                      <button
-                        onClick={e => {
-                          e.stopPropagation();
-                          if (esPedido) handleGenerarPdfPedido(cot);
-                          else handleGenerarPdf(cot);
-                        }}
-                        title={esPedido ? "Descargar PDF pedido" : "Descargar PDF cotización"}
-                        style={{ background: "transparent", border: "1px solid #C9922A44", color: "#C9922A", fontSize: 10, fontWeight: 700, padding: "4px 8px", borderRadius: 5, cursor: "pointer", flexShrink: 0 }}>
-                        🖨 PDF
-                      </button>
+
+                      <div onClick={e => e.stopPropagation()}>
+                        <BotonAccionesPdf
+                          procesando={procesandoEstePdf}
+                          onEjecutar={(opciones) =>
+                            esPedido
+                              ? handleAccionesPdfPedido(cot, opciones)
+                              : handleAccionesPdfCotizacion(cot, opciones)
+                          }
+                          label={esPedido ? "PDF Pedido" : "PDF"}
+                        />
+                      </div>
                       <span style={{ color: "#555", fontSize: 11, flexShrink: 0 }}>{abierto ? "▲" : "▼"}</span>
                     </div>
 
@@ -704,34 +992,29 @@ export default function ListaCotizaciones({
                             </button>
                             <button
                               onClick={() => iniciarFlujoAprobar(cot)}
-                              disabled={!haySeleccion || aprobando || cargandoEstaCliente}
+                              disabled={!haySeleccion || (enEsteFlujoAprobacion && (cargandoCliente || guardandoCliente || enviandoAprobacion))}
                               style={{
                                 flex: 1, border: "none", borderRadius: 8, padding: "10px",
                                 fontSize: 12.5, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-                                background: haySeleccion && !aprobando && !cargandoEstaCliente ? "#C9922A" : "#C9922A33",
-                                color: haySeleccion && !aprobando && !cargandoEstaCliente ? "#0D0D0D" : "#0D0D0D88",
-                                cursor: haySeleccion && !aprobando && !cargandoEstaCliente ? "pointer" : "not-allowed",
+                                background: haySeleccion ? "#C9922A" : "#C9922A33",
+                                color: haySeleccion ? "#0D0D0D" : "#0D0D0D88",
+                                cursor: haySeleccion ? "pointer" : "not-allowed",
                               }}>
-                              {cargandoEstaCliente ? "Cargando cliente..." : aprobando ? "Aprobando..." : "✓ Aprobar y convertir en pedido"}
+                              {enEsteFlujoAprobacion && cargandoCliente ? "Cargando cliente..."
+                                : enEsteFlujoAprobacion && enviandoAprobacion ? "Aprobando y enviando..."
+                                : "✓ Aprobar y convertir en pedido"}
                             </button>
                           </div>
                         ) : (
-                          <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
+                          <div style={{ display: "flex", gap: 10, marginTop: 8, alignItems: "center" }}>
                             <div style={{ flex: 1, background: "#C9922A15", border: "1px solid #C9922A44", borderRadius: 8, padding: "10px", color: "#C9922A", fontSize: 11.5, fontWeight: 600, textAlign: "center" }}>
                               ✓ Pedido aprobado — folio {cot.folioPedido || folioAPedido(cot.folio)}
                             </div>
-                            <button
-                              onClick={() => handleGenerarPdfPedido(cot)}
-                              disabled={generandoPdf === cot.id}
-                              style={{
-                                background: generandoPdf === cot.id ? "#C9922A55" : "#C9922A",
-                                border: "none", borderRadius: 8, padding: "10px 16px",
-                                fontSize: 12, fontWeight: 700, color: "#1A1A1A",
-                                cursor: generandoPdf === cot.id ? "not-allowed" : "pointer",
-                                flexShrink: 0,
-                              }}>
-                              {generandoPdf === cot.id ? "⏳" : "🖨 PDF Pedido"}
-                            </button>
+                            <BotonAccionesPdf
+                              procesando={procesandoEstePdf}
+                              onEjecutar={(opciones) => handleAccionesPdfPedido(cot, opciones)}
+                              label="PDF Pedido"
+                            />
                           </div>
                         )}
                       </div>
@@ -744,13 +1027,36 @@ export default function ListaCotizaciones({
         </div>
       </div>
 
-      {cotPendienteAprobar && (
+      {/* Paso 1: completar datos del cliente */}
+      {cotEnProceso && !modalCorreoAprobarAbierto && (
         <ModalCompletarCliente
           cliente={clienteParaEditar}
           cargando={cargandoCliente}
           guardando={guardandoCliente}
-          onGuardar={handleGuardarClienteYAprobar}
-          onCancelar={cerrarModalCliente}
+          onGuardar={handleGuardarClienteYContinuar}
+          onCancelar={cancelarTodoElFlujo}
+        />
+      )}
+
+      {/* Paso 2: confirmar correo — SOLO tras confirmar aquí se aprueba de verdad */}
+      {modalCorreoAprobarAbierto && (
+        <ModalConfirmarCorreo
+          correoInicial={correoAprobarDefault}
+          nombreDocumento={cotEnProceso ? folioAPedido(cotEnProceso.folio) : ""}
+          enviando={enviandoAprobacion}
+          onConfirmar={confirmarCorreoYAprobar}
+          onCancelar={cancelarTodoElFlujo}
+        />
+      )}
+
+      {/* Modal de correo para los botones sueltos de "PDF Pedido"/"PDF" (flujo normal: acción primero, confirmar después) */}
+      {modalCorreoAbierto && (
+        <ModalConfirmarCorreo
+          correoInicial={correoDefault}
+          nombreDocumento={nombreDocumentoModal}
+          enviando={enviandoCorreo}
+          onConfirmar={confirmarEnvioCorreo}
+          onCancelar={cancelarEnvioCorreo}
         />
       )}
     </div>

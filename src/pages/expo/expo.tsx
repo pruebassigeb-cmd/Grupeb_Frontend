@@ -13,6 +13,8 @@ import Catalogo          from "../../components/expo/Catalogo";
 import ModalProducto     from "../../components/expo/ModalProducto";
 import HojaCotizacion    from "../../components/expo/HojaCotizacion";
 import ListaCotizaciones from "../../components/expo/ListaCotizaciones";
+import BotonGuardarConOpciones from "../../components/BotonGuardarConOpciones";
+import ModalConfirmarCorreo from "../../components/ModalConfirmarCorreo";
 
 import {
   getCatalogoPropio, getCatalogoSistema,
@@ -30,6 +32,9 @@ import type { CatalogosPlastico, PigmentoDB } from "../../components/expo/Tablac
 import { getTiposInsumo, buscarInsumos, type Insumo } from "../../services/proveedoresService";
 import { useAuth } from "../../context/AuthContext";
 import { generarPdfCotizacionExpo } from "../../utils/expo/generarPdfCotizacionExpo";
+import { generarPdfCotizacion } from "../../services/generarPdfCotizacion";
+import { useEnvioDocumentoPdf } from "../../hooks/useEnvioDocumentoPdf";
+import { getClienteById } from "../../services/clientesService";
 
 const TODAY_NOW = () =>
   new Date().toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" });
@@ -85,6 +90,17 @@ export default function Expo() {
     tiposProducto: [], materiales: [], calibres: [],
   });
 
+  // ── Envío de PDFs (imprimir membretado / mandar por correo el bueno) ──────
+  const {
+    ejecutar: ejecutarEnvio,
+    modalCorreoAbierto,
+    enviandoCorreo,
+    correoDefault,
+    nombreDocumentoModal,
+    confirmarEnvioCorreo,
+    cancelarEnvioCorreo,
+  } = useEnvioDocumentoPdf();
+
   // ── Responsive ────────────────────────────────────────────────────────────
   useEffect(() => {
     const upd = () => setW(window.innerWidth);
@@ -113,8 +129,6 @@ useEffect(() => {
       setPigmentosDB(items.map(i => ({
         id: i.idinsumo,
         nombre: i.nombre,
-        // Si el pigmento tiene un solo proveedor, usamos su código;
-        // si tiene varios (o ninguno), no hay un código único que mostrar.
         codigo: i.proveedores.length === 1 ? i.proveedores[0].codigo : null,
       })))
     ).catch(console.error);
@@ -372,11 +386,73 @@ useEffect(() => {
     return resultado;
   };
 
+  // ── Construye productos para el PDF "bueno" (generarPdfCotizacion) ────────
+  // usado únicamente para el correo — el membretado sigue viviendo en
+  // generarPdfCotizacionExpo y no se toca.
+  const construirProductosPdfBueno = (filasListas: FilaProducto[]) => {
+    const parseP = (s: string) => parseFloat(s.replace(/[^0-9.]/g, "")) || 0;
+    const parseCant = (s: string) => parseInt(s.replace(/,/g, ""), 10) || 0;
+    const c1 = parseCant(cant1);
+    const c2 = parseCant(cant2);
+    const c3 = parseCant(cant3);
+
+    return filasListas.map(f => {
+      const extraNum = f.modoExtra === "precio" ? parseP(f.extra || "0") : 0;
+      const p1raw = parseP(f.precio1);
+      const p2raw = parseP(f.precio2);
+      const p3raw = parseP(f.precio3);
+      const p1 = p1raw > 0 ? p1raw + extraNum : 0;
+      const p2 = p2raw > 0 ? p2raw + extraNum : 0;
+      const p3 = p3raw > 0 ? p3raw + extraNum : 0;
+
+      const detalles = [
+        p1 > 0 ? { cantidad: c1, precio_total: c1 * p1, kilogramos: null, modo_cantidad: "unidad" as const } : null,
+        p2 > 0 ? { cantidad: c2, precio_total: c2 * p2, kilogramos: null, modo_cantidad: "unidad" as const } : null,
+        p3 > 0 ? { cantidad: c3, precio_total: c3 * p3, kilogramos: null, modo_cantidad: "unidad" as const } : null,
+      ].filter(Boolean) as any[];
+
+      const esPapel = f.producto.categoria === "papel" || f.producto.categoria === "carton";
+
+      return {
+        tipo_material: esPapel ? "papel" : undefined,
+        tipoCotizacion: esPapel ? "papel" : undefined,
+        nombre: f.producto.nombre,
+        medida: f.medida || f.producto.medida || "",
+        material: f.material || f.producto.material || "",
+        calibre: f.calibre || f.producto.calibre || "",
+        grupo_descripcion: esPapel ? (f.material || f.producto.material || "") : undefined,
+        medidasFormateadas: f.medida || f.producto.medida || "",
+        medidas: {},
+        tintas: f.tintas || null,
+        caras: null,
+        laminado: f.laminacion ? true : null,
+        laminado_nombre: f.laminacion ? (f.tipoLaminado || "SI") : null,
+        foil: f.hs ? true : null,
+        foil_nombre: f.hs ? (f.tipoHs || "SI") : null,
+        asa_suaje: f.asa ? (f.tipoAsa || "SI") : null,
+        asa_nombre: f.asa ? (f.tipoAsa || "SI") : null,
+        uvBr: f.uv ? true : null,
+        pigmentos: f.modoExtra === "pigmento" ? (f.pigmento || f.extra || null) : null,
+        observacion: null,
+        descripcion: null,
+        perforacion: false,
+        por_kilo: null,
+        herramental_descripcion: null,
+        herramental_precio: null,
+        detalles,
+      };
+    });
+  };
+
   // ── Cotizaciones ──────────────────────────────────────────────────────────
-  const guardarCotizacion = async () => {
+  // Reemplaza a guardarCotizacion/guardarEImprimir: guarda SIEMPRE, y según
+  // las opciones elegidas en el split-button, imprime el membretado y/o
+  // dispara el flujo de correo con el PDF "bueno" (generarPdfCotizacion).
+  const guardarConOpciones = async (opciones: { imprimir: boolean; correo: boolean }) => {
     if (filas.length === 0) { alert("Agrega al menos un producto."); return; }
     if (!cliente.trim())    { alert("Falta el nombre del cliente."); return; }
     if (!clienteIdReal)     { alert("Regresa y registra el prospecto primero."); return; }
+
     setGuardando(true);
     try {
       const filasListas = await prepararFilas(filas);
@@ -385,6 +461,7 @@ useEffect(() => {
       );
       const resultado = await crearCotizacionExpo({ clienteId: clienteIdReal, productos, comentarios: coment });
       setFolioActual(resultado.no_cotizacion);
+
       const nueva: CotizacionGuardada = {
         id: String(resultado.idsolicitud), folio: resultado.no_cotizacion,
         idsolicitud: resultado.idsolicitud, origen: "expo",
@@ -393,7 +470,96 @@ useEffect(() => {
         total: sumarTotales(filasListas),
       };
       setCotizaciones(prev => [...prev, nueva]);
-      alert(`✅ Cotización ${resultado.no_cotizacion} guardada.`);
+
+      const asesorNombre = user ? `${user.nombre} ${user.apellido}`.trim() : "Asesor de Ventas";
+
+      // ── Correo real ya registrado del cliente en BD — NO se reconstruye
+      // desde correoUsuario/correoExt del formulario, para que el modal
+      // siempre muestre lo que de verdad está guardado en su ficha.
+      let correoCliente = "";
+      try {
+        const clienteCompleto = await getClienteById(clienteIdReal);
+        correoCliente = clienteCompleto?.correo || "";
+      } catch (e) {
+        console.warn("No se pudo obtener el correo registrado del cliente:", e);
+      }
+
+      await ejecutarEnvio(
+        {
+          // ── Imprimir: sigue usando el membretado, exactamente como antes ──
+          paraImprimir: () => {
+            generarPdfCotizacionExpo({
+              folio:       resultado.no_cotizacion,
+              cliente:     cliente.trim(),
+              asesor:      asesorNombre,
+              fecha:       TODAY_NOW(),
+              comentarios: coment,
+              productos: filasListas.map(f => {
+                const parseP   = (s: string) => parseFloat(s.replace(/[^0-9.]/g, "")) || 0;
+                const extraNum = f.modoExtra === "precio" ? parseP(f.extra || "0") : 0;
+                const p1raw = parseP(f.precio1), p2raw = parseP(f.precio2), p3raw = parseP(f.precio3);
+                const p1 = p1raw > 0 ? p1raw + extraNum : 0;
+                const p2 = p2raw > 0 ? p2raw + extraNum : 0;
+                const p3 = p3raw > 0 ? p3raw + extraNum : 0;
+                const parseCant = (s: string) => parseInt(s.replace(/,/g, ""), 10) || 0;
+                const c1 = parseCant(cant1), c2 = parseCant(cant2), c3 = parseCant(cant3);
+                const detalles = [
+                  p1 > 0 ? { cantidad: c1, precio_unitario: p1, precio_total: c1 * p1 } : null,
+                  p2 > 0 ? { cantidad: c2, precio_unitario: p2, precio_total: c2 * p2 } : null,
+                  p3 > 0 ? { cantidad: c3, precio_unitario: p3, precio_total: c3 * p3 } : null,
+                ].filter(Boolean) as { cantidad: number; precio_unitario: number; precio_total: number }[];
+                return {
+                  nombre:   f.producto.nombre,
+                  medida:   f.medida   || f.producto.medida   || null,
+                  material: f.material || f.producto.material || null,
+                  calibre:  f.calibre  || f.producto.calibre  || null,
+                  tintas:   f.tintas   || null,
+                  laminado: f.laminacion ? (f.tipoLaminado || "SI") : null,
+                  hs:       f.hs        ? (f.tipoHs        || "SI") : null,
+                  ar:       f.ar        ? "SI"                      : null,
+                  textura:  f.textura   ? (f.tipoTextura   || "SI") : null,
+                  uv:       f.uv        ? "SI"                      : null,
+                  asa:      f.asa       ? (f.tipoAsa       || "SI") : null,
+                  pigmento: f.modoExtra === "pigmento" ? (f.pigmento || f.extra || null) : null,
+                  detalles,
+                };
+              }),
+            });
+          },
+
+          // ── Correo: usa el PDF "bueno" con diseño, sin descargar ni subir a S3 ──
+          paraCorreo: async () => {
+            return await generarPdfCotizacion(
+              {
+                no_cotizacion: resultado.no_cotizacion,
+                fecha: new Date().toISOString(),
+                cliente: cliente.trim(),
+                empresa: clienteGuardado?.impresion || "",
+                telefono: clienteGuardado?.celular || "",
+                correo: correoCliente,
+                estado: "Pendiente",
+                impresion: clienteGuardado?.impresion ?? null,
+                celular: clienteGuardado?.celular ?? null,
+                identificar: null,
+                cliente_id: clienteIdReal,
+                total: sumarTotales(filasListas).precio1,
+                productos: construirProductosPdfBueno(filasListas) as any,
+              },
+              false, // no subir a S3 desde este flujo
+              false  // no descargar — solo se usa el blob para adjuntar
+            );
+          },
+        },
+        {
+          tipo: "cotizacion",
+          folio: resultado.no_cotizacion,
+          cliente: cliente.trim(),
+          empresa: clienteGuardado?.impresion,
+          correoDefault: correoCliente,
+        },
+        opciones
+      );
+
       limpiar();
     } catch (err) {
       console.error("Error al guardar cotización:", err);
@@ -403,97 +569,27 @@ useEffect(() => {
     }
   };
 
-  const guardarEImprimir = async () => {
-    if (filas.length === 0) { alert("Agrega al menos un producto."); return; }
-    if (!cliente.trim())    { alert("Falta el nombre del cliente."); return; }
-    if (!clienteIdReal)     { alert("Regresa y registra el prospecto primero."); return; }
-    setGuardando(true);
-    try {
-      const filasListas = await prepararFilas(filas);
-      const productos = filasListas.map(f =>
-        mapearProductoAPayload(f, f.precio1, f.precio2, f.precio3, cant1, cant2, cant3)
-      );
-      const resultado = await crearCotizacionExpo({ clienteId: clienteIdReal, productos, comentarios: coment });
-      setFolioActual(resultado.no_cotizacion);
-      const nueva: CotizacionGuardada = {
-        id: String(resultado.idsolicitud), folio: resultado.no_cotizacion,
-        idsolicitud: resultado.idsolicitud, origen: "expo",
-        cliente: cliente.trim(), clienteId: clienteIdReal, clienteData: clienteGuardado,
-        fecha: TODAY_NOW(), estado: "cotizacion", filas: filasListas, comentarios: coment,
-        total: sumarTotales(filasListas),
-      };
-      setCotizaciones(prev => [...prev, nueva]);
-
-      generarPdfCotizacionExpo({
-        folio:       resultado.no_cotizacion,
-        cliente:     cliente.trim(),
-        asesor:      user ? `${user.nombre} ${user.apellido}`.trim() : "Asesor de Ventas",
-        fecha:       TODAY_NOW(),
-        comentarios: coment,
-        productos: filasListas.map(f => {
-          const parseP   = (s: string) => parseFloat(s.replace(/[^0-9.]/g, "")) || 0;
-          const extraNum = f.modoExtra === "precio" ? parseP(f.extra || "0") : 0;
-          const p1raw = parseP(f.precio1);
-          const p2raw = parseP(f.precio2);
-          const p3raw = parseP(f.precio3);
-          const p1 = p1raw > 0 ? p1raw + extraNum : 0;
-          const p2 = p2raw > 0 ? p2raw + extraNum : 0;
-          const p3 = p3raw > 0 ? p3raw + extraNum : 0;
-          const parseCant = (s: string) => parseInt(s.replace(/,/g, ""), 10) || 0;
-          const c1 = parseCant(cant1);
-          const c2 = parseCant(cant2);
-          const c3 = parseCant(cant3);
-          const detalles = [
-            p1 > 0 ? { cantidad: c1, precio_unitario: p1, precio_total: c1 * p1 } : null,
-            p2 > 0 ? { cantidad: c2, precio_unitario: p2, precio_total: c2 * p2 } : null,
-            p3 > 0 ? { cantidad: c3, precio_unitario: p3, precio_total: c3 * p3 } : null,
-          ].filter(Boolean) as { cantidad: number; precio_unitario: number; precio_total: number }[];
-          return {
-            nombre:   f.producto.nombre,
-            medida:   f.medida   || f.producto.medida   || null,
-            material: f.material || f.producto.material || null,
-            calibre:  f.calibre  || f.producto.calibre  || null,
-            tintas:   f.tintas   || null,
-            laminado: f.laminacion ? (f.tipoLaminado || "SI") : null,
-            hs:       f.hs        ? (f.tipoHs        || "SI") : null,
-            ar:       f.ar        ? "SI"                      : null,
-            textura:  f.textura   ? (f.tipoTextura   || "SI") : null,
-            uv:       f.uv        ? "SI"                      : null,
-            asa:      f.asa       ? (f.tipoAsa       || "SI") : null,
-            pigmento: f.modoExtra === "pigmento" ? (f.pigmento || f.extra || null) : null,
-            detalles,
-          };
-        }),
-      });
-
-      limpiar();
-    } catch (err) {
-      console.error("Error al guardar e imprimir:", err);
-      alert("No se pudo guardar la cotización.");
-    } finally {
-      setGuardando(false);
-    }
-  };
-
-  const aprobarCotizacion = async (id: string, items: ItemPedidoAprobado[]) => {
-    const cot = cotizaciones.find(c => c.id === id);
-    if (!cot?.folio) return;
-    setAprobando(true);
-    try {
-      const itemsConIds = items.map(item => ({
-        idsolicitud_producto: item.idsolicitud_producto || 0,
-        idsolicitud_detalle:  item.idsolicitud_detalle  || 0,
-      })).filter(i => i.idsolicitud_detalle > 0);
-      const resultado = await aprobarCotizacionExpo(cot.folio, itemsConIds);
-      setCotizaciones(prev => prev.map(c => c.id === id
-        ? { ...c, estado: "pedido", folioPedido: resultado.no_pedido, itemsAprobados: items }
-        : c));
-    } catch {
-      alert("No se pudo aprobar la cotización.");
-    } finally {
-      setAprobando(false);
-    }
-  };
+  const aprobarCotizacion = async (id: string, items: ItemPedidoAprobado[]): Promise<string | null> => {
+  const cot = cotizaciones.find(c => c.id === id);
+  if (!cot?.folio) return null;
+  setAprobando(true);
+  try {
+    const itemsConIds = items.map(item => ({
+      idsolicitud_producto: item.idsolicitud_producto || 0,
+      idsolicitud_detalle:  item.idsolicitud_detalle  || 0,
+    })).filter(i => i.idsolicitud_detalle > 0);
+    const resultado = await aprobarCotizacionExpo(cot.folio, itemsConIds);
+    setCotizaciones(prev => prev.map(c => c.id === id
+      ? { ...c, estado: "pedido", folioPedido: resultado.no_pedido, itemsAprobados: items }
+      : c));
+    return resultado.no_pedido;
+  } catch {
+    alert("No se pudo aprobar la cotización.");
+    return null;
+  } finally {
+    setAprobando(false);
+  }
+};
 
   const eliminarCotizacion = async (folio: string) => {
     try {
@@ -532,7 +628,7 @@ useEffect(() => {
 
   // ── Sub-componentes UI ────────────────────────────────────────────────────
   const BotonesAccion = () => (
-    <div className="no-print" style={{ display: "flex", gap: 10, width: "100%", maxWidth: desk ? 1100 : undefined, justifyContent: "flex-end" }}>
+    <div className="no-print" style={{ display: "flex", gap: 10, width: "100%", maxWidth: desk ? 1100 : undefined, justifyContent: "flex-end", alignItems: "center" }}>
       <button
         onClick={() => navigate("/home")}
         style={{ background: "transparent", border: "1px solid #444", color: "#666", fontSize: 11, fontWeight: 600, padding: "7px 9px", borderRadius: 6, cursor: "pointer" }}
@@ -542,8 +638,7 @@ useEffect(() => {
       </button>
       <button onClick={() => setVista("registro")} style={{ background: "transparent", border: "1px solid #333", color: "#888", fontSize: 12, fontWeight: 600, padding: "8px 14px", borderRadius: 6, cursor: "pointer", fontFamily: "'Inter',sans-serif" }}>← Cliente</button>
       <button onClick={limpiar} style={{ background: "transparent", border: "1px solid #555", color: "#AAA", fontSize: 12, fontWeight: 600, padding: "8px 18px", borderRadius: 6, cursor: "pointer", fontFamily: "'Inter',sans-serif" }}>Limpiar</button>
-      <button onClick={guardarCotizacion} disabled={guardando} style={{ background: "transparent", border: "1px solid #C9922A", color: "#C9922A", fontSize: 12, fontWeight: 700, padding: "8px 18px", borderRadius: 6, cursor: guardando ? "not-allowed" : "pointer", opacity: guardando ? .7 : 1, fontFamily: "'Inter',sans-serif" }}>{guardando ? "Guardando..." : "💾 Guardar cotización"}</button>
-      <button onClick={guardarEImprimir} disabled={guardando} style={{ background: "#C9922A", border: "none", color: "#1A1A1A", fontSize: 12, fontWeight: 700, padding: "8px 20px", borderRadius: 6, cursor: guardando ? "not-allowed" : "pointer", opacity: guardando ? .7 : 1, fontFamily: "'Inter',sans-serif" }}>{guardando ? "Guardando..." : "💾🖨 Guardar e Imprimir"}</button>
+      <BotonGuardarConOpciones guardando={guardando} onEjecutar={guardarConOpciones} variant="dark" />
     </div>
   );
 
@@ -626,7 +721,7 @@ useEffect(() => {
         {/* ── MÓVIL ── */}
         {mob && (
           <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh", background: "#1A1A1A" }}>
-            <div className="mob-bar no-print" style={{ background: "#111", borderBottom: "2px solid #C9922A", padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 10 }}>
+            <div className="mob-bar no-print" style={{ background: "#111", borderBottom: "2px solid #C9922A", padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 10, flexWrap: "wrap", gap: 8 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <div style={{ color: "#C9922A", fontSize: 22, fontWeight: 700, fontFamily: "Georgia,serif" }}>EB</div>
                 <div>
@@ -634,12 +729,11 @@ useEffect(() => {
                   <div style={{ color: "#666", fontSize: 9 }}>Cotizador Expo</div>
                 </div>
               </div>
-              <div style={{ display: "flex", gap: 6 }}>
+              <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
                 <button onClick={() => navigate("/home")} style={{ background: "transparent", border: "1px solid #444", color: "#666", fontSize: 11, fontWeight: 600, padding: "7px 9px", borderRadius: 6, cursor: "pointer" }} title="Regresar a SIGEB">🏠 SIGEB</button>
                 <button onClick={() => setVista("registro")} style={{ background: "transparent", border: "1px solid #333", color: "#888", fontSize: 11, fontWeight: 600, padding: "7px 9px", borderRadius: 6, cursor: "pointer" }}>← Cliente</button>
                 <button onClick={limpiar} style={{ background: "transparent", border: "1px solid #444", color: "#AAA", fontSize: 11, fontWeight: 600, padding: "7px 9px", borderRadius: 6, cursor: "pointer" }}>Limpiar</button>
-                <button onClick={guardarCotizacion} disabled={guardando} style={{ background: "transparent", border: "1px solid #C9922A", color: "#C9922A", fontSize: 11, fontWeight: 700, padding: "7px 9px", borderRadius: 6, cursor: "pointer", opacity: guardando ? .7 : 1 }}>{guardando ? "..." : "💾"}</button>
-                <button onClick={guardarEImprimir} disabled={guardando} style={{ background: "#C9922A", border: "none", color: "#1A1A1A", fontSize: 11, fontWeight: 700, padding: "7px 12px", borderRadius: 6, cursor: "pointer" }}>💾🖨</button>
+                <BotonGuardarConOpciones guardando={guardando} onEjecutar={guardarConOpciones} variant="dark" />
               </div>
             </div>
             <div style={{ flex: 1, overflowY: "auto", padding: "12px 0" }}>
@@ -661,7 +755,7 @@ useEffect(() => {
         {/* ── TABLET ── */}
         {tab && (
           <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh", background: "#2A2A2A" }}>
-            <div className="no-print" style={{ background: "#111", borderBottom: "2px solid #C9922A", padding: "10px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 10 }}>
+            <div className="no-print" style={{ background: "#111", borderBottom: "2px solid #C9922A", padding: "10px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 10, flexWrap: "wrap", gap: 10 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                 <div style={{ color: "#C9922A", fontSize: 24, fontWeight: 700, fontFamily: "Georgia,serif" }}>EB</div>
                 <div>
@@ -669,12 +763,11 @@ useEffect(() => {
                   <div style={{ color: "#666", fontSize: 9, letterSpacing: .5 }}>Cotizador Expo</div>
                 </div>
               </div>
-              <div style={{ display: "flex", gap: 10 }}>
+              <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
                 <button onClick={() => navigate("/home")} style={{ background: "transparent", border: "1px solid #444", color: "#666", fontSize: 11, fontWeight: 600, padding: "7px 9px", borderRadius: 6, cursor: "pointer" }} title="Regresar a SIGEB">🏠 SIGEB</button>
                 <button onClick={() => setVista("registro")} style={{ background: "transparent", border: "1px solid #333", color: "#888", fontSize: 12, fontWeight: 600, padding: "8px 14px", borderRadius: 6, cursor: "pointer" }}>← Cliente</button>
                 <button onClick={limpiar} style={{ background: "transparent", border: "1px solid #555", color: "#AAA", fontSize: 12, fontWeight: 600, padding: "8px 16px", borderRadius: 6, cursor: "pointer" }}>Limpiar</button>
-                <button onClick={guardarCotizacion} disabled={guardando} style={{ background: "transparent", border: "1px solid #C9922A", color: "#C9922A", fontSize: 12, fontWeight: 700, padding: "8px 16px", borderRadius: 6, cursor: "pointer", opacity: guardando ? .7 : 1 }}>{guardando ? "Guardando..." : "💾 Guardar"}</button>
-                <button onClick={guardarEImprimir} disabled={guardando} style={{ background: "#C9922A", border: "none", color: "#1A1A1A", fontSize: 12, fontWeight: 700, padding: "8px 18px", borderRadius: 6, cursor: "pointer" }}>💾🖨 Guardar e Imprimir</button>
+                <BotonGuardarConOpciones guardando={guardando} onEjecutar={guardarConOpciones} variant="dark" />
               </div>
             </div>
             <div style={{ flex: 1, overflowY: "auto", padding: "16px" }}>
@@ -760,6 +853,16 @@ useEffect(() => {
           onAprobar={aprobarCotizacion} onEliminar={eliminarCotizacion}
           onClose={() => setListaAbierta(false)} onRefresh={cargarCotizaciones}
           asesor={user ? `${user.nombre} ${user.apellido}`.trim() : "Asesor de Ventas"}
+        />
+      )}
+
+      {modalCorreoAbierto && (
+        <ModalConfirmarCorreo
+          correoInicial={correoDefault}
+          nombreDocumento={nombreDocumentoModal}
+          enviando={enviandoCorreo}
+          onConfirmar={confirmarEnvioCorreo}
+          onCancelar={cancelarEnvioCorreo}
         />
       )}
     </>

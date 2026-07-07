@@ -7,8 +7,19 @@ import type {
   MedidaKey,
   ConfigProducto,
 } from "../types/productos-plastico.types";
+import type {
+  TipoProductoAdminItem,
+  MaterialAdminItem,
+  CalibreAdminItem,
+} from "../types/productos-plastico.types";
 import { FORMATO_MEDIDAS } from "../types/productos-plastico.types";
 import { getCalibres } from "../services/productosPlasticoService";
+import { formatNumero } from "../utils/formatNumero";
+import {
+  AgregarTipoProductoInline,
+  AgregarMaterialInline,
+  AgregarCalibreInline,
+} from "./plastico/AgregarCatalogoPlasticoInline";
 
 import planaImg       from "../assets/plana.png";
 import troqueladaImg from "../assets/troquelada.png";
@@ -108,6 +119,13 @@ interface SelectorProductoProps {
   onProductoChange: (datos: DatosProducto) => void;
   mostrarFigura?: boolean;
   datosIniciales?: DatosProducto | null;
+  onAgregarTipoProducto?: (nombre: string) => Promise<TipoProductoAdminItem>;
+  onAgregarMaterial?: (nombre: string, valor: number) => Promise<MaterialAdminItem>;
+  onAgregarCalibre?: (
+    calibre: number,
+    calibre_bopp?: number | null,
+    gramos?: number | null
+  ) => Promise<CalibreAdminItem>;
 }
 
 const medidasVacias: Record<MedidaKey, string> = {
@@ -124,6 +142,9 @@ export default function SelectorProducto({
   onProductoChange,
   mostrarFigura = true,
   datosIniciales = null,
+  onAgregarTipoProducto,
+  onAgregarMaterial,
+  onAgregarCalibre,
 }: SelectorProductoProps) {
   const [tipoProducto, setTipoProducto] = useState("");
   const [tipoProductoId, setTipoProductoId] = useState(0);
@@ -135,6 +156,7 @@ export default function SelectorProducto({
 
   const [calibresDisponibles, setCalibresDisponibles] = useState<CatalogoCalibre[]>([]);
   const [cargandoCalibres, setCargandoCalibres] = useState(false);
+  const [calibreRefreshTick, setCalibreRefreshTick] = useState(0);
 
   const [medidas, setMedidas] = useState<Record<MedidaKey, string>>(medidasVacias);
 
@@ -256,7 +278,8 @@ export default function SelectorProducto({
     cargarCalibres();
 
     return () => controller.abort();
-  }, [tipoProducto, material, catalogos.calibres]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tipoProducto, material, catalogos.calibres, calibreRefreshTick]);
 
   const construirMedidasFormateadas = () => {
     const v = FORMATO_MEDIDAS.verticales.map(k => medidas[k]).filter(Boolean);
@@ -311,10 +334,24 @@ export default function SelectorProducto({
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
+  // ═══════════════════════════════════════════════════════════════════════
+  // REGLA CELOFÁN ⟷ BOPP
+  //   - Tipo = "Bolsa celofán"  →  Material se fuerza a BOPP (seleccionarTipo)
+  //   - Material = "BOPP"       →  Tipo se fuerza a "Bolsa celofán" (seleccionarMaterial)
+  //   - Calibre, en ese combo, solo muestra los que tienen calibre_bopp/gramos
+  //
+  // ✅ FIX: el dropdown de TIPO ya NO se limita a solo "Bolsa celofán" cuando
+  // material=BOPP. Antes eso atrapaba al usuario (una vez en celofán+BOPP,
+  // el dropdown de tipo solo mostraba esa única opción y no había forma de
+  // cambiar a otro producto). Ahora, si material=BOPP o no hay material aún,
+  // se muestran TODOS los tipos; si eligen uno distinto de celofán,
+  // seleccionarTipo ya se encarga de limpiar el material BOPP automáticamente.
+  // Solo se sigue ocultando "Bolsa celofán" cuando ya hay un material
+  // DISTINTO de BOPP elegido (eso sí es válido: celofán nunca puede ir con
+  // otro material, y no atrapa nada porque el resto de opciones sigue ahí).
+  // ═══════════════════════════════════════════════════════════════════════
   const getTiposProductoFiltrados = () => {
     const esBoppMaterial = material.toUpperCase() === "BOPP";
-
-    if (esBoppMaterial) return catalogos.tiposProducto;
 
     if (material && !esBoppMaterial) {
       return catalogos.tiposProducto.filter(t => t.nombre !== "Bolsa celofán");
@@ -342,6 +379,44 @@ export default function SelectorProducto({
     setCalibreId(0);
     setCalibreGramos(null);
     calibrePendienteRef.current = null;
+  };
+
+  const seleccionarTipo = (tipo: { id: number; nombre: string }) => {
+    setTipoProducto(tipo.nombre);
+    setTipoProductoId(tipo.id);
+    setMostrarDropdownTipo(false);
+    setMedidas({ ...medidasVacias });
+
+    if (tipo.nombre === "Bolsa celofán") {
+      const bopp = catalogos.materiales.find(m => m.nombre.toUpperCase() === "BOPP");
+      if (bopp) { setMaterial(bopp.nombre); setMaterialId(bopp.id); }
+    } else if (material.toUpperCase() === "BOPP") {
+      // Cambiaron a un tipo que no es celofán teniendo BOPP puesto → se limpia
+      setMaterial(""); setMaterialId(0);
+    }
+    limpiarCalibre();
+  };
+
+  const seleccionarMaterial = (mat: { id: number; nombre: string }) => {
+    setMaterial(mat.nombre);
+    setMaterialId(mat.id);
+    setMostrarDropdownMaterial(false);
+
+    if (mat.nombre.toUpperCase() === "BOPP") {
+      if (tipoProducto !== "Bolsa celofán") {
+        const celofan = catalogos.tiposProducto.find(t => t.nombre === "Bolsa celofán");
+        if (celofan) {
+          setTipoProducto(celofan.nombre);
+          setTipoProductoId(celofan.id);
+          setMedidas({ ...medidasVacias });
+        }
+      }
+    } else if (tipoProducto === "Bolsa celofán") {
+      setTipoProducto(""); setTipoProductoId(0);
+      setMedidas({ ...medidasVacias });
+    }
+
+    limpiarCalibre();
   };
 
   const setMedida = (key: MedidaKey, value: string) => {
@@ -411,29 +486,32 @@ export default function SelectorProducto({
               </svg>
             </button>
           </div>
+          {material.toUpperCase() === "BOPP" && (
+            <p className="mt-1 text-xs text-blue-600">
+              ℹ️ Con material BOPP, este producto es "Bolsa celofán". Puedes cambiar el tipo si lo necesitas;
+              el material se limpiará automáticamente.
+            </p>
+          )}
           {mostrarDropdownTipo && (
-            <ul className="absolute w-full bg-white border border-gray-300 mt-1 max-h-60 overflow-auto rounded-lg shadow-lg z-20">
+            <ul className="absolute w-full bg-white border border-gray-300 mt-1 max-h-72 overflow-auto rounded-lg shadow-lg z-20">
               {getTiposProductoFiltrados().map(tipo => (
                 <li
                   key={tipo.id}
-                  onClick={() => {
-                    setTipoProducto(tipo.nombre);
-                    setTipoProductoId(tipo.id);
-                    setMostrarDropdownTipo(false);
-                    setMedidas({ ...medidasVacias });
-                    if (tipo.nombre === "Bolsa celofán") {
-                      const bopp = catalogos.materiales.find(m => m.nombre.toUpperCase() === "BOPP");
-                      if (bopp) { setMaterial(bopp.nombre); setMaterialId(bopp.id); }
-                    } else if (material.toUpperCase() === "BOPP") {
-                      setMaterial(""); setMaterialId(0);
-                    }
-                    limpiarCalibre();
-                  }}
+                  onClick={() => seleccionarTipo(tipo)}
                   className="px-4 py-2 hover:bg-blue-100 cursor-pointer text-gray-900"
                 >
                   {tipo.nombre}
                 </li>
               ))}
+              {onAgregarTipoProducto && (
+                <AgregarTipoProductoInline
+                  onAgregar={async (nombre) => {
+                    const nuevo = await onAgregarTipoProducto(nombre);
+                    seleccionarTipo({ id: nuevo.id, nombre: nuevo.nombre });
+                    return nuevo;
+                  }}
+                />
+              )}
             </ul>
           )}
         </div>
@@ -469,26 +547,32 @@ export default function SelectorProducto({
               </svg>
             </button>
           </div>
+          {materialDeshabilitado && (
+            <p className="mt-1 text-xs text-blue-600">
+              🔒 "Bolsa celofán" solo puede usarse con material BOPP. Cambia el tipo de producto arriba
+              si quieres usar otro material.
+            </p>
+          )}
           {mostrarDropdownMaterial && !materialDeshabilitado && (
-            <ul className="absolute w-full bg-white border border-gray-300 mt-1 max-h-60 overflow-auto rounded-lg shadow-lg z-20">
+            <ul className="absolute w-full bg-white border border-gray-300 mt-1 max-h-72 overflow-auto rounded-lg shadow-lg z-20">
               {getMaterialesFiltrados().map(mat => (
                 <li
                   key={mat.id}
-                  onClick={() => {
-                    setMaterial(mat.nombre);
-                    setMaterialId(mat.id);
-                    setMostrarDropdownMaterial(false);
-                    if (mat.nombre.toUpperCase() !== "BOPP" && tipoProducto === "Bolsa celofán") {
-                      setTipoProducto(""); setTipoProductoId(0);
-                      setMedidas({ ...medidasVacias });
-                    }
-                    limpiarCalibre();
-                  }}
+                  onClick={() => seleccionarMaterial(mat)}
                   className="px-4 py-2 hover:bg-blue-100 cursor-pointer text-gray-900"
                 >
                   {mat.nombre}
                 </li>
               ))}
+              {onAgregarMaterial && (
+                <AgregarMaterialInline
+                  onAgregar={async (nombre, valor) => {
+                    const nuevo = await onAgregarMaterial(nombre, valor);
+                    seleccionarMaterial({ id: nuevo.id, nombre: nuevo.nombre });
+                    return nuevo;
+                  }}
+                />
+              )}
             </ul>
           )}
         </div>
@@ -498,13 +582,13 @@ export default function SelectorProducto({
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Calibre
             {tipoProducto === "Bolsa celofán" && material.toUpperCase() === "BOPP" && (
-              <span className="ml-2 text-xs text-blue-600 font-normal">(BOPP)</span>
+              <span className="ml-2 text-xs text-blue-600 font-normal">(BOPP — solo calibres con gramaje)</span>
             )}
           </label>
           <div className="flex gap-2">
             <input
               type="text"
-              value={calibre}
+              value={formatNumero(calibre)}
               readOnly
               placeholder={cargandoCalibres ? "Cargando..." : "Selecciona calibre"}
               disabled={cargandoCalibres}
@@ -534,7 +618,7 @@ export default function SelectorProducto({
             </button>
           </div>
           {mostrarDropdownCalibre && !cargandoCalibres && (
-            <ul className="absolute w-full bg-white border border-gray-300 mt-1 max-h-60 overflow-auto rounded-lg shadow-lg z-20">
+            <ul className="absolute w-full bg-white border border-gray-300 mt-1 max-h-72 overflow-auto rounded-lg shadow-lg z-20">
               {calibresDisponibles.length > 0 ? (
                 calibresDisponibles.map(cal => (
                   <li
@@ -547,12 +631,28 @@ export default function SelectorProducto({
                     }}
                     className="px-4 py-2 hover:bg-blue-100 cursor-pointer text-gray-900"
                   >
-                    {cal.valor}
-                    {cal.gramos && <span className="ml-2 text-xs text-gray-400">({cal.gramos}g)</span>}
+                    {formatNumero(cal.valor)}
+                    {cal.gramos && <span className="ml-2 text-xs text-gray-400">({formatNumero(cal.gramos)}g)</span>}
                   </li>
                 ))
               ) : (
                 <li className="px-4 py-2 text-gray-500 text-center">No hay calibres disponibles</li>
+              )}
+              {onAgregarCalibre && (
+                <AgregarCalibreInline
+                  esContextoBopp={tipoProducto === "Bolsa celofán" && material.toUpperCase() === "BOPP"}
+                  onAgregar={async (nuevoCalibre, calibre_bopp, gramos) => {
+                    const nuevo = await onAgregarCalibre(nuevoCalibre, calibre_bopp, gramos);
+                    const valorMostrado =
+                      tipoProducto === "Bolsa celofán" && material.toUpperCase() === "BOPP" && nuevo.calibre_bopp
+                        ? nuevo.calibre_bopp
+                        : nuevo.calibre;
+                    calibrePendienteRef.current = { id: nuevo.id, valor: String(valorMostrado) };
+                    setMostrarDropdownCalibre(false);
+                    setCalibreRefreshTick(t => t + 1);
+                    return nuevo;
+                  }}
+                />
               )}
             </ul>
           )}
