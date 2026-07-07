@@ -45,34 +45,36 @@ export function useEnvioDocumentoPdf() {
     }
   };
 
-  const confirmarEnvioCorreo = async (correoDestino: string) => {
-    if (!contextoPendiente?.generadores.paraCorreo) return;
-    const { generadores, datos } = contextoPendiente;
+const confirmarEnvioCorreo = async (correoDestino: string) => {
+  if (!contextoPendiente) return;
+  const { generadores, datos } = contextoPendiente;
+  const paraCorreo = generadores.paraCorreo;
+  if (!paraCorreo) return;
 
-    setEnviandoCorreo(true);
-    try {
-      const blob = await generadores.paraCorreo();
-      const nombreArchivo = `${datos.tipo === "pedido" ? "Pedido" : "Cotizacion"}_${datos.folio}.pdf`;
+  setEnviandoCorreo(true);
+  try {
+    const blob = await paraCorreo();
+    const nombreArchivo = `${datos.tipo === "pedido" ? "Pedido" : "Cotizacion"}_${datos.folio}.pdf`;
 
-      await enviarCorreoDocumento({
-        tipo: datos.tipo,
-        folio: datos.folio,
-        cliente: datos.cliente,
-        empresa: datos.empresa,
-        destinatario: correoDestino,
-        pdfBlob: blob,
-        nombreArchivo,
-      });
+    await enviarCorreoDocumento({
+      tipo: datos.tipo,
+      folio: datos.folio,
+      cliente: datos.cliente,
+      empresa: datos.empresa,
+      destinatario: correoDestino,
+      pdfBlob: blob,
+      nombreArchivo,
+    });
 
-      setModalCorreoAbierto(false);
-      setContextoPendiente(null);
-    } catch (e: any) {
-      console.error("❌ Error al enviar correo:", e);
-      alert(e?.response?.data?.error || "No se pudo enviar el correo.");
-    } finally {
-      setEnviandoCorreo(false);
-    }
-  };
+    setModalCorreoAbierto(false);
+    setContextoPendiente(null);
+  } catch (e: any) {
+    console.error("❌ Error al enviar correo:", e);
+    alert(e?.response?.data?.error || "No se pudo enviar el correo.");
+  } finally {
+    setEnviandoCorreo(false);
+  }
+};
 
   const cancelarEnvioCorreo = () => {
     if (enviandoCorreo) return;
