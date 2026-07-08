@@ -1388,26 +1388,30 @@ useEffect(() => {
                   </p>
                 )}
 
+                {/* CAMBIO: el tamaño de asa ya NO se captura aquí. Se
+                    registra una sola vez, al dar de alta el producto
+                    (FormularioProductoPapelAlta → campo "Tamaño de asa
+                    (default)"), y desde aquí solo se muestra de forma
+                    informativa, en modo lectura. El valor sigue viajando
+                    en specs.tamano_asa exactamente igual que antes, así
+                    que el guardado y el PDF no requieren ningún cambio. */}
                 <label className="block text-sm font-medium text-gray-700 mt-3 mb-1">
                   Tamaño de asa{" "}
                   <span className="text-xs text-gray-400 font-normal">
-                    (editable)
+                    (definido al registrar el producto)
                   </span>
                 </label>
-                <input
-                  type="text"
-                  value={specs.tamano_asa}
-                  onChange={(e) =>
-                    setSpecs((prev) => ({
-                      ...prev,
-                      tamano_asa: e.target.value,
-                    }))
-                  }
-                  placeholder="Ej. 30 x 2 cm"
-                  className={inputCls}
-                  disabled={!specs.id_asa}
-                  maxLength={100}
-                />
+                <div
+                  className={`w-full px-3 py-2 border rounded-lg text-sm ${
+                    specs.id_asa
+                      ? "border-gray-200 bg-gray-50 text-gray-700"
+                      : "border-gray-100 bg-gray-50 text-gray-400"
+                  }`}
+                >
+                  {specs.id_asa
+                    ? specs.tamano_asa || "Sin tamaño registrado en el producto"
+                    : "—"}
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">

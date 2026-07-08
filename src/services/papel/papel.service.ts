@@ -192,6 +192,8 @@ const mapFormToApi = (form: ProductoPapelForm) => ({
   altura: form.altura || null,
   medida: form.medida || null,
   tamano_asa_default: form.tamanoAsaDefault.trim() || null,
+  // NUEVO: tamaño del producto (Mini/Chico/Mediano/Grande/Extragrande).
+  tamano_prod: form.tamanoProd?.trim() || null,
   grupos: form.grupos.map(grupo => ({
     precio_sugerido: grupo.precioSugerido
       ? parseFloat(grupo.precioSugerido)

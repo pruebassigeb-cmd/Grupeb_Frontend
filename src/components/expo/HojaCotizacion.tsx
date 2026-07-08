@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import {
-  FilaTabla, FilaVacia, CantidadSelect,
+  FilaTabla, FilaVacia,
   TH, TH2, THD, TD,
 } from "./Tablacontroles";
 import type { FilaProducto, Producto } from "../../types/expo/expo.types";
@@ -12,7 +12,7 @@ import type { PigmentoDB } from "./Tablacontroles";
 
 interface Props {
   filas: FilaProducto[]; cliente: string; coment: string; folio: string;
-  cant1: string; cant2: string; cant3: string;
+  empresa: string;
   mob: boolean; tab: boolean; desk: boolean; over: boolean;
   catalogoPropio: Producto[];
   catalogs:       Catalogs;
@@ -24,7 +24,6 @@ interface Props {
   suajesPlast:    { id: number; tipo: string }[];
   asesor:         string;
   setCliente:(v:string)=>void; setComent:(v:string)=>void;
-  setCant1:(v:string)=>void; setCant2:(v:string)=>void; setCant3:(v:string)=>void;
   setOver:(v:boolean)=>void; onDrop:(e:React.DragEvent)=>void;
   onEdit:(uid:string, k:keyof FilaProducto, v:string|boolean|number|null)=>void;
   onEditNombre:(uid:string,nuevoNombre:string)=>void;
@@ -32,7 +31,6 @@ interface Props {
   onAgregarProducto:(p:Producto)=>void;
 }
 
-// Botón redondo chiquito reutilizado para el +/× de columnas de precio.
 function BotonColPrecio({ label, title, onClick, variante }: { label: string; title: string; onClick: () => void; variante: "add" | "remove" }) {
   const esAdd = variante === "add";
   return (
@@ -56,41 +54,25 @@ function BotonColPrecio({ label, title, onClick, variante }: { label: string; ti
 }
 
 export default function HojaCotizacion({
-  filas,cliente,coment,folio,cant1,cant2,cant3,mob,tab,desk,over,catalogoPropio,
+  filas,cliente,coment,folio,empresa,mob,tab,desk,over,catalogoPropio,
   catalogs, foils, texturas, catalogosPlast, pigmentosDB, coloresAsa, suajesPlast, asesor,
-  setCliente,setComent,setCant1,setCant2,setCant3,setOver,
+  setCliente,setComent,setOver,
   onDrop,onEdit,onEditNombre,onDel,onAbrirDrawer,onAgregarProducto,
 }:Props){
   const LIMITE_PRODUCTOS = 5;
   const alcanzoLimite = filas.length >= LIMITE_PRODUCTOS;
   const filasVaciasBlanco = Math.max(0, LIMITE_PRODUCTOS - filas.length - (alcanzoLimite ? 0 : 1));
 
-  // ── Columnas de precio visibles (1, 2 o 3) ──────────────────────────────
-  // El 80% de las cotizaciones solo necesitan una cantidad, así que arranca
-  // colapsado en 1 columna. El "+" junto al header revela la siguiente.
-  // Todo el resto del comportamiento (cálculo de totales, mapeo al backend,
-  // generación del PDF) sigue exactamente igual — solo cambia cuántas
-  // columnas se ven en pantalla.
   const [columnasPrecio, setColumnasPrecio] = useState<1 | 2 | 3>(1);
 
-  // Al ocultar una columna, limpiamos su precio en TODAS las filas para que
-  // nunca quede un precio "fantasma" guardado en una columna oculta que se
-  // cuele al PDF o al backend sin que se vea en pantalla — así el endpoint
-  // siempre manda exactamente lo que está plasmado en la hoja.
   const agregarColumnaPrecio = () => setColumnasPrecio(c => (c < 3 ? (c + 1) as 1 | 2 | 3 : c));
   const quitarColumnaPrecio = (columna: 2 | 3) => {
-    const campo: keyof FilaProducto = columna === 2 ? "precio2" : "precio3";
-    filas.forEach(f => onEdit(f.uid, campo, ""));
+    const campoPrecio: keyof FilaProducto = columna === 2 ? "precio2" : "precio3";
+    const campoCant: keyof FilaProducto = columna === 2 ? "cant2" : "cant3";
+    filas.forEach(f => { onEdit(f.uid, campoPrecio, ""); onEdit(f.uid, campoCant, ""); });
     setColumnasPrecio(columna === 2 ? 1 : 2);
   };
 
-  // Guardia extra: si una fila trae precio2/precio3 ya con valor al momento
-  // de agregarse (por ejemplo, un producto del catálogo con precios
-  // por defecto ya capturados en 500/1,000/3,000, o un cargo "extra" por
-  // pieza que se suma a las 3 columnas parejo), esos valores quedarían
-  // "fantasma" en una columna oculta y se colarían al guardar/PDF aunque
-  // nunca se vieran en pantalla. Este efecto los limpia apenas aparecen,
-  // no solo cuando el usuario da clic en "×".
   useEffect(() => {
     filas.forEach(f => {
       if (columnasPrecio < 2 && f.precio2) onEdit(f.uid, "precio2", "");
@@ -98,12 +80,8 @@ export default function HojaCotizacion({
     });
   }, [filas, columnasPrecio, onEdit]);
 
-  // Total de columnas de la tabla — usado para el colgroup y las filas en
-  // blanco de relleno, que deben coincidir siempre con la cantidad real de
-  // columnas renderizadas (12 fijas + las de precio visibles).
   const totalCols = 12 + columnasPrecio;
 
-  // La zona de drop cubre todo el tablero en desktop
   const dropProps = desk && !alcanzoLimite ? {
     onDrop,
     onDragOver: (e: React.DragEvent) => { e.preventDefault(); setOver(true); },
@@ -116,13 +94,11 @@ export default function HojaCotizacion({
       style={{
         width:"100%", background:"#F5EFE3", position:"relative",
         ...(desk ? { maxWidth:1100, borderRadius:8, boxShadow:"0 8px 40px rgba(0,0,0,.5)" } : { borderRadius:0 }),
-        // Resalte sutil cuando se arrastra algo encima
         outline: over && desk ? "2px dashed #C9922A" : "2px dashed transparent",
         transition: "outline .15s",
       }}
       {...dropProps}
     >
-      {/* Overlay visual cuando se arrastra — cubre todo el tablero */}
       {over && desk && !alcanzoLimite && (
         <div style={{
           position:"absolute", inset:0, zIndex:10, borderRadius:8,
@@ -181,7 +157,7 @@ export default function HojaCotizacion({
           <div style={{display:"grid",gridTemplateColumns:mob?"1fr 1fr":"repeat(4,1fr)",gap:mob?12:8,marginTop:mob?12:"auto"}}>
             {[
               {label:"Cliente", editable:true,  value:cliente, onChange:setCliente, placeholder:"—"},
-              {label:"Empresa", editable:false, value:"GRUPO EB"},
+              {label:"Empresa", editable:false, value: empresa || "—"},
               {label:"Asesor",  editable:false, value:asesor},
               {label:"Fecha",   editable:false, value:TODAY},
             ].map(({label,editable,value,onChange,placeholder})=>(
@@ -247,28 +223,28 @@ export default function HojaCotizacion({
                 <th style={TH2}>$/pig</th>
                 <th style={THD}>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }}>
-                    <CantidadSelect id="cant1" value={cant1} onChange={setCant1}/>
+                    <span>Cantidad</span>
                     {columnasPrecio === 1 && (
-                      <BotonColPrecio label="+" title="Agregar otra cantidad" variante="add" onClick={agregarColumnaPrecio} />
+                      <BotonColPrecio label="+" title="Agregar otra columna" variante="add" onClick={agregarColumnaPrecio} />
                     )}
                   </div>
                 </th>
                 {columnasPrecio >= 2 && (
                   <th style={THD}>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }}>
-                      <CantidadSelect id="cant2" value={cant2} onChange={setCant2}/>
+                      <span>Cantidad</span>
                       {columnasPrecio === 2 && (
-                        <BotonColPrecio label="+" title="Agregar otra cantidad" variante="add" onClick={agregarColumnaPrecio} />
+                        <BotonColPrecio label="+" title="Agregar otra columna" variante="add" onClick={agregarColumnaPrecio} />
                       )}
-                      <BotonColPrecio label="×" title="Quitar esta cantidad" variante="remove" onClick={() => quitarColumnaPrecio(2)} />
+                      <BotonColPrecio label="×" title="Quitar esta columna" variante="remove" onClick={() => quitarColumnaPrecio(2)} />
                     </div>
                   </th>
                 )}
                 {columnasPrecio >= 3 && (
                   <th style={THD}>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }}>
-                      <CantidadSelect id="cant3" value={cant3} onChange={setCant3}/>
-                      <BotonColPrecio label="×" title="Quitar esta cantidad" variante="remove" onClick={() => quitarColumnaPrecio(3)} />
+                      <span>Cantidad</span>
+                      <BotonColPrecio label="×" title="Quitar esta columna" variante="remove" onClick={() => quitarColumnaPrecio(3)} />
                     </div>
                   </th>
                 )}
@@ -310,7 +286,6 @@ export default function HojaCotizacion({
           </table>
         </div>
 
-        {/* Indicador de drop — solo cuando se arrastra activamente */}
         {desk && (
           <div className="drop-zone-el" style={{
             border:`1.5px dashed ${alcanzoLimite?"#B8A880":over?"#C9922A":"#D4C9B8"}`,

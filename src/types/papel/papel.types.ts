@@ -156,6 +156,10 @@ export interface ProductoPapelForm {
   acabados: Acabados;
   maquinaria: Maquinaria;
   tamanoAsaDefault: string;
+  // NUEVO: tamaño del producto (Mini / Chico / Mediano / Grande / Extragrande),
+  // desplegable fijo en la sección "Tipo de producto". Viaja como
+  // producto_papel.tamano_prod.
+  tamanoProd: string;
 }
 
 export interface ProductoPapelListItem {
@@ -170,6 +174,7 @@ export interface ProductoPapelListItem {
   created_at: string;
   creado_por: string | null;
   tamano_asa_default: string | null;
+  tamano_prod: string | null;
 }
 
 export const newHojeado = (): Hojeado => ({
@@ -284,4 +289,5 @@ export const newProductoForm = (): ProductoPapelForm => ({
   acabados: newAcabados(),
   maquinaria: newMaquinaria(),
   tamanoAsaDefault: "",
+  tamanoProd: "",
 });

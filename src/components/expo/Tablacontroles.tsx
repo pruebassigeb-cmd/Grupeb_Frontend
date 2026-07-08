@@ -605,6 +605,13 @@ export const FilaTabla = memo(function FilaTabla({
   const [precio1,    setPrecio1]    = useState(fila.precio1);
   const [precio2,    setPrecio2]    = useState(fila.precio2);
   const [precio3,    setPrecio3]    = useState(fila.precio3);
+  // Cantidades PROPIAS de esta fila — ya NO son estado local (useState solo
+  // tomaba el valor inicial al montar y se desincronizaba cuando el padre
+  // limpiaba cant2/cant3 al quitar/agregar columnas). Ahora se derivan
+  // directo de `fila`, la fuente de verdad, y siempre reflejan el valor real.
+  const cant1Fila = fila.cant1 || "500";
+  const cant2Fila = fila.cant2 || "1,000";
+  const cant3Fila = fila.cant3 || "3,000";
   const [extra,      setExtra]      = useState(fila.extra || "");
   const [tintas,     setTintas]     = useState(fila.tintas);
   const [laminacion, setLaminacion] = useState(fila.laminacion);
@@ -923,38 +930,46 @@ export const FilaTabla = memo(function FilaTabla({
         <span className="print-only">{extraPrint}</span>
       </td>
 
-      {/* Precios — solo se renderizan las columnas que estén visibles en el
-          header (controlado por columnasPrecio desde HojaCotizacion.tsx).
-          Los valores de precio2/precio3 siguen viviendo en el estado de la
-          fila aunque la columna esté oculta; HojaCotizacion se encarga de
-          limpiarlos al colapsar una columna para que nunca se cuelen datos
-          "fantasma" al backend o al PDF. */}
+      {/* Precios — cada fila trae su propia cantidad + precio para cada
+          columna visible (controlado por columnasPrecio desde
+          HojaCotizacion.tsx). Las cantidades se leen directo de `fila`
+          (fuente de verdad) y los cambios se propagan al padre — así el
+          selector nunca se desincroniza al quitar/agregar columnas. */}
       <td style={TDP}>
-        <input className="no-print-show" style={iP} value={precio1} placeholder="$0.00"
-          onChange={e => setPrecio1(e.target.value)} onBlur={() => propagar("precio1", precio1)} />
+        <div className="no-print-show" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+          <CantidadSelect id={`${pre}-cant1`} value={cant1Fila} onChange={v => propagar("cant1", v)} />
+          <input style={iP} value={precio1} placeholder="$0.00"
+            onChange={e => setPrecio1(e.target.value)} onBlur={() => propagar("precio1", precio1)} />
+        </div>
         {extraNum > 0 && modoExtra === "precio" && (
           <div className="no-print-show" style={{ fontSize: 7, color: "#22C55E", lineHeight: 1 }}>{precio1ConExtra}</div>
         )}
-        <span className="print-only">{precio1ConExtra}</span>
+        <span className="print-only">{cant1Fila} · {precio1ConExtra}</span>
       </td>
       {columnasPrecio >= 2 && (
         <td style={TDP}>
-          <input className="no-print-show" style={iP} value={precio2} placeholder="$0.00"
-            onChange={e => setPrecio2(e.target.value)} onBlur={() => propagar("precio2", precio2)} />
+          <div className="no-print-show" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+            <CantidadSelect id={`${pre}-cant2`} value={cant2Fila} onChange={v => propagar("cant2", v)} />
+            <input style={iP} value={precio2} placeholder="$0.00"
+              onChange={e => setPrecio2(e.target.value)} onBlur={() => propagar("precio2", precio2)} />
+          </div>
           {extraNum > 0 && modoExtra === "precio" && (
             <div className="no-print-show" style={{ fontSize: 7, color: "#22C55E", lineHeight: 1 }}>{precio2ConExtra}</div>
           )}
-          <span className="print-only">{precio2ConExtra}</span>
+          <span className="print-only">{cant2Fila} · {precio2ConExtra}</span>
         </td>
       )}
       {columnasPrecio >= 3 && (
         <td style={TDP}>
-          <input className="no-print-show" style={iP} value={precio3} placeholder="$0.00"
-            onChange={e => setPrecio3(e.target.value)} onBlur={() => propagar("precio3", precio3)} />
+          <div className="no-print-show" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+            <CantidadSelect id={`${pre}-cant3`} value={cant3Fila} onChange={v => propagar("cant3", v)} />
+            <input style={iP} value={precio3} placeholder="$0.00"
+              onChange={e => setPrecio3(e.target.value)} onBlur={() => propagar("precio3", precio3)} />
+          </div>
           {extraNum > 0 && modoExtra === "precio" && (
             <div className="no-print-show" style={{ fontSize: 7, color: "#22C55E", lineHeight: 1 }}>{precio3ConExtra}</div>
           )}
-          <span className="print-only">{precio3ConExtra}</span>
+          <span className="print-only">{cant3Fila} · {precio3ConExtra}</span>
         </td>
       )}
 

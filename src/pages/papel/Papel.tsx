@@ -125,6 +125,7 @@ function DetalleProducto({ id }: { id: number }) {
     <div style={{ padding: "14px 16px", background: "#F9FAFB", borderTop: "1px solid #E5E7EB" }}>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "3px 32px", marginBottom: 14 }}>
         {row("Tipo", detalle.tipo_producto)}
+        {row("Tamaño", detalle.tamano_prod)}
         {row("Descripción", detalle.descripcion_papel)}
         {row("Ancho", detalle.ancho)}
         {row("Fuelle", detalle.fuelle)}
@@ -425,11 +426,16 @@ export default function Papel() {
       form.idcat_tipo_producto_papel = d.idcat_tipo_producto_papel;
       form.tipoProductoNombre = d.tipo_producto ?? "";
       form.descripcion = d.descripcion_papel ?? "";
+      // El backend ya regresa ancho/fuelle/altura/medida limpios (sin
+      // ".00" sobrante) desde productoPapel.controller.ts, así que aquí
+      // solo se usan tal cual vienen.
       form.ancho = d.ancho ? String(d.ancho) : "";
       form.fuelle = d.fuelle ? String(d.fuelle) : "";
       form.altura = d.altura ? String(d.altura) : "";
       form.medida = d.medida ?? "";
       form.tamanoAsaDefault = d.tamano_asa_default ?? "";
+      // NUEVO: precargar el tamaño del producto (Mini/Chico/Mediano/Grande/Extragrande)
+      form.tamanoProd = d.tamano_prod ?? "";
 
       form.grupos = (d.grupos ?? []).map((g: any, gi: number) => ({
         id: Date.now() + gi,

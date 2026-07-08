@@ -60,9 +60,6 @@ export default function Expo() {
 
   const [cliente, setCliente] = useState("");
   const [coment,  setComent]  = useState("");
-  const [cant1,   setCant1]   = useState("500");
-  const [cant2,   setCant2]   = useState("1,000");
-  const [cant3,   setCant3]   = useState("3,000");
 
   const [over,         setOver]         = useState(false);
   const [catOpen,      setCatOpen]      = useState(true);
@@ -388,15 +385,17 @@ useEffect(() => {
 
   // ── Construye productos para el PDF "bueno" (generarPdfCotizacion) ────────
   // usado únicamente para el correo — el membretado sigue viviendo en
-  // generarPdfCotizacionExpo y no se toca.
+  // generarPdfCotizacionExpo y no se toca. Cada producto usa AHORA sus
+  // propias cantidades (f.cant1/f.cant2/f.cant3), ya no son globales.
   const construirProductosPdfBueno = (filasListas: FilaProducto[]) => {
     const parseP = (s: string) => parseFloat(s.replace(/[^0-9.]/g, "")) || 0;
     const parseCant = (s: string) => parseInt(s.replace(/,/g, ""), 10) || 0;
-    const c1 = parseCant(cant1);
-    const c2 = parseCant(cant2);
-    const c3 = parseCant(cant3);
 
     return filasListas.map(f => {
+      const c1 = parseCant(f.cant1);
+      const c2 = parseCant(f.cant2);
+      const c3 = parseCant(f.cant3);
+
       const extraNum = f.modoExtra === "precio" ? parseP(f.extra || "0") : 0;
       const p1raw = parseP(f.precio1);
       const p2raw = parseP(f.precio2);
@@ -456,8 +455,10 @@ useEffect(() => {
     setGuardando(true);
     try {
       const filasListas = await prepararFilas(filas);
+      // Cada producto manda sus propias cantidades (f.cant1/f.cant2/f.cant3)
+      // en vez de las 3 cantidades globales que existían antes.
       const productos = filasListas.map(f =>
-        mapearProductoAPayload(f, f.precio1, f.precio2, f.precio3, cant1, cant2, cant3)
+        mapearProductoAPayload(f, f.precio1, f.precio2, f.precio3, f.cant1, f.cant2, f.cant3)
       );
       const resultado = await crearCotizacionExpo({ clienteId: clienteIdReal, productos, comentarios: coment });
       setFolioActual(resultado.no_cotizacion);
@@ -486,15 +487,17 @@ useEffect(() => {
 
       await ejecutarEnvio(
         {
-          // ── Imprimir: sigue usando el membretado, exactamente como antes ──
+          // ── Imprimir: sigue usando el membretado, exactamente como antes,
+          // solo que ahora cada producto usa su propia cantidad (f.cant1/2/3). ──
           paraImprimir: () => {
             generarPdfCotizacionExpo({
-              folio:       resultado.no_cotizacion,
-              cliente:     cliente.trim(),
-              asesor:      asesorNombre,
-              fecha:       TODAY_NOW(),
-              comentarios: coment,
-              productos: filasListas.map(f => {
+    folio:       resultado.no_cotizacion,
+    cliente:     cliente.trim(),
+    empresa:     clienteGuardado?.impresion || "",
+    asesor:      asesorNombre,
+    fecha:       TODAY_NOW(),
+    comentarios: coment,
+    productos: filasListas.map(f => {
                 const parseP   = (s: string) => parseFloat(s.replace(/[^0-9.]/g, "")) || 0;
                 const extraNum = f.modoExtra === "precio" ? parseP(f.extra || "0") : 0;
                 const p1raw = parseP(f.precio1), p2raw = parseP(f.precio2), p3raw = parseP(f.precio3);
@@ -502,7 +505,7 @@ useEffect(() => {
                 const p2 = p2raw > 0 ? p2raw + extraNum : 0;
                 const p3 = p3raw > 0 ? p3raw + extraNum : 0;
                 const parseCant = (s: string) => parseInt(s.replace(/,/g, ""), 10) || 0;
-                const c1 = parseCant(cant1), c2 = parseCant(cant2), c3 = parseCant(cant3);
+                const c1 = parseCant(f.cant1), c2 = parseCant(f.cant2), c3 = parseCant(f.cant3);
                 const detalles = [
                   p1 > 0 ? { cantidad: c1, precio_unitario: p1, precio_total: c1 * p1 } : null,
                   p2 > 0 ? { cantidad: c2, precio_unitario: p2, precio_total: c2 * p2 } : null,
@@ -570,26 +573,26 @@ useEffect(() => {
   };
 
   const aprobarCotizacion = async (id: string, items: ItemPedidoAprobado[]): Promise<string | null> => {
-  const cot = cotizaciones.find(c => c.id === id);
-  if (!cot?.folio) return null;
-  setAprobando(true);
-  try {
-    const itemsConIds = items.map(item => ({
-      idsolicitud_producto: item.idsolicitud_producto || 0,
-      idsolicitud_detalle:  item.idsolicitud_detalle  || 0,
-    })).filter(i => i.idsolicitud_detalle > 0);
-    const resultado = await aprobarCotizacionExpo(cot.folio, itemsConIds);
-    setCotizaciones(prev => prev.map(c => c.id === id
-      ? { ...c, estado: "pedido", folioPedido: resultado.no_pedido, itemsAprobados: items }
-      : c));
-    return resultado.no_pedido;
-  } catch {
-    alert("No se pudo aprobar la cotización.");
-    return null;
-  } finally {
-    setAprobando(false);
-  }
-};
+    const cot = cotizaciones.find(c => c.id === id);
+    if (!cot?.folio) return null;
+    setAprobando(true);
+    try {
+      const itemsConIds = items.map(item => ({
+        idsolicitud_producto: item.idsolicitud_producto || 0,
+        idsolicitud_detalle:  item.idsolicitud_detalle  || 0,
+      })).filter(i => i.idsolicitud_detalle > 0);
+      const resultado = await aprobarCotizacionExpo(cot.folio, itemsConIds);
+      setCotizaciones(prev => prev.map(c => c.id === id
+        ? { ...c, estado: "pedido", folioPedido: resultado.no_pedido, itemsAprobados: items }
+        : c));
+      return resultado.no_pedido;
+    } catch {
+      alert("No se pudo aprobar la cotización.");
+      return null;
+    } finally {
+      setAprobando(false);
+    }
+  };
 
   const eliminarCotizacion = async (folio: string) => {
     try {
@@ -616,15 +619,16 @@ useEffect(() => {
   };
 
   const propsHoja = {
-    filas, cliente, coment, folio: folioActual || folioPreview, cant1, cant2, cant3,
-    mob, tab, desk, over, catalogoPropio: catalogo,
-    catalogs, foils, texturas, pigmentosDB, coloresAsa, suajesPlast,
-    setCliente, setComent, setCant1, setCant2, setCant3, setOver,
-    onDrop, onEdit: editFila, onDel: delFila, onEditNombre: editNombreProducto,
-    onAbrirDrawer: () => setDrawerOpen(true), onAgregarProducto: addProd,
-    catalogosPlast,
-    asesor: user ? `${user.nombre} ${user.apellido}`.trim() : "Asesor de Ventas",
-  };
+  filas, cliente, coment, folio: folioActual || folioPreview,
+  empresa: clienteGuardado?.impresion || clienteData.impresion || "",
+  mob, tab, desk, over, catalogoPropio: catalogo,
+  catalogs, foils, texturas, pigmentosDB, coloresAsa, suajesPlast,
+  setCliente, setComent, setOver,
+  onDrop, onEdit: editFila, onDel: delFila, onEditNombre: editNombreProducto,
+  onAbrirDrawer: () => setDrawerOpen(true), onAgregarProducto: addProd,
+  catalogosPlast,
+  asesor: user ? `${user.nombre} ${user.apellido}`.trim() : "Asesor de Ventas",
+};
 
   // ── Sub-componentes UI ────────────────────────────────────────────────────
   const BotonesAccion = () => (

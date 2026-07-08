@@ -54,6 +54,12 @@ export interface FilaProducto {
   precio1:      string;
   precio2:      string;
   precio3:      string;
+  // Cantidades PROPIAS de este producto — ya no son compartidas entre
+  // productos de la misma cotización. Cada fila elige su propia cantidad
+  // para cada una de sus hasta 3 columnas de precio.
+  cant1:        string;
+  cant2:        string;
+  cant3:        string;
   laminacion:   boolean;
   tipoLaminado: string;
   idLaminado:   number | null;
@@ -217,6 +223,9 @@ export const filaDesdeProducto = (p: Producto): FilaProducto => {
     precio1:      p.precio500,
     precio2:      p.precio1000,
     precio3:      p.precio3000,
+    cant1:        "500",
+    cant2:        "1,000",
+    cant3:        "3,000",
     laminacion:   esPapelOCarton ? p.laminacion : false,
     tipoLaminado: esPapelOCarton ? (p.tipoLaminado || "") : "",
     idLaminado:   null,

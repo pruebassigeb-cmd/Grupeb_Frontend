@@ -630,6 +630,9 @@ export default function FormularioProductoPapelAlta({ initial, onSave, onCancel,
         boxShadow: "0 2px 4px rgba(0,0,0,0.04)",
       }}>
         
+        <button onClick={onCancel} disabled={saving} style={{ height: 36, padding: "0 18px", border: "1px solid #D1D5DB", borderRadius: 7, background: "#fff", color: "#374151", fontSize: 13, fontWeight: 600, cursor: saving ? "not-allowed" : "pointer" }}>
+          ← Regresar
+        </button>
         <button onClick={handleSubmit} disabled={saving} style={{ height: 36, padding: "0 20px", border: "none", borderRadius: 7, background: saving ? "#93C5FD" : "#1D4ED8", color: "#fff", fontSize: 13, fontWeight: 600, cursor: saving ? "wait" : "pointer" }}>
           {saving ? "Guardando..." : isEdit ? "Guardar cambios" : "Registrar producto"}
         </button>
@@ -638,10 +641,27 @@ export default function FormularioProductoPapelAlta({ initial, onSave, onCancel,
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1.4fr", gap: 10, marginBottom: 10 }}>
         <Sec title="Tipo de producto" colorKey="tipo">
           <FG cols={2} gap="6px 8px">
-            <Field label="Tipo" style={{ gridColumn: "span 2" }}>
+            <Field label="Tipo">
               <SelConAlta catKey="tipo_producto" options={namesOf("tipo_producto")} value={form.tipoProductoNombre}
                 onChange={(v) => { const item = catalogItems<any>("tipo_producto" as CatKey).find(i => i.nombre === v); upd({ tipoProductoNombre: v, idcat_tipo_producto_papel: item?.id ?? null }); }}
                 onAdd={addItem} />
+            </Field>
+            {/* NUEVO: Tamaño del producto — desplegable fijo (no viene de
+                catálogo dinámico), se guarda en form.tamanoProd y viaja
+                a producto_papel.tamano_prod. */}
+            <Field label="Tamaño">
+              <select
+                value={form.tamanoProd ?? ""}
+                onChange={(e) => upd({ tamanoProd: e.target.value })}
+                style={{ width: "100%", height: 34, padding: "0 8px", border: "1px solid #D1D5DB", borderRadius: 5, fontSize: 13, color: form.tamanoProd ? "#111827" : "#9CA3AF", background: "#fff", outline: "none", boxSizing: "border-box", cursor: "pointer" }}
+              >
+                <option value="" style={{ color: "#9CA3AF" }}>Selecciona...</option>
+                <option value="Mini" style={{ color: "#111827" }}>Mini</option>
+                <option value="Chico" style={{ color: "#111827" }}>Chico</option>
+                <option value="Mediano" style={{ color: "#111827" }}>Mediano</option>
+                <option value="Grande" style={{ color: "#111827" }}>Grande</option>
+                <option value="Extragrande" style={{ color: "#111827" }}>Extragrande</option>
+              </select>
             </Field>
             <Field label="Descripción" style={{ gridColumn: "span 2" }}>
               <Inp value={form.descripcion} onChange={v => upd({ descripcion: v })} />
@@ -795,6 +815,18 @@ export default function FormularioProductoPapelAlta({ initial, onSave, onCancel,
                 catItems={catalogs?.laminado ?? []}
                 onChange={(ids, nombres) => updAcabados({ laminados: ids, laminadosNombres: nombres })}
                 onAdd={addItem} catKeyForAdd={"laminado" as CatKey} />
+            </Field>
+            {/* NUEVO: Tamaño de asa — se captura UNA sola vez, aquí, al dar
+                de alta el producto. Este valor es el que se usará como
+                default en pedidos/cotizaciones (ya NO se vuelve a pedir
+                en FormularioProductoPapel.tsx). Viaja en form.tamanoAsaDefault,
+                que ya se envía a crearProductoPapel/actualizarProductoPapel
+                y ya se lee del lado del pedido como tamano_asa_default. */}
+            <Field label="Tamaño de asa" style={{ gridColumn: "span 2" }}>
+              <Inp
+                value={form.tamanoAsaDefault ?? ""}
+                onChange={v => upd({ tamanoAsaDefault: v })}
+              />
             </Field>
           </FG>
         </Sec>
