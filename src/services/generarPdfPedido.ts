@@ -1,4 +1,4 @@
-// generarPdfPedido.ts — LANDSCAPE CARTA
+// generarPdfPedido.ts — LANDSCAPE CARTA / MEMBRETADO 300x210
 // Detección automática: solo plástico → tabla plástico, solo papel → tabla papel, mixto → tabla general
 
 import jsPDF from "jspdf";
@@ -42,6 +42,23 @@ interface PedidoPdf {
   estado_cliente?: string | null;
   cliente_id?: number | null;
   identificar?: string | null;
+}
+
+// ── Formato de hoja ───────────────────────────────────────────────────────────
+export type FormatoPedidoPdf = "carta" | "membretado";
+
+interface DimensionesFormato {
+  PW: number;
+  PH: number;
+  formatoJsPdf: [number, number] | string;
+  ocultarLogo: boolean;
+}
+
+function resolverDimensiones(formato: FormatoPedidoPdf): DimensionesFormato {
+  if (formato === "membretado") {
+    return { PW: 290, PH: 210, formatoJsPdf: [290, 210], ocultarLogo: true };
+  }
+  return { PW: 279.4, PH: 215.9, formatoJsPdf: "letter", ocultarLogo: false };
 }
 
 // ── Detección de tipo ─────────────────────────────────────────────────────────
@@ -491,18 +508,27 @@ function renderTablaMixtaPedido(
 export async function generarPdfPedido(
   pedido: PedidoPdf,
   guardarEnS3 = false,
-  descargar = true
-): Promise<Blob> {  const logoBase64 = pedido.logoBase64 ?? await cargarLogoBase64(logoUrl);
+  descargar = true,
+  formato: FormatoPedidoPdf = "carta"
+): Promise<Blob> {
+  const { PW, PH, formatoJsPdf, ocultarLogo } = resolverDimensiones(formato);
+  const M = 10;
+
+  // En la hoja membretada el logo ya viene impreso en el papel, así que
+  // ni siquiera se descarga/decodifica el logoBase64.
+  const logoBase64 = ocultarLogo
+    ? null
+    : (pedido.logoBase64 ?? await cargarLogoBase64(logoUrl));
+
   const sinIva = pedido.sin_iva === true;
 
-  const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "letter" });
-  const PW = 279.4;
-  const PH = 215.9;
-  const M = 10;
+  const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: formatoJsPdf });
   const PED_FOOTER_H = 55;
 
   const y = await dibujarEncabezado({
     doc, logoBase64,
+    mostrarLogo: !ocultarLogo,
+    pageWidth: PW, margin: M,
     labelDocumento: "PEDIDO", labelFolio: "No P", folio: pedido.no_pedido,
     refTexto: pedido.no_cotizacion ? `Ref. Cot. ${pedido.no_cotizacion}` : undefined,
     fecha: pedido.fecha, empresa: pedido.empresa, impresion: pedido.impresion,
@@ -537,11 +563,12 @@ export async function generarPdfPedido(
     total:    pedido.total,
     anticipo: pedido.anticipo,
     saldo:    pedido.saldo,
-  });
+  }, { pageWidth: PW, pageHeight: PH, margin: M });
 
-  dibujarPiePagina(doc, "PEDIDO", pedido.no_pedido, pedido.fecha);
+  dibujarPiePagina(doc, "PEDIDO", pedido.no_pedido, pedido.fecha, PW, PH);
 
- const nombre = `Pedido_${pedido.no_pedido}.pdf`;
+  const sufijoFormato = formato === "membretado" ? "_EB" : "";
+  const nombre = `Pedido_${pedido.no_pedido}${sufijoFormato}.pdf`;
   const blob = doc.output("blob");
   if (descargar) doc.save(nombre);
   if (guardarEnS3) {

@@ -80,7 +80,7 @@ export interface CreateProductoDto {
   notas?: string | null;
   clave_producto?: string | null;
   minimo_compra?: number | null;
-  unidad?: "kilos" | "pzas" | "litros" | null;
+  unidad?: string | null; // ✅ antes: "kilos" | "pzas" | "litros" | null
   producto_sat_idproducto_sat?: number | null;
 }
 
@@ -202,11 +202,15 @@ export const eliminarProductoProveedor = async (
 
 export const buscarInsumos = async (
   tipoId: number,
-  q?: string
+  q?: string,
+  activo?: boolean
 ): Promise<Insumo[]> => {
-  const { data } = await api.get("/proveedores/insumos", { params: { tipo: tipoId, q } });
+  const { data } = await api.get("/proveedores/insumos", {
+    params: { tipo: tipoId, q, activo: activo === undefined ? undefined : String(activo) },
+  });
   return data;
 };
+ 
 
 // ── Registrar insumo rápido — AHORA con selección múltiple de proveedores ───
 export interface RegistrarInsumoRapidoDto {
@@ -214,14 +218,22 @@ export interface RegistrarInsumoRapidoDto {
   nombre: string;
   codigo?: string | null;
   proveedores_ids?: number[];
+  // ✅ NUEVO
+  precio?: number | null;
+  notas?: string | null;
+  clave_producto?: string | null;
+  minimo_compra?: number | null;
+  unidad?: "kilos" | "pzas" | "litros" | null;
+  producto_sat_idproducto_sat?: number | null;
 }
-
+ 
 export const registrarInsumoRapido = async (
   dto: RegistrarInsumoRapidoDto
 ): Promise<Insumo> => {
   const { data } = await api.post("/proveedores/insumos/registrar-rapido", dto);
   return data.producto;
 };
+ 
 
 export const crearTipoInsumo = async (nombre: string): Promise<TipoInsumo> => {
   const { data } = await api.post("/proveedores/tipos-insumo", { nombre });
@@ -277,4 +289,14 @@ export const guardarProveedorCompleto = async (
 ): Promise<Proveedor> => {
   const { data } = await api.put(`/proveedores/${id}/completo`, { general, domicilio, facturacion });
   return data.proveedor;
+};
+
+export const desactivarInsumo = async (idinsumo: number): Promise<{ message: string }> => {
+  const { data } = await api.patch(`/proveedores/insumos/${idinsumo}`);
+  return data;
+};
+ 
+export const reactivarInsumo = async (idinsumo: number): Promise<{ message: string }> => {
+  const { data } = await api.patch(`/proveedores/insumos/${idinsumo}/reactivar`);
+  return data;
 };

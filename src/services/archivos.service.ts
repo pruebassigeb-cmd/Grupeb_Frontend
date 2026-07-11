@@ -38,14 +38,18 @@ export type SubcarpetaPDF =
   | "notas-remision"
   | "formas-envio";
 
-export type SubcarpetaSuaje = "catalogo" | "imagen" | "rendimiento";
+export type SubcarpetaSuaje = "catalogo" | "imagen" | "rendimiento" | "plastico-producto";
 
+// NOTA: la carpeta interna se sigue llamando "suaje" (así vive el path en S3
+// y así se filtra en el backend) — solo cambia el nombre que ve el usuario,
+// de "Productos Papel" a "Productos". El valor "suaje" NO se toca para no
+// romper nada de lo que ya compara/filtra contra ese string.
 export const CARPETAS_LABELS: Record<CarpetaFrontend, string> = {
   "disenos":            "Diseños",
   "pdfs":               "PDFs",
   "fotos-envios":       "Fotos de Envíos",
   "backups":            "Backups BD",
-  "suaje":              "Suaje",
+  "suaje":              "Productos",
   "catalogoproductos":  "Catálogo de Productos",
 };
 
@@ -62,9 +66,13 @@ export const SUBCARPETAS_PDF: { value: SubcarpetaPDF; label: string }[] = [
 ];
 
 export const SUBCARPETAS_SUAJE: { value: SubcarpetaSuaje; label: string }[] = [
-  { value: "catalogo",    label: "Catálogo"    },
-  { value: "imagen",      label: "Imagen"      },
-  { value: "rendimiento", label: "Rendimiento" },
+  { value: "catalogo",           label: "Catálogo"          },
+  { value: "imagen",             label: "Imagen"            },
+  { value: "rendimiento",        label: "Rendimiento"       },
+  // ✅ NUEVO — aquí se guarda la imagen del producto que se sube al dar de
+  // alta un producto de plástico (antes iba a carpeta="catalogoproductos",
+  // subcarpeta="plastico").
+  { value: "plastico-producto",  label: "Plástico Producto" },
 ];
 
 // Subir archivo — acepta envio_id y nota_id opcionales

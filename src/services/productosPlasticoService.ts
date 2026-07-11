@@ -204,10 +204,14 @@ export const checkProductoDuplicado = async (
 };
 
 // ====================================
-// ✅ NUEVO — ARCHIVOS (imagen / render / master)
-// Usa carpeta="catalogoproductos" y subcarpeta="plastico", que YA existen
-// en config/multer.ts del backend (CARPETAS.catalogo_productos y
-// SUBCARPETAS_CATALOGO). No requiere ningún ajuste ahí.
+// ✅ ARCHIVOS (imagen del producto de plástico)
+// Antes se guardaba en carpeta="catalogoproductos", subcarpeta="plastico".
+// Ahora se guarda en carpeta="suaje" (mostrada al usuario como "Productos"),
+// subcarpeta="plastico-producto" — ambas ya agregadas en:
+//   - backend:  config/multer.ts (SUBCARPETAS_SUAJE)
+//   - frontend: services/archivos.service.ts (SUBCARPETAS_SUAJE)
+// No requiere ningún otro ajuste: el backend valida la subcarpeta contra
+// esa misma lista (validarSubcarpeta en archivo.controller.ts).
 // ====================================
 
 export const subirArchivoProductoPlastico = async (
@@ -218,8 +222,8 @@ export const subirArchivoProductoPlastico = async (
   const BASE = (import.meta as any).env.VITE_API_URL;
   const fd = new FormData();
   fd.append("archivo", file);
-  fd.append("carpeta", "catalogoproductos");
-  fd.append("subcarpeta", "plastico");
+  fd.append("carpeta", "suaje");
+  fd.append("subcarpeta", "plastico-producto");
   fd.append("categoria", categoria);
   fd.append("idconfiguracion_plastico", String(idconfiguracion_plastico));
 
@@ -237,7 +241,7 @@ export const subirArchivoProductoPlastico = async (
   return await res.json();
 };
 
-/** Elimina un archivo ya subido (imagen/render/master) */
+/** Elimina un archivo ya subido (imagen del producto) */
 export const eliminarArchivoProductoPlastico = async (
   id_archivo: number
 ): Promise<{ message: string }> => {

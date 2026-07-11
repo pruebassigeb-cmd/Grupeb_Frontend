@@ -21,6 +21,10 @@ export interface Foil {
   clavefoil: string | null;
   activo: boolean;
   created_at: string;
+  // ✅ NUEVO — Clave producto SAT
+  producto_sat_idproducto_sat: number | null;
+  producto_sat_clave?: number | null;
+  producto_sat_nombre?: string | null;
   presentaciones: FoilPresentacion[];
   proveedores: FoilProveedorInfo[];
 }
@@ -31,7 +35,9 @@ export interface FoilForm {
   precio: string;
   notas: string;
   minimo_compra: string;
-  unidad: string;
+  unidad: string | null;
+  // ✅ NUEVO — Clave producto SAT
+  producto_sat_idproducto_sat: number | null;
   proveedores_ids: number[];
   presentaciones: string[];
 }
@@ -42,7 +48,8 @@ export const newFoilForm = (): FoilForm => ({
   precio: "",
   notas: "",
   minimo_compra: "",
-  unidad: "",
+  unidad: null,
+  producto_sat_idproducto_sat: null,
   proveedores_ids: [],
   presentaciones: [],
 });

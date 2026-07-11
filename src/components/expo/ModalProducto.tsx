@@ -59,26 +59,10 @@ const parsearMedidaAInputs = (medida: string): Record<MedidaKey, string> => {
 };
 
 // ─── Draft de imagen en sessionStorage ───────────────────────────────────────
-// Al tomar una foto, capture="environment" saca al usuario de la pestaña
-// hacia la app de cámara nativa. Android suele recortar la memoria de la
-// pestaña mientras está en segundo plano, y ahí es donde vive el riesgo real:
-// decodificar/comprimir la foto en el navegador justo al regresar es lo que
-// mataba la pestaña (confirmado: solo pasa al usar la cámara, nunca al subir
-// desde archivos). Por eso YA NO comprimimos en el cliente — subimos el
-// archivo tal cual, igual que hace SubirRender.tsx (que nunca ha fallado).
-// La compresión, si se necesita, debe vivir en el backend (sharp) donde no
-// hay riesgo de que el SO mate el proceso a media conversión.
-//
-// Guardamos la URL final en sessionStorage para poder recuperarla si el
-// modal se vuelve a montar después de un reinicio inesperado. La key es
-// específica por producto (nuevo vs. editando id X).
 const DRAFT_KEY_BASE = "modalProducto_imagenDraft";
 const draftKeyFor = (editando: Producto | null) =>
   editando ? `${DRAFT_KEY_BASE}_edit_${editando.id}` : `${DRAFT_KEY_BASE}_nuevo`;
 
-// Bandera "hay una subida en curso" — se marca ANTES de subir la foto, para
-// poder avisarle al usuario si la pestaña muere a medio proceso en vez de
-// dejarlo confundido sin saber qué pasó.
 const FLAG_KEY_BASE = "modalProducto_subiendoFlag";
 const flagKeyFor = (editando: Producto | null) =>
   editando ? `${FLAG_KEY_BASE}_edit_${editando.id}` : `${FLAG_KEY_BASE}_nuevo`;
@@ -98,12 +82,11 @@ const subirFotoInmediato = async (
     const subcarpeta  = categoria === "plastico" ? "plastico"
                        : categoria === "carton"   ? "carton"
                        : "papel";
-    // Archivo crudo, sin tocar — la compresión se hace en el backend.
     const archivo = await subirArchivo(file, "catalogoproductos", subcarpeta);
     const base = (api.defaults.baseURL || "").replace(/\/$/, "");
     const url = `${base}/archivos/${archivo.id_archivo}/ver`;
     setF("imagen", url);
-    sessionStorage.setItem(draftKey, url); // sobrevive a un reload de la pestaña
+    sessionStorage.setItem(draftKey, url);
     sessionStorage.removeItem(flagKey);
   } catch (e) {
     console.error("❌ No se pudo subir la imagen:", e);
@@ -259,6 +242,7 @@ const formVacio = (): Partial<Producto> => ({
   tipo:"",ancho:"",fuelle:"",altura:"",tipoPapel:"",
   tipoProducto:"",fuelLateral:"",fuelFondo:"",troquel:false,perforado:false,
   tipoLaminado:"",tipoAsa:"",tipoTextura:"",tipoHs:"",
+  pigmento:"",
   fuente:"expo",
 });
 
@@ -283,26 +267,16 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
     tipoHs:       editando.tipoHs       || "",
     tipo:         editando.tipo         || "",
     tipoPapel:    editando.tipoPapel    || editando.material || "",
+    pigmento:     editando.pigmento     || "",
   } : { ...formVacio(), categoria: catInicial });
 
   const [formCat, setFormCat] = useState<"papel"|"plastico"|"carton">(editando?.categoria ?? catInicial);
 
-  // ─── Foto: ya se sube a S3 apenas se selecciona/toma (ver subirFotoInmediato).
-  // form.imagen guarda directamente la URL final una vez subida.
   const [subiendoFoto, setSubiendoFoto] = useState(false);
 
-  // ─── Aviso de que se recuperó una foto pendiente de una sesión anterior ───
   const [draftRecuperado, setDraftRecuperado] = useState(false);
-  // ─── Aviso de que una subida se perdió (la pestaña murió antes de subir) ──
   const [intentoFallido, setIntentoFallido] = useState(false);
 
-  // ─── Recuperar draft de imagen si el modal se remonta tras un reinicio ────
-  // Aplica tanto a "nuevo producto" como a "editar producto X", cada uno con
-  // su propia key (ver draftKeyFor). Así no se mezclan drafts entre productos.
-  // Si no hay draft pero sí quedó la bandera de "subida en curso" (ver
-  // flagKeyFor), significa que la pestaña murió DURANTE el procesamiento de
-  // la foto, antes de que llegara a subirse — en ese caso no hay nada que
-  // recuperar, pero sí avisamos para que no quede la duda de qué pasó.
   useEffect(() => {
     const draftKey = draftKeyFor(editando);
     const flagKey  = flagKeyFor(editando);
@@ -326,7 +300,6 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
   const [loadingCats,   setLoadingCats]   = useState(false);
   const [loadingCal,    setLoadingCal]    = useState(false);
 
-  // Estado seleccionado plástico
   const [tipoPlastId,  setTipoPlastId]  = useState(0);
   const [tipoPlastNom, setTipoPlastNom] = useState(editando?.tipoProducto || "");
   const [materialId,   setMaterialId]   = useState(0);
@@ -334,7 +307,6 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
   const [calibreId,    setCalibreId]    = useState(0);
   const [calibreNom,   setCalibreNom]   = useState(editando?.calibre || "");
 
-  // Medidas — parsear desde medida string al editar
   const [medidas, setMedidas] = useState<Record<MedidaKey, string>>(
     editando?.medida && editando.categoria === "plastico"
       ? parsearMedidaAInputs(editando.medida)
@@ -344,7 +316,6 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
   const esCelofan = tipoPlastNom === "Bolsa celofán";
   const esBopp    = materialNom.toUpperCase() === "BOPP";
 
-  // ─── Cargar catálogos plástico ────────────────────────────────────────────
   useEffect(() => {
     if (formCat !== "plastico") return;
     setLoadingCats(true);
@@ -357,7 +328,6 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
       .finally(() => setLoadingCats(false));
   }, [formCat]);
 
-  // ─── Cargar calibres ──────────────────────────────────────────────────────
   const cargarCalibres = async (tipoCal: "bopp" | "normal", calibreARestaurar?: string) => {
     setLoadingCal(true);
     setCalibreId(0);
@@ -376,7 +346,6 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
     }
   };
 
-  // ─── Resolver IDs al editar + cargar calibres ─────────────────────────────
   useEffect(() => {
     if (!editando || !tiposProducto.length || !materiales.length) return;
     const tipo = tiposProducto.find(t => t.nombre === editando.tipoProducto);
@@ -389,7 +358,6 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
     }
   }, [tiposProducto, materiales]);
 
-  // ─── Recargar calibres cuando cambia tipo/material (usuario selecciona) ───
   useEffect(() => {
     if (formCat !== "plastico" || !tipoPlastNom || !materialNom) return;
     const tipoCal = (tipoPlastNom === "Bolsa celofán" && materialNom.toUpperCase() === "BOPP") ? "bopp" : "normal";
@@ -432,10 +400,6 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
     return `${v.join("+")}x${h.join("+")}`;
   };
 
-  // ─── Resolver imagen final al guardar ──────────────────────────────────────
-  // Ya no sube nada aquí: la foto se sube a S3 en el instante en que se toma
-  // o selecciona (ver subirFotoInmediato). Aquí solo devolvemos lo que ya
-  // quedó guardado en form.imagen (la URL final, o "" si no hay foto).
   const resolverImagen = async (): Promise<string | null> => {
     return form.imagen || "";
   };
@@ -444,7 +408,7 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
     if (!form.nombre?.trim()) return;
 
     const imagenFinal = await resolverImagen();
-    if (imagenFinal === null) return; // falló la subida — no guardar el producto
+    if (imagenFinal === null) return;
 
     const draftKey = draftKeyFor(editando);
 
@@ -469,24 +433,16 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
           ancho:        medidas.ancho,
           fuelFondo:    medidas.fuelleFondo,
           fuelLateral:  medidas.fuelleLateral1,
+          pigmento:     form.pigmento || "",
           imagen:       imagenFinal,
         });
       }
-      // Solo si el guardado en BD terminó con éxito borramos el draft.
-      // Si guardar() lanza (falló el request, o la pestaña muere a medias
-      // y nunca llegamos aquí), el draft se queda disponible para
-      // recuperarlo la próxima vez que se edite este mismo producto.
       sessionStorage.removeItem(draftKey);
     } catch {
-      // onGuardar ya mostró su propio alert con el error — aquí no hacemos
-      // nada más que NO borrar el draft, a propósito.
+      // onGuardar ya mostró su propio alert con el error
     }
   };
 
-  // ─── Cerrar sin guardar (✕ o "Cancelar") ───────────────────────────────────
-  // Es una decisión explícita del usuario de descartar la edición, así que
-  // aquí sí limpiamos el draft para que no reaparezca una foto vieja la
-  // próxima vez que abra este producto.
   const cerrarSinGuardar = () => {
     sessionStorage.removeItem(draftKeyFor(editando));
     onClose();
@@ -702,6 +658,14 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
               <label style={LS}>Tintas</label>
               <TintasSelectModal value={form.tintas||""} onChange={v=>setF("tintas",v)} />
             </div>
+            <div>
+              {/* NUEVO: pigmento — antes no existía en este modal. Se guarda
+                  en producto_acabado_default.pigmento_default. Es texto
+                  libre porque no hay catálogo con ID para pigmentos aquí
+                  (a diferencia del resto de catálogos plástico). */}
+              <label style={LS}>Pigmento</label>
+              <input style={IS} value={form.pigmento||""} onChange={e=>setF("pigmento",e.target.value)} placeholder="Ej. Natural, Blanco, Pantone 186C..." />
+            </div>
           </div>
         </>)}
 
@@ -738,7 +702,6 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
           )}
 
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
-            {/* Subir desde archivos */}
             <label style={{ display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:6,border:"1.5px dashed #444",borderRadius:8,padding:"14px 8px",cursor: subiendoFoto ? "not-allowed" : "pointer",background:"#111",opacity: subiendoFoto?.5:1 }}
               onMouseEnter={e=>{ if(!subiendoFoto) e.currentTarget.style.borderColor="#C9922A"; }}
               onMouseLeave={e=>(e.currentTarget.style.borderColor="#444")}>
@@ -754,7 +717,6 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
               }} />
             </label>
 
-            {/* Tomar foto con la cámara */}
             <label style={{ display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:6,border:"1.5px dashed #444",borderRadius:8,padding:"14px 8px",cursor: subiendoFoto ? "not-allowed" : "pointer",background:"#111",opacity: subiendoFoto?.5:1 }}
               onMouseEnter={e=>{ if(!subiendoFoto) e.currentTarget.style.borderColor="#C9922A"; }}
               onMouseLeave={e=>(e.currentTarget.style.borderColor="#444")}>

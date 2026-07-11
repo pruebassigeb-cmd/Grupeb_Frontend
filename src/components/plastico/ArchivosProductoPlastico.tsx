@@ -9,11 +9,16 @@ import {
   eliminarArchivoProductoPlastico,
 } from "../../services/productosPlasticoService";
 
-const CATEGORIAS: { categoria: CategoriaArchivoPlastico; label: string; icono: string; accept: string }[] = [
-  { categoria: "imagen-producto-plastico", label: "Imagen", icono: "🖼️", accept: "image/*" },
-  { categoria: "render-plastico", label: "Render", icono: "🎨", accept: "image/*,.pdf" },
-  { categoria: "master-plastico", label: "Master", icono: "📐", accept: ".pdf,.ai,.eps,image/*" },
-];
+// ✅ Solo se maneja una categoría: la imagen del producto.
+// (Antes existían también "render-plastico" y "master-plastico"; se dejan
+// de usar aquí pero no se tocan en la BD/tipos por si se vuelven a
+// necesitar más adelante — basta con agregar de nuevo su entrada aquí.)
+const CATEGORIA_IMAGEN: {
+  categoria: CategoriaArchivoPlastico;
+  label: string;
+  icono: string;
+  accept: string;
+} = { categoria: "imagen-producto-plastico", label: "Imagen del producto", icono: "🖼️", accept: "image/*" };
 
 const getTipoDeFile = (file: File): "image" | "pdf" | "document" => {
   if (file.type === "application/pdf") return "pdf";
@@ -22,8 +27,8 @@ const getTipoDeFile = (file: File): "image" | "pdf" | "document" => {
 };
 
 interface Props {
-  /** null cuando el producto aún no existe (modo alta) — los archivos quedan
-   *  pendientes y se suben después de crear el producto. */
+  /** null cuando el producto aún no existe (modo alta) — el archivo queda
+   *  pendiente y se sube después de crear el producto. */
   idconfiguracion_plastico: number | null;
   archivosIniciales?: ArchivoProductoPlastico[];
   onPendientesChange: (pendientes: ArchivoPendientePlastico[]) => void;
@@ -36,7 +41,7 @@ export default function ArchivosProductoPlastico({
 }: Props) {
   const [archivosGuardados, setArchivosGuardados] = useState<ArchivoProductoPlastico[]>(archivosIniciales);
   const [archivosPendientes, setArchivosPendientes] = useState<ArchivoPendientePlastico[]>([]);
-  const [subiendo, setSubiendo] = useState<CategoriaArchivoPlastico | null>(null);
+  const [subiendo, setSubiendo] = useState(false);
   const isEdit = idconfiguracion_plastico !== null;
 
   const notificarPendientes = (lista: ArchivoPendientePlastico[]) => {
@@ -44,7 +49,9 @@ export default function ArchivosProductoPlastico({
     onPendientesChange(lista);
   };
 
-  const handleFile = async (file: File, categoria: CategoriaArchivoPlastico) => {
+  const handleFile = async (file: File) => {
+    const { categoria } = CATEGORIA_IMAGEN;
+
     if (!isEdit) {
       const pendiente: ArchivoPendientePlastico = {
         uid: `${Date.now()}-${Math.random()}`,
@@ -55,23 +62,26 @@ export default function ArchivosProductoPlastico({
         tipo: getTipoDeFile(file),
         pendiente: true,
       };
-      notificarPendientes([...archivosPendientes, pendiente]);
+      // Solo hay un slot, así que un archivo nuevo reemplaza cualquier
+      // pendiente anterior (y libera su object URL para no dejar fugas).
+      archivosPendientes.forEach((p) => URL.revokeObjectURL(p.previewUrl));
+      notificarPendientes([pendiente]);
       return;
     }
 
-    setSubiendo(categoria);
+    setSubiendo(true);
     try {
       const subido = await subirArchivoProductoPlastico(file, categoria, idconfiguracion_plastico!);
-      setArchivosGuardados((prev) => [...prev, subido]);
+      setArchivosGuardados((prev) => [...prev.filter((a) => a.categoria !== categoria), subido]);
     } catch (e: any) {
       alert(e.message ?? "Error al subir el archivo");
     } finally {
-      setSubiendo(null);
+      setSubiendo(false);
     }
   };
 
   const eliminarGuardado = async (id_archivo: number) => {
-    if (!confirm("¿Eliminar este archivo?")) return;
+    if (!confirm("¿Eliminar esta imagen?")) return;
     try {
       await eliminarArchivoProductoPlastico(id_archivo);
       setArchivosGuardados((prev) => prev.filter((a) => a.id_archivo !== id_archivo));
@@ -86,34 +96,30 @@ export default function ArchivosProductoPlastico({
     notificarPendientes(archivosPendientes.filter((p) => p.uid !== uid));
   };
 
-  const archivoDe = (categoria: CategoriaArchivoPlastico) =>
-    archivosGuardados.find((a) => a.categoria === categoria) ??
-    archivosPendientes.find((p) => p.categoria === categoria);
+  const archivoActual =
+    archivosGuardados.find((a) => a.categoria === CATEGORIA_IMAGEN.categoria) ??
+    archivosPendientes.find((p) => p.categoria === CATEGORIA_IMAGEN.categoria);
 
   return (
     <div className="bg-white p-6 rounded-xl shadow">
-      <h2 className="text-lg font-bold mb-1">Archivos del producto</h2>
+      <h2 className="text-lg font-bold mb-1">Imagen del producto</h2>
       <p className="text-xs text-gray-400 mb-4">
         {isEdit
-          ? "Imagen del producto, render y master — se suben de inmediato."
-          : "Se subirán al servidor en cuanto guardes el producto."}
+          ? "Se sube de inmediato al servidor."
+          : "Se subirá al servidor en cuanto guardes el producto."}
       </p>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {CATEGORIAS.map(({ categoria, label, icono, accept }) => (
-          <ArchivoSlot
-            key={categoria}
-            categoria={categoria}
-            label={label}
-            icono={icono}
-            accept={accept}
-            actual={archivoDe(categoria)}
-            subiendo={subiendo === categoria}
-            onSubir={(file) => handleFile(file, categoria)}
-            onEliminarGuardado={eliminarGuardado}
-            onEliminarPendiente={eliminarPendiente}
-          />
-        ))}
+      <div className="max-w-xs">
+        <ArchivoSlot
+          label={CATEGORIA_IMAGEN.label}
+          icono={CATEGORIA_IMAGEN.icono}
+          accept={CATEGORIA_IMAGEN.accept}
+          actual={archivoActual}
+          subiendo={subiendo}
+          onSubir={handleFile}
+          onEliminarGuardado={eliminarGuardado}
+          onEliminarPendiente={eliminarPendiente}
+        />
       </div>
     </div>
   );
@@ -131,7 +137,6 @@ function ArchivoSlot({
   onEliminarGuardado,
   onEliminarPendiente,
 }: {
-  categoria: CategoriaArchivoPlastico;
   label: string;
   icono: string;
   accept: string;
@@ -157,7 +162,7 @@ function ArchivoSlot({
             <img
               src={"url" in actual ? actual.url : actual.previewUrl}
               alt={actual.nombre}
-              className="w-full h-28 object-cover rounded-md border border-gray-200"
+              className="w-full h-40 object-cover rounded-md border border-gray-200"
             />
           )}
           <p className="text-xs text-gray-600 truncate" title={actual.nombre}>
@@ -196,7 +201,7 @@ function ArchivoSlot({
             type="button"
             onClick={() => inputRef.current?.click()}
             disabled={subiendo}
-            className="w-full h-28 flex items-center justify-center border-2 border-dashed border-gray-300 rounded-md text-xs text-gray-400 hover:border-blue-400 hover:text-blue-500 transition-colors disabled:opacity-50"
+            className="w-full h-40 flex items-center justify-center border-2 border-dashed border-gray-300 rounded-md text-xs text-gray-400 hover:border-blue-400 hover:text-blue-500 transition-colors disabled:opacity-50"
           >
             {subiendo ? "Subiendo..." : `+ Subir ${label.toLowerCase()}`}
           </button>

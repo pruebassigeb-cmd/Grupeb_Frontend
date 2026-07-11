@@ -79,19 +79,23 @@ function calcPos(el: HTMLElement): DropPos {
 // ─── BuscadorProductoModal ────────────────────────────────────────────────────
 interface BuscadorProps {
   catalogoPropio: Producto[];
+  sistemaProductos: Producto[];
   onElegir: (p: Producto) => void;
   onClose: () => void;
   catalogs: Catalogs;
 }
-export function BuscadorProductoModal({ catalogoPropio, onElegir, onClose, catalogs }: BuscadorProps) {
+export function BuscadorProductoModal({ catalogoPropio, sistemaProductos, onElegir, onClose, catalogs }: BuscadorProps) {
   const [busq,           setBusq]           = useState("");
+  const [crearAbierto,   setCrearAbierto]   = useState(false);
   const [nombreNuevo,    setNombreNuevo]    = useState("");
   const [catSeleccionada,setCatSeleccionada]= useState<"papel" | "plastico" | "carton">("papel");
   const [tipoSeleccionado,setTipoSeleccionado] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => { inputRef.current?.focus(); }, []);
 
-  const todos = [...catalogoPropio];
+  // Catálogo propio (Expo) + catálogo del sistema (SIGEB), todo en un solo buscador.
+  const LIMITE_RESULTADOS = 10;
+  const todos = [...catalogoPropio, ...sistemaProductos];
   const filtrados = busq.trim()
     ? todos.filter(p =>
         p.nombre.toLowerCase().includes(busq.toLowerCase()) ||
@@ -135,62 +139,83 @@ export function BuscadorProductoModal({ catalogoPropio, onElegir, onClose, catal
           <button onClick={onClose} style={{ background: "#2A2A2A", border: "none", color: "#AAA", width: 26, height: 26, borderRadius: "50%", cursor: "pointer", fontSize: 15 }}>✕</button>
         </div>
 
-        <div style={{ padding: "12px 16px 10px", borderBottom: "1px solid #2A2A2A" }}>
-          <div style={{ color: "#666", fontSize: 9, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", marginBottom: 8 }}>O crear desde cero</div>
-          <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
-            {CATS.map(c => (
-              <button key={c.key} onClick={() => seleccionarCat(c.key as "papel" | "plastico" | "carton")}
-                style={{
-                  flex: 1, fontSize: 10, fontWeight: 700, padding: "7px 4px", borderRadius: 6, cursor: "pointer",
-                  background:    catSeleccionada === c.key ? `${c.color}28` : `${c.color}10`,
-                  border:        `1.5px solid ${catSeleccionada === c.key ? c.color : c.color + "44"}`,
-                  color:         c.color,
-                  boxShadow:     catSeleccionada === c.key ? `0 0 0 1px ${c.color}44` : "none",
-                }}>
-                {c.emoji} {c.label} en blanco
-              </button>
-            ))}
-          </div>
-          <div style={{ display: "flex", gap: 8, alignItems: "stretch" }}>
-            <input
-              value={nombreNuevo}
-              onChange={e => setNombreNuevo(e.target.value)}
-              placeholder="Nombre del producto *"
-              onKeyDown={e => { if (e.key === "Enter" && nombreNuevo.trim()) confirmarNuevo(); }}
-              style={{
-                flex: 2, background: "#111", border: `1px solid ${nombreNuevo.trim() ? catColor : "#333"}`,
-                borderRadius: 6, padding: "7px 10px", color: "#EEE", fontSize: 12,
-                outline: "none", fontFamily: "'Inter',sans-serif", transition: "border-color .15s",
-              }}
-            />
-            <select
-              value={tipoSeleccionado}
-              onChange={e => setTipoSeleccionado(e.target.value)}
-              style={{
-                flex: 1, background: "#111", border: "1px solid #333", borderRadius: 6,
-                padding: "7px 8px", color: tipoSeleccionado ? "#EEE" : "#555",
-                fontSize: 11, outline: "none", fontFamily: "'Inter',sans-serif", cursor: "pointer",
-              }}>
-              <option value="">Tipo (opc.)</option>
-              {catSeleccionada === "plastico"
-                ? TIPOS_PLASTICO.map(t => <option key={t} value={t}>{t}</option>)
-                : catalogs.tipo_producto.map(item => <option key={item.id} value={item.nombre}>{item.nombre}</option>)
-              }
-            </select>
-            <button
-              onClick={confirmarNuevo}
-              disabled={!nombreNuevo.trim()}
-              style={{
-                background: nombreNuevo.trim() ? catColor : "#2A2A2A",
-                border: "none", borderRadius: 6, padding: "7px 14px",
-                color: nombreNuevo.trim() ? "#1A1A1A" : "#555",
-                fontSize: 13, fontWeight: 700,
-                cursor: nombreNuevo.trim() ? "pointer" : "not-allowed",
-                transition: "all .15s", flexShrink: 0,
-              }}>
-              ✓
-            </button>
-          </div>
+        {/* ── Crear producto en blanco (a la medida del cliente) ──────────────
+            Escondido detrás de un desplegable cerrado por default: la mayoría
+            de las veces se elige un producto ya existente, así que esta
+            opción (armar uno desde cero directo en el tablero) no debe
+            competir visualmente con la búsqueda. La funcionalidad queda
+            intacta, solo cambia la presentación. */}
+        <div style={{ borderBottom: "1px solid #2A2A2A" }}>
+          <button
+            onClick={() => setCrearAbierto(v => !v)}
+            style={{ width: "100%", background: "transparent", border: "none", padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer" }}>
+            <span style={{ color: "#888", fontSize: 10.5, fontWeight: 700, letterSpacing: .8, textTransform: "uppercase" }}>
+              ✎ Crear producto nuevo a la medida
+            </span>
+            <span style={{ color: "#666", fontSize: 10 }}>{crearAbierto ? "▲" : "▼"}</span>
+          </button>
+
+          {crearAbierto && (
+            <div style={{ padding: "0 16px 14px" }}>
+              <div style={{ color: "#666", fontSize: 9, marginBottom: 8 }}>
+                Se arma en blanco y lo rellenas directo en la hoja de cotización.
+              </div>
+              <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+                {CATS.map(c => (
+                  <button key={c.key} onClick={() => seleccionarCat(c.key as "papel" | "plastico" | "carton")}
+                    style={{
+                      flex: 1, fontSize: 10, fontWeight: 700, padding: "7px 4px", borderRadius: 6, cursor: "pointer",
+                      background:    catSeleccionada === c.key ? `${c.color}28` : `${c.color}10`,
+                      border:        `1.5px solid ${catSeleccionada === c.key ? c.color : c.color + "44"}`,
+                      color:         c.color,
+                      boxShadow:     catSeleccionada === c.key ? `0 0 0 1px ${c.color}44` : "none",
+                    }}>
+                    {c.emoji} {c.label} en blanco
+                  </button>
+                ))}
+              </div>
+              <div style={{ display: "flex", gap: 8, alignItems: "stretch" }}>
+                <input
+                  value={nombreNuevo}
+                  onChange={e => setNombreNuevo(e.target.value)}
+                  placeholder="Nombre del producto *"
+                  onKeyDown={e => { if (e.key === "Enter" && nombreNuevo.trim()) confirmarNuevo(); }}
+                  style={{
+                    flex: 2, background: "#111", border: `1px solid ${nombreNuevo.trim() ? catColor : "#333"}`,
+                    borderRadius: 6, padding: "7px 10px", color: "#EEE", fontSize: 12,
+                    outline: "none", fontFamily: "'Inter',sans-serif", transition: "border-color .15s",
+                  }}
+                />
+                <select
+                  value={tipoSeleccionado}
+                  onChange={e => setTipoSeleccionado(e.target.value)}
+                  style={{
+                    flex: 1, background: "#111", border: "1px solid #333", borderRadius: 6,
+                    padding: "7px 8px", color: tipoSeleccionado ? "#EEE" : "#555",
+                    fontSize: 11, outline: "none", fontFamily: "'Inter',sans-serif", cursor: "pointer",
+                  }}>
+                  <option value="">Tipo (opc.)</option>
+                  {catSeleccionada === "plastico"
+                    ? TIPOS_PLASTICO.map(t => <option key={t} value={t}>{t}</option>)
+                    : catalogs.tipo_producto.map(item => <option key={item.id} value={item.nombre}>{item.nombre}</option>)
+                  }
+                </select>
+                <button
+                  onClick={confirmarNuevo}
+                  disabled={!nombreNuevo.trim()}
+                  style={{
+                    background: nombreNuevo.trim() ? catColor : "#2A2A2A",
+                    border: "none", borderRadius: 6, padding: "7px 14px",
+                    color: nombreNuevo.trim() ? "#1A1A1A" : "#555",
+                    fontSize: 13, fontWeight: 700,
+                    cursor: nombreNuevo.trim() ? "pointer" : "not-allowed",
+                    transition: "all .15s", flexShrink: 0,
+                  }}>
+                  ✓
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         <div style={{ padding: "10px 16px 0" }}>
@@ -200,27 +225,50 @@ export function BuscadorProductoModal({ catalogoPropio, onElegir, onClose, catal
 
         <div style={{ flex: 1, overflowY: "auto", padding: "10px 10px 10px" }}>
           {CATS.map(cat => {
-            const ps = filtrados.filter(p => p.categoria === cat.key);
-            if (ps.length === 0) return null;
+            const psCat = filtrados.filter(p => p.categoria === cat.key);
+            if (psCat.length === 0) return null;
+            // Límite independiente por categoría — que "papel" tenga muchos
+            // resultados no debe recortar lo que se ve de "plástico" o
+            // "cartón", cada una se corta a sus propios 10.
+            const ps = psCat.slice(0, LIMITE_RESULTADOS);
+            const hayMasEnCat = psCat.length > LIMITE_RESULTADOS;
             return (
               <div key={cat.key} style={{ marginBottom: 8 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 6px 4px" }}>
                   <span style={{ fontSize: 12 }}>{cat.emoji}</span>
                   <span style={{ color: cat.color, fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase" }}>{cat.label}</span>
                 </div>
-                {ps.map(p => (
-                  <div key={p.id} onClick={() => { onElegir(p); onClose(); }}
-                    style={{ display: "flex", gap: 10, alignItems: "center", padding: "8px 10px", borderRadius: 8, cursor: "pointer", border: "1px solid transparent" }}
-                    onMouseEnter={e => { e.currentTarget.style.background = "#222"; e.currentTarget.style.borderColor = "#333"; }}
-                    onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.borderColor = "transparent"; }}>
-                    <img src={p.imagen} alt="" loading="lazy" decoding="async" style={{ width: 36, height: 36, objectFit: "cover", borderRadius: 5, border: "1px solid #333", flexShrink: 0 }} />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ color: "#EEE", fontSize: 12, fontWeight: 600 }}>{p.nombre}</div>
-                      <div style={{ color: "#666", fontSize: 10 }}>{p.medida} · {p.material}</div>
+                {ps.map(p => {
+                  const esExpo = p.fuente === "expo";
+                  return (
+                    <div key={`${p.fuente || "x"}-${p.id}`} onClick={() => { onElegir(p); onClose(); }}
+                      style={{ display: "flex", gap: 10, alignItems: "center", padding: "8px 10px", borderRadius: 8, cursor: "pointer", border: "1px solid transparent" }}
+                      onMouseEnter={e => { e.currentTarget.style.background = "#222"; e.currentTarget.style.borderColor = "#333"; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.borderColor = "transparent"; }}>
+                      <img src={p.imagen} alt="" loading="lazy" decoding="async" style={{ width: 36, height: 36, objectFit: "cover", borderRadius: 5, border: "1px solid #333", flexShrink: 0 }} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          <span style={{ color: "#EEE", fontSize: 12, fontWeight: 600 }}>{p.nombre}</span>
+                          <span style={{
+                            fontSize: 7.5, fontWeight: 700, padding: "1px 5px", borderRadius: 8, textTransform: "uppercase", letterSpacing: .4,
+                            color: esExpo ? "#C9922A" : "#8AB4F8",
+                            background: esExpo ? "#C9922A1E" : "#8AB4F81E",
+                            border: `1px solid ${esExpo ? "#C9922A44" : "#8AB4F844"}`,
+                          }}>
+                            {esExpo ? "Expo" : "Sistema"}
+                          </span>
+                        </div>
+                        <div style={{ color: "#666", fontSize: 10 }}>{p.medida} · {p.material}</div>
+                      </div>
+                      <div style={{ color: "#C9922A", fontSize: 11, fontWeight: 700 }}>{p.precio500}</div>
                     </div>
-                    <div style={{ color: "#C9922A", fontSize: 11, fontWeight: 700 }}>{p.precio500}</div>
+                  );
+                })}
+                {hayMasEnCat && (
+                  <div style={{ textAlign: "center", color: "#666", fontSize: 10, padding: "4px 6px 2px", fontStyle: "italic" }}>
+                    +{psCat.length - LIMITE_RESULTADOS} más en {cat.label.toLowerCase()} — sigue escribiendo para afinar
                   </div>
-                ))}
+                )}
               </div>
             );
           })}
@@ -523,19 +571,20 @@ export function ExtraOPigmentoCell({ id, esPlastico, modo, setModo, extra, setEx
 interface FilaVaciaProps {
   onElegir: (p: Producto) => void;
   catalogoPropio: Producto[];
+  sistemaProductos: Producto[];
   catalogs: Catalogs;
   columnasPrecio: 1 | 2 | 3;
 }
-export function FilaVacia({ onElegir, catalogoPropio, catalogs, columnasPrecio }: FilaVaciaProps) {
+export function FilaVacia({ onElegir, catalogoPropio, sistemaProductos, catalogs, columnasPrecio }: FilaVaciaProps) {
   const [open, setOpen] = useState(false);
   // Total de columnas reales de la tabla: 11 fijas antes del precio
   // (Producto, Medida, Material, Tintas, Acabados x7) + 1 de eliminar
   // + las columnas de precio visibles (1 a 3). Debe coincidir siempre con
   // el colgroup/headers de HojaCotizacion.tsx.
   const totalCols = 12 + columnasPrecio;
-  // Al elegir un producto del catálogo expo, va COMPLETO (con su medida,
-  // material y calibre registrados) — igual que si se arrastrara del catálogo.
-  // Solo los productos creados desde cero (sin fuente) nacen editables.
+  // Al elegir un producto del catálogo (expo o sistema), va COMPLETO (con su
+  // medida, material y calibre registrados) — igual que si se arrastrara del
+  // catálogo. Solo los productos creados desde cero (sin fuente) nacen editables.
   const elegirProducto = (p: Producto) => {
     onElegir(p);
     setOpen(false);
@@ -554,6 +603,7 @@ export function FilaVacia({ onElegir, catalogoPropio, catalogs, columnasPrecio }
       {open && (
         <BuscadorProductoModal
           catalogoPropio={catalogoPropio}
+          sistemaProductos={sistemaProductos}
           onClose={() => setOpen(false)}
           onElegir={elegirProducto}
           catalogs={catalogs}
@@ -605,6 +655,22 @@ export const FilaTabla = memo(function FilaTabla({
   const [precio1,    setPrecio1]    = useState(fila.precio1);
   const [precio2,    setPrecio2]    = useState(fila.precio2);
   const [precio3,    setPrecio3]    = useState(fila.precio3);
+
+  // ── BUGFIX ────────────────────────────────────────────────────────────
+  // precio1/2/3 son estado LOCAL (para que escribir sea fluido y solo se
+  // propague al padre en onBlur), pero antes NUNCA se resincronizaban si
+  // `fila.precioN` cambiaba desde afuera (por ejemplo, por una limpieza
+  // automática al agregar/quitar columnas de precio en HojaCotizacion.tsx).
+  // Eso provocaba que el input siguiera mostrando un valor "fantasma" ya
+  // borrado en el estado real — pasaba siempre en la primera fila porque
+  // es la que se crea mientras `columnasPrecio` aún no se ha ampliado a 2/3.
+  // Con este efecto, cualquier cambio externo a fila.precioN se refleja de
+  // inmediato en el input, igual que ya se hace con cant1/cant2/cant3.
+  useEffect(() => { setPrecio1(fila.precio1); }, [fila.precio1]);
+  useEffect(() => { setPrecio2(fila.precio2); }, [fila.precio2]);
+  useEffect(() => { setPrecio3(fila.precio3); }, [fila.precio3]);
+  // ─────────────────────────────────────────────────────────────────────
+
   // Cantidades PROPIAS de esta fila — ya NO son estado local (useState solo
   // tomaba el valor inicial al montar y se desincronizaba cuando el padre
   // limpiaba cant2/cant3 al quitar/agregar columnas). Ahora se derivan
@@ -934,12 +1000,15 @@ export const FilaTabla = memo(function FilaTabla({
           columna visible (controlado por columnasPrecio desde
           HojaCotizacion.tsx). Las cantidades se leen directo de `fila`
           (fuente de verdad) y los cambios se propagan al padre — así el
-          selector nunca se desincroniza al quitar/agregar columnas. */}
+          selector nunca se desincroniza al quitar/agregar columnas. Los
+          precios (precio1/2/3) son estado local para escritura fluida,
+          pero se resincronizan con `fila.precioN` vía los useEffect de
+          arriba si el padre los cambia desde afuera. */}
       <td style={TDP}>
         <div className="no-print-show" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
           <CantidadSelect id={`${pre}-cant1`} value={cant1Fila} onChange={v => propagar("cant1", v)} />
           <input style={iP} value={precio1} placeholder="$0.00"
-            onChange={e => setPrecio1(e.target.value)} onBlur={() => propagar("precio1", precio1)} />
+            onChange={e => { setPrecio1(e.target.value); propagar("precio1", e.target.value); }} />
         </div>
         {extraNum > 0 && modoExtra === "precio" && (
           <div className="no-print-show" style={{ fontSize: 7, color: "#22C55E", lineHeight: 1 }}>{precio1ConExtra}</div>
@@ -951,7 +1020,7 @@ export const FilaTabla = memo(function FilaTabla({
           <div className="no-print-show" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
             <CantidadSelect id={`${pre}-cant2`} value={cant2Fila} onChange={v => propagar("cant2", v)} />
             <input style={iP} value={precio2} placeholder="$0.00"
-              onChange={e => setPrecio2(e.target.value)} onBlur={() => propagar("precio2", precio2)} />
+              onChange={e => { setPrecio2(e.target.value); propagar("precio2", e.target.value); }} />
           </div>
           {extraNum > 0 && modoExtra === "precio" && (
             <div className="no-print-show" style={{ fontSize: 7, color: "#22C55E", lineHeight: 1 }}>{precio2ConExtra}</div>
@@ -964,7 +1033,7 @@ export const FilaTabla = memo(function FilaTabla({
           <div className="no-print-show" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
             <CantidadSelect id={`${pre}-cant3`} value={cant3Fila} onChange={v => propagar("cant3", v)} />
             <input style={iP} value={precio3} placeholder="$0.00"
-              onChange={e => setPrecio3(e.target.value)} onBlur={() => propagar("precio3", precio3)} />
+              onChange={e => { setPrecio3(e.target.value); propagar("precio3", e.target.value); }} />
           </div>
           {extraNum > 0 && modoExtra === "precio" && (
             <div className="no-print-show" style={{ fontSize: 7, color: "#22C55E", lineHeight: 1 }}>{precio3ConExtra}</div>

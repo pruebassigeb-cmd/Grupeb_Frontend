@@ -11,6 +11,7 @@ import api from "../../services/api";
 import RegistroCliente   from "../../components/expo/RegistroCliente";
 import Catalogo          from "../../components/expo/Catalogo";
 import ModalProducto     from "../../components/expo/ModalProducto";
+import ModalCatalogoExpo from "../../components/expo/ModalCatalogoExpo";
 import HojaCotizacion    from "../../components/expo/HojaCotizacion";
 import ListaCotizaciones from "../../components/expo/ListaCotizaciones";
 import BotonGuardarConOpciones from "../../components/BotonGuardarConOpciones";
@@ -31,7 +32,7 @@ import type { FoilOpcion, TexturaOpcion } from "../../types/papel/cotizacion-pap
 import type { CatalogosPlastico, PigmentoDB } from "../../components/expo/Tablacontroles";
 import { getTiposInsumo, buscarInsumos, type Insumo } from "../../services/proveedoresService";
 import { useAuth } from "../../context/AuthContext";
-import { generarPdfCotizacionExpo } from "../../utils/expo/generarPdfCotizacionExpo";
+import { generarPdfCotizacionExpo, cotizacionBackDataAPdfParams } from "../../utils/expo/generarPdfCotizacionExpo";
 import { generarPdfCotizacion } from "../../services/generarPdfCotizacion";
 import { useEnvioDocumentoPdf } from "../../hooks/useEnvioDocumentoPdf";
 import { getClienteById } from "../../services/clientesService";
@@ -43,6 +44,10 @@ export default function Expo() {
   const navigate = useNavigate();
 
   const [filas,    setFilas]    = useState<FilaProducto[]>([]);
+  // NUEVO: subido desde HojaCotizacion.tsx — se necesita aquí para poder
+  // ignorar, justo al guardar, las columnas de precio que el vendedor ya
+  // ocultó (ver guardarConOpciones más abajo).
+  const [columnasPrecio, setColumnasPrecio] = useState<1 | 2 | 3>(1);
   const [vista,    setVista]    = useState<"registro" | "cotizacion">("registro");
   const [catalogo, setCatalogo] = useState<Producto[]>([]);
   const [sistemaProductos, setSistemaProductos] = useState<Producto[]>([]);
@@ -75,6 +80,7 @@ export default function Expo() {
   const [savingModal, setSavingModal] = useState(false);
   const [guardando,   setGuardando]   = useState(false);
   const [aprobando,   setAprobando]   = useState(false);
+  const [catalogoExpoAbierto, setCatalogoExpoAbierto] = useState(false);
 
   const { catalogs } = useCatalogosPapel();
   const { user } = useAuth();
@@ -240,7 +246,9 @@ useEffect(() => {
     const prod = catalogo.find(p => p.id === id);
     if (!prod || prod.fuente !== "expo") return;
     try {
-      await eliminarProductoCatalogoAPI(id);
+      // El backend nuevo necesita saber en qué tabla borrar (producto_papel
+      // vs configuracion_plastico) — ya no hay una sola tabla catalogo_expo.
+      await eliminarProductoCatalogoAPI(id, prod.categoria);
       setCatalogo(prev => prev.filter(p => p.id !== id));
       setFilas(prev => prev.filter(f => f.producto.id !== id));
     } catch {
@@ -275,6 +283,7 @@ useEffect(() => {
         asa:           p.asa,
         tipo_asa:      p.tipoAsa       || null,
         otro:          p.otro          || null,
+        pigmento:      esPlastico ? (p.pigmento || null) : null,
         precio_500:    parseFloat(p.precio500.replace(/[^0-9.]/g, ""))  || null,
         precio_1000:   parseFloat(p.precio1000.replace(/[^0-9.]/g, "")) || null,
         precio_3000:   parseFloat(p.precio3000.replace(/[^0-9.]/g, "")) || null,
@@ -361,7 +370,7 @@ useEffect(() => {
 
   const delFila = useCallback((uid: string) => setFilas(p => p.filter(f => f.uid !== uid)), []);
 
-  const limpiar = () => { setFilas([]); setComent(""); setFolioActual(null); };
+  const limpiar = () => { setFilas([]); setComent(""); setFolioActual(null); setColumnasPrecio(1); };
 
   const prepararFilas = async (filasActuales: FilaProducto[]): Promise<FilaProducto[]> => {
     const resultado: FilaProducto[] = [];
@@ -370,10 +379,18 @@ useEffect(() => {
       const esEnBlanco = !p.fuente;
       if (esEnBlanco) {
         try {
-          const idcatalogo = await registrarProductoEnBlanco(fila, fila.precio1, fila.precio2, fila.precio3);
-          resultado.push({ ...fila, producto: { ...p, id: idcatalogo, fuente: "expo" } });
+          // Ahora se registra directo en producto_papel / configuracion_plastico
+          // (las tablas del sistema), marcado con origen_expo=true — ya no en
+          // catalogo_expo. fuente:"sistema" porque, a partir de este punto, es
+          // literalmente el mismo tipo de registro que un producto normal de
+          // Papel/Plástico (solo que con datos parciales, a completar después).
+          const { id, fuente } = await registrarProductoEnBlanco(fila, fila.precio1, fila.precio2, fila.precio3);
+          const productoActualizado = fuente === "papel"
+            ? { ...p, id, fuente: "sistema" as const, idproducto_papel: id }
+            : { ...p, id, fuente: "sistema" as const, configuracion_plastico_id: id };
+          resultado.push({ ...fila, producto: productoActualizado });
         } catch (err) {
-          console.error(`[EXPO] No se pudo registrar "${p.nombre}" en catálogo:`, err);
+          console.error(`[EXPO] No se pudo registrar "${p.nombre}" en el sistema:`, err);
           resultado.push(fila);
         }
       } else {
@@ -383,70 +400,125 @@ useEffect(() => {
     return resultado;
   };
 
-  // ── Construye productos para el PDF "bueno" (generarPdfCotizacion) ────────
-  // usado únicamente para el correo — el membretado sigue viviendo en
-  // generarPdfCotizacionExpo y no se toca. Cada producto usa AHORA sus
-  // propias cantidades (f.cant1/f.cant2/f.cant3), ya no son globales.
-  const construirProductosPdfBueno = (filasListas: FilaProducto[]) => {
-    const parseP = (s: string) => parseFloat(s.replace(/[^0-9.]/g, "")) || 0;
-    const parseCant = (s: string) => parseInt(s.replace(/,/g, ""), 10) || 0;
+  // ── Construye el payload para generarPdfCotizacion (el PDF "bueno" de
+  // correo) usando datos FRESCOS DEL BACKEND — ya no el estado local del
+  // formulario. Este era el origen del bug: material/calibre/tintas se
+  // leían del <select> en pantalla, que puede no coincidir 1:1 con lo que
+  // el backend realmente guardó y resuelve (mismo problema que ya se había
+  // corregido para el PDF de imprimir, replicado aquí para el de correo).
+  const construirPayloadPdfCotizacionDesdeBackData = async (backData: any, folio: string, fecha: string) => {
+    const clienteCompleto = backData.cliente_id
+      ? await getClienteById(backData.cliente_id).catch(() => null)
+      : null;
 
-    return filasListas.map(f => {
-      const c1 = parseCant(f.cant1);
-      const c2 = parseCant(f.cant2);
-      const c3 = parseCant(f.cant3);
-
-      const extraNum = f.modoExtra === "precio" ? parseP(f.extra || "0") : 0;
-      const p1raw = parseP(f.precio1);
-      const p2raw = parseP(f.precio2);
-      const p3raw = parseP(f.precio3);
-      const p1 = p1raw > 0 ? p1raw + extraNum : 0;
-      const p2 = p2raw > 0 ? p2raw + extraNum : 0;
-      const p3 = p3raw > 0 ? p3raw + extraNum : 0;
-
-      const detalles = [
-        p1 > 0 ? { cantidad: c1, precio_total: c1 * p1, kilogramos: null, modo_cantidad: "unidad" as const } : null,
-        p2 > 0 ? { cantidad: c2, precio_total: c2 * p2, kilogramos: null, modo_cantidad: "unidad" as const } : null,
-        p3 > 0 ? { cantidad: c3, precio_total: c3 * p3, kilogramos: null, modo_cantidad: "unidad" as const } : null,
-      ].filter(Boolean) as any[];
-
-      const esPapel = f.producto.categoria === "papel" || f.producto.categoria === "carton";
+    const productos = (backData.productos || []).map((p: any) => {
+      const esPapel = p.tipo_material === "papel";
+      const foilNombre = p.foil_nombre || null;
+      const asaNombre = p.asa_nombre || p.color_asa_nombre || null;
+      const base = esPapel
+        ? {
+            tipo_material: "papel",
+            tipoCotizacion: "papel",
+            nombre: p.nombre,
+            grupo_descripcion: p.grupo_descripcion ?? "",
+            material: p.material || "",
+            calibre: p.calibre || "",
+            tintas: p.tintas ?? 0,
+            tintasDentro: 0,
+            caras: p.caras ?? 0,
+            medidasFormateadas: p.medida || "",
+            medidas: {},
+            bk: null,
+            foil: foilNombre ? true : null,
+            foil_nombre: foilNombre,
+            laminado: p.laminado_nombre ? true : null,
+            laminado_nombre: p.laminado_nombre || null,
+            asa_suaje: asaNombre || null,
+            asa_nombre: asaNombre || null,
+            uvBr: p.uv ? true : null,
+            alto_relieve: p.alto_relieve === true,
+            metodo_hojeado: p.metodo_hojeado ?? null,
+            lleva_armado: p.lleva_armado ?? true,
+            maquinaria_seleccionada: p.maquinaria_seleccionada ?? {},
+            textura_nombre: p.textura_nombre || null,
+            pigmentos: null,
+            pantones: p.pantones || null,
+            pantonesDentro: null,
+            observacion: p.observacion || null,
+            descripcion: p.descripcion || null,
+            perforacion: false,
+            por_kilo: null,
+            herramental_descripcion: null,
+            herramental_precio: null,
+            herramental_aprobado: null,
+          }
+        : {
+            nombre: p.nombre,
+            material: p.material || "",
+            calibre: p.calibre || "",
+            tintas: p.tintas ?? 0,
+            caras: p.caras ?? 0,
+            medidasFormateadas: p.medida || "",
+            medidas: {},
+            bk: null, foil: null, laminado: null, uvBr: null,
+            pigmentos: p.pigmentos || null,
+            pantones: p.pantones || null,
+            asa_suaje: p.suaje_tipo || null,
+            observacion: p.observacion || null,
+            descripcion: p.descripcion || null,
+            perforacion: false,
+            por_kilo: null,
+            herramental_descripcion: null,
+            herramental_precio: null,
+            herramental_aprobado: null,
+          };
 
       return {
-        tipo_material: esPapel ? "papel" : undefined,
-        tipoCotizacion: esPapel ? "papel" : undefined,
-        nombre: f.producto.nombre,
-        medida: f.medida || f.producto.medida || "",
-        material: f.material || f.producto.material || "",
-        calibre: f.calibre || f.producto.calibre || "",
-        grupo_descripcion: esPapel ? (f.material || f.producto.material || "") : undefined,
-        medidasFormateadas: f.medida || f.producto.medida || "",
-        medidas: {},
-        tintas: f.tintas || null,
-        caras: null,
-        laminado: f.laminacion ? true : null,
-        laminado_nombre: f.laminacion ? (f.tipoLaminado || "SI") : null,
-        foil: f.hs ? true : null,
-        foil_nombre: f.hs ? (f.tipoHs || "SI") : null,
-        asa_suaje: f.asa ? (f.tipoAsa || "SI") : null,
-        asa_nombre: f.asa ? (f.tipoAsa || "SI") : null,
-        uvBr: f.uv ? true : null,
-        pigmentos: f.modoExtra === "pigmento" ? (f.pigmento || f.extra || null) : null,
-        observacion: null,
-        descripcion: null,
-        perforacion: false,
-        por_kilo: null,
-        herramental_descripcion: null,
-        herramental_precio: null,
-        detalles,
+        ...base,
+        detalles: (p.detalles || []).map((d: any) => ({
+          cantidad: Number(d.cantidad),
+          precio_total: Number(d.precio_total),
+          kilogramos: null,
+          modo_cantidad: "unidad",
+        })),
       };
     });
+
+    const total = productos.reduce(
+      (sum: number, p: any) => sum + p.detalles.reduce((s: number, d: any) => s + d.precio_total, 0),
+      0
+    );
+
+    return {
+      no_cotizacion: folio,
+      fecha,
+      cliente: backData.cliente || "",
+      empresa: backData.impresion || "",
+      telefono: backData.celular || "",
+      correo: clienteCompleto?.correo || backData.correo || "",
+      estado: "Pendiente",
+      impresion: backData.impresion ?? null,
+      celular: backData.celular ?? null,
+      razon_social: clienteCompleto?.razon_social ?? null,
+      rfc: clienteCompleto?.rfc ?? null,
+      domicilio: clienteCompleto?.domicilio ?? null,
+      numero: clienteCompleto?.numero ?? null,
+      colonia: clienteCompleto?.colonia ?? null,
+      codigo_postal: clienteCompleto?.codigo_postal ?? null,
+      poblacion: clienteCompleto?.poblacion ?? backData.ciudad ?? null,
+      estado_cliente: clienteCompleto?.estado ?? backData.estado_cliente ?? null,
+      cliente_id: backData.cliente_id ?? null,
+      identificar: backData.identificar ?? null,
+      total,
+      productos,
+      _correoCliente: clienteCompleto?.correo || backData.correo || "",
+    };
   };
 
   // ── Cotizaciones ──────────────────────────────────────────────────────────
-  // Reemplaza a guardarCotizacion/guardarEImprimir: guarda SIEMPRE, y según
-  // las opciones elegidas en el split-button, imprime el membretado y/o
-  // dispara el flujo de correo con el PDF "bueno" (generarPdfCotizacion).
+  // Guarda SIEMPRE, y según las opciones elegidas, imprime el membretado y/o
+  // envía el correo — ambos ahora releen del backend recién guardado (un
+  // solo origen de verdad, ya no el formulario local).
   const guardarConOpciones = async (opciones: { imprimir: boolean; correo: boolean }) => {
     if (filas.length === 0) { alert("Agrega al menos un producto."); return; }
     if (!cliente.trim())    { alert("Falta el nombre del cliente."); return; }
@@ -455,10 +527,22 @@ useEffect(() => {
     setGuardando(true);
     try {
       const filasListas = await prepararFilas(filas);
-      // Cada producto manda sus propias cantidades (f.cant1/f.cant2/f.cant3)
-      // en vez de las 3 cantidades globales que existían antes.
+      // Solo se manda lo que el vendedor de verdad seleccionó/ve en pantalla
+      // — columnasPrecio dice cuántas columnas están visibles ahora mismo.
+      // Sin esto, una fila que se agregó cuando había 3 columnas y luego se
+      // quitó a 1 podía seguir cargando cant2/cant3/precio2/precio3
+      // "flotando" sin que el vendedor los viera, y se registraban de todos
+      // modos.
       const productos = filasListas.map(f =>
-        mapearProductoAPayload(f, f.precio1, f.precio2, f.precio3, f.cant1, f.cant2, f.cant3)
+        mapearProductoAPayload(
+          f,
+          f.precio1,
+          columnasPrecio >= 2 ? f.precio2 : "",
+          columnasPrecio >= 3 ? f.precio3 : "",
+          f.cant1,
+          columnasPrecio >= 2 ? f.cant2 : "",
+          columnasPrecio >= 3 ? f.cant3 : "",
+        )
       );
       const resultado = await crearCotizacionExpo({ clienteId: clienteIdReal, productos, comentarios: coment });
       setFolioActual(resultado.no_cotizacion);
@@ -474,9 +558,6 @@ useEffect(() => {
 
       const asesorNombre = user ? `${user.nombre} ${user.apellido}`.trim() : "Asesor de Ventas";
 
-      // ── Correo real ya registrado del cliente en BD — NO se reconstruye
-      // desde correoUsuario/correoExt del formulario, para que el modal
-      // siempre muestre lo que de verdad está guardado en su ficha.
       let correoCliente = "";
       try {
         const clienteCompleto = await getClienteById(clienteIdReal);
@@ -485,72 +566,29 @@ useEffect(() => {
         console.warn("No se pudo obtener el correo registrado del cliente:", e);
       }
 
+      // ── Un solo fetch fresco del backend, reutilizado tanto por
+      // "Imprimir" como por "Correo" — así ambos parten exactamente de
+      // los mismos datos ya guardados, sin discrepancias entre ellos.
+      let backDataFresco: any = null;
+      try {
+        const data = await getCotizacionesExpo();
+        backDataFresco = data.find(c => c.no_cotizacion === resultado.no_cotizacion) || null;
+      } catch (e) {
+        console.error("No se pudo releer la cotización recién creada:", e);
+      }
+
       await ejecutarEnvio(
         {
-          // ── Imprimir: sigue usando el membretado, exactamente como antes,
-          // solo que ahora cada producto usa su propia cantidad (f.cant1/2/3). ──
-          paraImprimir: () => {
-            generarPdfCotizacionExpo({
-    folio:       resultado.no_cotizacion,
-    cliente:     cliente.trim(),
-    empresa:     clienteGuardado?.impresion || "",
-    asesor:      asesorNombre,
-    fecha:       TODAY_NOW(),
-    comentarios: coment,
-    productos: filasListas.map(f => {
-                const parseP   = (s: string) => parseFloat(s.replace(/[^0-9.]/g, "")) || 0;
-                const extraNum = f.modoExtra === "precio" ? parseP(f.extra || "0") : 0;
-                const p1raw = parseP(f.precio1), p2raw = parseP(f.precio2), p3raw = parseP(f.precio3);
-                const p1 = p1raw > 0 ? p1raw + extraNum : 0;
-                const p2 = p2raw > 0 ? p2raw + extraNum : 0;
-                const p3 = p3raw > 0 ? p3raw + extraNum : 0;
-                const parseCant = (s: string) => parseInt(s.replace(/,/g, ""), 10) || 0;
-                const c1 = parseCant(f.cant1), c2 = parseCant(f.cant2), c3 = parseCant(f.cant3);
-                const detalles = [
-                  p1 > 0 ? { cantidad: c1, precio_unitario: p1, precio_total: c1 * p1 } : null,
-                  p2 > 0 ? { cantidad: c2, precio_unitario: p2, precio_total: c2 * p2 } : null,
-                  p3 > 0 ? { cantidad: c3, precio_unitario: p3, precio_total: c3 * p3 } : null,
-                ].filter(Boolean) as { cantidad: number; precio_unitario: number; precio_total: number }[];
-                return {
-                  nombre:   f.producto.nombre,
-                  medida:   f.medida   || f.producto.medida   || null,
-                  material: f.material || f.producto.material || null,
-                  calibre:  f.calibre  || f.producto.calibre  || null,
-                  tintas:   f.tintas   || null,
-                  laminado: f.laminacion ? (f.tipoLaminado || "SI") : null,
-                  hs:       f.hs        ? (f.tipoHs        || "SI") : null,
-                  ar:       f.ar        ? "SI"                      : null,
-                  textura:  f.textura   ? (f.tipoTextura   || "SI") : null,
-                  uv:       f.uv        ? "SI"                      : null,
-                  asa:      f.asa       ? (f.tipoAsa       || "SI") : null,
-                  pigmento: f.modoExtra === "pigmento" ? (f.pigmento || f.extra || null) : null,
-                  detalles,
-                };
-              }),
-            });
+          paraImprimir: async () => {
+            if (!backDataFresco) { console.warn("Sin datos frescos para el PDF de impresión."); return; }
+            const params = cotizacionBackDataAPdfParams(backDataFresco, resultado.no_cotizacion, TODAY_NOW(), asesorNombre);
+            generarPdfCotizacionExpo(params);
           },
 
-          // ── Correo: usa el PDF "bueno" con diseño, sin descargar ni subir a S3 ──
           paraCorreo: async () => {
-            return await generarPdfCotizacion(
-              {
-                no_cotizacion: resultado.no_cotizacion,
-                fecha: new Date().toISOString(),
-                cliente: cliente.trim(),
-                empresa: clienteGuardado?.impresion || "",
-                telefono: clienteGuardado?.celular || "",
-                correo: correoCliente,
-                estado: "Pendiente",
-                impresion: clienteGuardado?.impresion ?? null,
-                celular: clienteGuardado?.celular ?? null,
-                identificar: null,
-                cliente_id: clienteIdReal,
-                total: sumarTotales(filasListas).precio1,
-                productos: construirProductosPdfBueno(filasListas) as any,
-              },
-              false, // no subir a S3 desde este flujo
-              false  // no descargar — solo se usa el blob para adjuntar
-            );
+            if (!backDataFresco) throw new Error("Sin datos frescos para el PDF de correo.");
+            const payload = await construirPayloadPdfCotizacionDesdeBackData(backDataFresco, resultado.no_cotizacion, TODAY_NOW());
+            return await generarPdfCotizacion(payload as any, false, false);
           },
         },
         {
@@ -619,20 +657,50 @@ useEffect(() => {
   };
 
   const propsHoja = {
-  filas, cliente, coment, folio: folioActual || folioPreview,
-  empresa: clienteGuardado?.impresion || clienteData.impresion || "",
-  mob, tab, desk, over, catalogoPropio: catalogo,
-  catalogs, foils, texturas, pigmentosDB, coloresAsa, suajesPlast,
-  setCliente, setComent, setOver,
-  onDrop, onEdit: editFila, onDel: delFila, onEditNombre: editNombreProducto,
-  onAbrirDrawer: () => setDrawerOpen(true), onAgregarProducto: addProd,
-  catalogosPlast,
-  asesor: user ? `${user.nombre} ${user.apellido}`.trim() : "Asesor de Ventas",
-};
+    filas, cliente, coment, folio: folioActual || folioPreview,
+    empresa: clienteGuardado?.impresion || clienteData.impresion || "",
+    mob, tab, desk, over, catalogoPropio: catalogo, sistemaProductos,
+    catalogs, foils, texturas, pigmentosDB, coloresAsa, suajesPlast,
+    columnasPrecio, setColumnasPrecio,
+    setCliente, setComent, setOver,
+    onDrop, onEdit: editFila, onDel: delFila, onEditNombre: editNombreProducto,
+    onAbrirDrawer: () => setDrawerOpen(true), onAgregarProducto: addProd,
+    catalogosPlast,
+    asesor: user ? `${user.nombre} ${user.apellido}`.trim() : "Asesor de Ventas",
+  };
+
+  // ── Botones rápidos: acceso directo sin abrir el menú del split-button,
+  // para que quien prefiera un clic fijo (en vez de marcar checkboxes) lo
+  // tenga a la mano. Todos guardan por defecto, igual que el botón principal.
+  const BotonesRapidos = () => (
+    <div className="no-print" style={{ display: "flex", gap: 6 }}>
+      <button
+        onClick={() => guardarConOpciones({ imprimir: true, correo: false })}
+        disabled={guardando}
+        title="Guardar e imprimir únicamente"
+        style={{ background: "transparent", border: "1px solid #C9922A55", color: "#C9922A", fontSize: 11, fontWeight: 700, padding: "8px 10px", borderRadius: 6, cursor: guardando ? "not-allowed" : "pointer", opacity: guardando ? .5 : 1 }}>
+        🖨 Imprimir
+      </button>
+      <button
+        onClick={() => guardarConOpciones({ imprimir: false, correo: true })}
+        disabled={guardando}
+        title="Guardar y enviar por correo únicamente"
+        style={{ background: "transparent", border: "1px solid #C9922A55", color: "#C9922A", fontSize: 11, fontWeight: 700, padding: "8px 10px", borderRadius: 6, cursor: guardando ? "not-allowed" : "pointer", opacity: guardando ? .5 : 1 }}>
+        📧 Enviar
+      </button>
+      <button
+        onClick={() => guardarConOpciones({ imprimir: true, correo: true })}
+        disabled={guardando}
+        title="Guardar, imprimir y enviar por correo"
+        style={{ background: "transparent", border: "1px solid #C9922A55", color: "#C9922A", fontSize: 11, fontWeight: 700, padding: "8px 10px", borderRadius: 6, cursor: guardando ? "not-allowed" : "pointer", opacity: guardando ? .5 : 1 }}>
+        🖨📧 Ambos
+      </button>
+    </div>
+  );
 
   // ── Sub-componentes UI ────────────────────────────────────────────────────
   const BotonesAccion = () => (
-    <div className="no-print" style={{ display: "flex", gap: 10, width: "100%", maxWidth: desk ? 1100 : undefined, justifyContent: "flex-end", alignItems: "center" }}>
+    <div className="no-print" style={{ display: "flex", gap: 10, width: "100%", maxWidth: desk ? 1100 : undefined, justifyContent: "flex-end", alignItems: "center", flexWrap: "wrap" }}>
       <button
         onClick={() => navigate("/home")}
         style={{ background: "transparent", border: "1px solid #444", color: "#666", fontSize: 11, fontWeight: 600, padding: "7px 9px", borderRadius: 6, cursor: "pointer" }}
@@ -640,8 +708,16 @@ useEffect(() => {
       >
         🏠 SIGEB
       </button>
+      <button
+        onClick={() => setCatalogoExpoAbierto(true)}
+        style={{ background: "#1A1A1A", border: "1px solid #C9922A55", color: "#C9922A", fontSize: 11, fontWeight: 700, padding: "7px 12px", borderRadius: 6, cursor: "pointer" }}
+        title="Administrar catálogo de Expo"
+      >
+        🛠 Catálogo
+      </button>
       <button onClick={() => setVista("registro")} style={{ background: "transparent", border: "1px solid #333", color: "#888", fontSize: 12, fontWeight: 600, padding: "8px 14px", borderRadius: 6, cursor: "pointer", fontFamily: "'Inter',sans-serif" }}>← Cliente</button>
       <button onClick={limpiar} style={{ background: "transparent", border: "1px solid #555", color: "#AAA", fontSize: 12, fontWeight: 600, padding: "8px 18px", borderRadius: 6, cursor: "pointer", fontFamily: "'Inter',sans-serif" }}>Limpiar</button>
+      <BotonesRapidos />
       <BotonGuardarConOpciones guardando={guardando} onEjecutar={guardarConOpciones} variant="dark" />
     </div>
   );
@@ -735,8 +811,10 @@ useEffect(() => {
               </div>
               <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
                 <button onClick={() => navigate("/home")} style={{ background: "transparent", border: "1px solid #444", color: "#666", fontSize: 11, fontWeight: 600, padding: "7px 9px", borderRadius: 6, cursor: "pointer" }} title="Regresar a SIGEB">🏠 SIGEB</button>
+                <button onClick={() => setCatalogoExpoAbierto(true)} style={{ background: "#1A1A1A", border: "1px solid #C9922A55", color: "#C9922A", fontSize: 11, fontWeight: 700, padding: "7px 9px", borderRadius: 6, cursor: "pointer" }} title="Administrar catálogo de Expo">🛠</button>
                 <button onClick={() => setVista("registro")} style={{ background: "transparent", border: "1px solid #333", color: "#888", fontSize: 11, fontWeight: 600, padding: "7px 9px", borderRadius: 6, cursor: "pointer" }}>← Cliente</button>
                 <button onClick={limpiar} style={{ background: "transparent", border: "1px solid #444", color: "#AAA", fontSize: 11, fontWeight: 600, padding: "7px 9px", borderRadius: 6, cursor: "pointer" }}>Limpiar</button>
+                <BotonesRapidos />
                 <BotonGuardarConOpciones guardando={guardando} onEjecutar={guardarConOpciones} variant="dark" />
               </div>
             </div>
@@ -767,10 +845,12 @@ useEffect(() => {
                   <div style={{ color: "#666", fontSize: 9, letterSpacing: .5 }}>Cotizador Expo</div>
                 </div>
               </div>
-              <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+              <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
                 <button onClick={() => navigate("/home")} style={{ background: "transparent", border: "1px solid #444", color: "#666", fontSize: 11, fontWeight: 600, padding: "7px 9px", borderRadius: 6, cursor: "pointer" }} title="Regresar a SIGEB">🏠 SIGEB</button>
+                <button onClick={() => setCatalogoExpoAbierto(true)} style={{ background: "#1A1A1A", border: "1px solid #C9922A55", color: "#C9922A", fontSize: 11, fontWeight: 700, padding: "7px 12px", borderRadius: 6, cursor: "pointer" }} title="Administrar catálogo de Expo">🛠 Catálogo</button>
                 <button onClick={() => setVista("registro")} style={{ background: "transparent", border: "1px solid #333", color: "#888", fontSize: 12, fontWeight: 600, padding: "8px 14px", borderRadius: 6, cursor: "pointer" }}>← Cliente</button>
                 <button onClick={limpiar} style={{ background: "transparent", border: "1px solid #555", color: "#AAA", fontSize: 12, fontWeight: 600, padding: "8px 16px", borderRadius: 6, cursor: "pointer" }}>Limpiar</button>
+                <BotonesRapidos />
                 <BotonGuardarConOpciones guardando={guardando} onEjecutar={guardarConOpciones} variant="dark" />
               </div>
             </div>
@@ -867,6 +947,19 @@ useEffect(() => {
           enviando={enviandoCorreo}
           onConfirmar={confirmarEnvioCorreo}
           onCancelar={cancelarEnvioCorreo}
+        />
+      )}
+
+      {catalogoExpoAbierto && (
+        <ModalCatalogoExpo
+          onClose={() => {
+            setCatalogoExpoAbierto(false);
+            // Lo que se creó/editó/eliminó ahí adentro debe reflejarse en el
+            // sidebar y en el buscador del cotizador — como ambos manejan
+            // su propio estado, se refresca al cerrar en vez de compartir
+            // estado en vivo entre los dos.
+            cargarCatalogo();
+          }}
         />
       )}
     </>

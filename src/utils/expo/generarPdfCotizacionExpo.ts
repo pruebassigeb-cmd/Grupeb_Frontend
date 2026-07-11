@@ -24,7 +24,7 @@ const ROW_H          = 8;
 
 // Columnas de la tabla — todas corridas 10mm a la izquierda
 const X_PRODUCTO     = 70;
-const X_MEDIDA       = 106;
+const X_MEDIDA       = 107;
 const X_MATERIAL     = 131;
 const X_TINTAS       = 156;
 const X_LAM          = 166;
@@ -41,7 +41,10 @@ const X_PIGMENTO     = 239;
 const X_PRECIOS_INI  = 259;
 const X_PRECIOS_FIN  = 297;
 const GUTTER_PRECIOS = 3;
-const PRECIO_Y_OFFSET = -1;
+// Cuando una fila trae solo 2 precios, se usa un gutter más grande para que
+// no se vean pegados entre sí (el bloque completo se sigue centrando).
+const GUTTER_PRECIOS_DOS = GUTTER_PRECIOS + 6;
+const PRECIO_Y_OFFSET = 0; // bajado 1mm respecto al original (-1)
 
 // ── SECCIÓN 4: COMENTARIOS ──────────────────────────────────────────────────
 const Y_COMENTARIOS  = 155;
@@ -185,8 +188,9 @@ export function generarPdfCotizacionExpo(params: PdfCotizacionExpoParams): void 
     3,
     Math.max(...productos.map(p => p.detalles?.length || 0), 0)
   );
+  const anchoTotalPrecios = X_PRECIOS_FIN - X_PRECIOS_INI;
   const anchoPrecio = numPrecios > 0
-    ? (X_PRECIOS_FIN - X_PRECIOS_INI - GUTTER_PRECIOS * (numPrecios - 1)) / numPrecios
+    ? (anchoTotalPrecios - GUTTER_PRECIOS * (numPrecios - 1)) / numPrecios
     : 0;
 
   productos.forEach((prod, idx) => {
@@ -194,52 +198,62 @@ export function generarPdfCotizacionExpo(params: PdfCotizacionExpoParams): void 
 
     // Producto — apilado en 2 líneas.
     const [nombreL1, nombreL2] = partirNombre(doc, prod.nombre, 32);
-    txt(doc, nombreL1, X_PRODUCTO, y, 9);
-    if (nombreL2) txt(doc, nombreL2, X_PRODUCTO, y + 2.8, 8);
+    txt(doc, nombreL1, X_PRODUCTO, y, 9, "left", true);
+    if (nombreL2) txt(doc, nombreL2, X_PRODUCTO, y + 2.8, 8, "left", true);
 
-    if (prod.medida)   txt(doc, truncar(doc, prod.medida, 22, 8), X_MEDIDA, y, 8);
+    if (prod.medida)   txt(doc, truncar(doc, prod.medida, 22, 8), X_MEDIDA, y, 8, "left", true);
 
     // Material (línea 1) + Calibre (línea 2)
-    if (prod.material) txt(doc, truncar(doc, prod.material, 22, 8), X_MATERIAL, y, 8);
-    if (prod.calibre)  txt(doc, String(prod.calibre), X_MATERIAL, y + 3.5, 7);
+    if (prod.material) txt(doc, truncar(doc, prod.material, 22, 8), X_MATERIAL, y, 8, "left", true);
+    if (prod.calibre)  txt(doc, String(prod.calibre), X_MATERIAL, y + 3.5, 7, "left", true);
 
-    if (prod.tintas) txt(doc, String(prod.tintas), X_TINTAS, y, 8, "center");
+    if (prod.tintas) txt(doc, String(prod.tintas), X_TINTAS, y, 8, "center", true);
 
-    if (prod.laminado) txt(doc, truncar(doc, prod.laminado, 18, 8), X_LAM, y, 8);
-    if (prod.hs)       txt(doc, truncarConPuntos(prod.hs, 6),     X_HS, y, 7.5, "center");
-    if (prod.ar)       txt(doc, prod.ar,                          X_AR, y, 7.5, "center");
-    if (prod.textura)  txt(doc, truncarConPuntos(prod.textura, 8), X_TEX, y, 8);
-    if (prod.uv)       txt(doc, prod.uv,                          X_UV, y, 7.5, "center");
-    if (prod.asa)      txt(doc, truncar(doc, prod.asa, 9, 8), X_ASA, y, 8);
-    if (prod.pigmento) txt(doc, truncar(doc, prod.pigmento, 9, 8), X_PIGMENTO, y, 8);
+    if (prod.laminado) txt(doc, truncar(doc, prod.laminado, 18, 8), X_LAM, y, 8, "left", true);
+    if (prod.hs)       txt(doc, truncarConPuntos(prod.hs, 5),     X_HS, y, 7.5, "center", true);
+    if (prod.ar)       txt(doc, prod.ar,                          X_AR, y, 7.5, "center", true);
+    if (prod.textura)  txt(doc, truncarConPuntos(prod.textura, 8), X_TEX, y, 8, "left", true);
+    if (prod.uv)       txt(doc, prod.uv,                          X_UV, y, 7.5, "center", true);
+    if (prod.asa)      txt(doc, truncar(doc, prod.asa, 9, 8), X_ASA, y, 8, "left", true);
+    if (prod.pigmento) txt(doc, truncar(doc, prod.pigmento, 9, 8), X_PIGMENTO, y, 8, "left", true);
 
     // Precios — cada renglón imprime SU propia cantidad, una línea real
-    // dibujada debajo como separador (no un carácter "_", cuya posición
-    // varía según la fuente), y luego SU propio precio unitario.
+    // dibujada debajo como separador, y luego SU propio precio unitario.
+    // El bloque de columnas de esta fila se centra dentro del área total de
+    // precios: si trae 1 sola cantidad, queda centrada; si trae 2, se
+    // centran como pareja pero con más separación entre ellas para que no
+    // se vean pegadas; si trae 3, ocupa el ancho completo como antes.
     const detalles = (prod.detalles || []).slice(0, numPrecios);
+    const n = detalles.length;
+    const gutterFila = n === 2 ? GUTTER_PRECIOS_DOS : GUTTER_PRECIOS;
+    const anchoUsado = n * anchoPrecio + Math.max(n - 1, 0) * gutterFila;
+    const xInicioFila = X_PRECIOS_INI + (anchoTotalPrecios - anchoUsado) / 2;
+
     detalles.forEach((d, i) => {
-  const xCol = X_PRECIOS_INI + i * (anchoPrecio + GUTTER_PRECIOS) + anchoPrecio / 2;
-  const pxPz = d.precio_unitario != null
-    ? Number(d.precio_unitario)
-    : Number(d.precio_total) / Number(d.cantidad);
+      const xCol = xInicioFila + i * (anchoPrecio + gutterFila) + anchoPrecio / 2;
+      const pxPz = d.precio_unitario != null
+        ? Number(d.precio_unitario)
+        : Number(d.precio_total) / Number(d.cantidad);
 
-  txt(doc, Number(d.cantidad).toLocaleString("es-MX"), xCol, y + PRECIO_Y_OFFSET, 8, "center");
+      txt(doc, Number(d.cantidad).toLocaleString("es-MX"), xCol, y + PRECIO_Y_OFFSET, 10, "center", true);
 
-  const lineaY = y + 0.8 + PRECIO_Y_OFFSET;
-  const medioAncho = anchoPrecio * 0.28;
-  doc.setDrawColor(0, 0, 0);
-  doc.setLineWidth(0.2);
-  doc.line(xCol - medioAncho, lineaY, xCol + medioAncho, lineaY);
+      const lineaY = y + 0.8 + PRECIO_Y_OFFSET;
+      const medioAncho = anchoPrecio * 0.28;
+      doc.setDrawColor(0, 0, 0);
+      doc.setLineWidth(0.2);
+      doc.line(xCol - medioAncho, lineaY, xCol + medioAncho, lineaY);
 
-  txt(doc, `$${pxPz.toFixed(2)}`, xCol, y + 3.5 + PRECIO_Y_OFFSET, 7.5, "center");
-});
+      txt(doc, `$${pxPz.toFixed(2)}`, xCol, y + 3.5 + PRECIO_Y_OFFSET, 9.5, "center", true);
+    });
   });
 
   // ── COMENTARIOS ────────────────────────────────────────────────────────────
   if (comentarios.trim()) {
+    doc.setFont("helvetica", "bold");
     doc.setFontSize(8);
     const lineas = doc.splitTextToSize(comentarios, 240);
     doc.text(lineas.slice(0, 3), X_COMENTARIOS, Y_COMENTARIOS);
+    doc.setFont("helvetica", "normal");
   }
 
   // ── GUARDAR ────────────────────────────────────────────────────────────────
@@ -247,10 +261,11 @@ export function generarPdfCotizacionExpo(params: PdfCotizacionExpoParams): void 
 }
 
 // ─── Helper para construir params desde backData (ListaCotizaciones) ─────────
-// backData es lo que regresa getCotizacionesExpo() — se usa tanto para
-// reimprimir manualmente desde la lista como para el PDF que se genera al
-// guardar. Para productos de PAPEL, material/calibre no vienen poblados
-// directo del backend — se reconstruyen desde grupo_descripcion.
+// backData es lo que regresa getCotizacionesExpo() — se usa TANTO para
+// reimprimir manualmente desde la lista COMO para el PDF que se genera
+// automáticamente al guardar (ver expo.tsx → guardarConOpciones →
+// paraImprimir, que ahora relee del backend y llama a esta misma función).
+// Un solo lugar arma los datos del PDF membretado para ambos caminos.
 export function cotizacionBackDataAPdfParams(
   backData: any,
   folio: string,
@@ -260,8 +275,11 @@ export function cotizacionBackDataAPdfParams(
   const productos: ProductoPdfExpo[] = (backData.productos || []).map((p: any) => {
     const laminadoOTipo = p.laminado_nombre || p.tipo_producto || null;
     const hs = p.foil_nombre || null;
-    const asa = p.asa_nombre
-      || (p.suaje_tipo ? `${p.suaje_tipo}${p.color_asa_nombre ? " · " + p.color_asa_nombre : ""}` : null);
+
+    // Asa: mostrar el COLOR (color_asa_nombre / asa_nombre en papel), NO la
+    // etiqueta genérica "asa" que trae suaje_tipo — esa solo describe el
+    // tipo de troquel, no aporta información útil al cliente en el PDF.
+    const asa = p.asa_nombre || p.color_asa_nombre || null;
 
     const esPapel = p.tipo_material === "papel";
     const { materialStr, calibreStr } = esPapel
@@ -305,4 +323,4 @@ export function cotizacionBackDataAPdfParams(
     comentarios: backData.comentarios || comentariosFallback || "",
     productos,
   };
-}
+} 

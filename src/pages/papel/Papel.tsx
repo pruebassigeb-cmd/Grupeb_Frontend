@@ -42,6 +42,57 @@ const ICON_IMG = "\uD83D\uDDBC\uFE0F";
 const ICON_CHART = "\uD83D\uDCCA";
 
 // ═══════════════════════════════════════════════════════════════════════════
+// BADGE "CREADO DESDE EXPO"
+// ═══════════════════════════════════════════════════════════════════════════
+// Mismo lenguaje visual que el badge "⭐ Expo" de ListaCotizaciones.tsx (ahí
+// vive sobre fondo oscuro), pero adaptado a la paleta clara de esta página —
+// mismo tono ámbar que ya se usa aquí para "archivo pendiente" en
+// FormularioProductoPapelAlta.tsx, para que se sienta consistente.
+function BadgeExpo() {
+  return (
+    <span style={{
+      display: "inline-flex", alignItems: "center", gap: 3, flexShrink: 0,
+      padding: "1px 7px", borderRadius: 8,
+      background: "#FFFBEB", border: "1px solid #FCD34D",
+      color: "#92400E", fontSize: 10, fontWeight: 700, whiteSpace: "nowrap",
+    }} title="Este producto se creó automáticamente desde una cotización de Expo">
+      ⭐ Expo
+    </span>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BADGE DE COMPLETITUD (% de información capturada)
+// ═══════════════════════════════════════════════════════════════════════════
+// Compara cuántos campos relevantes tiene llenos el producto contra el total
+// posible (generales + suaje + acabados + maquinaria + materiales +
+// archivos). El % ya viene calculado desde el backend (completitud_pct en
+// GET /productos-papel), así que aquí solo se pinta el color según el rango:
+// verde >=90%, amarillo/naranja 65-89%, rojo <65%.
+function BadgeCompletitud({ pct }: { pct: number }) {
+  const estilo =
+    pct >= 90
+      ? { bg: "#F0FDF4", border: "#86EFAC", color: "#15803D" }
+      : pct >= 65
+        ? { bg: "#FFFBEB", border: "#FCD34D", color: "#92400E" }
+        : { bg: "#FEF2F2", border: "#FCA5A5", color: "#B91C1C" };
+
+  return (
+    <span
+      style={{
+        display: "inline-flex", alignItems: "center", justifyContent: "center",
+        minWidth: 40, padding: "3px 7px", borderRadius: 6,
+        background: estilo.bg, border: `1px solid ${estilo.border}`,
+        color: estilo.color, fontSize: 11, fontWeight: 700, whiteSpace: "nowrap",
+      }}
+      title={`Información completa: ${pct}%`}
+    >
+      {pct}%
+    </span>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // MINI ARCHIVOS EN TABLA
 // ═══════════════════════════════════════════════════════════════════════════
 function ArchivosMini({ archivos }: { archivos?: ArchivoPreview[] }) {
@@ -114,11 +165,11 @@ function DetalleProducto({ id }: { id: number }) {
 
   const corteTxt = detalle.suaje
     ? [detalle.suaje.corte1_tipo, detalle.suaje.corte1_medida].filter(Boolean).join(" — ") +
-      (detalle.suaje.puntos_corte != null ? ` (${detalle.suaje.puntos_corte} pts)` : "")
+    (detalle.suaje.puntos_corte != null ? ` (${detalle.suaje.puntos_corte} pts)` : "")
     : "";
   const doblesTxt = detalle.suaje
     ? [detalle.suaje.dobles1_tipo, detalle.suaje.dobles1_medida].filter(Boolean).join(" — ") +
-      (detalle.suaje.puntos_doble != null ? ` (${detalle.suaje.puntos_doble} pts)` : "")
+    (detalle.suaje.puntos_doble != null ? ` (${detalle.suaje.puntos_doble} pts)` : "")
     : "";
 
   return (
@@ -133,6 +184,7 @@ function DetalleProducto({ id }: { id: number }) {
         {row("Medida", detalle.medida)}
         {row("Tamaño de asa sugerido", detalle.tamano_asa_default)}
         {row("Creado por", detalle.creado_por_nombre)}
+        {detalle.origen_expo && row("Origen", "Creado automáticamente desde Expo")}
       </div>
 
       {detalle.suaje && (
@@ -370,7 +422,10 @@ function TablaCatalogo({ productos, loading, onNuevo, onEditar, onEliminar }: {
                     {isExpanded ? "^" : "v"}
                   </button>
                   <div style={{ minWidth: 0 }}>
-                    <p style={{ margin: 0, fontWeight: 600, fontSize: 12, color: "#111827", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.tipo_producto}</p>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+                      <p style={{ margin: 0, fontWeight: 600, fontSize: 12, color: "#111827", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.tipo_producto}</p>
+                      {px.origen_expo && <BadgeExpo />}
+                    </div>
                     <p style={{ margin: 0, fontSize: 10, color: "#9CA3AF" }}>ID #{p.idproducto_papel}</p>
                   </div>
                 </div>
@@ -386,7 +441,8 @@ function TablaCatalogo({ productos, loading, onNuevo, onEditar, onEliminar }: {
                 <span style={{ fontSize: 12, color: "#374151" }}>{px.primer_pliego || "—"}</span>
                 <span style={{ fontSize: 12, color: "#374151", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.creado_por || "—"}</span>
                 <ArchivosMini archivos={px.archivos_preview} />
-                <div style={{ display: "flex", gap: 5, justifyContent: "flex-end" }} onClick={e => e.stopPropagation()}>
+                <div style={{ display: "flex", gap: 5, alignItems: "center", justifyContent: "flex-end" }} onClick={e => e.stopPropagation()}>
+                  <BadgeCompletitud pct={px.completitud_pct} />
                   <button onClick={() => onEditar(p)} style={{ height: 28, padding: "0 10px", background: "#F3F4F6", border: "1px solid #D1D5DB", borderRadius: 5, cursor: "pointer", fontSize: 11, fontWeight: 600, color: "#374151" }}>Editar</button>
                   <button onClick={() => setDeleteId(p.idproducto_papel)} style={{ height: 28, padding: "0 8px", background: "#FEE2E2", border: "none", borderRadius: 5, cursor: "pointer", fontSize: 11, fontWeight: 600, color: "#DC2626" }}>x</button>
                 </div>

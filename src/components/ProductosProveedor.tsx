@@ -409,6 +409,8 @@ const getBadgeClass = (tipo: string) => {
                                     <option value="kilos">Kilos</option>
                                     <option value="pzas">Piezas</option>
                                     <option value="litros">Litros</option>
+                                                                        <option value="litros">Litros</option>
+
                                 </select>
                             </div>
                             <div>

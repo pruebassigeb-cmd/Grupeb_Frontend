@@ -166,6 +166,16 @@ export interface OpcionesEncabezado {
   estado_cliente?: string | null;
   cliente_id?:     number | null;
   identificar?:    string | null;
+  /** Ancho de página en mm. Por defecto la carta landscape (279.4mm). */
+  pageWidth?:      number;
+  /** Margen en mm. Por defecto 10mm. */
+  margin?:         number;
+  /**
+   * Si es false, no se dibuja el logo (ni el placeholder de texto de respaldo).
+   * Útil para hojas ya membretadas donde el logo viene impreso en el papel.
+   * Por defecto true.
+   */
+  mostrarLogo?:    boolean;
 }
 
 export async function dibujarEncabezado(opts: OpcionesEncabezado): Promise<number> {
@@ -175,9 +185,12 @@ export async function dibujarEncabezado(opts: OpcionesEncabezado): Promise<numbe
     celular, razon_social, rfc,
     domicilio, numero, colonia, codigo_postal, poblacion, estado_cliente,
     cliente_id, identificar,
+    pageWidth, margin, mostrarLogo,
   } = opts;
 
-  const PW = 279.4; const M = 10;
+  const PW = pageWidth ?? 279.4;
+  const M  = margin ?? 10;
+  const debeDibujarLogo = mostrarLogo !== false;
 
   const row1H = 24;
   const rowH  = 6;
@@ -189,7 +202,7 @@ export async function dibujarEncabezado(opts: OpcionesEncabezado): Promise<numbe
 
   doc.setDrawColor(...BLACK); doc.setLineWidth(0.3);
 
-  if (logoBase64) {
+  if (logoBase64 && debeDibujarLogo) {
     try { doc.addImage(logoBase64, "PNG", M + 1, y + 1, logoW - 2, row1H - 2); }
     catch {
       doc.setFont("helvetica", "bold"); doc.setFontSize(14); doc.setTextColor(...BLACK);
@@ -363,9 +376,12 @@ export function dibujarPiePagina(
   doc:            jsPDF,
   labelDocumento: string,
   folio:          string | number,
-  fecha:          string
+  fecha:          string,
+  pageWidth?:     number,
+  pageHeight?:    number
 ): void {
-  const PW = 279.4; const PH = 215.9;
+  const PW = pageWidth ?? 279.4;
+  const PH = pageHeight ?? 215.9;
   const total = (doc as any).internal.getNumberOfPages();
   for (let p = 1; p <= total; p++) {
     doc.setPage(p);
@@ -386,13 +402,22 @@ export interface TotalesPdf {
   saldo?:    number;
 }
 
+export interface DimensionesPagina {
+  pageWidth?:  number;
+  pageHeight?: number;
+  margin?:     number;
+}
+
 export function dibujarCajasPie(
   doc:       jsPDF,
   productos: ProductoPdf[],
   condLines: string[],
-  totales?:  TotalesPdf
+  totales?:  TotalesPdf,
+  dims?:     DimensionesPagina
 ): void {
-  const PW = 279.4; const PH = 215.9; const M = 10;
+  const PW = dims?.pageWidth  ?? 279.4;
+  const PH = dims?.pageHeight ?? 215.9;
+  const M  = dims?.margin     ?? 10;
   const FOOTER_H      = 65;
   const fY            = PH - M - FOOTER_H;
   const footerHeaderH = 9;
@@ -523,8 +548,8 @@ export function dibujarCajasPie(
   doc.setFont("helvetica", "bold");
   const wB = doc.getTextWidth(parteB);
 
-  const totalW = wA + wB + wC;
-  let xCursor  = lX + lW / 2 - totalW / 2;
+  const totalW2 = wA + wB + wC;
+  let xCursor  = lX + lW / 2 - totalW2 / 2;
 
   doc.setFont("helvetica", "normal");
   doc.text(parteA, xCursor, y1);

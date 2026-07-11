@@ -10,7 +10,6 @@ const WHITE: [number, number, number] = [255, 255, 255];
 const GRAY_DARK: [number, number, number] = [80, 80, 80];
 const GRAY_MED: [number, number, number] = [136, 136, 136];
 const GRAY_LIGHT: [number, number, number] = [240, 240, 240];
-const PARCIAL_BG: [number, number, number] = [40, 40, 40];
 const PARCIAL_TX: [number, number, number] = [255, 255, 255];
 
 const f = (v: any) =>
@@ -49,17 +48,17 @@ function dibujarEtiqueta(
   doc.setTextColor(...WHITE);
   doc.text("GRUPEB SA DE CV", txtX, y + 10);
 
-  // RFC + dirección — 7.5pt en lugar de 6.5pt, con más interlineado
+  // RFC + dirección — más grande y legible
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(7.5);                      // ← era 6.5
+  doc.setFontSize(8.5);                      // ← era 7.5, ahora 8.5
   doc.setTextColor(210, 210, 210);
   doc.text(
     "RFC: GRU110205D55  ·  Rogelio Ledesma #102, Col. Cruz Vieja,",
-    txtX, y + 18, { maxWidth: maxW }
+    txtX, y + 19, { maxWidth: maxW }
   );
   doc.text(
     "Tlajomulco de Zúñiga, Jal.  CP. 45644   Tel: (33) 31801460",
-    txtX, y + 26, { maxWidth: maxW }         // ← era y+23
+    txtX, y + 27, { maxWidth: maxW }         // ← era y+26
   );
 
   doc.setTextColor(...BLACK);
@@ -72,7 +71,7 @@ function dibujarEtiqueta(
   doc.rect(ML, y, W, 7, "F");
   doc.setFont("helvetica", "bold");
   doc.setFontSize(7);
-  doc.setTextColor(...GRAY_DARK);
+  doc.setTextColor(...BLACK);
   doc.text("DESTINATARIO", ML + 3, y + 5);
   doc.setTextColor(...BLACK);
   y += 7;
@@ -102,7 +101,7 @@ function dibujarEtiqueta(
     yIzq += 2;
     doc.setFont("helvetica", "bold");
     doc.setFontSize(6.5);
-    doc.setTextColor(...GRAY_DARK);
+    doc.setTextColor(...BLACK);
     doc.text("ATENCIÓN", colIzqX + 2, yIzq);
     yIzq += 4;
     doc.setFont("helvetica", "normal");
@@ -129,7 +128,7 @@ function dibujarEtiqueta(
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7.5);
-  doc.setTextColor(...GRAY_DARK);
+  doc.setTextColor(...BLACK);
 
   [direccion, coloniaCP, pobEdo, contacto].filter(Boolean).forEach(line => {
     const wrapped = doc.splitTextToSize(line, colDerW);
@@ -158,7 +157,7 @@ function dibujarEtiqueta(
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(7);
-  doc.setTextColor(...GRAY_DARK);
+  doc.setTextColor(...BLACK);
   doc.text("PEDIDO / PRODUCTO", ML + 3, y + 5.5);
 
   // Badge descripción — a la derecha del encabezado gris
@@ -184,7 +183,7 @@ function dibujarEtiqueta(
     const textX = ML + W - textW - 3;
     const textY = y + 5.5;                    // misma línea base que "PEDIDO / PRODUCTO"
 
-    doc.setTextColor(...GRAY_DARK);
+    doc.setTextColor(...BLACK);
     doc.text(descTexto, textX, textY);
   }
 
@@ -194,7 +193,7 @@ function dibujarEtiqueta(
   // Sub-etiquetas de columnas
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7);
-  doc.setTextColor(...GRAY_MED);
+  doc.setTextColor(...BLACK);
   doc.text("PEDIDO",   ML + 3,  y + 5);
   doc.text("ORDEN",    ML + 34, y + 5);
   doc.text("PRODUCTO", ML + 62, y + 5);
@@ -221,7 +220,7 @@ function dibujarEtiqueta(
     campos.forEach((c, i) => {
       const cx = ML + 3 + dimColW * i;
       doc.setFontSize(6);
-      doc.setTextColor(...GRAY_MED);
+      doc.setTextColor(...BLACK);
       doc.text(`${c.label}:`, cx, y + 20);
       doc.setFont("helvetica", "bold");
       doc.setFontSize(7.5);
@@ -249,7 +248,7 @@ function dibujarEtiqueta(
   const detalle = [data.medida, data.material, cantDisplay].filter(Boolean).join("  ·  ");
 
   doc.setFontSize(8);
-  doc.setTextColor(...GRAY_DARK);
+  doc.setTextColor(...BLACK);
   const detLines = doc.splitTextToSize(detalle, W - 65);
   doc.text(detLines, ML + 62, y + 21);
   doc.setTextColor(...BLACK);
@@ -276,7 +275,7 @@ function dibujarEtiqueta(
     const badgeX      = ML + 3;
     const badgeY      = y;
 
-    doc.setFillColor(...PARCIAL_BG);
+    doc.setFillColor(...BLACK);
     doc.roundedRect(badgeX, badgeY, badgeW, badgeH, 1.5, 1.5, "F");
 
     doc.setFont("helvetica", "bold");
@@ -296,7 +295,7 @@ function dibujarEtiqueta(
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(6);
-  doc.setTextColor(...GRAY_DARK);
+  doc.setTextColor(...BLACK);
   doc.text("BULTO", ML + 3 + 13, y + 5, { align: "center" });
 
   doc.setFont("helvetica", "bold");
@@ -306,7 +305,7 @@ function dibujarEtiqueta(
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(6);
-  doc.setTextColor(...GRAY_DARK);
+  doc.setTextColor(...BLACK);
   doc.text(`de ${totalBultos}`, ML + 3 + 13, y + 17, { align: "center" });
 
   // Unidades / KG en este bulto
@@ -318,7 +317,7 @@ function dibujarEtiqueta(
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7.5);
-  doc.setTextColor(...GRAY_MED);
+  doc.setTextColor(...BLACK);
   doc.text(labelUnidades, ML + 33, y + 6);
 
   doc.setFont("helvetica", "bold");
@@ -330,7 +329,7 @@ function dibujarEtiqueta(
   if (esKiloBulto && bulto.cantidad_unidades > 0) {
     doc.setFont("helvetica", "normal");
     doc.setFontSize(6.5);
-    doc.setTextColor(...GRAY_MED);
+    doc.setTextColor(...BLACK);
     doc.text(
       `(${bulto.cantidad_unidades.toLocaleString("es-MX")} pzs ref.)`,
       ML + 33, y + 22
@@ -344,7 +343,7 @@ function dibujarEtiqueta(
   // ══════════════════════════════════════════
   doc.setFont("helvetica", "normal");
   doc.setFontSize(6.5);
-  doc.setTextColor(...GRAY_MED);
+  doc.setTextColor(...BLACK);
 
   const pieTexto = data.es_parcialidad
     ? `${f(data.no_produccion)}  ·  ${f(data.no_pedido)}  ·  Envío parcial ${data.numero_envio_parcial ?? 1}  ·  Bulto ${bultoNum} de ${totalBultos}`

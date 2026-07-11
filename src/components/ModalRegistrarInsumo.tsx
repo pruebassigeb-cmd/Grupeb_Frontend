@@ -2,11 +2,13 @@ import { useState, useEffect } from "react";
 import {
   getTiposInsumo,
   getProveedores,
+  getProductosSat,
   buscarInsumos,
   registrarInsumoRapido,
   type TipoInsumo,
   type Insumo,
   type Proveedor,
+  type ProductoSat,
 } from "../services/proveedoresService";
 import { showAlert } from "./CustomAlert";
 
@@ -17,6 +19,16 @@ interface Props {
   onCancelar:        () => void;
 }
 
+// ✅ Opciones predefinidas mostradas en el <select> (la BD ya no restringe
+// esto a un enum fijo — el control de valores válidos vive solo aquí).
+const OPCIONES_UNIDAD = [
+  { value: "", label: "Sin especificar" },
+  { value: "kilos", label: "Kilos" },
+  { value: "pzas", label: "Piezas" },
+  { value: "litros", label: "Litros" },
+  { value: "metros", label: "Metros" },
+] as const;
+
 export default function ModalRegistrarInsumo({
   tipoInsumoInicial,
   nombreInicial,
@@ -25,6 +37,7 @@ export default function ModalRegistrarInsumo({
 }: Props) {
   const [tipos, setTipos]             = useState<TipoInsumo[]>([]);
   const [proveedores, setProveedores] = useState<Proveedor[]>([]);
+  const [productosSat, setProductosSat] = useState<ProductoSat[]>([]);
   const [guardando, setGuardando]     = useState(false);
   const [verificando, setVerificando] = useState(false);
   const [duplicado, setDuplicado]     = useState<string | null>(null);
@@ -33,15 +46,26 @@ export default function ModalRegistrarInsumo({
     tipo_insumo_id: tipoInsumoInicial,
     nombre:         nombreInicial,
     codigo:         "",
+    precio:         "",
+    notas:          "",
+    clave_producto: "",
+    minimo_compra:  "",
+    unidad:         "" as string,
+    producto_sat_idproducto_sat: "" as string | number,
   });
   const [proveedoresSeleccionados, setProveedoresSeleccionados] = useState<number[]>([]);
 
   useEffect(() => {
     const cargar = async () => {
       try {
-        const [t, p] = await Promise.all([getTiposInsumo(), getProveedores()]);
+        const [t, p, s] = await Promise.all([
+          getTiposInsumo(),
+          getProveedores(),
+          getProductosSat().catch(() => []),
+        ]);
         setTipos(t);
         setProveedores(p);
+        setProductosSat(s);
       } catch {
         showAlert("Error al cargar catálogos", "error");
       }
@@ -77,6 +101,16 @@ export default function ModalRegistrarInsumo({
   const set = (field: string, value: any) =>
     setForm(prev => ({ ...prev, [field]: value }));
 
+  const handlePrecioChange = (v: string) => {
+    if (!/^\d*\.?\d{0,4}$/.test(v)) return;
+    set("precio", v);
+  };
+
+  const handleMinimoChange = (v: string) => {
+    if (!/^\d*\.?\d{0,2}$/.test(v)) return;
+    set("minimo_compra", v);
+  };
+
   const toggleProveedor = (idproveedor: number) => {
     setProveedoresSeleccionados(prev =>
       prev.includes(idproveedor) ? prev.filter(id => id !== idproveedor) : [...prev, idproveedor]
@@ -94,6 +128,14 @@ export default function ModalRegistrarInsumo({
         nombre:         form.nombre.trim(),
         codigo:         form.codigo.trim() || null,
         proveedores_ids: proveedoresSeleccionados,
+        precio:         form.precio.trim() ? parseFloat(form.precio) : null,
+        notas:          form.notas.trim() || null,
+        clave_producto: form.clave_producto.trim() || null,
+        minimo_compra:  form.minimo_compra.trim() ? parseFloat(form.minimo_compra) : null,
+        unidad:         form.unidad || null,
+        producto_sat_idproducto_sat: form.producto_sat_idproducto_sat
+          ? Number(form.producto_sat_idproducto_sat)
+          : null,
       });
       showAlert(`Insumo "${resultado.nombre}" registrado`, "success");
       onRegistrado(resultado);
@@ -110,11 +152,12 @@ export default function ModalRegistrarInsumo({
     }
   };
 
-  const inputClass = "w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent";
+  const inputClass = "w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-purple-500 focus:border-transparent";
+  const selectClass = `${inputClass} cursor-pointer`;
 
   return (
-    <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md border border-gray-200">
+    <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl border border-gray-200 my-8">
 
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
@@ -125,7 +168,7 @@ export default function ModalRegistrarInsumo({
               </svg>
             </div>
             <div>
-              <h3 className="font-bold text-gray-900 text-sm">Registrar nuevo insumo</h3>
+              <h3 className="font-bold text-gray-900 text-sm">Nuevo insumo</h3>
               <p className="text-xs text-gray-400">Se guardará en el catálogo de proveedores</p>
             </div>
           </div>
@@ -139,18 +182,28 @@ export default function ModalRegistrarInsumo({
         {/* Body */}
         <div className="px-6 py-5 space-y-4">
 
-          {/* Tipo */}
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1.5">
-              Tipo de insumo <span className="text-red-500">*</span>
-            </label>
-            <select value={form.tipo_insumo_id}
-              onChange={e => set("tipo_insumo_id", Number(e.target.value))}
-              className={inputClass}>
-              {tipos.map(t => (
-                <option key={t.idtipo_insumo} value={t.idtipo_insumo}>{t.nombre}</option>
-              ))}
-            </select>
+          {/* Tipo + Código */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                Tipo de insumo <span className="text-red-500">*</span>
+              </label>
+              <select value={form.tipo_insumo_id}
+                onChange={e => set("tipo_insumo_id", Number(e.target.value))}
+                className={selectClass}>
+                {tipos.map(t => (
+                  <option key={t.idtipo_insumo} value={t.idtipo_insumo}>{t.nombre}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                Código <span className="text-xs text-gray-400 font-normal">(opcional)</span>
+              </label>
+              <input type="text" value={form.codigo}
+                onChange={e => set("codigo", e.target.value)}
+                placeholder="PMS-485, R-200..." className={inputClass} maxLength={80} />
+            </div>
           </div>
 
           {/* Nombre */}
@@ -174,17 +227,69 @@ export default function ModalRegistrarInsumo({
             )}
           </div>
 
-          {/* Código */}
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1.5">
-              Código <span className="text-xs text-gray-400 font-normal">(opcional — PMS-485, R-200...)</span>
-            </label>
-            <input type="text" value={form.codigo}
-              onChange={e => set("codigo", e.target.value)}
-              placeholder="PMS-485" className={inputClass} maxLength={80} />
-            {proveedoresSeleccionados.length > 1 && (
-              <p className="text-xs text-gray-400 mt-1">Se usará el mismo código para todos los proveedores marcados.</p>
-            )}
+          {/* Precio + Notas */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                Precio <span className="text-xs text-gray-400 font-normal">(opcional)</span>
+              </label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
+                <input type="text" inputMode="decimal" value={form.precio}
+                  onChange={e => handlePrecioChange(e.target.value)}
+                  placeholder="0.00" className={`${inputClass} pl-7`} />
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                Notas <span className="text-xs text-gray-400 font-normal">(opcional)</span>
+              </label>
+              <input type="text" value={form.notas}
+                onChange={e => set("notas", e.target.value)}
+                placeholder="Observaciones..." className={inputClass} />
+            </div>
+          </div>
+
+          {/* Clave SAT + Unidad (predefinida) + Mínimo de compra */}
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                Clave producto SAT <span className="text-xs text-gray-400 font-normal">(opcional)</span>
+              </label>
+              <select
+                value={form.producto_sat_idproducto_sat}
+                onChange={e => set("producto_sat_idproducto_sat", e.target.value)}
+                className={selectClass}
+              >
+                <option value="">Sin especificar</option>
+                {productosSat.map(s => (
+                  <option key={s.idproducto_sat} value={s.idproducto_sat}>
+                    {s.clave} — {s.pdft}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                Unidad <span className="text-xs text-gray-400 font-normal">(opcional)</span>
+              </label>
+              {/* ✅ Predefinida — mismo enum que CreateProductoDto.unidad, no texto libre */}
+              <select value={form.unidad}
+                onChange={e => set("unidad", e.target.value)}
+                className={selectClass}>
+                {OPCIONES_UNIDAD.map(o => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                Mínimo de compra <span className="text-xs text-gray-400 font-normal">(opcional)</span>
+              </label>
+              <input type="text" inputMode="decimal" value={form.minimo_compra}
+                onChange={e => handleMinimoChange(e.target.value)}
+                placeholder="0.00" className={inputClass} />
+            </div>
           </div>
 
           {/* Proveedores — selección múltiple */}
@@ -213,6 +318,11 @@ export default function ModalRegistrarInsumo({
                 ✓ {proveedoresSeleccionados.length} proveedor{proveedoresSeleccionados.length > 1 ? "es" : ""} seleccionado{proveedoresSeleccionados.length > 1 ? "s" : ""}
               </p>
             )}
+            {proveedoresSeleccionados.length > 1 && (
+              <p className="text-xs text-gray-400 mt-1">
+                El código, precio, notas y mínimo de compra se guardarán igual para los {proveedoresSeleccionados.length} proveedores marcados.
+              </p>
+            )}
           </div>
 
           {duplicado && (
@@ -239,7 +349,7 @@ export default function ModalRegistrarInsumo({
             className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-purple-600 hover:bg-purple-700 rounded-lg disabled:bg-purple-300 disabled:cursor-not-allowed transition-colors">
             {guardando ? (
               <><span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Guardando...</>
-            ) : "Registrar insumo"}
+            ) : "Agregar insumo"}
           </button>
         </div>
       </div>

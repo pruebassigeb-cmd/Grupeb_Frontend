@@ -39,6 +39,8 @@ export const crearFoil = async (data: FoilForm): Promise<{ idfoil: number; clave
       notas:          data.notas || null,
       minimo_compra:  data.minimo_compra ? Number(data.minimo_compra) : null,
       unidad:         data.unidad || null,
+      // ✅ NUEVO
+      producto_sat_idproducto_sat: data.producto_sat_idproducto_sat ?? null,
       presentaciones: data.presentaciones,
       proveedores_ids: data.proveedores_ids,
     }),
@@ -65,6 +67,8 @@ export const actualizarFoil = async (
       notas:          data.notas || null,
       minimo_compra:  data.minimo_compra ? Number(data.minimo_compra) : null,
       unidad:         data.unidad || null,
+      // ✅ NUEVO
+      producto_sat_idproducto_sat: data.producto_sat_idproducto_sat ?? null,
       presentaciones: data.presentaciones,
       proveedores_ids: data.proveedores_ids,
     }),

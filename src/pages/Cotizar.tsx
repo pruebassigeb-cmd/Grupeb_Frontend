@@ -15,10 +15,13 @@ import type { CatalogosPlastico } from "../types/productos-plastico.types";
 import type { Cotizacion } from "../types/cotizaciones.types";
 import { showAlert } from '../components/CustomAlert';
 import { showConfirm } from '../components/CustomConfirm';
+import { useNavigate } from "react-router-dom";
+
 
 
 
 const ITEMS_POR_PAGINA = 7;
+
 
 // Identifica si una línea es de papel (viene de getCotizaciones / del form)
 const esLineaPapel = (p: any): boolean =>
@@ -29,6 +32,7 @@ const esLineaPapel = (p: any): boolean =>
 
 export default function Cotizaciones() {
   const [cotizaciones, setCotizaciones] = useState<Cotizacion[]>([]);
+  const navigate = useNavigate();
   const [loadingCots, setLoadingCots] = useState(false);
   const [busqueda, setBusqueda] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
@@ -601,6 +605,26 @@ export default function Cotizaciones() {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                           </svg>
                         </button>
+                        {cot.estado !== "Aprobada" && cot.tipo_documento !== "pedido" && (
+                          <button
+                            onClick={() =>
+                              navigate(
+                                cot.productos.every((p: any) => p.tipo_material === "papel" || p.tipoCotizacion === "papel")
+                                  ? `/cotizar/${cot.no_cotizacion}/editar-papel`
+                                  : `/cotizar/${cot.no_cotizacion}/editar`
+                              )
+                            }
+                            title="Editar productos de la cotización"
+                            className="p-1.5 rounded-md text-indigo-600 hover:bg-indigo-50 transition-colors"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                d="M16.5 15.5l2.5 2.5M18.5 13.5a1.5 1.5 0 012.121 2.121l-4.243 4.243-2.828.707.707-2.828 4.243-4.243z" />
+                            </svg>
+                          </button>
+                        )}
                         <button onClick={() => handleDescargarPdf(cot)} title="Descargar PDF"
                           className="p-1.5 rounded-md text-green-600 hover:bg-green-50">
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -669,7 +693,7 @@ export default function Cotizaciones() {
                                   ) : (
                                     // ── Detalle de PLÁSTICO (igual que antes) ──
                                     <>
-                                    {p.tipo_material === "expo" && (p.tipo_producto || p.material || p.calibre) && (
+                                      {p.tipo_material === "expo" && (p.tipo_producto || p.material || p.calibre) && (
                                         <p className="text-xs text-gray-500 mt-0.5">
                                           {[p.tipo_producto, p.material, p.calibre].filter(Boolean).join(" · ")}
                                         </p>

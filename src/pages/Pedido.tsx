@@ -7,6 +7,7 @@ import { getCatalogosPlastico } from "../services/productosPlasticoService";
 import { getPedidos, eliminarPedido } from "../services/pedidosService";
 import { crearCotizacion } from "../services/cotizacionesService";
 import { generarPdfPedido } from "../services/generarPdfPedido";
+import type { FormatoPedidoPdf } from "../services/generarPdfPedido";
 import { preguntarGuardarS3 } from "../services/pdfS3.service";
 import { getVentaByPedido } from "../services/ventasservice";
 import type { CatalogosPlastico } from "../types/productos-plastico.types";
@@ -46,6 +47,8 @@ export default function Pedidos() {
     pedido: Pedido;
     datosFormulario: any;
   } | null>(null);
+  const [menuPdfAbierto, setMenuPdfAbierto] = useState<string | null>(null);
+  const [descargandoPdf, setDescargandoPdf] = useState<string | null>(null);
 
   useEffect(() => { cargarCatalogos(); cargarPedidos(); }, []);
   useEffect(() => { setPaginaActual(1); }, [busqueda, filtroMaterial]);
@@ -460,7 +463,9 @@ export default function Pedidos() {
     } finally { setGuardando(false); }
   };
 
-  const handleDescargarPdf = async (ped: Pedido) => {
+  const handleDescargarPdf = async (ped: Pedido, formato: FormatoPedidoPdf = "carta") => {
+    setMenuPdfAbierto(null);
+    setDescargandoPdf(ped.no_pedido);
     try {
       const venta = await getVentaByPedido(ped.no_pedido);
       const guardarS3 = await preguntarGuardarS3("pedido");
@@ -490,10 +495,12 @@ export default function Pedidos() {
         anticipo: Number(venta.anticipo),
         saldo: Number(venta.saldo),
         productos: buildProductosPdf(ped.productos),
-      }, guardarS3);
+      }, guardarS3, true, formato);
     } catch (e) {
       console.error("❌ Error al obtener venta para PDF:", e);
       showAlert("No se pudo generar el PDF. Verifica que la venta esté registrada.");
+    } finally {
+      setDescargandoPdf(null);
     }
   };
 
@@ -729,12 +736,49 @@ export default function Pedidos() {
                               d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                           </svg>
                         </button>
-                        <button onClick={() => handleDescargarPdf(ped)} title="Descargar PDF"
-                          className="p-1.5 rounded-md text-green-600 hover:bg-green-50 transition-colors">
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                          </svg>
-                        </button>
+
+                        <div className="relative">
+                          <button
+                            onClick={() =>
+                              setMenuPdfAbierto(prev => (prev === ped.no_pedido ? null : ped.no_pedido))
+                            }
+                            title="Descargar PDF"
+                            disabled={descargandoPdf === ped.no_pedido}
+                            className="p-1.5 rounded-md text-green-600 hover:bg-green-50 transition-colors disabled:opacity-40"
+                          >
+                            {descargandoPdf === ped.no_pedido ? (
+                              <div className="w-4 h-4 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
+                            ) : (
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                              </svg>
+                            )}
+                          </button>
+
+                          {menuPdfAbierto === ped.no_pedido && (
+                            <>
+                              <div
+                                className="fixed inset-0 z-10"
+                                onClick={() => setMenuPdfAbierto(null)}
+                              />
+                              <div className="absolute right-0 z-20 mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden">
+                                <button
+                                  onClick={() => handleDescargarPdf(ped, "carta")}
+                                  className="w-full flex items-center gap-2 text-left px-3 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
+                                >
+                                  📄 <span>PDF normal (carta)</span>
+                                </button>
+                                <button
+                                  onClick={() => handleDescargarPdf(ped, "membretado")}
+                                  className="w-full flex items-center gap-2 text-left px-3 py-2.5 text-sm text-gray-700 hover:bg-gray-50 border-t border-gray-100"
+                                >
+                                  🖨️ <span>Hoja EB (membretada)</span>
+                                </button>
+                              </div>
+                            </>
+                          )}
+                        </div>
+
                         <button onClick={() => handleEliminar(ped)} title="Cancelar pedido"
                           className="p-1.5 rounded-md text-red-500 hover:bg-red-50 transition-colors">
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

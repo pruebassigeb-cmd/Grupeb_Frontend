@@ -175,6 +175,16 @@ export interface ProductoPapelListItem {
   creado_por: string | null;
   tamano_asa_default: string | null;
   tamano_prod: string | null;
+  // NUEVO: true cuando el producto se creó automáticamente desde Expo
+  // (catalogo_expo → resolverFKsProductoExpo), en vez de darse de alta a
+  // mano desde esta página. Se usa para mostrar el badge "⭐ Expo" en la tabla.
+  origen_expo: boolean;
+  // NUEVO: % de completitud de la información del producto (generales +
+  // suaje + acabados + maquinaria + materiales + archivos), calculado en
+  // el backend dentro de GET /productos-papel para no requerir peticiones
+  // extra por producto. Se usa para pintar el badge de color junto a
+  // "Editar" en la tabla (verde >=90, amarillo 65-89, rojo <65).
+  completitud_pct: number;
 }
 
 export const newHojeado = (): Hojeado => ({

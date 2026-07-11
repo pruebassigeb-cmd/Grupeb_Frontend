@@ -1,29 +1,29 @@
-// src/pages/EditarPedido.tsx
+// src/pages/EditarCotizacionCompleta.tsx
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import Dashboard from "../layouts/Sidebar";
-import { getPedidos, actualizarPedido } from "../services/pedidosService";
+import { getCotizaciones, actualizarCotizacionProductos } from "../services/cotizacionesService";
 import type {
-  ProductoPlasticoActualizar,
-  ProductoNuevoPlastico,
-} from "../services/pedidosService";
-import type { Pedido } from "../types/cotizaciones.types";
+  ProductoPlasticoCotizacionActualizar,
+  ProductoCotizacionNuevoPlastico,
+} from "../services/cotizacionesService";
+import type { Cotizacion } from "../types/cotizaciones.types";
+import { generarPdfCotizacion } from "../services/generarPdfCotizacion";
 import { usePreciosBatch } from "../hooks/usePrecioCalculado";
 import api from "../services/api";
-import ModalCambiarProducto from "./ModalCambiarProducto";
-import type { ProductoReemplazo } from "./ModalCambiarProducto";
-import ComboboxInsumo from "./ComboboxInsumo";
+import ModalCambiarProducto from "../components/ModalCambiarProducto";
+import type { ProductoReemplazo } from "../components/ModalCambiarProducto";
+import ComboboxInsumo from "../components/ComboboxInsumo";
 import ModalRegistrarInsumo from "../components/ModalRegistrarInsumo";
 import { getTiposInsumo } from "../services/proveedoresService";
 import type { Insumo } from "../services/proveedoresService";
+import { showAlert } from "../components/CustomAlert";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 interface DetalleEdit {
   iddetalle: number | null;
   cantidad: string;
   precio_total: string;
-  precio_unitario: string;
-  kilogramos: string;
   modo_cantidad: "unidad" | "kilo";
 }
 
@@ -44,13 +44,9 @@ interface ProductoEdit {
   perforacion: boolean;
   herramental_descripcion: string;
   herramental_precio: string;
-  herramental_aprobado: boolean | null;
   detalles: DetalleEdit[];
   _eliminado: boolean;
-  // Marca productos agregados en esta sesión de edición (aún no existen en BD)
   _esNuevo?: boolean;
-  // Cuando el usuario cambia el producto desde el modal, se actualiza
-  // el configuracion_plastico en lugar de eliminar+crear.
   _configuracionCambiada?: boolean;
   nuevo_configuracion_id?: number;
   idsuaje: number | null;
@@ -59,9 +55,8 @@ interface ProductoEdit {
   color_asa_nombre: string | null;
   id_medidatro: number | null;
   medida_troquel: string | null;
-  // IDs de catálogo — necesarios para pre-poblar el modal
   tipo_producto_id: number;
-  tipo_producto_nombre: string;   // nombre exacto del catálogo, ej: "Bolsa asa flexible"
+  tipo_producto_nombre: string;
   material_id: number;
   calibre_id: number;
   medidas: {
@@ -141,39 +136,24 @@ function ProductoEditable({
     prod.detalles.map(() => false)
   );
   const [preciosTexto, setPreciosTexto] = useState<string[]>(
-    prod.detalles.map(d => d.precio_total)
-  );
-  const [preciosUnitTexto, setPreciosUnitTexto] = useState<string[]>(
-    prod.detalles.map(d => {
-      const puBolsa = parseSafe(d.precio_unitario);
-      if (puBolsa <= 0) return "";
-      const pk2 = parseSafe(prod.por_kilo);
-      if (d.modo_cantidad === "kilo" && pk2 > 0) return (puBolsa * pk2).toFixed(4);
-      return puBolsa.toFixed(4);
-    })
+    prod.detalles.map(() => "")
   );
 
   const tintasCambiadasRef = useRef(false);
   const [tintasCambiadasState, setTintasCambiadasState] = useState(false);
-
-  const cantidadesEnBolsas = useMemo(
-    () => prod.detalles.map(d => {
-      const c = parseSafe(d.cantidad);
-      if (d.modo_cantidad === "kilo" && parseSafe(prod.por_kilo) > 0) {
-        return Math.round(c * parseSafe(prod.por_kilo));
-      }
-      return c;
-    }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [prod.detalles.map(d => `${d.cantidad}|${d.modo_cantidad}`).join(","), prod.por_kilo]
-  );
-
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const _tintasRender = tintasCambiadasState;
-  const hookEnabled = cantidadesEnBolsas.some(v => v > 0) && !!prod.por_kilo && !!tintasIdResuelto;
+
+  const cantidadesNumericas = useMemo(
+    () => prod.detalles.map(d => parseSafe(d.cantidad)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [prod.detalles.map(d => d.cantidad).join(",")]
+  );
+
+  const hookEnabled = cantidadesNumericas.some(v => v > 0) && !!prod.por_kilo && !!tintasIdResuelto;
 
   const { resultados, loading: calculando } = usePreciosBatch({
-    cantidades: cantidadesEnBolsas,
+    cantidades: cantidadesNumericas,
     porKilo: prod.por_kilo,
     tintasId: tintasIdResuelto,
     enabled: hookEnabled,
@@ -186,11 +166,7 @@ function ProductoEditable({
     setTintasCambiadasState(true);
     setPreciosEditadosManual(prod.detalles.map(() => false));
     setPreciosTexto(prod.detalles.map(() => ""));
-    setPreciosUnitTexto(prod.detalles.map(() => ""));
-  }, [prod.tintasId, prod.nuevo_configuracion_id]); // ← agregar nuevo_configuracion_id
-
-  
-
+  }, [prod.tintasId, prod.nuevo_configuracion_id]);
 
   const indicesLibres = prod.detalles
     .map((d, i) => {
@@ -210,27 +186,16 @@ function ProductoEditable({
       if (!esLibre) return;
       if (preciosEditadosManual[di]) return;
 
-      const pk = parseSafe(prod.por_kilo);
       const pu = r.precio_unitario;
-      let precioTotal = 0;
-      if (det.modo_cantidad === "kilo") {
-        const kgs = parseSafe(det.kilogramos || det.cantidad);
-        precioTotal = Math.round(pu * pk * kgs * 100) / 100;
-      } else {
-        precioTotal = Math.round(pu * parseSafe(det.cantidad) * 100) / 100;
-      }
+      const precioTotal = Math.round(pu * parseSafe(det.cantidad) * 100) / 100;
 
       if (precioTotal > 0) {
         setDetalleField(pi, di, "precio_total", precioTotal.toFixed(2));
-        setDetalleField(pi, di, "precio_unitario", pu.toFixed(6));
         setPreciosTexto(prev => { const n = [...prev]; n[di] = precioTotal.toFixed(2); return n; });
-        const puMostrado = det.modo_cantidad === "kilo" && pk > 0 ? (pu * pk).toFixed(4) : pu.toFixed(4);
-        setPreciosUnitTexto(prev => { const n = [...prev]; n[di] = puMostrado; return n; });
       }
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resultados]);
-
-
 
   const subtotal = prod.detalles.reduce((s, d) => s + parseSafe(d.precio_total), 0)
     + parseSafe(prod.herramental_precio);
@@ -274,7 +239,6 @@ function ProductoEditable({
           <div className="flex items-center gap-1 flex-shrink-0">
             <span className="text-sm font-bold text-gray-700 mr-2">${fmt(subtotal)}</span>
 
-            {/* Botón cambiar producto */}
             <button
               onClick={() => onCambiarProducto(pi)}
               title={esProductoCambiado ? "Cambiar de nuevo" : "Cambiar producto"}
@@ -286,7 +250,6 @@ function ProductoEditable({
               </svg>
             </button>
 
-            {/* Botón eliminar */}
             <button
               onClick={() => setProductoField(pi, "_eliminado", true)}
               title="Marcar para eliminar"
@@ -335,45 +298,45 @@ function ProductoEditable({
 
         {/* ── Pantones ── */}
         <div className="grid grid-cols-2 gap-2">
-  {Array(prod.tintas).fill("").map((_, ti) => {
-    const pantoneArr = prod.pantones
-      ? prod.pantones.split(",").map((s: string) => s.trim())
-      : [];
-    return (
-      <div key={ti} className="flex items-start gap-2">
-        <span className="flex-shrink-0 w-6 h-6 mt-2 rounded-full bg-purple-200 text-purple-800 text-xs font-bold flex items-center justify-center">
-          {ti + 1}
-        </span>
-        <ComboboxInsumo
-          tipoId={idTipoPanton}
-          placeholder={`Tinta ${ti + 1}...`}
-          value={pantoneArr[ti] || ""}
-          onChange={(val) => {
-            const arr = prod.pantones
+          {Array(prod.tintas).fill("").map((_, ti) => {
+            const pantoneArr = prod.pantones
               ? prod.pantones.split(",").map((s: string) => s.trim())
               : [];
-            arr[ti] = val;
-            setProductoField(pi, "pantones", arr.filter(Boolean).join(", "));
-          }}
-          onSeleccionar={(item) => {
-            const codigo = item.proveedores[0]?.codigo;
-            const texto = codigo ? `${item.nombre} (${codigo})` : item.nombre;
-            const arr = prod.pantones
-              ? prod.pantones.split(",").map((s: string) => s.trim())
-              : [];
-            arr[ti] = texto;
-            setProductoField(pi, "pantones", arr.filter(Boolean).join(", "));
-          }}
-          onRegistrarNuevo={(nombre) => {
-            if (!idTipoPanton) return;
-            onAbrirModalInsumo(idTipoPanton, nombre, pi, ti);
-          }}
-          className="flex-1"
-        />
-      </div>
-    );
-  })}
-</div>
+            return (
+              <div key={ti} className="flex items-start gap-2">
+                <span className="flex-shrink-0 w-6 h-6 mt-2 rounded-full bg-purple-200 text-purple-800 text-xs font-bold flex items-center justify-center">
+                  {ti + 1}
+                </span>
+                <ComboboxInsumo
+                  tipoId={idTipoPanton}
+                  placeholder={`Tinta ${ti + 1}...`}
+                  value={pantoneArr[ti] || ""}
+                  onChange={(val) => {
+                    const arr = prod.pantones
+                      ? prod.pantones.split(",").map((s: string) => s.trim())
+                      : [];
+                    arr[ti] = val;
+                    setProductoField(pi, "pantones", arr.filter(Boolean).join(", "));
+                  }}
+                  onSeleccionar={(item) => {
+                    const codigo = item.proveedores[0]?.codigo;
+                    const texto = codigo ? `${item.nombre} (${codigo})` : item.nombre;
+                    const arr = prod.pantones
+                      ? prod.pantones.split(",").map((s: string) => s.trim())
+                      : [];
+                    arr[ti] = texto;
+                    setProductoField(pi, "pantones", arr.filter(Boolean).join(", "));
+                  }}
+                  onRegistrarNuevo={(nombre) => {
+                    if (!idTipoPanton) return;
+                    onAbrirModalInsumo(idTipoPanton, nombre, pi, ti);
+                  }}
+                  className="flex-1"
+                />
+              </div>
+            );
+          })}
+        </div>
 
         {/* ── Pigmentos ── */}
         <div>
@@ -537,7 +500,7 @@ function ProductoEditable({
           </div>
         </div>
 
-        {/* ── Cantidades y precios ── */}
+        {/* ── Cantidades y precios (hasta 3 opciones) ── */}
         <div>
           <div className="flex items-center justify-between mb-3">
             <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide flex items-center gap-2">
@@ -560,25 +523,15 @@ function ProductoEditable({
           <div className="space-y-3">
             {prod.detalles.map((det, di) => {
               const r = resultados[di];
-              const pk = parseSafe(prod.por_kilo);
               const esLibre = indicesLibres.includes(di);
-              const esModoKilo = det.modo_cantidad === "kilo";
-
-              const puBolsaGuardado = parseSafe(det.precio_unitario);
-              const puBolsaHook = r?.precio_unitario ?? 0;
-              const puBolsa = esLibre && !preciosEditadosManual[di] && puBolsaHook > 0
-                ? puBolsaHook
-                : puBolsaGuardado;
-              const puMostrar = esModoKilo && pk > 0 ? puBolsa * pk : puBolsa;
+              const puAuto = esLibre && !preciosEditadosManual[di] && r?.precio_unitario ? r.precio_unitario : null;
 
               return (
                 <div key={di} className="p-3 bg-gray-50 rounded-lg border border-gray-100 space-y-2">
                   <div className="flex gap-2">
                     {/* Cantidad */}
                     <div className="flex-1">
-                      <label className="block text-xs text-gray-400 mb-1">
-                        {det.modo_cantidad === "kilo" ? "Cantidad (kg)" : "Cantidad (pzas)"}
-                      </label>
+                      <label className="block text-xs text-gray-400 mb-1">Cantidad (pzas)</label>
                       <input type="text" inputMode="numeric" value={det.cantidad}
                         onChange={e => { if (esEntero(e.target.value)) setDetalleField(pi, di, "cantidad", e.target.value); }}
                         placeholder="0"
@@ -590,78 +543,24 @@ function ProductoEditable({
                       <label className="block text-xs text-gray-400 mb-1">Precio total</label>
                       <div className="relative">
                         <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs">$</span>
-                        <input type="text" readOnly
+                        <input type="text"
                           value={preciosTexto[di] !== "" ? preciosTexto[di] : (parseSafe(det.precio_total) > 0 ? parseSafe(det.precio_total).toFixed(2) : "")}
-                          placeholder="—"
-                          className="w-full pl-6 py-2 border border-gray-100 rounded-lg text-sm text-gray-600 bg-gray-50 cursor-not-allowed" />
-                      </div>
-                      <p className="mt-0.5 text-xs text-gray-400">Calculado automáticamente</p>
-                    </div>
-
-                    {/* Precio/bolsa o kg */}
-                    <div className="flex-1">
-                      <label className="block text-xs text-gray-400 mb-1">
-                        {esModoKilo && pk > 0 ? "Precio/kg" : "Precio/bolsa"}
-                      </label>
-                      <div className="relative">
-                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs">$</span>
-                        <input type="text" inputMode="decimal"
-                          value={
-                            preciosUnitTexto[di] !== ""
-                              ? preciosUnitTexto[di]
-                              : puMostrar > 0 ? puMostrar.toFixed(4) : ""
-                          }
                           onChange={e => {
                             if (!esDecimal(e.target.value)) return;
-                            const nuevos = [...preciosUnitTexto];
-                            nuevos[di] = e.target.value;
-                            setPreciosUnitTexto(nuevos);
-                            const valorIngresado = parseSafe(e.target.value);
-                            const puBolsaNuevo = esModoKilo && pk > 0 ? valorIngresado / pk : valorIngresado;
-                            setDetalleField(pi, di, "precio_unitario", puBolsaNuevo.toFixed(6));
-                            const kgs = parseSafe(det.kilogramos || det.cantidad);
-                            const cant = parseSafe(det.cantidad);
-                            let newTotal = 0;
-                            if (esModoKilo) {
-                              newTotal = Math.round(valorIngresado * kgs * 100) / 100;
-                            } else {
-                              newTotal = Math.round(puBolsaNuevo * cant * 100) / 100;
-                            }
-                            if (newTotal > 0) {
-                              const nuevosTextos = [...preciosTexto];
-                              nuevosTextos[di] = newTotal.toFixed(2);
-                              setPreciosTexto(nuevosTextos);
-                              setDetalleField(pi, di, "precio_total", newTotal.toFixed(2));
-                            }
-                            const nuevosEditados = [...preciosEditadosManual];
-                            nuevosEditados[di] = true;
-                            setPreciosEditadosManual(nuevosEditados);
+                            const nuevos = [...preciosTexto]; nuevos[di] = e.target.value; setPreciosTexto(nuevos);
+                            setDetalleField(pi, di, "precio_total", e.target.value);
+                            const nuevosEditados = [...preciosEditadosManual]; nuevosEditados[di] = true; setPreciosEditadosManual(nuevosEditados);
                           }}
-                          onBlur={() => {
-                            const val = parseFloat(preciosUnitTexto[di]);
-                            if (!isNaN(val) && val > 0) {
-                              const nuevos = [...preciosUnitTexto];
-                              nuevos[di] = val.toFixed(4);
-                              setPreciosUnitTexto(nuevos);
-                            }
-                          }}
-                          placeholder="0.0000"
+                          placeholder={puAuto ? "Calculando..." : "0.00"}
                           className="w-full pl-6 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-blue-300" />
                       </div>
-                      {esModoKilo && pk > 0 && puBolsa > 0 && (
-                        <p className="mt-0.5 text-xs text-gray-400">≈ ${puBolsa.toFixed(6)}/bolsa</p>
-                      )}
+                      <p className="mt-0.5 text-xs text-gray-400">
+                        {esLibre && !preciosEditadosManual[di] ? "Calculado automáticamente" : "Editado manualmente"}
+                      </p>
                     </div>
 
-                    {/* Modo + eliminar — alineados al input mediante margin-top manual */}
+                    {/* Eliminar */}
                     <div className="flex-shrink-0 flex items-start gap-1 mt-5">
-                      <select value={det.modo_cantidad}
-                        onChange={e => setDetalleField(pi, di, "modo_cantidad", e.target.value)}
-                        className="px-2 py-2 border border-gray-200 rounded-lg text-xs text-gray-700 bg-white focus:ring-2 focus:ring-blue-400">
-                        <option value="unidad">pz</option>
-                        <option value="kilo">kg</option>
-                      </select>
-
                       {prod.detalles.length > 1 && (
                         <button onClick={() => eliminarDetalle(pi, di)}
                           className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition">
@@ -679,7 +578,7 @@ function ProductoEditable({
 
           <div className="mt-2 flex items-center justify-between px-3 py-2 bg-blue-50/60 rounded-lg">
             <span className="text-xs text-gray-500">
-              {prod.detalles.length} detalle{prod.detalles.length !== 1 ? "s" : ""}
+              {prod.detalles.length} opción{prod.detalles.length !== 1 ? "es" : ""}
               {parseSafe(prod.herramental_precio) > 0 && (
                 <span className="ml-1 text-orange-500">+ herramental</span>
               )}
@@ -693,8 +592,8 @@ function ProductoEditable({
 }
 
 // ─── Página principal ─────────────────────────────────────────────────────────
-export default function EditarPedido() {
-  const { noPedido } = useParams<{ noPedido: string }>();
+export default function EditarCotizacionCompleta() {
+  const { noCotizacion } = useParams<{ noCotizacion: string }>();
   const navigate = useNavigate();
 
   const [cargando, setCargando] = useState(true);
@@ -702,46 +601,37 @@ export default function EditarPedido() {
   const [error, setError] = useState<string | null>(null);
   const [errorGuardar, setErrorGuardar] = useState<string | null>(null);
   const [exito, setExito] = useState(false);
-  const [pedidoOrig, setPedidoOrig] = useState<Pedido | null>(null);
+  const [cotOrig, setCotOrig] = useState<Cotizacion | null>(null);
   const [productos, setProductos] = useState<ProductoRow[]>([]);
-  const [pedidoMixto, setPedidoMixto] = useState(false);
+  const [cotizacionMixta, setCotizacionMixta] = useState(false);
 
   const [suajes, setSuajes] = useState<any[]>([]);
   const [coloresAsa, setColoresAsa] = useState<any[]>([]);
   const [medidasTroquel, setMedidasTroquel] = useState<any[]>([]);
   const [catalogoTintas, setCatalogoTintas] = useState<any[]>([]);
   const [idTipoPigmento, setIdTipoPigmento] = useState<number | null>(null);
-  const [idTipoPanton, setIdTipoPanton] = useState<number | null>(null); // ← agregar
+  const [idTipoPanton, setIdTipoPanton] = useState<number | null>(null);
   const [modalInsumo, setModalInsumo] = useState<{
-  abierto: boolean;
-  tipoId: number;
-  nombre: string;
-  pi: number | null;
-  indicePanton: number | null;
-}>({ abierto: false, tipoId: 0, nombre: "", pi: null, indicePanton: null });
+    abierto: boolean; tipoId: number; nombre: string; pi: number | null; indicePanton: number | null;
+  }>({ abierto: false, tipoId: 0, nombre: "", pi: null, indicePanton: null });
 
   useEffect(() => {
-  getTiposInsumo()
-    .then(tipos => {
-      const pigmento = tipos.find(t => t.nombre === "Pigmento");
-      const panton = tipos.find(t => t.nombre === "Pantón");
-      if (pigmento) setIdTipoPigmento(pigmento.idtipo_insumo);
-      if (panton) setIdTipoPanton(panton.idtipo_insumo);
-    })
-    .catch(() => {});
-}, []);
+    getTiposInsumo()
+      .then(tipos => {
+        const pigmento = tipos.find(t => t.nombre === "Pigmento");
+        const panton = tipos.find(t => t.nombre === "Pantón");
+        if (pigmento) setIdTipoPigmento(pigmento.idtipo_insumo);
+        if (panton) setIdTipoPanton(panton.idtipo_insumo);
+      })
+      .catch(() => {});
+  }, []);
 
-  // ── Estado del modal ──────────────────────────────────────────────────────
-  // modo "cambiar": reemplaza el producto en piOrigen
-  // modo "agregar": crea un producto nuevo al final de la lista
-  const [modal, setModal] = useState<{
-    abierto: boolean;
-    piOrigen: number;
-    modo: "cambiar" | "agregar";
-  }>({ abierto: false, piOrigen: -1, modo: "cambiar" });
+  const [modal, setModal] = useState<{ abierto: boolean; piOrigen: number; modo: "cambiar" | "agregar" }>({
+    abierto: false, piOrigen: -1, modo: "cambiar",
+  });
 
   useEffect(() => {
-    if (!noPedido) return;
+    if (!noCotizacion) return;
     (async () => {
       try {
         const [suajesRes, coloresRes, troquelRes, catalogosRes] = await Promise.all([
@@ -755,25 +645,30 @@ export default function EditarPedido() {
         setMedidasTroquel(troquelRes.data);
         setCatalogoTintas(catalogosRes.data.tintas || []);
 
-        const todos = await getPedidos() as Pedido[];
-        const ped = todos.find(p => p.no_pedido === noPedido);
-        if (!ped) { setError("Pedido no encontrado"); return; }
-        const tienePapel = (ped.productos as any[]).some(
+        const todas = await getCotizaciones();
+        const cot = todas.find(c => c.no_cotizacion === noCotizacion);
+        if (!cot) { setError("Cotización no encontrada"); return; }
+
+        if (cot.estado === "Aprobada" || cot.tipo_documento === "pedido") {
+          setError("Esta cotización ya fue aprobada y convertida a pedido. Edítala desde el módulo de Pedidos.");
+          return;
+        }
+
+        const tienePapel = (cot.productos as any[]).some(
           p => p.tipo_material === "papel" || p.tipoCotizacion === "papel"
         );
-        const tienePlastico = (ped.productos as any[]).some(
+        const tienePlastico = (cot.productos as any[]).some(
           p => p.tipo_material !== "papel" && p.tipoCotizacion !== "papel"
         );
 
         if (tienePapel && !tienePlastico) {
-          navigate(`/pedido/${noPedido}/editar-papel`, { replace: true });
+          navigate(`/cotizar/${noCotizacion}/editar-papel`, { replace: true });
           return;
         }
 
-        setPedidoMixto(tienePapel && tienePlastico);
-
-        setPedidoOrig(ped);
-        setProductos((ped.productos as any[])
+        setCotizacionMixta(tienePapel && tienePlastico);
+        setCotOrig(cot);
+        setProductos((cot.productos as any[])
           .filter(p => p.tipo_material !== "papel" && p.tipoCotizacion !== "papel")
           .map(p => ({
             idsolicitud_producto: p.idsolicitud_producto ?? p.idcotizacion_producto,
@@ -792,7 +687,6 @@ export default function EditarPedido() {
             perforacion: p.perforacion ?? false,
             herramental_descripcion: p.herramental_descripcion || "",
             herramental_precio: p.herramental_precio != null ? String(p.herramental_precio) : "",
-            herramental_aprobado: p.herramental_aprobado ?? null,
             _eliminado: false,
             idsuaje: p.idsuaje ?? null,
             suaje_tipo: p.asa_suaje ?? null,
@@ -800,7 +694,6 @@ export default function EditarPedido() {
             color_asa_nombre: p.color_asa_nombre ?? null,
             id_medidatro: p.id_medidatro ?? null,
             medida_troquel: p.medida_troquel ?? null,
-            // IDs de catálogo para pre-poblar el modal
             tipo_producto_id: p.tipo_producto_id ?? 0,
             tipo_producto_nombre: p.tipo_producto_nombre ?? p.nombre.split(" ").slice(0, 2).join(" "),
             material_id: p.material_id ?? 0,
@@ -815,26 +708,18 @@ export default function EditarPedido() {
             },
             detalles: (p.detalles || []).map((d: any) => ({
               iddetalle: d.iddetalle ?? null,
-              cantidad: d.modo_cantidad === "kilo" && d.kilogramos != null
-                ? String(d.kilogramos)
-                : String(d.cantidad ?? ""),
+              cantidad: String(d.cantidad ?? ""),
               precio_total: String(d.precio_total ?? ""),
-              precio_unitario: d.precio_unitario != null
-                ? String(d.precio_unitario)
-                : d.cantidad > 0
-                  ? String(Math.round((d.precio_total / d.cantidad) * 1000000) / 1000000)
-                  : "",
-              kilogramos: d.kilogramos != null ? String(d.kilogramos) : "",
               modo_cantidad: d.modo_cantidad || "unidad",
             })),
           })));
       } catch (e: any) {
-        setError(e.message || "Error al cargar pedido");
+        setError(e.message || "Error al cargar cotización");
       } finally {
         setCargando(false);
       }
     })();
-  }, [noPedido]);
+  }, [noCotizacion, navigate]);
 
   // ── Helpers de estado ──────────────────────────────────────────────────────
   const setProductoField = <K extends keyof ProductoEdit>(pi: number, k: K, v: ProductoEdit[K]) =>
@@ -851,7 +736,7 @@ export default function EditarPedido() {
       ...p,
       detalles: [
         ...p.detalles,
-        { iddetalle: null, cantidad: "", precio_total: "", precio_unitario: "", kilogramos: "", modo_cantidad: "unidad" as const },
+        { iddetalle: null, cantidad: "", precio_total: "", modo_cantidad: "unidad" as const },
       ],
     }));
 
@@ -860,7 +745,6 @@ export default function EditarPedido() {
       ...p, detalles: p.detalles.filter((_, j) => j !== di),
     }));
 
-  // ── Abrir modal (cambiar / agregar) ───────────────────────────────────────
   const handleCambiarProducto = (pi: number) =>
     setModal({ abierto: true, piOrigen: pi, modo: "cambiar" });
 
@@ -872,29 +756,26 @@ export default function EditarPedido() {
   };
 
   const handleInsumoRegistrado = (item: Insumo) => {
-  if (modalInsumo.pi === null) return;
-  const codigo = item.proveedores[0]?.codigo;
-  const texto = codigo ? `${item.nombre} (${codigo})` : item.nombre;
+    if (modalInsumo.pi === null) return;
+    const codigo = item.proveedores[0]?.codigo;
+    const texto = codigo ? `${item.nombre} (${codigo})` : item.nombre;
 
-  if (modalInsumo.indicePanton !== null) {
-    // Es un pantón: reconstruir el string separado por comas en esa posición
-    setProductos(prev => prev.map((p, i) => {
-      if (i !== modalInsumo.pi) return p;
-      const arr = p.pantones ? p.pantones.split(",").map(s => s.trim()) : [];
-      arr[modalInsumo.indicePanton!] = texto;
-      return { ...p, pantones: arr.filter(Boolean).join(", ") };
-    }));
-  } else {
-    // Es pigmento
-    setProductoField(modalInsumo.pi, "pigmentos", texto);
-  }
+    if (modalInsumo.indicePanton !== null) {
+      setProductos(prev => prev.map((p, i) => {
+        if (i !== modalInsumo.pi) return p;
+        const arr = p.pantones ? p.pantones.split(",").map(s => s.trim()) : [];
+        arr[modalInsumo.indicePanton!] = texto;
+        return { ...p, pantones: arr.filter(Boolean).join(", ") };
+      }));
+    } else {
+      setProductoField(modalInsumo.pi, "pigmentos", texto);
+    }
 
-  setModalInsumo({ abierto: false, tipoId: 0, nombre: "", pi: null, indicePanton: null });
-};
+    setModalInsumo({ abierto: false, tipoId: 0, nombre: "", pi: null, indicePanton: null });
+  };
 
-  // Construye un ProductoEdit nuevo desde cero a partir de lo elegido en el modal.
   const crearProductoDesdeReemplazo = (reemplazo: ProductoReemplazo): ProductoEdit => {
-    const tempId = -Date.now(); // id temporal: aún no existe en BD
+    const tempId = -Date.now();
 
     return {
       idsolicitud_producto: tempId,
@@ -913,19 +794,9 @@ export default function EditarPedido() {
       perforacion: false,
       herramental_descripcion: "",
       herramental_precio: "",
-      herramental_aprobado: null,
-      detalles: [{
-        iddetalle: null,
-        cantidad: "",
-        precio_total: "",
-        precio_unitario: "",
-        kilogramos: "",
-        modo_cantidad: "unidad" as const,
-      }],
+      detalles: [{ iddetalle: null, cantidad: "", precio_total: "", modo_cantidad: "unidad" as const }],
       _eliminado: false,
       _esNuevo: true,
-      // Id de configuración con el que se crea el producto (no es un "cambio",
-      // es la configuración inicial del producto nuevo)
       nuevo_configuracion_id: reemplazo.configuracion_plastico_id,
       idsuaje: null,
       suaje_tipo: null,
@@ -933,9 +804,6 @@ export default function EditarPedido() {
       color_asa_nombre: null,
       id_medidatro: null,
       medida_troquel: null,
-      // IDs de catálogo — importantes si luego el usuario quiere "cambiar" este producto de nuevo.
-      // Si ProductoReemplazo no expone estos campos, quedan en 0 y el modal de
-      // "cambiar producto" para este ítem abrirá en blanco la próxima vez.
       tipo_producto_id: (reemplazo as any).tipo_producto_id ?? 0,
       tipo_producto_nombre: (reemplazo as any).tipo_producto_nombre ?? reemplazo.nombre,
       material_id: (reemplazo as any).material_id ?? 0,
@@ -944,7 +812,6 @@ export default function EditarPedido() {
     };
   };
 
-  // ── Confirmar selección desde modal (cambiar o agregar) ───────────────────
   const handleConfirmarModal = (reemplazo: ProductoReemplazo) => {
     if (modal.modo === "agregar") {
       const nuevo = crearProductoDesdeReemplazo(reemplazo);
@@ -954,76 +821,108 @@ export default function EditarPedido() {
     }
 
     const pi = modal.piOrigen;
-
-    // En lugar de eliminar el original y crear uno nuevo,
-    // actualizamos el producto existente con el nuevo configuracion_plastico_id.
-    // El registro en BD se conserva, solo cambia a qué producto apunta.
     setProductos(prev => prev.map((p, i) => {
       if (i !== pi) return p;
       return {
         ...p,
-        // Nuevo producto seleccionado
         nombre: reemplazo.nombre,
         material: reemplazo.material,
         calibre: reemplazo.calibre,
         medidasFormateadas: reemplazo.medidasFormateadas,
         por_kilo: reemplazo.por_kilo,
         medidas: reemplazo.medidas,
-        // Marcar que el configuracion_plastico cambió
         _configuracionCambiada: true,
         nuevo_configuracion_id: reemplazo.configuracion_plastico_id,
-        // Limpiar pigmentos si el nuevo es BOPP
         pigmentos: esBopp(reemplazo.material, reemplazo.nombre) ? "" : p.pigmentos,
-        // Limpiar precios de los detalles para recalcular con nuevo por_kilo
-        detalles: p.detalles.map(d => ({
-          ...d,
-          precio_total: "",
-          precio_unitario: "",
-        })),
+        detalles: p.detalles.map(d => ({ ...d, precio_total: "" })),
       };
     }));
 
     setModal({ abierto: false, piOrigen: -1, modo: "cambiar" });
   };
 
-  // ── Cálculos de totales ────────────────────────────────────────────────────
   const calcularTotalProducto = (p: ProductoRow) =>
     p.detalles.reduce((s, d) => s + parseSafe(d.precio_total), 0) + parseSafe(p.herramental_precio);
 
   const calcularTotal = () =>
     productos.filter(p => !p._eliminado).reduce((s, p) => s + calcularTotalProducto(p), 0);
 
-  // ── Guardar ────────────────────────────────────────────────────────────────
-  const mapearDetalle = (d: DetalleEdit, porKilo: string) => {
-    const kgs = d.kilogramos !== "" ? parseSafe(d.kilogramos) : parseSafe(d.cantidad);
-    const pk = parseSafe(porKilo);
-    const cantidadParaBackend =
-      d.modo_cantidad === "kilo" && pk > 0
-        ? Math.round(kgs * pk)
-        : parseSafe(d.cantidad);
-    return {
-      iddetalle: d.iddetalle,
-      cantidad: cantidadParaBackend,
-      precio_total: parseSafe(d.precio_total),
-      precio_unitario: d.precio_unitario !== "" ? parseSafe(d.precio_unitario) : null,
-      kilogramos: d.modo_cantidad === "kilo" ? kgs : null,
-      modo_cantidad: d.modo_cantidad,
-    };
-  };
+  const mapearDetalle = (d: DetalleEdit) => ({
+    iddetalle: d.iddetalle,
+    cantidad: parseSafe(d.cantidad),
+    precio_total: parseSafe(d.precio_total),
+    kilogramos: null,
+    modo_cantidad: d.modo_cantidad,
+  });
 
-  // Igual que mapearDetalle, pero sin iddetalle: los detalles de un producto
-  // nuevo nunca tienen id todavía (el backend los inserta, no los actualiza).
-  const mapearDetalleNuevo = (d: DetalleEdit, porKilo: string) => {
-    const { iddetalle, ...resto } = mapearDetalle(d, porKilo);
+  const mapearDetalleNuevo = (d: DetalleEdit) => {
+    const { iddetalle, ...resto } = mapearDetalle(d);
     return resto;
   };
 
+  // ── Regenerar PDF de la cotización con datos actualizados ────────────────
+  const regenerarPdfCotizacion = async (cotFresca: Cotizacion) => {
+    const productosPdf = cotFresca.productos.map((p: any) => ({
+      nombre: p.nombre,
+      material: p.material || "",
+      calibre: p.calibre || "",
+      tintas: p.tintas,
+      caras: p.caras,
+      medidasFormateadas: p.medidasFormateadas || "",
+      medidas: p.medidas || {},
+      bk: null, foil: null, laminado: null, uvBr: null,
+      pigmentos: p.pigmentos || null,
+      pantones: p.pantones || null,
+      asa_suaje: p.asa_suaje || null,
+      observacion: p.observacion || null,
+      descripcion: p.descripcion || null,
+      perforacion: p.perforacion ?? false,
+      por_kilo: p.por_kilo || null,
+      herramental_descripcion: p.herramental_descripcion ?? null,
+      herramental_precio: p.herramental_precio != null ? Number(p.herramental_precio) : null,
+      herramental_aprobado: p.herramental_aprobado ?? null,
+      detalles: (p.detalles || []).map((d: any) => ({
+        cantidad: d.cantidad,
+        precio_total: d.precio_total,
+        kilogramos: d.kilogramos ?? null,
+        modo_cantidad: d.modo_cantidad || "unidad",
+      })),
+    }));
+
+    try {
+      await generarPdfCotizacion({
+        no_cotizacion: cotFresca.no_cotizacion,
+        fecha: cotFresca.fecha,
+        cliente: cotFresca.cliente || "",
+        empresa: cotFresca.empresa || "",
+        telefono: cotFresca.telefono || "",
+        correo: cotFresca.correo || "",
+        estado: cotFresca.estado,
+        impresion: cotFresca.impresion ?? null,
+        celular: cotFresca.celular ?? null,
+        razon_social: cotFresca.razon_social ?? null,
+        rfc: cotFresca.rfc ?? null,
+        domicilio: cotFresca.domicilio ?? null,
+        numero: cotFresca.numero ?? null,
+        colonia: cotFresca.colonia ?? null,
+        codigo_postal: cotFresca.codigo_postal ?? null,
+        poblacion: cotFresca.poblacion ?? null,
+        estado_cliente: cotFresca.estado_cliente ?? null,
+        cliente_id: cotFresca.cliente_id ?? null,
+        identificar: cotFresca.identificar ?? null,
+        total: cotFresca.total,
+        productos: productosPdf,
+      }, true);
+    } catch (pdfErr) {
+      console.warn("⚠️ No se pudo regenerar el PDF de la cotización:", pdfErr);
+    }
+  };
+
+  // ── Guardar ────────────────────────────────────────────────────────────────
   const handleGuardar = async () => {
-    if (!pedidoOrig) return;
+    if (!cotOrig) return;
     setErrorGuardar(null);
 
-    // Un producto nuevo sin configuracion_plastico_id no se puede insertar:
-    // el backend no sabría qué producto crear.
     const productoNuevoSinConfiguracion = productos.find(
       p => !!p._esNuevo && !p._eliminado && !p.nuevo_configuracion_id
     );
@@ -1034,14 +933,22 @@ export default function EditarPedido() {
       return;
     }
 
+    const activos = productos.filter(p => !p._eliminado);
+    const sinCantidadValida = activos.find(
+      p => !p.detalles.some(d => parseSafe(d.cantidad) > 0 && parseSafe(d.precio_total) > 0)
+    );
+    if (sinCantidadValida) {
+      setErrorGuardar(`El producto "${sinCantidadValida.nombre}" no tiene cantidades o precios válidos.`);
+      return;
+    }
+
     setGuardando(true);
     try {
-      const productosExistentes: ProductoPlasticoActualizar[] = productos
+      const productosExistentes: ProductoPlasticoCotizacionActualizar[] = productos
         .filter(p => !p._esNuevo)
         .map(p => ({
           idsolicitud_producto: p.idsolicitud_producto,
           eliminado: p._eliminado,
-          // Si cambió la configuración, enviar el nuevo id
           nuevo_configuracion_id: p._configuracionCambiada ? p.nuevo_configuracion_id : undefined,
           tintas: p.tintas,
           caras: p.caras,
@@ -1052,14 +959,13 @@ export default function EditarPedido() {
           perforacion: permitePerforacion(p.nombre) ? p.perforacion : false,
           herramental_descripcion: p.herramental_descripcion || null,
           herramental_precio: p.herramental_precio !== "" ? parseSafe(p.herramental_precio) : null,
-          herramental_aprobado: p.herramental_aprobado ?? null,
           idsuaje: p.idsuaje ?? null,
           id_color: p.id_color ?? null,
           id_medidatro: p.id_medidatro ?? null,
-          detalles: p.detalles.map(d => mapearDetalle(d, p.por_kilo)),
+          detalles: p.detalles.map(mapearDetalle),
         }));
 
-      const productosNuevos: ProductoNuevoPlastico[] = productos
+      const productosNuevos: ProductoCotizacionNuevoPlastico[] = productos
         .filter(p => !!p._esNuevo && !p._eliminado)
         .map(p => ({
           configuracion_plastico_id: p.nuevo_configuracion_id as number,
@@ -1072,21 +978,24 @@ export default function EditarPedido() {
           perforacion: permitePerforacion(p.nombre) ? p.perforacion : false,
           herramental_descripcion: p.herramental_descripcion || null,
           herramental_precio: p.herramental_precio !== "" ? parseSafe(p.herramental_precio) : null,
-          herramental_aprobado: p.herramental_aprobado ?? null,
           idsuaje: p.idsuaje ?? null,
           id_color: p.id_color ?? null,
           id_medidatro: p.id_medidatro ?? null,
-          detalles: p.detalles.map(d => mapearDetalleNuevo(d, p.por_kilo)),
+          detalles: p.detalles.map(mapearDetalleNuevo),
         }));
 
-      const payload = {
+      await actualizarCotizacionProductos(cotOrig.no_cotizacion, {
         productos: productosExistentes,
         productos_nuevos: productosNuevos,
-      };
+      });
 
-      await actualizarPedido(pedidoOrig.no_pedido, payload);
+      // Recargar la cotización ya actualizada para regenerar el PDF con datos frescos
+      const todas = await getCotizaciones();
+      const cotFresca = todas.find(c => c.no_cotizacion === cotOrig.no_cotizacion);
+      if (cotFresca) await regenerarPdfCotizacion(cotFresca);
+
       setExito(true);
-      setTimeout(() => navigate("/pedido"), 1500);
+      setTimeout(() => navigate("/cotizar"), 1500);
     } catch (e: any) {
       setErrorGuardar(e.response?.data?.error || e.message || "Error al guardar");
     } finally {
@@ -1094,9 +1003,6 @@ export default function EditarPedido() {
     }
   };
 
-  // ── datosActuales para el modal ────────────────────────────────────────────
-  // Cuando el modo es "agregar" no hay producto de origen: el modal debe abrir
-  // en blanco para que el usuario elija tipo/material/calibre/medidas desde cero.
   const datosParaModal = modal.abierto && modal.modo === "cambiar"
     && modal.piOrigen >= 0 && modal.piOrigen < productos.length
     ? (() => {
@@ -1120,7 +1026,7 @@ export default function EditarPedido() {
     <Dashboard>
       <div className="flex flex-col items-center justify-center h-64 gap-4">
         <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
-        <p className="text-gray-500 text-sm">Cargando pedido...</p>
+        <p className="text-gray-500 text-sm">Cargando cotización...</p>
       </div>
     </Dashboard>
   );
@@ -1129,8 +1035,8 @@ export default function EditarPedido() {
     <Dashboard>
       <div className="max-w-md mx-auto mt-12 p-6 bg-red-50 border border-red-200 rounded-xl text-center">
         <p className="text-red-700 font-semibold mb-4">{error}</p>
-        <button onClick={() => navigate("/pedido")} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm">
-          ← Volver a Pedidos
+        <button onClick={() => navigate("/cotizar")} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm">
+          ← Volver a Cotizaciones
         </button>
       </div>
     </Dashboard>
@@ -1144,8 +1050,8 @@ export default function EditarPedido() {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
           </svg>
         </div>
-        <p className="text-green-700 font-semibold text-lg">Pedido actualizado correctamente</p>
-        <p className="text-gray-400 text-sm">Redirigiendo...</p>
+        <p className="text-green-700 font-semibold text-lg">Cotización actualizada correctamente</p>
+        <p className="text-gray-400 text-sm">Regenerando PDF y redirigiendo...</p>
       </div>
     </Dashboard>
   );
@@ -1155,26 +1061,21 @@ export default function EditarPedido() {
 
   return (
     <Dashboard>
-
-      {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
-          <button onClick={() => navigate("/pedido")}
+          <button onClick={() => navigate("/cotizar")}
             className="p-2 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
           </button>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Editar Pedido</h1>
+            <h1 className="text-2xl font-bold text-gray-900">Editar Cotización</h1>
             <p className="text-sm text-gray-400 mt-0.5">
-              <span className="font-semibold text-blue-600">{noPedido}</span>
-              {pedidoOrig?.no_cotizacion && (
-                <span className="ml-2 text-purple-500">• De {pedidoOrig.no_cotizacion}</span>
-              )}
-              {pedidoOrig && (
+              <span className="font-semibold text-blue-600">{noCotizacion}</span>
+              {cotOrig && (
                 <span className="ml-2 text-gray-400">
-                  — {(pedidoOrig as any).impresion || pedidoOrig.cliente || pedidoOrig.empresa || ""}
+                  — {(cotOrig as any).impresion || cotOrig.cliente || cotOrig.empresa || ""}
                 </span>
               )}
             </p>
@@ -1186,22 +1087,19 @@ export default function EditarPedido() {
         </div>
       </div>
 
-      {pedidoMixto && (
+      {cotizacionMixta && (
         <div className="mb-5 p-3 bg-white border border-gray-200 rounded-xl flex items-center justify-between gap-3 shadow-sm">
           <div>
-            <p className="text-sm font-semibold text-gray-800">Pedido mixto</p>
-            <p className="text-xs text-gray-400">Edita cada material del mismo pedido desde este selector.</p>
+            <p className="text-sm font-semibold text-gray-800">Cotización mixta</p>
+            <p className="text-xs text-gray-400">Edita cada material de la misma cotización desde este selector.</p>
           </div>
           <div className="inline-flex rounded-lg bg-gray-100 p-1">
-            <button
-              type="button"
-              className="px-4 py-1.5 rounded-md bg-blue-600 text-white text-sm font-semibold shadow-sm"
-            >
+            <button type="button" className="px-4 py-1.5 rounded-md bg-blue-600 text-white text-sm font-semibold shadow-sm">
               Plástico
             </button>
             <button
               type="button"
-              onClick={() => navigate(`/pedido/${noPedido}/editar-papel`)}
+              onClick={() => navigate(`/cotizar/${noCotizacion}/editar-papel`)}
               className="px-4 py-1.5 rounded-md text-gray-600 hover:text-amber-700 hover:bg-white text-sm font-semibold transition"
             >
               Papel
@@ -1210,7 +1108,6 @@ export default function EditarPedido() {
         </div>
       )}
 
-      {/* Error guardar */}
       {errorGuardar && (
         <div className="mb-5 p-4 bg-red-50 border border-red-200 rounded-xl flex items-start gap-3">
           <svg className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1233,13 +1130,7 @@ export default function EditarPedido() {
                   <p className="text-xs text-red-400 mt-0.5">Marcado para eliminar al guardar</p>
                 </div>
                 <button
-                  onClick={() => {
-                    setProductos(prev => prev.map((p, i) =>
-                      i === pi
-                        ? { ...p, _eliminado: false }
-                        : p
-                    ));
-                  }}
+                  onClick={() => setProductos(prev => prev.map((p, i) => i === pi ? { ...p, _eliminado: false } : p))}
                   className="text-xs px-3 py-1.5 bg-white border border-red-300 text-red-600 rounded-lg hover:bg-red-100 transition">
                   Restaurar
                 </button>
@@ -1261,7 +1152,7 @@ export default function EditarPedido() {
                 medidasTroquel={medidasTroquel}
                 catalogoTintas={catalogoTintas}
                 onCambiarProducto={handleCambiarProducto}
-                idTipoPigmento={idTipoPigmento}        // ← agregar
+                idTipoPigmento={idTipoPigmento}
                 onAbrirModalInsumo={abrirModalInsumo}
                 idTipoPanton={idTipoPanton}
               />
@@ -1275,7 +1166,6 @@ export default function EditarPedido() {
           </p>
         )}
 
-        {/* Agregar nuevo producto al pedido */}
         <button
           type="button"
           onClick={handleAgregarProducto}
@@ -1284,10 +1174,9 @@ export default function EditarPedido() {
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
           </svg>
-          Agregar producto de plástico al pedido
+          Agregar producto de plástico a la cotización
         </button>
 
-        {/* Resumen */}
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-semibold text-gray-700">Resumen</h3>
@@ -1299,12 +1188,8 @@ export default function EditarPedido() {
                 <span className="text-gray-500 truncate flex-1 mr-2">
                   <span className="text-gray-300 mr-1">{i + 1}.</span>
                   {p.nombre}
-                  {p._configuracionCambiada && (
-                    <span className="ml-1.5 text-xs text-amber-500">● cambiado</span>
-                  )}
-                  {p._esNuevo && (
-                    <span className="ml-1.5 text-xs text-green-500">● nuevo</span>
-                  )}
+                  {p._configuracionCambiada && <span className="ml-1.5 text-xs text-amber-500">● cambiado</span>}
+                  {p._esNuevo && <span className="ml-1.5 text-xs text-green-500">● nuevo</span>}
                 </span>
                 <span className="font-medium text-gray-800 flex-shrink-0">${fmt(calcularTotalProducto(p))}</span>
               </div>
@@ -1320,9 +1205,8 @@ export default function EditarPedido() {
           </div>
         </div>
 
-        {/* Botones */}
         <div className="flex items-center justify-between gap-3 pb-4">
-          <button onClick={() => navigate("/pedido")}
+          <button onClick={() => navigate("/cotizar")}
             className="px-5 py-2.5 border border-gray-300 text-gray-600 rounded-xl text-sm font-medium hover:bg-gray-50 transition">
             Cancelar
           </button>
@@ -1333,7 +1217,7 @@ export default function EditarPedido() {
                 ? "bg-gray-300 text-gray-400 cursor-not-allowed"
                 : "bg-blue-600 hover:bg-blue-700 text-white shadow-sm shadow-blue-200"}`}>
             {guardando
-              ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Guardando...</>
+              ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Guardando y regenerando PDF...</>
               : <>
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
@@ -1345,7 +1229,6 @@ export default function EditarPedido() {
         </div>
       </div>
 
-      {/* Modal */}
       <ModalCambiarProducto
         abierto={modal.abierto}
         onCerrar={() => setModal({ abierto: false, piOrigen: -1, modo: "cambiar" })}
@@ -1361,7 +1244,6 @@ export default function EditarPedido() {
           onCancelar={() => setModalInsumo({ abierto: false, tipoId: 0, nombre: "", pi: null, indicePanton: null })}
         />
       )}
-
     </Dashboard>
   );
 }

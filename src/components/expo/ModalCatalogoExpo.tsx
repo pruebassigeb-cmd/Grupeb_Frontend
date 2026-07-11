@@ -77,6 +77,8 @@ export default function ModalCatalogoExpo({ onClose }: Props) {
         hs: p.hs, tipo_hs: p.tipoHs || null,
         ar: p.ar, textura: p.textura, tipo_textura: p.tipoTextura || null,
         uv: p.uv, asa: p.asa, tipo_asa: p.tipoAsa || null, otro: p.otro || null,
+        // NUEVO: pigmento (plástico) — se guarda en producto_acabado_default
+        pigmento: esPlastico ? (p.pigmento || null) : null,
         precio_500: parseFloat(p.precio500.replace(/[^0-9.]/g, "")) || null,
         precio_1000: parseFloat(p.precio1000.replace(/[^0-9.]/g, "")) || null,
         precio_3000: parseFloat(p.precio3000.replace(/[^0-9.]/g, "")) || null,
@@ -109,9 +111,14 @@ export default function ModalCatalogoExpo({ onClose }: Props) {
 
   const eliminarProd = async (id: number, nombre: string) => {
     if (!confirm(`¿Eliminar "${nombre}" del catálogo expo?`)) return;
+    // NUEVO: hay que mandar la categoría — el backend ya no tiene una sola
+    // tabla catalogo_expo, necesita saber si busca en producto_papel o
+    // configuracion_plastico.
+    const prod = productos.find(p => p.id === id);
+    if (!prod) return;
     setEliminandoId(id);
     try {
-      await eliminarProductoCatalogoAPI(id);
+      await eliminarProductoCatalogoAPI(id, prod.categoria);
       setProductos(prev => prev.filter(p => p.id !== id));
     } catch {
       alert("No se pudo eliminar el producto");
@@ -183,7 +190,6 @@ export default function ModalCatalogoExpo({ onClose }: Props) {
               {filtrados.map(p => (
                 <div key={p.id} style={{ background: "#1A1A1A", border: "1px solid #222", borderRadius: 10, overflow: "hidden", display: "flex", flexDirection: "column" }}>
 
-                  {/* Imagen del producto */}
                   <div style={{ width: "100%", height: 110, background: "#0D0D0D", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                     {p.imagen ? (
                       <img

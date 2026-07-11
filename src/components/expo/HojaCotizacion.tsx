@@ -1,4 +1,3 @@
-import { useState, useEffect } from "react";
 import {
   FilaTabla, FilaVacia,
   TH, TH2, THD, TD,
@@ -15,6 +14,7 @@ interface Props {
   empresa: string;
   mob: boolean; tab: boolean; desk: boolean; over: boolean;
   catalogoPropio: Producto[];
+  sistemaProductos: Producto[];
   catalogs:       Catalogs;
   foils:          FoilOpcion[];
   texturas:       TexturaOpcion[];
@@ -23,6 +23,12 @@ interface Props {
   coloresAsa:     { id: number; nombre: string }[];
   suajesPlast:    { id: number; tipo: string }[];
   asesor:         string;
+  // NUEVO: subido a Expo.tsx (antes vivía como useState local aquí) para
+  // poder ignorar, justo al guardar la cotización, las columnas de precio
+  // que el vendedor ya ocultó — aunque alguna fila nueva traiga valores
+  // "flotando" en cant2/cant3/precio2/precio3 que nunca se mostraron.
+  columnasPrecio: 1 | 2 | 3;
+  setColumnasPrecio: React.Dispatch<React.SetStateAction<1 | 2 | 3>>;
   setCliente:(v:string)=>void; setComent:(v:string)=>void;
   setOver:(v:boolean)=>void; onDrop:(e:React.DragEvent)=>void;
   onEdit:(uid:string, k:keyof FilaProducto, v:string|boolean|number|null)=>void;
@@ -54,8 +60,9 @@ function BotonColPrecio({ label, title, onClick, variante }: { label: string; ti
 }
 
 export default function HojaCotizacion({
-  filas,cliente,coment,folio,empresa,mob,tab,desk,over,catalogoPropio,
+  filas,cliente,coment,folio,empresa,mob,tab,desk,over,catalogoPropio,sistemaProductos,
   catalogs, foils, texturas, catalogosPlast, pigmentosDB, coloresAsa, suajesPlast, asesor,
+  columnasPrecio, setColumnasPrecio,
   setCliente,setComent,setOver,
   onDrop,onEdit,onEditNombre,onDel,onAbrirDrawer,onAgregarProducto,
 }:Props){
@@ -63,22 +70,55 @@ export default function HojaCotizacion({
   const alcanzoLimite = filas.length >= LIMITE_PRODUCTOS;
   const filasVaciasBlanco = Math.max(0, LIMITE_PRODUCTOS - filas.length - (alcanzoLimite ? 0 : 1));
 
-  const [columnasPrecio, setColumnasPrecio] = useState<1 | 2 | 3>(1);
-
   const agregarColumnaPrecio = () => setColumnasPrecio(c => (c < 3 ? (c + 1) as 1 | 2 | 3 : c));
   const quitarColumnaPrecio = (columna: 2 | 3) => {
-    const campoPrecio: keyof FilaProducto = columna === 2 ? "precio2" : "precio3";
-    const campoCant: keyof FilaProducto = columna === 2 ? "cant2" : "cant3";
-    filas.forEach(f => { onEdit(f.uid, campoPrecio, ""); onEdit(f.uid, campoCant, ""); });
-    setColumnasPrecio(columna === 2 ? 1 : 2);
-  };
-
-  useEffect(() => {
+  if (columna === 3) {
+    // Es la última columna — simplemente se limpia y se reduce el conteo.
+    filas.forEach(f => { onEdit(f.uid, "precio3", ""); onEdit(f.uid, "cant3", ""); });
+    setColumnasPrecio(2);
+    return;
+  }
+  // columna === 2
+  if (columnasPrecio === 3) {
+    // Hay una columna 3 con datos — se recorre a la posición 2 en vez de
+    // perderse, y se limpia lo que queda en la 3.
     filas.forEach(f => {
-      if (columnasPrecio < 2 && f.precio2) onEdit(f.uid, "precio2", "");
-      if (columnasPrecio < 3 && f.precio3) onEdit(f.uid, "precio3", "");
+      onEdit(f.uid, "precio2", f.precio3);
+      onEdit(f.uid, "cant2", f.cant3);
+      onEdit(f.uid, "precio3", "");
+      onEdit(f.uid, "cant3", "");
     });
-  }, [filas, columnasPrecio, onEdit]);
+    setColumnasPrecio(2);
+  } else {
+    // Solo había 2 columnas — se quita la 2 sin nada que recorrer.
+    filas.forEach(f => { onEdit(f.uid, "precio2", ""); onEdit(f.uid, "cant2", ""); });
+    setColumnasPrecio(1);
+  }
+};
+
+  // ── BUGFIX ──────────────────────────────────────────────────────────────
+  // Antes había aquí un useEffect que, en cada cambio de `filas`, revisaba
+  // `if (columnasPrecio < 2 && f.precio2) onEdit(f.uid, "precio2", "")`
+  // (y lo mismo para precio3/cant3).
+  //
+  // `columnasPrecio` arranca en 1 por defecto. Al arrastrar el PRIMER
+  // producto de la cotización (antes de que el usuario alcance a hacer
+  // click en "+" para mostrar las columnas 2 y 3), ese efecto se disparaba
+  // de inmediato porque `filas` acababa de cambiar — y si el producto traía
+  // precio1000/precio3000 de catálogo, los borraba silenciosamente en el
+  // estado real (`filas` del padre) aunque el usuario nunca tocó nada.
+  //
+  // El input en pantalla seguía mostrando el valor viejo porque
+  // `FilaTabla` guarda precio1/2/3 en estado local que solo se lee una vez
+  // al montar — por eso se veía "completo" en la hoja pero no se guardaba
+  // ni aparecía en el PDF/registro. Pasaba siempre en la fila 1 porque es
+  // la única que se crea mientras `columnasPrecio` todavía vale 1.
+  //
+  // La limpieza de precio2/cant2/precio3/cant3 YA se maneja correctamente
+  // en `quitarColumnaPrecio` (arriba), que solo actúa cuando el usuario
+  // decide quitar una columna explícitamente. Este efecto era redundante
+  // y además causaba el bug, así que se eliminó.
+  // ──────────────────────────────────────────────────────────────────────
 
   const totalCols = 12 + columnasPrecio;
 
@@ -275,6 +315,7 @@ export default function HojaCotizacion({
                 <FilaVacia
                   onElegir={onAgregarProducto}
                   catalogoPropio={catalogoPropio}
+                  sistemaProductos={sistemaProductos}
                   catalogs={catalogs}
                   columnasPrecio={columnasPrecio}
                 />

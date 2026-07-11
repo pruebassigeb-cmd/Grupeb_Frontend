@@ -22,6 +22,8 @@ export interface ProductoCatalogoExpo {
   precio_3000: number | null;
   imagen_url: string | null;
   tipo_producto: string | null;
+  // NUEVO: pigmento (plástico) — de producto_acabado_default.pigmento_default
+  pigmento?: string | null;
 }
 
 export interface CatalogoSistema {
@@ -125,8 +127,14 @@ export const actualizarProductoCatalogo = async (id: number, payload: Omit<Produ
   return data.producto;
 };
 
-export const eliminarProductoCatalogo = async (id: number): Promise<void> => {
-  await api.delete(`/expo/catalogo/${id}`);
+// NUEVO: ahora requiere `categoria` — el backend ya no tiene una sola tabla
+// catalogo_expo, necesita saber si busca en producto_papel o
+// configuracion_plastico (cartón cuenta como "papel" del lado del backend).
+export const eliminarProductoCatalogo = async (
+  id: number,
+  categoria: "papel" | "plastico" | "carton"
+): Promise<void> => {
+  await api.delete(`/expo/catalogo/${id}`, { params: { categoria } });
 };
 
 // ═══════════════════════════════════════════════════════════
@@ -214,16 +222,27 @@ export const crearCotizacionExpo = async (payload: {
 // ═══════════════════════════════════════════════════════════
 // registrarProductoEnBlanco
 // ═══════════════════════════════════════════════════════════
-
+// CAMBIO IMPORTANTE: ya NO se registra en catalogo_expo. Se registra
+// directo en producto_papel / configuracion_plastico (las tablas
+// principales que también usan Papel.tsx y Plastico.tsx), marcado con
+// origen_expo=true, con los datos que se tengan — el resto se completa
+// después cuando la cotización se convierta en pedido real. Así se evita
+// por completo el problema de "dos tablas espejo" para este flujo.
 export const registrarProductoEnBlanco = async (
   fila: FilaProducto,
   precio1: string,
   precio2: string,
   precio3: string,
-): Promise<number> => {
+): Promise<{ id: number; fuente: "papel" | "plastico" }> => {
   const p = fila.producto;
   const parseN = (v: string | undefined | null) => parseFloat(v || "0") || null;
-  const parseP = (s: string) => parseFloat(s.replace(/[^0-9.]/g, "")) || null;
+  // Los precios vienen formateados con "$" (ej. "$5.00") — parseN los deja
+  // en NaN porque parseFloat no puede arrancar con "$". Este sí les quita
+  // cualquier caracter que no sea número o punto antes de convertir.
+  const parsePrecioLocal = (v: string | undefined | null) => {
+    const limpio = (v || "").replace(/[^0-9.]/g, "");
+    return limpio ? (parseFloat(limpio) || null) : null;
+  };
 
   const medidaStr = fila.medida || p.medida || null;
   let alturaCalc: number | null = null;
@@ -250,41 +269,43 @@ export const registrarProductoEnBlanco = async (
 
   const esPlastico = p.categoria === "plastico";
 
+  if (esPlastico) {
+    const payload = {
+      nombre:        p.nombre || "Producto expo",
+      tipo_producto: fila.tipoPlastico || p.tipoProducto || p.tipo || null,
+      material:      fila.material || p.material || null,
+      calibre:       fila.calibre  || p.calibre  || null,
+      medida:        medidaStr,
+      altura:            parseN(p.altura) ?? alturaCalc,
+      ancho:             parseN(p.ancho)  ?? anchoCalc,
+      fuelle_fondo:      parseN(p.fuelFondo) ?? fuelleCalc,
+      fuelle_latIz:      parseN(p.fuelLateral),
+      fuelle_latDe:      parseN(p.fuelLateral2),
+      refuerzo:          parseN(p.refuerzo),
+      precio_500:  parsePrecioLocal(precio1),
+      precio_1000: parsePrecioLocal(precio2),
+      precio_3000: parsePrecioLocal(precio3),
+    };
+    const { data } = await api.post("/productos-plastico/en-blanco-expo", payload);
+    return { id: data.idconfiguracion_plastico as number, fuente: "plastico" };
+  }
+
   const payload = {
     nombre:        p.nombre || "Producto expo",
-    categoria:     p.categoria,
+    categoria:     p.categoria, // "papel" | "carton"
     medida:        medidaStr,
-    material:      fila.material     || p.material     || null,
-    calibre:       fila.calibre      || p.calibre      || null,
-    tintas:        fila.tintas       || p.tintas        || null,
+    material:      fila.material || p.material || null,
+    calibre:       fila.calibre  || p.calibre  || null,
     tipo_producto: fila.tipoPlastico || p.tipoProducto || p.tipo || null,
-    laminacion:    fila.laminacion,
-    tipo_laminado: fila.tipoLaminado || null,
-    hs:            fila.hs,
-    tipo_hs:       fila.tipoHs       || null,
-    ar:            fila.ar,
-    textura:       fila.textura,
-    tipo_textura:  fila.tipoTextura  || null,
-    uv:            fila.uv,
-    asa:           fila.asa,
-    tipo_asa:      fila.tipoAsa      || null,
-    otro:          fila.otro         || null,
-    precio_500:    parseP(precio1),
-    precio_1000:   parseP(precio2),
-    precio_3000:   parseP(precio3),
-    imagen_url:    p.imagen          || null,
-    origen:        "expo",
-    altura:            parseN(p.altura)      ?? alturaCalc,
-    ancho:             parseN(p.ancho)       ?? anchoCalc,
-    fuelle:            !esPlastico ? (parseN(p.fuelle) ?? fuelleCalc) : null,
-    fuelle_fondo:       esPlastico ? (parseN(p.fuelFondo)    ?? fuelleCalc) : null,
-    fuelle_lateral_iz:  esPlastico ?  parseN(p.fuelLateral)  : null,
-    fuelle_lateral_de:  esPlastico ?  parseN(p.fuelLateral2) : null,
-    refuerzo:           esPlastico ?  parseN(p.refuerzo)     : null,
+    altura: parseN(p.altura) ?? alturaCalc,
+    ancho:  parseN(p.ancho)  ?? anchoCalc,
+    fuelle: parseN(p.fuelle) ?? fuelleCalc,
+    precio_500:  parsePrecioLocal(precio1),
+    precio_1000: parsePrecioLocal(precio2),
+    precio_3000: parsePrecioLocal(precio3),
   };
-
-  const { data } = await api.post("/expo/catalogo", payload);
-  return data.producto.idcatalogo_expo as number;
+  const { data } = await api.post("/productos-papel/en-blanco-expo", payload);
+  return { id: data.idproducto_papel as number, fuente: "papel" };
 };
 
 // ═══════════════════════════════════════════════════════════
@@ -306,13 +327,6 @@ export const mapearProductoAPayload = (
   const parseP = (s: string) => parseFloat(s.replace(/[^0-9.]/g, "")) || 0;
 
   const extraNum = fila.modoExtra === "precio" ? (parseP(fila.extra || "0")) : 0;
-  // El cargo extra por pieza solo aplica a columnas que YA tienen un precio
-  // base capturado. Antes se sumaba parejo a las 3 columnas, así que una
-  // fila con solo el precio1 lleno pero con un extra activo terminaba
-  // "registrando" precio2/precio3 fantasma (extraNum > 0 hacía que p2/p3
-  // quedaran > 0 aunque el usuario nunca los haya llenado ni se vieran
-  // en pantalla — esto coincidía exactamente con "dejo solo la cantidad 1
-  // pero se registran las 3").
   const p1raw = parseP(precio1);
   const p2raw = parseP(precio2);
   const p3raw = parseP(precio3);
@@ -325,8 +339,9 @@ export const mapearProductoAPayload = (
   const c2 = parseCant(cant2);
   const c3 = parseCant(cant3);
 
-  // ── Papel del sistema SIGEB ──────────────────────────────────────────────
-  if (p.fuente === "sistema" && p.categoria === "papel") {
+  // ── Papel del sistema SIGEB (o ya registrado en blanco desde Expo — ahora
+  // es EXACTAMENTE el mismo camino, porque ya vive en producto_papel) ──────
+  if (p.categoria === "papel" && (p.fuente === "sistema" || p.fuente === "expo")) {
     return {
       tipoCotizacion:   "papel",
       tipo_material:    "papel",
@@ -345,8 +360,6 @@ export const mapearProductoAPayload = (
       idcat_textura:   fila.idTextura  ?? null,
       uv:              fila.uv,
       alto_relieve:    fila.ar,
-      // Los comentarios de la cotización viajan como `comentarios` en el POST;
-      // el back los aplica como observación de cada producto (obsGeneral).
       observacion:     null,
       descripcion:     p.nombre        ?? null,
       cantidades: [c1, c2, c3] as [number, number, number],
@@ -358,15 +371,17 @@ export const mapearProductoAPayload = (
     };
   }
 
-  // ── Papel expo propio ────────────────────────────────────────────────────
-  if (p.fuente === "expo" && (p.categoria === "papel" || p.categoria === "carton")) {
+  // ── Cartón "en blanco" desde Expo: sigue sin FK directa del sistema
+  // (producto_papel maneja cartón vía idproductos=3, pero por ahora ese
+  // camino sigue como antes hasta que se confirme el detalle con el resto
+  // del flujo de cartón).
+  if (p.fuente === "expo" && p.categoria === "carton") {
     return {
       tipoCotizacion:  "expo_papel",
       tipo_material:   "expo",
       categoria:       p.categoria,
       nombre:          p.nombre || null,
       tintas_cantidad: fila.tintas || p.tintas || 1,
-      // Comentarios generales → observación (los aplica el back)
       observacion:     null,
       tipoLaminado:  fila.tipoLaminado || null,
       tipoHs:        fila.tipoHs       || null,
@@ -380,26 +395,20 @@ export const mapearProductoAPayload = (
     };
   }
 
-  // ── Plástico (sistema o expo) ────────────────────────────────────────────
-  // Para plástico expo:
-  //   idSuaje = idsuaje (1=flexible, 3=rígida) — elegido por el usuario
-  //   idAsa   = id_color del color del asa
-  //   tipoAsa = nombre del color ("Azul", "Negro", etc.)
+  // ── Plástico (sistema, o ya registrado en blanco desde Expo — mismo
+  // camino ahora, vive en configuracion_plastico) ──────────────────────────
   return {
     tipoCotizacion:            "plastico",
     tipo_material:             "plastico",
-    configuracion_plastico_id: p.fuente === "sistema" ? (p.configuracion_plastico_id ?? p.id) : null,
+    configuracion_plastico_id: p.configuracion_plastico_id ?? p.id,
     tintas_cantidad:           fila.tintas || p.tintas || 1,
     nombre:                    p.nombre   || null,
-    // OJO: fila.otro en plástico trae el TIPO de bolsa (el select lo propaga ahí),
-    // no una observación — mandarlo tapaba el comentario general en el back.
     observacion:               null,
     id_laminado: fila.idLaminado ?? null,
     idfoil:      fila.idFoil     ?? null,
     id_textura:  fila.idTextura  ?? null,
-    // Asa plástico — manda idsuaje e id_color por separado
-    idsuaje:     fila.idSuaje   ?? null,   // tipo (1=flexible, 3=rígida)
-    id_color:    fila.idAsa     ?? null,   // color (id_color de color_asa)
+    idsuaje:     fila.idSuaje   ?? null,
+    id_color:    fila.idAsa     ?? null,
     uv:          fila.uv,
     ar:          fila.ar,
     pigmento:    fila.modoExtra === "pigmento" ? (fila.pigmento || null) : null,

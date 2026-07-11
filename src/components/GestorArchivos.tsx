@@ -16,7 +16,7 @@ const CARPETAS_OPTIONS: { value: CarpetaFrontend; label: string }[] = [
   { value: "pdfs", label: "PDFs" },
   { value: "fotos-envios", label: "Fotos de Envíos" },
   { value: "backups", label: "Backups BD" },
-  { value: "suaje", label: "Suajes" }, 
+  { value: "suaje", label: "Productos" },
   { value: "catalogoproductos", label: "Catálogo de Productos" },
 ];
 
@@ -201,6 +201,95 @@ const getSubcarpetasDeCarpeta = (carpeta: CarpetaFrontend) => {
   if (carpeta === "catalogoproductos") return SUBCARPETAS_CATALOGO;
   return [];
 };
+
+const getExtension = (nombre: string) => nombre.split(".").pop()?.toUpperCase() ?? "FILE";
+
+// ── Vista previa por tipo de archivo ────────────────────────────────────────
+// Componente aparte (no una función interna) para que el PDF pueda usar
+// IntersectionObserver por tarjeta: cada iframe de PDF solo se monta cuando
+// esa tarjeta específica entra al viewport, así nunca se disparan todas las
+// cargas de golpe al abrir una carpeta con muchos archivos.
+function PdfPreviewLazy({ archivo }: { archivo: Archivo }) {
+  const [visible, setVisible] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (visible) return;
+    const el = ref.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          setVisible(true);
+          obs.disconnect();
+        }
+      },
+      { rootMargin: "200px" } // empieza a cargar un poco antes de que se vea, para que no se note el "pop-in"
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [visible]);
+
+  return (
+    <div ref={ref} className="w-full h-full overflow-hidden pointer-events-none bg-white">
+      {visible ? (
+        <iframe
+          src={`${archivo.url}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`}
+          loading="lazy"
+          title={archivo.nombre}
+          className="w-full h-full border-0"
+        />
+      ) : (
+        <div className="w-full h-full flex flex-col items-center justify-center gap-1">
+          <svg className="w-10 h-10 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+              d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+          </svg>
+          <span className="text-xs font-bold text-red-500">PDF</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Solo dispositivos con mouse real (hover confiable) cargan la vista previa
+// en vivo del PDF. En táctil (tablet/celular) el navegador dibuja su propio
+// "chrome" nativo sobre el iframe (botón de abrir, barra de controles) que
+// no se puede ocultar de forma confiable con parámetros de URL — por eso ahí
+// mejor nos quedamos con el ícono estático, sin iframe, y así ni aparece.
+const tieneHoverReal = () =>
+  typeof window !== "undefined" &&
+  !!window.matchMedia?.("(hover: hover) and (pointer: fine)").matches;
+
+function ArchivoPreview({ archivo }: { archivo: Archivo }) {
+  if (archivo.tipo === "image") {
+    return <img src={archivo.url} alt={archivo.nombre} loading="lazy" className="w-full h-full object-cover"
+      onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />;
+  }
+  if (archivo.tipo === "pdf") {
+    if (!tieneHoverReal()) {
+      return (
+        <div className="w-full h-full flex flex-col items-center justify-center gap-1">
+          <svg className="w-10 h-10 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+              d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+          </svg>
+          <span className="text-xs font-bold text-red-500">PDF</span>
+        </div>
+      );
+    }
+    return <PdfPreviewLazy archivo={archivo} />;
+  }
+  return (
+    <div className="flex flex-col items-center gap-1">
+      <svg className="w-10 h-10 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+          d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+      </svg>
+      <span className="text-xs font-bold text-gray-500">{getExtension(archivo.nombre)}</span>
+    </div>
+  );
+}
 
 // ── Componente principal ─────────────────────────────────────
 export default function GestorArchivos() {
@@ -459,7 +548,6 @@ const [subcarpetaActiva, setSubcarpetaActiva] = useState<SubcarpetaPDF | Subcarp
   const formatFecha = (fecha: string) =>
     new Date(fecha).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" });
   const formatTamano = (kb: number) => kb < 1024 ? `${kb} KB` : `${(kb / 1024).toFixed(1)} MB`;
-  const getExtension = (nombre: string) => nombre.split(".").pop()?.toUpperCase() ?? "FILE";
 
   const ordenActualLabel = ORDEN_OPTIONS.find(o => o.value === orden)?.label ?? "Ordenar";
   const agrupaActualLabel = AGRUPA_OPTIONS.find(o => o.value === agrupacion)?.label ?? "Agrupar";
@@ -478,33 +566,6 @@ const subcarpetaLabel = carpetaActiva === "suaje"
   const todosSeleccionados =
     archivosFiltradosYOrdenados.length > 0 &&
     seleccionados.size === archivosFiltradosYOrdenados.length;
-
-  const renderPreview = (archivo: Archivo) => {
-    if (archivo.tipo === "image") {
-      return <img src={archivo.url} alt={archivo.nombre} className="w-full h-full object-cover"
-        onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />;
-    }
-    if (archivo.tipo === "pdf") {
-      return (
-        <div className="flex flex-col items-center gap-1">
-          <svg className="w-10 h-10 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-              d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-          </svg>
-          <span className="text-xs font-bold text-red-500">PDF</span>
-        </div>
-      );
-    }
-    return (
-      <div className="flex flex-col items-center gap-1">
-        <svg className="w-10 h-10 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-        </svg>
-        <span className="text-xs font-bold text-gray-500">{getExtension(archivo.nombre)}</span>
-      </div>
-    );
-  };
 
   const renderIconoCarpeta = (carpeta: CarpetaFrontend) => {
 const colores: Record<CarpetaFrontend, string> = {
@@ -552,30 +613,29 @@ const colores: Record<CarpetaFrontend, string> = {
               </div>
             )}
             <div className="aspect-square bg-gray-50 flex items-center justify-center overflow-hidden cursor-pointer"
-              onClick={() => modoSeleccion && toggleSeleccion(archivo.id_archivo)}>
-              {renderPreview(archivo)}
+              onClick={() => {
+                if (modoSeleccion) { toggleSeleccion(archivo.id_archivo); return; }
+                window.open(archivo.url, "_blank", "noopener,noreferrer");
+              }}>
+              <ArchivoPreview archivo={archivo} />
             </div>
             <div className="p-2">
               <p className="text-xs text-gray-700 font-medium truncate" title={archivo.nombre}>{archivo.nombre}</p>
               <p className="text-xs text-gray-400 mt-0.5">{formatTamano(archivo.tamano_kb)} · {formatFecha(archivo.created_at)}</p>
             </div>
+            {/* Eliminar: ícono fijo en la esquina, siempre disponible (no depende
+                de :hover, que en táctil se comporta raro con doble-toque). El
+                stopPropagation evita que el toque también dispare la apertura
+                del archivo del div de arriba. */}
             {!modoSeleccion && (
-              <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                <a href={archivo.url} target="_blank" rel="noopener noreferrer"
-                  className="p-2 bg-white rounded-lg hover:bg-gray-100 transition-colors" title="Ver / Descargar">
-                  <svg className="w-4 h-4 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                      d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                  </svg>
-                </a>
-                <button onClick={() => handleEliminarUno(archivo.id_archivo, archivo.nombre)}
-                  className="p-2 bg-white rounded-lg hover:bg-red-50 transition-colors" title="Eliminar">
-                  <svg className="w-4 h-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                      d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                  </svg>
-                </button>
-              </div>
+              <button onClick={e => { e.stopPropagation(); handleEliminarUno(archivo.id_archivo, archivo.nombre); }}
+                title="Eliminar"
+                className="absolute top-2 right-2 z-10 p-1.5 bg-white/95 border border-gray-200 rounded-lg shadow-sm text-red-500 hover:bg-red-50 hover:border-red-200 transition-colors">
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </button>
             )}
           </div>
         );
@@ -714,7 +774,7 @@ const getNumSubcarpetas = (carpeta: CarpetaFrontend) => {
                 { label: "PDFs", value: estadisticas.por_carpeta.pdfs, color: "bg-red-50 text-red-700" },
                 { label: "Fotos de Envíos", value: estadisticas.por_carpeta.fotos_envios, color: "bg-green-50 text-green-700" },
                 { label: "Backups BD", value: estadisticas.por_carpeta.backups, color: "bg-gray-100 text-gray-700" },
-                { label: "Suajes", value: estadisticas.por_carpeta.suaje, color: "bg-purple-50 text-purple-700" },
+                { label: "Productos", value: estadisticas.por_carpeta.suaje, color: "bg-purple-50 text-purple-700" },
               ].map(item => (
                 <div key={item.label} className={`rounded-xl px-3 py-2 ${item.color}`}>
                   <p className="text-xs font-semibold">{item.label}</p>

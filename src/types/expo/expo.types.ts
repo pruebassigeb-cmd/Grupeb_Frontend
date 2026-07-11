@@ -42,6 +42,20 @@ export interface Producto {
   tintasId?:          number;
   carasId?:           number;
   origen?:            string;
+  // NUEVO: pigmento (solo plástico) — antes no existía en el catálogo de
+  // Expo. Se guarda en producto_acabado_default.pigmento_default, texto
+  // libre (no hay catálogo con ID para pigmentos).
+  pigmento?:          string;
+  // NUEVO: IDs reales de los acabados por default — el <select> de la hoja
+  // de cotización se ve bien mostrando el NOMBRE, pero lo que en verdad se
+  // guarda al cotizar es el ID. Sin esto, un producto "tal cual" (sin que
+  // el vendedor toque los selects) se guardaba con estos acabados en null.
+  idLaminadoDefault?: number;
+  idFoilDefault?:     number;
+  idTexturaDefault?:  number;
+  idAsaDefault?:      number;  // papel: idcat_tipo_asa
+  idSuajeDefault?:    number;  // plástico: tipo de asa/suaje
+  idColorDefault?:    number;  // plástico: color de asa
 }
 
 // Opciones filtradas por producto de papel del sistema
@@ -228,28 +242,32 @@ export const filaDesdeProducto = (p: Producto): FilaProducto => {
     cant3:        "3,000",
     laminacion:   esPapelOCarton ? p.laminacion : false,
     tipoLaminado: esPapelOCarton ? (p.tipoLaminado || "") : "",
-    idLaminado:   null,
+    idLaminado:   esPapelOCarton ? (p.idLaminadoDefault ?? null) : null,
     hs:           esPapelOCarton ? p.hs : false,
     tipoHs:       esPapelOCarton ? (p.tipoHs || "") : "",
-    idFoil:       null,
+    idFoil:       esPapelOCarton ? (p.idFoilDefault ?? null) : null,
     ar:           esPapelOCarton ? p.ar : false,
     textura:      esPapelOCarton ? p.textura : false,
     tipoTextura:  esPapelOCarton ? (p.tipoTextura || "") : "",
-    idTextura:    null,
+    idTextura:    esPapelOCarton ? (p.idTexturaDefault ?? null) : null,
     uv:           esPapelOCarton ? p.uv : false,
     asa:          p.asa,
     tipoAsa:      p.tipoAsa || "",
-    idAsa:        null,
-    idSuaje:      null,
+    idAsa:        esPapelOCarton ? (p.idAsaDefault ?? null) : (p.idColorDefault ?? null),
+    idSuaje:      esPlastico ? (p.idSuajeDefault ?? null) : null,
     tintas:       p.tintas || (esPlastico ? "1" : "1x0"),
     otro:         p.otro || "",
     medida:       p.medida || "",
     material:     p.material || "",
     calibre:      p.calibre || "",
     tipoPlastico: esPlastico ? (p.tipoProducto || p.tipo || "") : "",
-    modoExtra:    "precio",
+    // Para plástico, el campo "extra" arranca SIEMPRE en modo pigmento (no
+    // en modo precio) — es el campo principal para ese tipo de producto, no
+    // debe hacer falta que el vendedor lo cambie a mano cada vez. El modo
+    // "precio extra" sigue disponible desde el mismo selector si se necesita.
+    modoExtra:    esPlastico ? "pigmento" : "precio",
     extra:        "",
-    pigmento:     "",
+    pigmento:     esPlastico ? (p.pigmento || "") : "",
     pantones:     null,
     // Se populan en Expo.tsx al hacer addProd, solo para papel del sistema
     asasPermitidas:      null,
@@ -289,6 +307,8 @@ export const mapearCatalogoExpoAProducto = (p: {
   fuelle_lateral_de?: number | null;
   refuerzo?:         number | null;
   origen?:           string | null;
+  // NUEVO: pigmento (plástico) — de producto_acabado_default.pigmento_default
+  pigmento?:         string | null;
 }): Producto => {
   const esPlastico = p.categoria === "plastico";
   const esPapelOCarton = p.categoria === "papel" || p.categoria === "carton";
@@ -326,6 +346,7 @@ export const mapearCatalogoExpoAProducto = (p: {
     fuelLateral2: esPlastico && p.fuelle_lateral_de != null ? String(p.fuelle_lateral_de) : "",
     refuerzo:     esPlastico && p.refuerzo          != null ? String(p.refuerzo)          : "",
     origen:       p.origen            || "expo",
+    pigmento:     esPlastico ? (p.pigmento || "") : "",
   };
 };
 
@@ -342,17 +363,40 @@ export const mapearPlasticoSistemaAProducto = (p: {
   material: string | null; calibre: number | null; calibre_bopp: number | null; por_kilo: number | null;
   altura?: number | null; ancho?: number | null; fuelle_fondo?: number | null;
   fuelle_latiz?: number | null; fuelle_latde?: number | null; refuerzo?: number | null;
+  // NUEVO: URL firmada de la imagen registrada en Plastico.tsx (categoria
+  // 'imagen-producto-plastico' en `archivos`), o la de backfill desde
+  // Catálogo Expo si aplicó. Viene ya resuelta del backend (getCatalogoSistema).
+  imagen_url?: string | null;
+  // NUEVO: precios de referencia (500/1000/3000 pzs) — antes vivían en
+  // catalogo_expo, ahora en configuracion_plastico. Son solo el valor con
+  // el que arranca la fila al agregar el producto a la cotización; se
+  // pueden seguir editando libremente ahí, igual que siempre.
+  precio_500?: number | null;
+  precio_1000?: number | null;
+  precio_3000?: number | null;
+  // NUEVO: acabados por default (producto_acabado_default) — antes esta
+  // función los ignoraba por completo (hardcodeados en false/""), por eso
+  // no se veían al arrastrar el producto al cotizador aunque sí estuvieran
+  // guardados en la base de datos.
+  pigmento?: string | null;
+  asa?: boolean;
+  tipo_asa?: string | null;
+  // NUEVO: IDs reales — ver comentario en la interfaz Producto.
+  idsuaje?: number | null;
+  id_color?: number | null;
 }): Producto => {
-  const calibre = p.calibre_bopp
-    ? String(p.calibre_bopp)
-    : p.calibre ? String(p.calibre) : "";
+  const materialNorm = normalizarMaterialPlastico(p.material);
+  const esBopp = materialNorm === "BOPP";
+  const calibre = esBopp
+    ? (p.calibre_bopp != null ? String(p.calibre_bopp) : "")
+    : (p.calibre != null ? String(p.calibre) : "");
   return {
     id:           p.id,
     fuente:       "sistema",
     nombre:       p.nombre,
     categoria:    "plastico",
     medida:       p.medida || "",
-    material:     normalizarMaterialPlastico(p.material),
+    material:     materialNorm,
     calibre,
     tintas:       "1",
     laminacion:   false,
@@ -363,13 +407,16 @@ export const mapearPlasticoSistemaAProducto = (p: {
     textura:      false,
     tipoTextura:  "",
     uv:           false,
-    asa:          false,
-    tipoAsa:      "",
+    asa:          p.asa === true,
+    tipoAsa:      p.tipo_asa || "",
     otro:         "",
-    precio500:    "",
-    precio1000:   "",
-    precio3000:   "",
-    imagen:       "",
+    pigmento:     p.pigmento || "",
+    idSuajeDefault: p.idsuaje  ?? undefined,
+    idColorDefault: p.id_color ?? undefined,
+    precio500:    p.precio_500  != null ? `$${Number(p.precio_500).toFixed(2)}`  : "",
+    precio1000:   p.precio_1000 != null ? `$${Number(p.precio_1000).toFixed(2)}` : "",
+    precio3000:   p.precio_3000 != null ? `$${Number(p.precio_3000).toFixed(2)}` : "",
+    imagen:       p.imagen_url || "",
     tipo:         "",
     tipoProducto: "",
     configuracion_plastico_id: p.id,
@@ -389,6 +436,36 @@ export const mapearPapelSistemaAProducto = (p: {
   descripcion_papel: string | null; primer_material?: string | null;
   primer_calibre?: string | null;
   ancho?: number | null; fuelle?: number | null; altura?: number | null;
+  // NUEVO: URL firmada de la imagen registrada en "Productos Papel" →
+  // subcarpeta "imagen" (categoria='imagen-suaje-papel' en `archivos`).
+  // Viene del backend ya resuelta (getCatalogoSistema), lista para usarse
+  // directo como src de <img>.
+  imagen_url?: string | null;
+  // NUEVO: precios de referencia — mismo comentario que en el mapeo de
+  // plástico: solo el valor con el que arranca la fila al agregar el
+  // producto a la cotización, se sigue pudiendo editar libremente.
+  precio_500?: number | null;
+  precio_1000?: number | null;
+  precio_3000?: number | null;
+  // NUEVO: acabados reales (acabados_papel/acabados_laminado/acabados_asas
+  // + producto_acabado_default) — antes esta función los ignoraba por
+  // completo (hardcodeados en false/""), por eso no se veían al arrastrar
+  // el producto al cotizador aunque sí estuvieran guardados en la BD.
+  laminacion?: boolean;
+  tipo_laminado?: string | null;
+  hs?: boolean;
+  tipo_hs?: string | null;
+  ar?: boolean;
+  textura?: boolean;
+  tipo_textura?: string | null;
+  uv?: boolean;
+  asa?: boolean;
+  tipo_asa?: string | null;
+  // NUEVO: IDs reales — ver comentario en la interfaz Producto.
+  idcat_laminado?: number | null;
+  idfoil?: number | null;
+  idcat_textura?: number | null;
+  idcat_tipo_asa?: number | null;
 }): Producto => ({
   id:           p.id,
   fuente:       "sistema",
@@ -400,21 +477,25 @@ export const mapearPapelSistemaAProducto = (p: {
   material:     p.primer_material || "",
   calibre:      p.primer_calibre || "",
   tintas:       "1x0",
-  laminacion:   false,
-  tipoLaminado: "",
-  hs:           false,
-  tipoHs:       "",
-  ar:           false,
-  textura:      false,
-  tipoTextura:  "",
-  uv:           false,
-  asa:          false,
-  tipoAsa:      "",
+  laminacion:   p.laminacion === true,
+  tipoLaminado: p.tipo_laminado || "",
+  hs:           p.hs === true,
+  tipoHs:       p.tipo_hs || "",
+  ar:           p.ar === true,
+  textura:      p.textura === true,
+  tipoTextura:  p.tipo_textura || "",
+  uv:           p.uv === true,
+  asa:          p.asa === true,
+  tipoAsa:      p.tipo_asa || "",
   otro:         "",
-  precio500:    "",
-  precio1000:   "",
-  precio3000:   "",
-  imagen:       "",
+  idLaminadoDefault: p.idcat_laminado    ?? undefined,
+  idFoilDefault:     p.idfoil            ?? undefined,
+  idTexturaDefault:  p.idcat_textura     ?? undefined,
+  idAsaDefault:      p.idcat_tipo_asa    ?? undefined,
+  precio500:    p.precio_500  != null ? `$${Number(p.precio_500).toFixed(2)}`  : "",
+  precio1000:   p.precio_1000 != null ? `$${Number(p.precio_1000).toFixed(2)}` : "",
+  precio3000:   p.precio_3000 != null ? `$${Number(p.precio_3000).toFixed(2)}` : "",
+  imagen:       p.imagen_url || "",
   idproducto_papel: p.id,
   tipo:         "",
   tipoProducto: "",

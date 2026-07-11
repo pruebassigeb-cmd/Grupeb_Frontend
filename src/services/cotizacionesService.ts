@@ -160,3 +160,124 @@ export const eliminarCotizacion = async (noCotizacion: string) => {
   const response = await api.delete(`/cotizaciones/${noCotizacion}`);
   return response.data;
 };
+
+// ─── Editar cotización (antes de aprobar) ────────────────────────────────
+
+export interface DetalleCotizacionActualizar {
+  iddetalle: number | null;
+  cantidad: number;
+  precio_total: number;
+  kilogramos?: number | null;
+  modo_cantidad: "unidad" | "kilo";
+}
+
+interface ProductoCotizacionActualizarBase {
+  idsolicitud_producto: number;
+  eliminado: boolean;
+  observacion: string | null;
+  descripcion: string | null;
+  herramental_descripcion: string | null;
+  herramental_precio: number | null;
+  detalles: DetalleCotizacionActualizar[];
+}
+
+export interface ProductoPlasticoCotizacionActualizar extends ProductoCotizacionActualizarBase {
+  tipo_material?: "plastico";
+  tipoCotizacion?: "plastico";
+  nuevo_configuracion_id?: number;
+  tintas: number;
+  caras: number;
+  pantones: string | null;
+  pigmentos: string | null;
+  perforacion: boolean;
+  idsuaje: number | null;
+  id_color: number | null;
+  id_medidatro: number | null;
+}
+
+export interface ProductoPapelCotizacionActualizar extends ProductoCotizacionActualizarBase {
+  tipo_material: "papel";
+  tipoCotizacion: "papel";
+  idproducto_papel: number;
+  idgrupo_papel: number | null;
+  grupo_descripcion: string | null;
+  tintasId: number | null;
+  carasId: number | null;
+  pantones: string | null;
+  id_asa: number | null;
+  tamano_asa?: string | null;
+  id_color: number | null;
+  idcat_laminado: number | null;
+  idfoil: number | null;
+  idcat_textura: number | null;
+  uv: boolean;
+  alto_relieve: boolean;
+  tintasDentroId: number | null;
+  pantonesDentro: string | null;
+  cargo_adicional_descripcion?: string | null;
+  cargo_adicional_precio?: number | null;
+}
+
+export type ProductoCotizacionActualizar =
+  | ProductoPlasticoCotizacionActualizar
+  | ProductoPapelCotizacionActualizar;
+
+interface ProductoCotizacionNuevoBase {
+  observacion: string | null;
+  descripcion: string | null;
+  herramental_descripcion: string | null;
+  herramental_precio: number | null;
+  detalles: Omit<DetalleCotizacionActualizar, "iddetalle">[];
+}
+
+export interface ProductoCotizacionNuevoPlastico extends ProductoCotizacionNuevoBase {
+  tipo_material?: "plastico";
+  tipoCotizacion?: "plastico";
+  configuracion_plastico_id: number;
+  tintas: number;
+  caras: number;
+  pantones: string | null;
+  pigmentos: string | null;
+  perforacion: boolean;
+  idsuaje: number | null;
+  id_color: number | null;
+  id_medidatro: number | null;
+}
+
+export interface ProductoCotizacionNuevoPapel extends ProductoCotizacionNuevoBase {
+  tipo_material: "papel";
+  tipoCotizacion: "papel";
+  idproducto_papel: number;
+  idgrupo_papel: number | null;
+  grupo_descripcion: string | null;
+  tintasId: number | null;
+  carasId: number | null;
+  pantones: string | null;
+  id_asa: number | null;
+  tamano_asa?: string | null;
+  id_color: number | null;
+  idcat_laminado: number | null;
+  idfoil: number | null;
+  idcat_textura: number | null;
+  uv: boolean;
+  alto_relieve: boolean;
+  tintasDentroId: number | null;
+  pantonesDentro: string | null;
+}
+
+export type ProductoCotizacionNuevo =
+  | ProductoCotizacionNuevoPlastico
+  | ProductoCotizacionNuevoPapel;
+
+export interface ActualizarCotizacionPayload {
+  productos: ProductoCotizacionActualizar[];
+  productos_nuevos?: ProductoCotizacionNuevo[];
+}
+
+export const actualizarCotizacionProductos = async (
+  noCotizacion: string,
+  payload: ActualizarCotizacionPayload
+): Promise<{ message: string }> => {
+  const response = await api.put(`/cotizaciones/${noCotizacion}`, payload);
+  return response.data;
+};

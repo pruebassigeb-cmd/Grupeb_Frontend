@@ -23,6 +23,8 @@ import Papel from "./pages/papel/Papel";
 import Catalogos from "./pages/papel/catalogos.tsx";
 import Expo from "./pages/expo/expo.tsx";
 import EditarPedidoPapel from "./pages/EditarPedidoPapel.tsx";
+import EditarCotizacionCompleta from "./pages/EditarCotizacionCompleta.tsx";
+import EditarCotizacionPapelCompleta from "./pages/EditarCotizacionPapelCompleta.tsx";
 
 const PERMISOS = {
   usuarios: "Crear/Editar/Eliminar Usuarios",
@@ -105,6 +107,26 @@ function App() {
               </ProtectedRoute>
             }
           />
+
+          {/* Cotizaciones — editar (antes de aprobar) */}
+<Route
+  path="/cotizar/:noCotizacion/editar"
+  element={
+    <ProtectedRoute permiso={PERMISOS.cotizar}>
+      <EditarCotizacionCompleta />
+    </ProtectedRoute>
+  }
+/>
+
+{/* Cotizaciones de papel — editar (antes de aprobar) */}
+<Route
+  path="/cotizar/:noCotizacion/editar-papel"
+  element={
+    <ProtectedRoute permiso={PERMISOS.cotizar}>
+      <EditarCotizacionPapelCompleta />
+    </ProtectedRoute>
+  }
+/>
 
           {/* Cotizaciones */}
           <Route
