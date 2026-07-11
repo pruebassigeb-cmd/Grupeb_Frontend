@@ -80,11 +80,12 @@ export interface CreateProductoDto {
   notas?: string | null;
   clave_producto?: string | null;
   minimo_compra?: number | null;
-  unidad?: string | null; // ✅ antes: "kilos" | "pzas" | "litros" | null
+  unidad?: string | null;
   producto_sat_idproducto_sat?: number | null;
 }
 
 // ── Domicilio ─────────────────────────────────────────────────────────────────
+
 export interface DomicilioProveedor {
   idproveedor_domicilio?: number;
   codigo_postal?: string | null;
@@ -95,6 +96,7 @@ export interface DomicilioProveedor {
 }
 
 // ── Facturación ───────────────────────────────────────────────────────────────
+
 export interface FacturacionProveedor {
   idproveedor_facturacion?: number;
   banco: string;
@@ -103,8 +105,7 @@ export interface FacturacionProveedor {
   convenio: string;
   nombre_cuenta: string;
   condicion_compra: string;
-  dias_credito?: number | null;  
-
+  dias_credito?: number | null;
 }
 
 export interface InsumoProveedorInfo {
@@ -122,9 +123,8 @@ export interface Insumo {
   unidad: string | null;
   idtipo_insumo: number;
   tipo_insumo_nombre: string;
- proveedores: InsumoProveedorInfo[];
+  proveedores: InsumoProveedorInfo[];
 }
-
 
 // ── Catálogos ─────────────────────────────────────────────────────────────────
 
@@ -138,24 +138,41 @@ export const getRegimenesFiscales = async (): Promise<RegimenFiscal[]> => {
   return data;
 };
 
-export const getProductosSat = async (q?: string): Promise<ProductoSat[]> => {
-  const { data } = await api.get("/proveedores/productos-sat", { params: { q } });
+export const getProductosSat = async (
+  q?: string
+): Promise<ProductoSat[]> => {
+  const { data } = await api.get("/proveedores/productos-sat", {
+    params: { q },
+  });
+
   return data;
 };
 
 // ── Proveedores ───────────────────────────────────────────────────────────────
 
-export const getProveedores = async (q?: string): Promise<Proveedor[]> => {
-  const { data } = await api.get("/proveedores", { params: { q, activo: true } });
+export const getProveedores = async (
+  q?: string
+): Promise<Proveedor[]> => {
+  const { data } = await api.get("/proveedores", {
+    params: {
+      q,
+      activo: true,
+    },
+  });
+
   return data;
 };
 
-export const getProveedorById = async (id: number): Promise<ProveedorDetalle> => {
+export const getProveedorById = async (
+  id: number
+): Promise<ProveedorDetalle> => {
   const { data } = await api.get(`/proveedores/${id}`);
   return data;
 };
 
-export const crearProveedor = async (dto: CreateProveedorDto): Promise<Proveedor> => {
+export const crearProveedor = async (
+  dto: CreateProveedorDto
+): Promise<Proveedor> => {
   const { data } = await api.post("/proveedores", dto);
   return data.proveedor;
 };
@@ -168,7 +185,9 @@ export const actualizarProveedor = async (
   return data.proveedor;
 };
 
-export const eliminarProveedor = async (id: number): Promise<void> => {
+export const eliminarProveedor = async (
+  id: number
+): Promise<void> => {
   await api.delete(`/proveedores/${id}`);
 };
 
@@ -178,7 +197,11 @@ export const crearProductoProveedor = async (
   proveedorId: number,
   dto: CreateProductoDto
 ): Promise<ProductoProveedor> => {
-  const { data } = await api.post(`/proveedores/${proveedorId}/productos`, dto);
+  const { data } = await api.post(
+    `/proveedores/${proveedorId}/productos`,
+    dto
+  );
+
   return data.producto;
 };
 
@@ -187,7 +210,11 @@ export const actualizarProductoProveedor = async (
   productoId: number,
   dto: Partial<CreateProductoDto> & { activo?: boolean }
 ): Promise<ProductoProveedor> => {
-  const { data } = await api.put(`/proveedores/${proveedorId}/productos/${productoId}`, dto);
+  const { data } = await api.put(
+    `/proveedores/${proveedorId}/productos/${productoId}`,
+    dto
+  );
+
   return data.producto;
 };
 
@@ -195,7 +222,9 @@ export const eliminarProductoProveedor = async (
   proveedorId: number,
   productoId: number
 ): Promise<void> => {
-  await api.delete(`/proveedores/${proveedorId}/productos/${productoId}`);
+  await api.delete(
+    `/proveedores/${proveedorId}/productos/${productoId}`
+  );
 };
 
 // ── Búsqueda global de insumos ────────────────────────────────────────────────
@@ -206,79 +235,127 @@ export const buscarInsumos = async (
   activo?: boolean
 ): Promise<Insumo[]> => {
   const { data } = await api.get("/proveedores/insumos", {
-    params: { tipo: tipoId, q, activo: activo === undefined ? undefined : String(activo) },
+    params: {
+      tipo: tipoId,
+      q,
+      activo:
+        activo === undefined
+          ? undefined
+          : String(activo),
+    },
   });
+
   return data;
 };
- 
 
-// ── Registrar insumo rápido — AHORA con selección múltiple de proveedores ───
+// ── Registrar insumo rápido ───────────────────────────────────────────────────
+
 export interface RegistrarInsumoRapidoDto {
   tipo_insumo_id: number;
   nombre: string;
   codigo?: string | null;
   proveedores_ids?: number[];
-  // ✅ NUEVO
   precio?: number | null;
   notas?: string | null;
   clave_producto?: string | null;
   minimo_compra?: number | null;
-  unidad?: "kilos" | "pzas" | "litros" | null;
+
+  // Se permite cualquier unidad enviada por el formulario.
+  unidad?: string | null;
+
   producto_sat_idproducto_sat?: number | null;
 }
- 
+
 export const registrarInsumoRapido = async (
   dto: RegistrarInsumoRapidoDto
 ): Promise<Insumo> => {
-  const { data } = await api.post("/proveedores/insumos/registrar-rapido", dto);
+  const { data } = await api.post(
+    "/proveedores/insumos/registrar-rapido",
+    dto
+  );
+
   return data.producto;
 };
- 
 
-export const crearTipoInsumo = async (nombre: string): Promise<TipoInsumo> => {
-  const { data } = await api.post("/proveedores/tipos-insumo", { nombre });
+export const crearTipoInsumo = async (
+  nombre: string
+): Promise<TipoInsumo> => {
+  const { data } = await api.post(
+    "/proveedores/tipos-insumo",
+    { nombre }
+  );
+
   return data.tipo;
 };
 
 // ── Domicilio ─────────────────────────────────────────────────────────────────
 
-export const getDomicilioProveedor = async (id: number): Promise<DomicilioProveedor | null> => {
-  const { data } = await api.get(`/proveedores/${id}/domicilio`);
+export const getDomicilioProveedor = async (
+  id: number
+): Promise<DomicilioProveedor | null> => {
+  const { data } = await api.get(
+    `/proveedores/${id}/domicilio`
+  );
+
   return data;
 };
 
 export const upsertDomicilioProveedor = async (
-  id: number, dto: DomicilioProveedor
+  id: number,
+  dto: DomicilioProveedor
 ): Promise<DomicilioProveedor> => {
-  const { data } = await api.put(`/proveedores/${id}/domicilio`, dto);
+  const { data } = await api.put(
+    `/proveedores/${id}/domicilio`,
+    dto
+  );
+
   return data.domicilio;
 };
 
 // ── Facturación ───────────────────────────────────────────────────────────────
 
-export const getFacturacionProveedor = async (id: number): Promise<FacturacionProveedor[]> => {
-  const { data } = await api.get(`/proveedores/${id}/facturacion`);
+export const getFacturacionProveedor = async (
+  id: number
+): Promise<FacturacionProveedor[]> => {
+  const { data } = await api.get(
+    `/proveedores/${id}/facturacion`
+  );
+
   return data;
 };
 
 export const crearFacturacionProveedor = async (
-  id: number, dto: FacturacionProveedor
+  id: number,
+  dto: FacturacionProveedor
 ): Promise<FacturacionProveedor> => {
-  const { data } = await api.post(`/proveedores/${id}/facturacion`, dto);
+  const { data } = await api.post(
+    `/proveedores/${id}/facturacion`,
+    dto
+  );
+
   return data.facturacion;
 };
 
 export const actualizarFacturacionProveedor = async (
-  id: number, idFact: number, dto: Partial<FacturacionProveedor>
+  id: number,
+  idFact: number,
+  dto: Partial<FacturacionProveedor>
 ): Promise<FacturacionProveedor> => {
-  const { data } = await api.put(`/proveedores/${id}/facturacion/${idFact}`, dto);
+  const { data } = await api.put(
+    `/proveedores/${id}/facturacion/${idFact}`,
+    dto
+  );
+
   return data.facturacion;
 };
 
 export const eliminarFacturacionProveedor = async (
-  id: number, idFact: number
+  id: number,
+  idFact: number
 ): Promise<void> => {
-  await api.delete(`/proveedores/${id}/facturacion/${idFact}`);
+  await api.delete(
+    `/proveedores/${id}/facturacion/${idFact}`
+  );
 };
 
 export const guardarProveedorCompleto = async (
@@ -287,16 +364,36 @@ export const guardarProveedorCompleto = async (
   domicilio: DomicilioProveedor,
   facturacion: FacturacionProveedor[]
 ): Promise<Proveedor> => {
-  const { data } = await api.put(`/proveedores/${id}/completo`, { general, domicilio, facturacion });
+  const { data } = await api.put(
+    `/proveedores/${id}/completo`,
+    {
+      general,
+      domicilio,
+      facturacion,
+    }
+  );
+
   return data.proveedor;
 };
 
-export const desactivarInsumo = async (idinsumo: number): Promise<{ message: string }> => {
-  const { data } = await api.patch(`/proveedores/insumos/${idinsumo}`);
+// ── Activar/desactivar insumos ────────────────────────────────────────────────
+
+export const desactivarInsumo = async (
+  idinsumo: number
+): Promise<{ message: string }> => {
+  const { data } = await api.patch(
+    `/proveedores/insumos/${idinsumo}`
+  );
+
   return data;
 };
- 
-export const reactivarInsumo = async (idinsumo: number): Promise<{ message: string }> => {
-  const { data } = await api.patch(`/proveedores/insumos/${idinsumo}/reactivar`);
+
+export const reactivarInsumo = async (
+  idinsumo: number
+): Promise<{ message: string }> => {
+  const { data } = await api.patch(
+    `/proveedores/insumos/${idinsumo}/reactivar`
+  );
+
   return data;
 };
