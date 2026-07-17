@@ -5,9 +5,9 @@ import QRCode from "qrcode";
 
 // ── Paleta B&N ────────────────────────────────────────────────────────────────
 export const GRAY_DARK  = [0,   0,   0]   as [number, number, number];
-export const GRAY_MED   = [255, 255, 255] as [number, number, number];
-export const GRAY_LIGHT = [255, 255, 255] as [number, number, number];
-export const GRAY_ROW   = [255, 255, 255] as [number, number, number];
+export const GRAY_MED   = [150, 150, 150] as [number, number, number];
+export const GRAY_LIGHT = [225, 225, 225] as [number, number, number];
+export const GRAY_ROW   = [245, 245, 245] as [number, number, number];
 export const BLACK      = [0,   0,   0]   as [number, number, number];
 export const WHITE      = [255, 255, 255] as [number, number, number];
 
@@ -128,11 +128,11 @@ export function formatCantidadCelda(det: DetallePdf, porKilo?: string | number |
     const kgStr    = Number.isInteger(det.kilogramos)
       ? det.kilogramos.toString()
       : Number(det.kilogramos).toFixed(2);
-    return `${kgStr} kg\n${fmtMoneda(precioKg)}/kg\n+/-20%`;
+    return `${kgStr} kg\n${fmtMoneda(precioKg)}/kg`;
   }
 
   const precioUnit = det.cantidad > 0 ? det.precio_total / det.cantidad : 0;
-  return `${det.cantidad.toLocaleString("es-MX")}\n${fmtMoneda(Math.round(precioUnit * 100) / 100)}/pza\n+/-20%`;
+  return `${det.cantidad.toLocaleString("es-MX")}\n${fmtMoneda(Math.round(precioUnit * 100) / 100)}/pza`;
 }
 // ── Importe — columna separada ────────────────────────────────────────────────
 export function formatImporte(det: DetallePdf, porKilo?: string | number | null): string {
@@ -249,14 +249,16 @@ export async function dibujarEncabezado(opts: OpcionesEncabezado): Promise<numbe
   doc.text("www.grupoeb.com.mx     E-mail: ventas@grupoeb.com.mx", centerX + 2, ty);
 
   // ── Recuadro PEDIDO/COTIZACION ────────────────────────────────────────────
-  doc.setDrawColor(...BLACK); doc.setLineWidth(0.3);
+  doc.setDrawColor(...BLACK); doc.setLineWidth(0.6);
   doc.rect(cotBoxX, y, cotBoxW, row1H);
+  doc.setLineWidth(0.3);
 
   const labelH = row1H * 0.38;
-  doc.setFillColor(...GRAY_MED);
+  doc.setFillColor(...GRAY_DARK);
   doc.rect(cotBoxX, y, cotBoxW, labelH, "F");
-  doc.setFont("helvetica", "bold"); doc.setFontSize(12); doc.setTextColor(...BLACK);
+  doc.setFont("helvetica", "bold"); doc.setFontSize(13); doc.setTextColor(...WHITE);
   doc.text(labelDocumento, cotBoxX + cotBoxW / 2, y + labelH / 2 + 2, { align: "center" });
+  doc.setTextColor(...BLACK);
 
   doc.line(cotBoxX, y + labelH, cotBoxX + cotBoxW, y + labelH);
 
@@ -413,7 +415,8 @@ export function dibujarCajasPie(
   productos: ProductoPdf[],
   condLines: string[],
   totales?:  TotalesPdf,
-  dims?:     DimensionesPagina
+  dims?:     DimensionesPagina,
+  ocultarDatosBancarios = false
 ): void {
   const PW = dims?.pageWidth  ?? 279.4;
   const PH = dims?.pageHeight ?? 215.9;
@@ -532,36 +535,42 @@ export function dibujarCajasPie(
   const lX = M;
   const lW = LEFT_W;
 
-  // ── Caja banco ────────────────────────────────────────────────────────────
+  // ── Caja banco (el tamaño de la caja SIEMPRE se mantiene; cuando el pedido
+  //    es "Remisión" / sin IVA, solo se cambia el contenido por un aviso) ────
   const BANCO_H = 15;
   doc.rect(lX, pfY, lW, BANCO_H);
 
-  const y1     = pfY + 5;
-  const parteA = "Favor de depositar en Banamex  —  A nombre de  ";
-  const parteB = "Grupeb S.A. de C.V.";
-  const parteC = "  —  Enviar comprobante de depósito.";
+  if (ocultarDatosBancarios) {
+    doc.setFont("helvetica", "bold"); doc.setFontSize(12); doc.setTextColor(...BLACK);
+    doc.text("Sin remisión", lX + lW / 2, pfY + BANCO_H / 2 + 3, { align: "center" });
+  } else {
+    const y1     = pfY + 5;
+    const parteA = "Favor de depositar en Banamex  —  A nombre de  ";
+    const parteB = "Grupeb S.A. de C.V.";
+    const parteC = "  —  Enviar comprobante de depósito.";
 
-  doc.setFontSize(9); doc.setTextColor(...BLACK);
-  doc.setFont("helvetica", "normal");
-  const wA = doc.getTextWidth(parteA);
-  const wC = doc.getTextWidth(parteC);
-  doc.setFont("helvetica", "bold");
-  const wB = doc.getTextWidth(parteB);
+    doc.setFontSize(9); doc.setTextColor(...BLACK);
+    doc.setFont("helvetica", "normal");
+    const wA = doc.getTextWidth(parteA);
+    const wC = doc.getTextWidth(parteC);
+    doc.setFont("helvetica", "bold");
+    const wB = doc.getTextWidth(parteB);
 
-  const totalW2 = wA + wB + wC;
-  let xCursor  = lX + lW / 2 - totalW2 / 2;
+    const totalW2 = wA + wB + wC;
+    let xCursor  = lX + lW / 2 - totalW2 / 2;
 
-  doc.setFont("helvetica", "normal");
-  doc.text(parteA, xCursor, y1);
-  xCursor += wA;
-  doc.setFont("helvetica", "bold");
-  doc.text(parteB, xCursor, y1);
-  xCursor += wB;
-  doc.setFont("helvetica", "normal");
-  doc.text(parteC, xCursor, y1);
+    doc.setFont("helvetica", "normal");
+    doc.text(parteA, xCursor, y1);
+    xCursor += wA;
+    doc.setFont("helvetica", "bold");
+    doc.text(parteB, xCursor, y1);
+    xCursor += wB;
+    doc.setFont("helvetica", "normal");
+    doc.text(parteC, xCursor, y1);
 
-  doc.setFont("helvetica", "bold"); doc.setFontSize(11);
-  doc.text("CTA: 70010708964     CLABE: 002320 700107089643", lX + lW / 2, pfY + 11, { align: "center" });
+    doc.setFont("helvetica", "bold"); doc.setFontSize(11);
+    doc.text("CTA: 70010708964     CLABE: 002320 700107089643", lX + lW / 2, pfY + 11, { align: "center" });
+  }
 
   const F2_Y   = pfY + BANCO_H;
   const F2_H   = PED_FOOTER_H - BANCO_H;

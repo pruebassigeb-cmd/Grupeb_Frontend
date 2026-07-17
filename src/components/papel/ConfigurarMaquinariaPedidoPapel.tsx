@@ -7,6 +7,7 @@ import { guardarMaquinariaPedidoPapel } from "../../services/pedidosService";
 import ModalMaquinariaPedidoPapel from "./ModalMaquinariaPedidoPapel";
 import type { MaquinariaProductoPedidoPapel } from "../../types/papel/maquinaria-pedido.types";
 
+
 type Props = {
   noPedido: string;
   productos: ProductoCotizacion[];

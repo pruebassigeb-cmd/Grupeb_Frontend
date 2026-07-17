@@ -46,7 +46,12 @@ export function useProductosPapel() {
       return creado.idproducto_papel;
     } catch (e: any) {
       setError(e.message);
-      return null;
+      // Se relanza para que quien llamó a crear() (p. ej. el onSave del
+      // formulario) pueda enterarse del error real (como el 409 de
+      // "producto duplicado") en vez de solo recibir null. Antes este
+      // catch se quedaba con el error aquí adentro y nunca llegaba a
+      // mostrarse en pantalla.
+      throw e;
     } finally {
       setSaving(false);
     }
@@ -64,7 +69,10 @@ export function useProductosPapel() {
       return true;
     } catch (e: any) {
       setError(e.message);
-      return false;
+      // Mismo motivo que en crear(): relanzar para que el error (p. ej.
+      // "Ya existe otro producto con esa descripción y medida") llegue
+      // hasta el formulario y se le muestre al usuario.
+      throw e;
     } finally {
       setSaving(false);
     }

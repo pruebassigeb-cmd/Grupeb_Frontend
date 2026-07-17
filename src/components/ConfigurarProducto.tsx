@@ -159,6 +159,7 @@ export default function SelectorProducto({
   const [calibreRefreshTick, setCalibreRefreshTick] = useState(0);
 
   const [medidas, setMedidas] = useState<Record<MedidaKey, string>>(medidasVacias);
+  const [descripcion, setDescripcion] = useState("");
 
   const [mostrarDropdownTipo, setMostrarDropdownTipo] = useState(false);
   const [mostrarDropdownMaterial, setMostrarDropdownMaterial] = useState(false);
@@ -205,6 +206,7 @@ export default function SelectorProducto({
     setMaterialId(datosIniciales.materialId || 0);
     setCalibreGramos(datosIniciales.gramos ?? null);
     setMedidas({ ...medidasVacias, ...(datosIniciales.medidas || {}) });
+    setDescripcion(datosIniciales.descripcion || "");
   }, [datosIniciales]);
 
   useEffect(() => {
@@ -313,9 +315,10 @@ export default function SelectorProducto({
       medidas: { ...medidas },
       medidasFormateadas: construirMedidasFormateadas(),
       nombreCompleto: construirNombreCompleto(),
+      descripcion,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tipoProducto, tipoProductoId, material, materialId, calibre, calibreId, calibreGramos, medidas]);
+  }, [tipoProducto, tipoProductoId, material, materialId, calibre, calibreId, calibreGramos, medidas, descripcion]);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -677,6 +680,21 @@ export default function SelectorProducto({
             />
           </div>
         )}
+
+        {/* Descripción (alias del producto) */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Descripción <span className="text-gray-400 font-normal">(opcional)</span>
+          </label>
+          <input
+            type="text"
+            value={descripcion}
+            onChange={(e) => setDescripcion(e.target.value)}
+            maxLength={128}
+            placeholder="Ej: bolsa camisa, apodo del cliente, alias comercial..."
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:border-blue-500"
+          />
+        </div>
       </div>
 
       {/* ── Figura — siempre debajo del formulario ── */}

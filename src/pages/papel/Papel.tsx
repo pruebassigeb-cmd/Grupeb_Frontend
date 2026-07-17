@@ -97,10 +97,10 @@ function BadgeCompletitud({ pct }: { pct: number }) {
 // ═══════════════════════════════════════════════════════════════════════════
 function ArchivosMini({ archivos }: { archivos?: ArchivoPreview[] }) {
   if (!archivos || archivos.length === 0)
-    return <span style={{ color: "#D1D5DB", fontSize: 11 }}>—</span>;
+    return <span style={{ display: "block", width: "100%", textAlign: "center", color: "#D1D5DB", fontSize: 11 }}>—</span>;
 
   return (
-    <div style={{ display: "flex", gap: 5, alignItems: "center", flexWrap: "nowrap" }}>
+    <div style={{ display: "flex", width: "100%", justifyContent: "center", gap: 5, alignItems: "center", flexWrap: "nowrap" }}>
       {archivos.slice(0, 3).map((a) => {
         const esImagen = a.categoria === "imagen-suaje-papel";
         const esPDF = a.nombre?.toLowerCase().endsWith(".pdf");
@@ -150,7 +150,8 @@ function DetalleProducto({ id }: { id: number }) {
       .finally(() => setLoading(false));
   }, [id]);
 
-  const row = (label: string, val: string | null | number | undefined) => val ? (
+  const row = (label: string, val: string | null | number | undefined) =>
+    val !== null && val !== undefined && val !== "" ? (
     <div key={label} style={{ display: "flex", gap: 6, fontSize: 12, marginBottom: 2 }}>
       <span style={{ color: "#6B7280", minWidth: 140, flexShrink: 0 }}>{label}</span>
       <span style={{ color: "#111827", fontWeight: 500 }}>{String(val)}</span>
@@ -176,13 +177,24 @@ function DetalleProducto({ id }: { id: number }) {
     <div style={{ padding: "14px 16px", background: "#F9FAFB", borderTop: "1px solid #E5E7EB" }}>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "3px 32px", marginBottom: 14 }}>
         {row("Tipo", detalle.tipo_producto)}
-        {row("Tamaño", detalle.tamano_prod)}
+        {row("Tamaño", detalle.tamano_prod_nombre)}
         {row("Descripción", detalle.descripcion_papel)}
         {row("Ancho", detalle.ancho)}
         {row("Fuelle", detalle.fuelle)}
         {row("Altura", detalle.altura)}
         {row("Medida", detalle.medida)}
         {row("Tamaño de asa sugerido", detalle.tamano_asa_default)}
+        {row(
+          "Costo de laminado",
+          detalle.costo_laminado == null
+            ? null
+            : Number(detalle.costo_laminado).toLocaleString("es-MX", {
+                style: "currency",
+                currency: "MXN",
+                minimumFractionDigits: 4,
+                maximumFractionDigits: 4,
+              })
+        )}
         {row("Creado por", detalle.creado_por_nombre)}
         {detalle.origen_expo && row("Origen", "Creado automáticamente desde Expo")}
       </div>
@@ -213,6 +225,19 @@ function DetalleProducto({ id }: { id: number }) {
             {row("Tipo de pegado", detalle.acabados.tipo_pegado)}
             {row("Pegamento", detalle.acabados.pegamento)}
             {detalle.acabados.laminados?.length > 0 && row("Laminado", detalle.acabados.laminados.map((l: any) => l.nombre).join(", "))}
+            {row("Rollo de laminado", detalle.acabados.rollo_lam)}
+            {row(
+              "Ancho del rollo",
+              detalle.acabados.rollo_lam_medida_ancho == null
+                ? null
+                : `${Number(detalle.acabados.rollo_lam_medida_ancho)} cm`
+            )}
+            {row(
+              "Desarrollo laminado",
+              detalle.acabados.desarrollo_laminado == null
+                ? null
+                : `${Number(detalle.acabados.desarrollo_laminado)} cm`
+            )}
             {row("Refuerzo material", detalle.acabados.refuerzo_material)}
             {row("Refuerzo medida", detalle.acabados.refuerzo_medida)}
             {row("Base material", detalle.acabados.base_material)}
@@ -234,7 +259,9 @@ function DetalleProducto({ id }: { id: number }) {
               ["hs_ar", "Hs y AR"],
               ["suaje_maquina", "Suaje"],
               ["uv", "UV"],
-              ["textura", "Textura"],
+              ["laminado_maquina", "Laminadora"],
+              ["texturizadora", "Texturizadora"],
+              ["empaque_maquina", "Empaque"],
               ["empalme", "Empalme"],
               ["armado", "Armado"],
               ["asas_maquina", "Asas"],
@@ -337,15 +364,55 @@ function TablaCatalogo({ productos, loading, onNuevo, onEditar, onEliminar }: {
   const [search, setSearch] = useState("");
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [deleteId, setDeleteId] = useState<number | null>(null);
+  const [ordenMedida, setOrdenMedida] = useState<"asc" | "desc" | null>(null);
 
-  const COLS = "1.2fr 1fr 0.8fr 1fr 0.7fr 0.75fr 0.9fr 140px auto";
+  // La última columna debe tener ancho fijo. Con "auto", el encabezado la
+  // calculaba en 0 px (está vacío), mientras cada fila la hacía crecer por
+  // los botones; eso cambiaba el ancho de todas las columnas anteriores.
+  const COLS = "1.2fr 1fr 0.8fr 1fr 0.7fr 0.75fr 0.9fr 140px 140px";
 
-  const filtered = (productos as ProductoPapelListItemEx[]).filter(p =>
-    p.tipo_producto.toLowerCase().includes(search.toLowerCase()) ||
-    (p.medida ?? "").toLowerCase().includes(search.toLowerCase()) ||
-    ((p as any).descripcion_papel ?? "").toLowerCase().includes(search.toLowerCase()) ||
-    (p.primer_tipo_papel ?? "").toLowerCase().includes(search.toLowerCase())
-  );
+  // El formato de "medida" trae varios números seguidos (p. ej. "A+BxC",
+  // "AxB", etc). Para ordenar hay que compararlos como se compara texto
+  // alfabéticamente: primero el 1er número; si empatan, se desempata con
+  // el 2do; si ese también empata, con el 3ro; y así sucesivamente con
+  // todos los números que traiga la medida.
+  const parsearMedida = (medida?: string | null): number[] => {
+    if (!medida) return [];
+    const numeros = medida.match(/[\d]+(?:\.\d+)?/g);
+    if (!numeros) return [];
+    return numeros.map(parseFloat);
+  };
+
+  const compararMedidas = (a: string | null | undefined, b: string | null | undefined, signo: 1 | -1): number => {
+    const na = parsearMedida(a);
+    const nb = parsearMedida(b);
+    const len = Math.max(na.length, nb.length);
+    for (let i = 0; i < len; i++) {
+      // Si una medida trae menos números que la otra, el faltante se
+      // trata como el valor más bajo posible para que no rompa la
+      // comparación de los números que sí tiene en común.
+      const va = na[i] ?? -Infinity;
+      const vb = nb[i] ?? -Infinity;
+      if (va !== vb) return (va - vb) * signo;
+    }
+    return 0;
+  };
+
+  const toggleOrdenMedida = () => {
+    setOrdenMedida(prev => (prev === "asc" ? "desc" : "asc"));
+  };
+
+  const filtered = (productos as ProductoPapelListItemEx[])
+    .filter(p =>
+      p.tipo_producto.toLowerCase().includes(search.toLowerCase()) ||
+      (p.medida ?? "").toLowerCase().includes(search.toLowerCase()) ||
+      ((p as any).descripcion_papel ?? "").toLowerCase().includes(search.toLowerCase()) ||
+      (p.primer_tipo_papel ?? "").toLowerCase().includes(search.toLowerCase())
+    )
+    .sort((a, b) => {
+      if (!ordenMedida) return 0;
+      return compararMedidas(a.medida, b.medida, ordenMedida === "asc" ? 1 : -1);
+    });
 
   const toggleExpanded = (id: number) => setExpandedId(prev => prev === id ? null : id);
 
@@ -387,19 +454,59 @@ function TablaCatalogo({ productos, loading, onNuevo, onEditar, onEliminar }: {
           </div>
         </div>
 
-        <div style={{ position: "relative" }}>
-          <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", fontSize: 13, color: "#9CA3AF" }}>&#128269;</span>
-          <input type="text" value={search} onChange={e => setSearch(e.target.value)}
-            placeholder="Buscar por tipo, descripción o material..."
-            style={{ width: "100%", height: 36, paddingLeft: 32, paddingRight: 12, border: "1px solid #D1D5DB", borderRadius: 7, fontSize: 12, color: "#111827", background: "#fff", outline: "none", boxSizing: "border-box" }} />
+        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+          <div style={{ position: "relative", flex: 1 }}>
+            <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", fontSize: 13, color: "#9CA3AF" }}>&#128269;</span>
+            <input type="text" value={search} onChange={e => setSearch(e.target.value)}
+              placeholder="Buscar por tipo, descripción o material..."
+              style={{ width: "100%", height: 36, paddingLeft: 32, paddingRight: 12, border: "1px solid #D1D5DB", borderRadius: 7, fontSize: 12, color: "#111827", background: "#fff", outline: "none", boxSizing: "border-box" }} />
+          </div>
+
+          <button
+            onClick={toggleOrdenMedida}
+            title={
+              ordenMedida === "asc"
+                ? "Ordenado por medida: menor a mayor"
+                : ordenMedida === "desc"
+                  ? "Ordenado por medida: mayor a menor"
+                  : "Ordenar por medida"
+            }
+            style={{
+              display: "flex", alignItems: "center", gap: 6, flexShrink: 0,
+              height: 36, padding: "0 12px", borderRadius: 7, cursor: "pointer",
+              fontSize: 12, fontWeight: 600, whiteSpace: "nowrap",
+              border: ordenMedida ? "1px solid #1D4ED8" : "1px solid #D1D5DB",
+              background: ordenMedida ? "#EFF6FF" : "#fff",
+              color: ordenMedida ? "#1D4ED8" : "#374151",
+            }}
+          >
+            <span style={{ fontSize: 13 }}>{ordenMedida === "desc" ? "↓" : "↑"}</span>
+            Medida {ordenMedida === "desc" ? "(mayor a menor)" : "(menor a mayor)"}
+          </button>
         </div>
       </div>
 
       <div style={{ border: "1px solid #E5E7EB", borderRadius: 9, overflow: "hidden" }}>
         <div style={{ display: "grid", gridTemplateColumns: COLS, background: "#F9FAFB", borderBottom: "1px solid #E5E7EB", padding: "0 16px" }}>
-          {["Tipo de producto", "Descripción", "Medida", "Tipo de papel", "Gramaje", "Pliego", "Creado por", "Archivos", ""].map(h => (
-            <div key={h} style={{ padding: "8px 0 8px 4px", fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#6B7280" }}>{h}</div>
-          ))}
+          {["Tipo de producto", "Descripción", "Medida", "Tipo de papel", "Gramaje", "Pliego", "Creado por", "Archivos", ""].map((h, i) => {
+            const centrada = [2, 4, 5, 6, 7].includes(i);
+            return (
+              <div
+                key={`${h}-${i}`}
+                style={{
+                  padding: "8px 4px",
+                  fontSize: 10,
+                  fontWeight: 700,
+                  letterSpacing: "0.08em",
+                  textTransform: "uppercase",
+                  color: "#6B7280",
+                  textAlign: centrada ? "center" : i === 8 ? "right" : "left",
+                }}
+              >
+                {h}
+              </div>
+            );
+          })}
         </div>
 
         {loading ? (
@@ -430,18 +537,18 @@ function TablaCatalogo({ productos, loading, onNuevo, onEditar, onEliminar }: {
                   </div>
                 </div>
                 <span style={{ fontSize: 12, color: "#374151", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", paddingRight: 6 }}>{(p as any).descripcion_papel || "—"}</span>
-                <span style={{ fontSize: 12, color: "#374151" }}>{p.medida || "—"}</span>
+                <span style={{ fontSize: 12, color: "#374151", textAlign: "center" }}>{p.medida || "—"}</span>
                 <span style={{ fontSize: 12, color: "#374151", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", paddingRight: 6 }}>{px.primer_tipo_papel || "—"}</span>
-                <span>
+                <span style={{ textAlign: "center" }}>
                   {px.primer_calibre
                     ? <span style={{ display: "inline-block", background: "#F1F5F9", border: "1px solid #E2E8F0", borderRadius: 4, padding: "2px 6px", fontSize: 11, color: "#475569", fontWeight: 500, whiteSpace: "nowrap" }}>{px.primer_calibre}</span>
                     : <span style={{ fontSize: 12, color: "#374151" }}>—</span>
                   }
                 </span>
-                <span style={{ fontSize: 12, color: "#374151" }}>{px.primer_pliego || "—"}</span>
-                <span style={{ fontSize: 12, color: "#374151", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.creado_por || "—"}</span>
+                <span style={{ fontSize: 12, color: "#374151", textAlign: "center" }}>{px.primer_pliego || "—"}</span>
+                <span style={{ fontSize: 12, color: "#374151", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textAlign: "center" }}>{p.creado_por || "—"}</span>
                 <ArchivosMini archivos={px.archivos_preview} />
-                <div style={{ display: "flex", gap: 5, alignItems: "center", justifyContent: "flex-end" }} onClick={e => e.stopPropagation()}>
+                <div style={{ display: "flex", width: "100%", gap: 5, alignItems: "center", justifyContent: "flex-end" }} onClick={e => e.stopPropagation()}>
                   <BadgeCompletitud pct={px.completitud_pct} />
                   <button onClick={() => onEditar(p)} style={{ height: 28, padding: "0 10px", background: "#F3F4F6", border: "1px solid #D1D5DB", borderRadius: 5, cursor: "pointer", fontSize: 11, fontWeight: 600, color: "#374151" }}>Editar</button>
                   <button onClick={() => setDeleteId(p.idproducto_papel)} style={{ height: 28, padding: "0 8px", background: "#FEE2E2", border: "none", borderRadius: 5, cursor: "pointer", fontSize: 11, fontWeight: 600, color: "#DC2626" }}>x</button>
@@ -491,7 +598,14 @@ export default function Papel() {
       form.medida = d.medida ?? "";
       form.tamanoAsaDefault = d.tamano_asa_default ?? "";
       // NUEVO: precargar el tamaño del producto (Mini/Chico/Mediano/Grande/Extragrande)
-      form.tamanoProd = d.tamano_prod ?? "";
+      // NUEVO: tamano_prod ahora es FK — el GET /productos-papel/:id trae
+      // tanto el id crudo (d.tamano_prod) como el nombre ya resuelto
+      // (d.tamano_prod_nombre, gracias al join agregado en
+      // getProductoPapelById).
+      form.idcat_tamano_producto = d.tamano_prod ?? null;
+      form.tamanoProdNombre = d.tamano_prod_nombre ?? "";
+      form.costoLaminado =
+        d.costo_laminado == null ? null : Number(d.costo_laminado);
 
       form.grupos = (d.grupos ?? []).map((g: any, gi: number) => ({
         id: Date.now() + gi,
@@ -556,6 +670,15 @@ export default function Papel() {
         form.acabados.idcat_pegamento = d.acabados.idcat_pegamento ?? null;
         form.acabados.laminados = (d.acabados.laminados ?? []).map((l: any) => l.id);
         form.acabados.laminadosNombres = (d.acabados.laminados ?? []).map((l: any) => l.nombre);
+        // NUEVO: precargar el rollo de laminado guardado. El GET
+        // /productos-papel/:id trae "rollo_lam" (nombre) gracias al join
+        // en producto_papel.controller.ts; "idrollo_lam" viene directo de a.* y corresponde a la FK real
+        // hacia public.rollo_lam.
+        form.acabados.idrollo_lam = d.acabados.idrollo_lam ?? null;
+        form.acabados.rolloLamNombre = d.acabados.rollo_lam ?? "";
+        form.acabados.desarrolloLaminado = d.acabados.desarrollo_laminado != null
+          ? String(d.acabados.desarrollo_laminado)
+          : "";
         form.acabados.idcat_refuerzo_material = d.acabados.idcat_refuerzo_material ?? null;
         form.acabados.idcat_refuerzo_medidas = d.acabados.idcat_refuerzo_medidas ?? null;
         form.acabados.refuerzoMedidaNombre = d.acabados.refuerzo_medida ?? "";
@@ -569,7 +692,25 @@ export default function Papel() {
 
       if (d.maquinaria) {
         const maq = d.maquinaria;
-        const keys = ["hojeado_guillotina", "impresora", "hs_ar", "suaje_maquina", "uv", "textura", "empalme", "armado", "asas_maquina", "desbarbe"];
+        // FIX: faltaban "laminado_maquina" y "empaque_maquina" en esta lista,
+        // y "textura" estaba mal escrito — la clave real (tanto en el backend
+        // getMaquinaria como en el tipo Maquinaria) es "texturizadora". Por
+        // eso esos 3 campos siempre se quedaban vacíos al editar un producto,
+        // aunque el backend sí regresara la maquinaria guardada.
+        const keys = [
+          "hojeado_guillotina",
+          "impresora",
+          "hs_ar",
+          "suaje_maquina",
+          "uv",
+          "laminado_maquina",
+          "texturizadora",
+          "empaque_maquina",
+          "empalme",
+          "armado",
+          "asas_maquina",
+          "desbarbe",
+        ];
         for (const key of keys) {
           form.maquinaria[key] = (maq[key] ?? []).map((i: any) => i.id);
           form.maquinaria[`${key}_nombres`] = (maq[key] ?? []).map((i: any) => i.nombre);

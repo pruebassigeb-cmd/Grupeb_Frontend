@@ -141,7 +141,16 @@ export default function Dashboard({ children }: DashboardProps) {
       icon: "🏷️",
       permiso: "Modificar Catalogo de precios",
       subItems: [
-        { name: "Plástico", path: "/precioplastico", permiso: "Modificar Catalogo de precios" },
+        {
+          name: "Plástico",
+          path: "/precioplastico",
+          permiso: "Modificar Catalogo de precios",
+        },
+        {
+          name: "Papel",
+          path: "/precios-acabados-papel",
+          permiso: "Modificar Catalogo de precios",
+        },
       ],
     },
     {

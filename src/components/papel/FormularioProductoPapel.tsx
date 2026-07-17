@@ -25,6 +25,7 @@ import type { Insumo } from "../../services/proveedoresService";
 import FormularioProductoPapelAlta from "./FormularioProductoPapelAlta";
 import type { ArchivoPendiente } from "./FormularioProductoPapelAlta";
 import type { ProductoPapelForm } from "../../types/papel/papel.types";
+import { coincideBusquedaProductoPapel } from "../../utils/papel/buscarProductoPapel";
 
 export type { ProductoPapelCotizacion };
 
@@ -94,7 +95,7 @@ export default function FormularioProductoPapel({
 
   const [mostrarModal, setMostrarModal] = useState(false);
   const [busqueda, setBusqueda] = useState("");
-  const [productos, setProductos] = useState<ProductoPapelBusqueda[]>([]);
+  const [productosTodos, setProductosTodos] = useState<ProductoPapelBusqueda[]>([]);
   const [loadingProductos, setLoadingProductos] = useState(false);
 
   const [mostrarModalNuevo, setMostrarModalNuevo] = useState(false);
@@ -109,8 +110,8 @@ export default function FormularioProductoPapel({
 
   const [foils, setFoils] = useState<FoilOpcion[]>([]);
   const [texturas, setTexturas] = useState<TexturaOpcion[]>([]);
-const [coloresAsa, setColoresAsa] = useState<ColorAsaOpcion[]>([]);
-const [loadingColores, setLoadingColores] = useState(true);
+  const [coloresAsa, setColoresAsa] = useState<ColorAsaOpcion[]>([]);
+  const [loadingColores, setLoadingColores] = useState(true);
   const [specs, setSpecs] = useState(nuevoSpecs());
   const [inputsPantones, setInputsPantones] = useState<string[]>([]);
   const [usaTintasDentro, setUsaTintasDentro] = useState(false);
@@ -145,10 +146,15 @@ const [loadingColores, setLoadingColores] = useState(true);
     (herramentalPrecioTexto !== "" && parseFloat(herramentalPrecioTexto) > 0);
 
   const indices = modo === "pedido" ? [0] : [0, 1, 2];
-  const tintasPapel = tintas.filter((t) => {
-    const cantidad = Number(t.cantidad);
-    return cantidad >= 1 && cantidad <= 6;
-  });
+  const tintasPapel = tintas
+    .filter((t) => {
+      const cantidad = Number(t.cantidad);
+      return cantidad >= 0;
+    })
+    .sort((a, b) => Number(a.cantidad) - Number(b.cantidad));
+  // Para el interior no ofrecemos "Sin tintas": si el usuario marcó
+  // "¿Tintas por dentro?" es porque sí quiere imprimir dentro.
+  const tintasPapelInterior = tintasPapel.filter((t) => Number(t.cantidad) >= 1);
 
   const calcularCarasAutomaticas = (s = specs) => {
     const tieneTintasFrente = Number(s.tintas ?? 0) > 0 || s.tintasId != null;
@@ -189,31 +195,31 @@ const [loadingColores, setLoadingColores] = useState(true);
   }, []);
 
   useEffect(() => {
-  setLoadingColores(true);
-  getColoresAsa()
-    .then((data) => {
-      const lista = Array.isArray(data) ? data : [];
-      setColoresAsa(lista);
-      setSpecs((prev) => {
-        if (prev.id_color != null && !prev.color_asa_nombre) {
-          const found = lista.find((c) => c.id_color === prev.id_color);
-          if (found) return { ...prev, color_asa_nombre: found.color };
-        }
-        if (prev.id_color == null && prev.color_asa_nombre) {
-          const found = lista.find(
-            (c) => c.color.toLowerCase() === prev.color_asa_nombre!.toLowerCase()
-          );
-          if (found) return { ...prev, id_color: found.id_color };
-        }
-        return prev;
-      });
-    })
-    .catch((error) => {
-      console.error("Error cargando colores de asa:", error);
-      setColoresAsa([]);
-    })
-    .finally(() => setLoadingColores(false));
-}, []);
+    setLoadingColores(true);
+    getColoresAsa()
+      .then((data) => {
+        const lista = Array.isArray(data) ? data : [];
+        setColoresAsa(lista);
+        setSpecs((prev) => {
+          if (prev.id_color != null && !prev.color_asa_nombre) {
+            const found = lista.find((c) => c.id_color === prev.id_color);
+            if (found) return { ...prev, color_asa_nombre: found.color };
+          }
+          if (prev.id_color == null && prev.color_asa_nombre) {
+            const found = lista.find(
+              (c) => c.color.toLowerCase() === prev.color_asa_nombre!.toLowerCase()
+            );
+            if (found) return { ...prev, id_color: found.id_color };
+          }
+          return prev;
+        });
+      })
+      .catch((error) => {
+        console.error("Error cargando colores de asa:", error);
+        setColoresAsa([]);
+      })
+      .finally(() => setLoadingColores(false));
+  }, []);
 
   useEffect(() => {
     setInputsPantones((prev) =>
@@ -364,28 +370,28 @@ const [loadingColores, setLoadingColores] = useState(true);
     );
     setHerramentalExpandido(
       !!(productoEditando as any).herramental_descripcion ||
-        (productoEditando as any).herramental_precio != null,
+      (productoEditando as any).herramental_precio != null,
     );
     cargarDetalleProducto(productoEditando.idproducto_papel);
   }, [productoEditando]);
 
   // AGREGAR después del useEffect de productoEditando:
-useEffect(() => {
-  if (loadingColores || coloresAsa.length === 0) return;
-  setSpecs((prev) => {
-    if (prev.id_color != null && !prev.color_asa_nombre) {
-      const found = coloresAsa.find((c) => c.id_color === prev.id_color);
-      if (found) return { ...prev, color_asa_nombre: found.color };
-    }
-    if (prev.id_color == null && prev.color_asa_nombre) {
-      const found = coloresAsa.find(
-        (c) => c.color.toLowerCase() === prev.color_asa_nombre!.toLowerCase()
-      );
-      if (found) return { ...prev, id_color: found.id_color };
-    }
-    return prev;
-  });
-}, [loadingColores, coloresAsa]);
+  useEffect(() => {
+    if (loadingColores || coloresAsa.length === 0) return;
+    setSpecs((prev) => {
+      if (prev.id_color != null && !prev.color_asa_nombre) {
+        const found = coloresAsa.find((c) => c.id_color === prev.id_color);
+        if (found) return { ...prev, color_asa_nombre: found.color };
+      }
+      if (prev.id_color == null && prev.color_asa_nombre) {
+        const found = coloresAsa.find(
+          (c) => c.color.toLowerCase() === prev.color_asa_nombre!.toLowerCase()
+        );
+        if (found) return { ...prev, id_color: found.id_color };
+      }
+      return prev;
+    });
+  }, [loadingColores, coloresAsa]);
 
   const resetForm = () => {
     setProductoSel(null);
@@ -403,26 +409,30 @@ useEffect(() => {
     setHerramentalPrecioTexto("");
   };
 
-  const cargarProductos = async (q = "") => {
+  // Se trae la lista completa UNA sola vez al abrir el modal, y el filtrado
+  // se hace siempre en el cliente contra TODOS los campos del producto
+  // (id, tipo, descripción, medida, material, calibre, tamaños, etc.) — así
+  // el buscador no depende de qué tanto (o qué tan poco) filtre el backend
+  // por texto, y encuentra resultados aunque el dato esté en un campo que
+  // antes no se revisaba.
+  const cargarProductos = async () => {
     setLoadingProductos(true);
     try {
-      setProductos(await getProductosPapel(q));
+      setProductosTodos(await getProductosPapel());
     } catch {
-      setProductos([]);
+      setProductosTodos([]);
     } finally {
       setLoadingProductos(false);
     }
   };
 
   useEffect(() => {
-    if (!mostrarModal) return;
-    const t = setTimeout(() => cargarProductos(busqueda), 400);
-    return () => clearTimeout(t);
-  }, [busqueda, mostrarModal]);
-
-  useEffect(() => {
-    if (mostrarModal && productos.length === 0) cargarProductos();
+    if (mostrarModal && productosTodos.length === 0) cargarProductos();
   }, [mostrarModal]);
+
+  const productos = productosTodos.filter((p) =>
+    coincideBusquedaProductoPapel(p, busqueda),
+  );
 
   const cargarDetalleProducto = async (
     id: number,
@@ -537,6 +547,7 @@ useEffect(() => {
         tamano_asa_default: form.tamanoAsaDefault?.trim() || null,
       };
       setProductoSel(productoBase);
+      setProductosTodos([]);
       setMostrarModalNuevo(false);
       setModoProductoPapel("registrado");
       setSpecs(nuevoSpecs());
@@ -689,8 +700,8 @@ useEffect(() => {
       alert("Ingresa al menos una cantidad y precio válidos");
       return;
     }
-    if (!specs.tintasId || specs.tintas <= 0) {
-      alert("Selecciona las tintas. La impresión es obligatoria para papel");
+    if (!specs.tintasId) {
+      alert("Selecciona una opción de Impresión (o 'Sin tintas' si no lleva)");
       return;
     }
 
@@ -1208,7 +1219,7 @@ useEffect(() => {
                   </option>
                   {tintasPapel.map((t) => (
                     <option key={t.id} value={t.id}>
-                      {t.cantidad} tinta{t.cantidad > 1 ? "s" : ""}
+                      {Number(t.cantidad) === 0 ? "Sin tintas" : `${t.cantidad} tinta${t.cantidad > 1 ? "s" : ""}`}
                     </option>
                   ))}
                 </select>
@@ -1287,7 +1298,7 @@ useEffect(() => {
                       <option value="" disabled>
                         Selecciona...
                       </option>
-                      {tintasPapel.map((t) => (
+                      {tintasPapelInterior.map((t) => (
                         <option key={t.id} value={t.id}>
                           {t.cantidad} tinta{t.cantidad > 1 ? "s" : ""}
                         </option>
@@ -1402,11 +1413,10 @@ useEffect(() => {
                   </span>
                 </label>
                 <div
-                  className={`w-full px-3 py-2 border rounded-lg text-sm ${
-                    specs.id_asa
+                  className={`w-full px-3 py-2 border rounded-lg text-sm ${specs.id_asa
                       ? "border-gray-200 bg-gray-50 text-gray-700"
                       : "border-gray-100 bg-gray-50 text-gray-400"
-                  }`}
+                    }`}
                 >
                   {specs.id_asa
                     ? specs.tamano_asa || "Sin tamaño registrado en el producto"
@@ -1504,16 +1514,22 @@ useEffect(() => {
               </div>
             </div>
 
-            {/* UV y Alto relieve */}
+            {/* UV, Alto relieve y Armado */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Acabados especiales
               </label>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
                 {(
                   [
                     ["uv", "🔆 UV"],
                     ["alto_relieve", "🔳 Alto relieve"],
+                    // NUEVO: Armado se captura aquí, como parte de la
+                    // cotización/pedido, en vez de en ModalMaquinariaPedidoPapel.
+                    // La máquina de armado (si aplica) ya se define una sola
+                    // vez al dar de alta el producto — aquí solo se decide si
+                    // ESTE pedido específico necesita el proceso o no.
+                    ["lleva_armado", "📦 Armado"],
                   ] as [keyof typeof specs, string][]
                 ).map(([key, label]) => (
                   <label

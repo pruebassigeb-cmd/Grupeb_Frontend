@@ -100,7 +100,7 @@ const parseSafe = (v: string) => { const n = parseFloat(v); return isNaN(n) ? 0 
 const esDecimal = (v: string) => /^\d*\.?\d{0,4}$/.test(v);
 const esEntero = (v: string) => /^\d*$/.test(v);
 const tintasPapel = (items: CatItem[]) =>
-  items.filter(t => t.cantidad >= 1 && t.cantidad <= 6);
+  items.filter(t => t.cantidad >= 0).sort((a, b) => a.cantidad - b.cantidad);
 
 const numeroONull = (v: any): number | null => {
   const n = Number(v);
@@ -331,6 +331,7 @@ function ProductoPapelEditable({
   onAbrirModalInsumo: (tipoId: number, nombre: string, pi: number, campo: "ext" | "int", indice: number) => void;
 }) {
   const catalogoTintasValidas = tintasPapel(catalogoTintas);
+  const catalogoTintasInterior = catalogoTintasValidas.filter(t => t.cantidad >= 1);
   const subtotal =
     prod.detalles.reduce((s, d) => s + parseSafe(d.precio_total), 0)
     + parseSafe(prod.herramental_precio);
@@ -443,7 +444,7 @@ function ProductoPapelEditable({
               className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-blue-500"
             >
               {(catalogoTintasValidas.length > 0 ? catalogoTintasValidas : [1, 2, 3, 4, 5, 6].map(n => ({ id: n, cantidad: n }))).map(t => (
-                <option key={t.id} value={t.cantidad}>{t.cantidad} tinta{t.cantidad > 1 ? "s" : ""}</option>
+                <option key={t.id} value={t.cantidad}>{t.cantidad === 0 ? "Sin tintas" : `${t.cantidad} tinta${t.cantidad > 1 ? "s" : ""}`}</option>
               ))}
             </select>
           </div>
@@ -457,6 +458,7 @@ function ProductoPapelEditable({
         </div>
 
         {/* Pantones exteriores */}
+        {prod.tintas > 0 && (
         <div>
           <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
             Pantones exteriores{" "}
@@ -485,6 +487,7 @@ function ProductoPapelEditable({
             ))}
           </div>
         </div>
+        )}
 
         {/* Tintas interiores */}
         <div className="space-y-3">
@@ -505,7 +508,7 @@ function ProductoPapelEditable({
             className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-blue-500"
           >
             <option value={0}>Sin tintas interiores</option>
-            {(catalogoTintasValidas.length > 0 ? catalogoTintasValidas : [1, 2, 3, 4, 5, 6].map(n => ({ id: n, cantidad: n }))).map(t => (
+            {(catalogoTintasInterior.length > 0 ? catalogoTintasInterior : [1, 2, 3, 4, 5, 6].map(n => ({ id: n, cantidad: n }))).map(t => (
               <option key={t.id} value={t.cantidad}>{t.cantidad} tinta{t.cantidad > 1 ? "s" : ""}</option>
             ))}
           </select>
@@ -1120,9 +1123,9 @@ export default function EditarCotizacionPapelCompleta() {
     if (!cotOrig) return;
     setErrorGuardar(null);
 
-    const productoSinTintas = productos.find(p => !p._eliminado && (!p.tintasId || p.tintas <= 0));
+    const productoSinTintas = productos.find(p => !p._eliminado && !p.tintasId);
     if (productoSinTintas) {
-      setErrorGuardar(`Selecciona las tintas (frente) para "${productoSinTintas.nombre}". Impresión es obligatoria.`);
+      setErrorGuardar(`Selecciona una opción de Impresión (frente) para "${productoSinTintas.nombre}" — puede ser "Sin tintas".`);
       return;
     }
 

@@ -372,13 +372,11 @@ function datosProceso(
   const merma = fmtNum(reg.merma);
 
   switch (key) {
-    // Hojeado y Guillotina ahora usan el MISMO formato genérico que el
-    // resto de los procesos (columna izquierda: Máquina + specs en
-    // líneas separadas + "Cantidad Calculada"; columna derecha: Merma /
-    // Entregadas / Observaciones / Firma). "Cantidad Calculada" es el
-    // primer proceso de la cadena, así que su entrada NO se hereda de
-    // nadie (se calcula desde cantidad/rendimiento — ver el loop
-    // principal, sección "Entrada encadenada").
+    // Hojeado y Guillotina: tituloEntrada/entrada siguen alimentando la
+    // 1ra celda del bloque DERECHO (procesoBlockDerecho) y el número
+    // grande que se hereda hacia Impresión — sin cambios aquí. Lo que
+    // cambió es solo cómo se dibuja el bloque IZQUIERDO (ver
+    // prepBlockIzquierdo más abajo).
     case "hojeado_papel": {
       const anyData = data as any;
       return {
@@ -547,11 +545,6 @@ function datosProceso(
   }
 }
 
-// (Se eliminaron miniCelda() y procesoPreparacionBlock(): Hojeado y
-// Guillotina ahora usan el mismo bloque genérico de 2 columnas que el
-// resto de los procesos — procesoBlockIzquierdo / procesoBlockDerecho —
-// en vez de una fila ancha aparte con mini-celdas.)
-
 // Bloque IZQUIERDO: etiqueta vertical + máquina + número grande de
 // entrada + datos técnicos, equivalente a las cajas "Hojeado / Impresión /
 // Laminación..." del PDF de referencia.
@@ -628,34 +621,17 @@ function procesoBlockIzquierdo(
   });
 }
 
-// Celda de la cuadrícula 2x2 (Hojeado/Guillotina): borde propio, label
-// chico gris arriba y valor BOLD más grande centrado abajo — más legible
-// que una línea de texto plano, y con espacio para agrandar el valor.
-function celdaGridInfo(doc: jsPDF, label: string, value: string, x: number, y: number, w: number, h: number) {
-  rect(doc, x, y, w, h);
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(5.6);
-  doc.setTextColor(GRAY_DARK[0], GRAY_DARK[1], GRAY_DARK[2]);
-  // "sube" el label (más cerca del borde superior) para que quede más
-  // separado del valor de abajo — antes se veían pegados.
-  lineText(doc, label, x + w / 2, y + 2.4, w - 2, 5.6, false, "center", 1);
-  doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(9.5);
-  lineText(doc, value, x + w / 2, y + h - 2, w - 2.4, 9.5, true, "center", 1);
-}
-
 // ────────────────────────────────────────────────────────────────────────
-// Bloque IZQUIERDO específico de Hojeado/Guillotina: mismo header que el
-// bloque genérico (Maquina + número de "Cantidad Calculada"), pero sus 4
-// datos técnicos ya no van en líneas de texto — van en una CUADRÍCULA
-// 2x2 de celdas con borde propio, en negritas y con letra más grande,
-// como pidió el usuario ("celdas de 2 y 2").
-//
-//   Hojeado    → Bobina | Hojeado
-//                Rend. Hojeado | Pliego Hojeado
-//   Guillotina → Pliego | Rend. Guillotina
-//                Corte | Cortes
+// Bloque IZQUIERDO específico de Hojeado/Guillotina — REDISEÑADO siguiendo
+// el PDF de referencia del usuario: una sola fila compacta de celdas
+// chicas (Maquina + specs técnicos) terminando en una celda DESTACADA con
+// el número grande calculado, en vez de la cuadrícula 2x2 anterior (que
+// no incluía la máquina). Se agrega "Maquina" como primera celda —el dato
+// nuevo que pidió el usuario— con el mismo criterio que ya usan TODOS los
+// demás procesos de este documento (Impresión, Laminación, etc.): ahora
+// que Hojeadora y Guillotina son máquinas registradas por separado (ver
+// CLAVE_MAQUINA_POR_PROCESO_PAPEL), cada una muestra la suya vía
+// `valorMaquina(proceso, registro)`.
 // ────────────────────────────────────────────────────────────────────────
 function prepBlockIzquierdo(
   doc: jsPDF,
@@ -673,59 +649,93 @@ function prepBlockIzquierdo(
   const mainW = w - leftW;
 
   headerCellVertical(doc, proceso.etiqueta, x, y, leftW, h, 6);
-  rect(doc, mainX, y, mainW, h);
-
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(LABEL);
-  doc.setTextColor(GRAY_DARK[0], GRAY_DARK[1], GRAY_DARK[2]);
-  doc.text("Maquina", mainX + 1.4, y + 3);
-  doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);
-  const maquinaTexto = valorMaquina(proceso, registro);
-  lineText(doc, maquinaTexto, mainX + 1.4, y + 6.4, mainW - 26, 7.5, true, "left", 1);
-
-  if (entradaTexto) {
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(12);
-    doc.text(entradaTexto, mainX + mainW - 2, y + 6.3, { align: "right" });
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(5.5);
-    doc.setTextColor(GRAY_DARK[0], GRAY_DARK[1], GRAY_DARK[2]);
-    doc.text("Pliegos", mainX + mainW - 2, y + 8.3, { align: "right" });
-    doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);
-  }
-
-  doc.line(mainX, y + 8.8, mainX + mainW, y + 8.8);
 
   const reg = (registro ?? {}) as Record<string, unknown>;
-  const items = proceso.key === "hojeado_papel"
-    ? [
-      {
-        label: "Bobina", value: (() => {
-          const v = primeraLinea(data.hoj_bobina, data.bobina_cm);
-          return v ? `${v}cm` : "";
-        })()
-      },
-      { label: "Hojeado", value: primeraLinea(data.pliego_hojeado, data.hoj_corte, data.pliego) },
-      { label: "Rend. Hojeado", value: primeraLinea(data.hoj_rendimiento, data.rendimiento) },
-      { label: "Pliego Hojeado", value: pliegoHojeadoTexto(data) },
-    ]
-    : [
-      { label: "Pliego", value: primeraLinea(data.pliego, data.pliegos_guillotina) },
-      { label: "Rend. Guillotina", value: primeraLinea(data.rendimiento, data.hoj_rendimiento) },
-      { label: "Corte", value: primeraLinea(data.corte, data.corte_guillotina) },
-      { label: "Cortes", value: fmtNum(reg.cortes) },
-    ];
+  const maquinaTexto = valorMaquina(proceso, registro);
 
-  const gridY = y + 8.8;
-  const gridH = h - 8.8;
-  const cellW = mainW / 2;
-  const cellH = gridH / 2;
+  type ItemPrep = { label: string; value: string; destacado?: boolean };
 
-  items.forEach((item, i) => {
-    const col = i % 2;
-    const row = Math.floor(i / 2);
-    celdaGridInfo(doc, item.label, item.value, mainX + col * cellW, gridY + row * cellH, cellW, cellH);
+  const items: ItemPrep[] =
+    proceso.key === "hojeado_papel"
+      ? [
+          { label: "Maquina", value: maquinaTexto },
+          {
+            label: "Bobina",
+            value: (() => {
+              const v = primeraLinea(data.hoj_bobina, data.bobina_cm);
+              return v ? `${v}cm` : "";
+            })(),
+          },
+          { label: "Hojeado", value: primeraLinea(data.pliego_hojeado, data.hoj_corte, data.pliego) },
+          { label: "Rend", value: primeraLinea(data.hoj_rendimiento, data.rendimiento) },
+          { label: "Pliego Hojeado", value: pliegoHojeadoTexto(data) },
+          { label: "Cantidad Hojeado", value: entradaTexto, destacado: true },
+        ]
+      : [
+          { label: "Maquina", value: maquinaTexto },
+          { label: "Pliego", value: primeraLinea(data.pliego, data.pliegos_guillotina) },
+          { label: "Rend", value: primeraLinea(data.rendimiento, data.hoj_rendimiento) },
+          { label: "Corte", value: primeraLinea(data.corte, data.corte_guillotina) },
+          { label: "Cortes", value: fmtNum(reg.cortes) },
+          { label: "Cantidad Calculada", value: entradaTexto, destacado: true },
+        ];
+
+  // Anchos proporcionales: "Maquina" y la celda destacada llevan un poco
+  // más de espacio que las celdas de specs intermedias (más angostas).
+  const peso = (item: ItemPrep) => (item.label === "Maquina" ? 1.35 : item.destacado ? 1.25 : 1);
+  const pesoTotal = items.reduce((acc, item) => acc + peso(item), 0);
+
+  let cx = mainX;
+  items.forEach((item) => {
+    const itemW = (mainW * peso(item)) / pesoTotal;
+
+    if (item.destacado) {
+      // Celda destacada: mismo estilo que el resto del documento usa para
+      // resaltar un número (label chico gris arriba, valor grande en bold
+      // abajo) — equivalente a "Cantidad hojeado" en el PDF de referencia.
+      labelCell(doc, item.label, item.value, cx, y, itemW, h, 11, true, "center");
+    } else if (item.label === "Maquina") {
+      // NUEVO: la Maquina se dibuja aparte (no con simpleField) porque el
+      // nombre de la máquina no tiene largo garantizado — con nombres
+      // largos, una sola línea a fuente TEXT(8) se desbordaba de la
+      // celda. Aquí se permiten hasta 2 líneas a una fuente ligeramente
+      // menor, que es lo que realmente cabe en los 16mm de alto de esta
+      // fila sin salirse del borde.
+      rect(doc, cx, y, itemW, h);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(LABEL);
+      doc.setTextColor(GRAY_DARK[0], GRAY_DARK[1], GRAY_DARK[2]);
+      doc.text(item.label, cx + 1.2, y + 3.2);
+      doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);
+      lineText(doc, item.value, cx + 1.4, y + 6.6, itemW - 2.6, 7, true, "left", 2);
+    } else {
+      // Celda de spec normal: mismo estilo que simpleField (label chico
+      // gris arriba, valor en bold abajo) — usado para los 4 datos
+      // técnicos, que siempre son cortos (medidas, rendimiento).
+      simpleField(doc, item.label, item.value, cx, y, itemW, h);
+    }
+
+    cx += itemW;
   });
+}
+
+// Celda de la cuadrícula 2x2 (Hojeado/Guillotina): borde propio, label
+// chico gris arriba y valor BOLD más grande centrado abajo — más legible
+// que una línea de texto plano, y con espacio para agrandar el valor.
+// NOTA: ya no se usa en prepBlockIzquierdo (que ahora es una sola fila,
+// ver arriba); se deja disponible por si se reutiliza en otro lado.
+function celdaGridInfo(doc: jsPDF, label: string, value: string, x: number, y: number, w: number, h: number) {
+  rect(doc, x, y, w, h);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(5.6);
+  doc.setTextColor(GRAY_DARK[0], GRAY_DARK[1], GRAY_DARK[2]);
+  // "sube" el label (más cerca del borde superior) para que quede más
+  // separado del valor de abajo — antes se veían pegados.
+  lineText(doc, label, x + w / 2, y + 2.4, w - 2, 5.6, false, "center", 1);
+  doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9.5);
+  lineText(doc, value, x + w / 2, y + h - 2, w - 2.4, 9.5, true, "center", 1);
 }
 
 // Segmento label:valor horizontal (label chico gris a la izquierda, valor
@@ -1504,10 +1514,9 @@ export async function generarPdfOrdenProduccionPapel(
   });
   y += attrsH + 1;
 
-  // Bloques de proceso. Hojeado/Guillotina ahora usan el MISMO esquema
-  // de 2 columnas paralelas que el resto (specs / merma-entregadas-
-  // observaciones-firma) — ya no llevan una fila ancha aparte con
-  // mini-celdas.
+  // Bloques de proceso. Hojeado/Guillotina ahora usan su propio bloque
+  // compacto (prepBlockIzquierdo, rediseñado en una sola fila con
+  // "Maquina" — ver arriba), ya no la cuadrícula 2x2 anterior.
   const gap = 14;
   const leftColW = CW * 0.53 - 5;
   const rightColW = CW - leftColW - gap;
@@ -1527,9 +1536,13 @@ export async function generarPdfOrdenProduccionPapel(
   const rowHLaminacion = 22;
   // Empaque: 2 casillas simples, sin specs extra.
   const rowHEmpaque = 11.5;
-  // Hojeado/Guillotina: header (8.8mm) + cuadrícula 2x2 de celdas más
-  // grandes (2 filas de ~8mm cada una para que quepa el valor en bold 9.5pt).
-  const rowHPrep = 27;
+  // CORREGIDO: Hojeado/Guillotina ahora son UNA sola fila compacta
+  // (Maquina + 4 specs + celda destacada), siguiendo el PDF de
+  // referencia del usuario, en vez de la cuadrícula 2x2 (que necesitaba
+  // 27mm). Con 6 celdas angostas tipo simpleField/labelCell, 16mm es
+  // suficiente y deja cómodo el bloque derecho (Merma/Entregadas/
+  // Observaciones/Firma) compartido con las demás filas.
+  const rowHPrep = 16;
   const rowGap = 1;
 
   // Rendimiento de hojeado/guillotina, usado únicamente para la fórmula

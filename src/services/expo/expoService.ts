@@ -1,9 +1,16 @@
+// src/services/expo/expoService.ts
 import api from "../api";
-import type { ClienteExpo, FilaProducto } from "../../types/expo/expo.types";
+import type {
+  ClienteExpo,
+  FilaProducto,
+  OpcionPrecioPapelCotizacionPayload,
+  OpcionesRegistroExpoResponse,
+} from "../../types/expo/expo.types";
 
 export interface ProductoCatalogoExpo {
   idcatalogo_expo: number;
   nombre: string;
+  descripcion?: string | null;
   categoria: "papel" | "plastico" | "carton";
   medida: string | null;
   material: string | null;
@@ -20,10 +27,23 @@ export interface ProductoCatalogoExpo {
   precio_500: number | null;
   precio_1000: number | null;
   precio_3000: number | null;
+  precio_base?: number | null;
+  costo_laminado?: number | null;
+  id_tamano_producto?: number | null;
+  tamano_producto?: string | null;
+  idproducto_papel?: number | null;
+  idgrupo_papel?: number | null;
+  grupo_descripcion?: string | null;
+  laminados_permitidos?: { idcat_laminado: number; nombre: string }[];
+  asas_permitidas?: { idcat_tipo_asa: number; nombre: string }[];
   imagen_url: string | null;
   tipo_producto: string | null;
-  // NUEVO: pigmento (plástico) — de producto_acabado_default.pigmento_default
+  tamano_prod?: string | null;
   pigmento?: string | null;
+  por_kilo?: number | string | null;
+  // NUEVO: defaults de tintas — CANTIDAD (1-6), sin pantones.
+  tintas_frente_default?: number | null;
+  tintas_dentro_default?: number | null;
 }
 
 export interface CatalogoSistema {
@@ -53,6 +73,13 @@ export interface DetalleExpo {
   precio_total:    number;
   precio_unitario: number | null;
   aprobado:        boolean | null;
+  precio_calculado_unitario?: number | null;
+  precio_tablero_unitario?: number | null;
+  cargo_extra_unitario?: number | null;
+  ajuste_manual?: boolean | null;
+  idcat_escala_costo?: number | null;
+  escala_cantidad?: number | null;
+  calculo_snapshot?: Record<string, unknown> | null;
 }
 
 export interface ProductoExpoGuardado {
@@ -117,6 +144,17 @@ export const getCatalogoSistema = async (): Promise<CatalogoSistema> => {
   return data;
 };
 
+export const getOpcionesRegistroExpo = async (): Promise<OpcionesRegistroExpoResponse> => {
+  const { data } = await api.get<OpcionesRegistroExpoResponse>(
+    "/expo/catalogo/opciones-registro"
+  );
+  return {
+    papel: Array.isArray(data?.papel) ? data.papel : [],
+    plastico: Array.isArray(data?.plastico) ? data.plastico : [],
+    tamanos: Array.isArray(data?.tamanos) ? data.tamanos : [],
+  };
+};
+
 export const crearProductoCatalogo = async (payload: Omit<ProductoCatalogoExpo, "idcatalogo_expo">): Promise<ProductoCatalogoExpo> => {
   const { data } = await api.post("/expo/catalogo", payload);
   return data.producto;
@@ -127,9 +165,6 @@ export const actualizarProductoCatalogo = async (id: number, payload: Omit<Produ
   return data.producto;
 };
 
-// NUEVO: ahora requiere `categoria` — el backend ya no tiene una sola tabla
-// catalogo_expo, necesita saber si busca en producto_papel o
-// configuracion_plastico (cartón cuenta como "papel" del lado del backend).
 export const eliminarProductoCatalogo = async (
   id: number,
   categoria: "papel" | "plastico" | "carton"
@@ -222,12 +257,6 @@ export const crearCotizacionExpo = async (payload: {
 // ═══════════════════════════════════════════════════════════
 // registrarProductoEnBlanco
 // ═══════════════════════════════════════════════════════════
-// CAMBIO IMPORTANTE: ya NO se registra en catalogo_expo. Se registra
-// directo en producto_papel / configuracion_plastico (las tablas
-// principales que también usan Papel.tsx y Plastico.tsx), marcado con
-// origen_expo=true, con los datos que se tengan — el resto se completa
-// después cuando la cotización se convierta en pedido real. Así se evita
-// por completo el problema de "dos tablas espejo" para este flujo.
 export const registrarProductoEnBlanco = async (
   fila: FilaProducto,
   precio1: string,
@@ -236,9 +265,6 @@ export const registrarProductoEnBlanco = async (
 ): Promise<{ id: number; fuente: "papel" | "plastico" }> => {
   const p = fila.producto;
   const parseN = (v: string | undefined | null) => parseFloat(v || "0") || null;
-  // Los precios vienen formateados con "$" (ej. "$5.00") — parseN los deja
-  // en NaN porque parseFloat no puede arrancar con "$". Este sí les quita
-  // cualquier caracter que no sea número o punto antes de convertir.
   const parsePrecioLocal = (v: string | undefined | null) => {
     const limpio = (v || "").replace(/[^0-9.]/g, "");
     return limpio ? (parseFloat(limpio) || null) : null;
@@ -317,31 +343,85 @@ export const mapearProductoAPayload = (
   precio1: string,
   precio2: string,
   precio3: string,
-  cant1: string = "500",
-  cant2: string = "1,000",
-  cant3: string = "3,000",
+  cant1: string = "",
+  cant2: string = "",
+  cant3: string = "",
+  columnasPrecio: 1 | 2 | 3 = 3,
 ): any => {
   const p = fila.producto;
-    console.log("[PAYLOAD] fuente:", p.fuente, "categoria:", p.categoria, "nombre:", p.nombre); // ← AQUÍ
+  console.log("[PAYLOAD] fuente:", p.fuente, "categoria:", p.categoria, "nombre:", p.nombre);
 
   const parseP = (s: string) => parseFloat(s.replace(/[^0-9.]/g, "")) || 0;
 
-  const extraNum = fila.modoExtra === "precio" ? (parseP(fila.extra || "0")) : 0;
+  const extraNum = fila.modoExtra === "precio" ? parseP(fila.extra || "0") : 0;
+
+  // La cantidad de columnas visibles es la fuente de verdad del guardado.
+  // Aunque React conserve valores antiguos en una columna oculta, aquí se
+  // convierten explícitamente en cero para que nunca lleguen al backend.
   const p1raw = parseP(precio1);
-  const p2raw = parseP(precio2);
-  const p3raw = parseP(precio3);
+  const p2raw = columnasPrecio >= 2 ? parseP(precio2) : 0;
+  const p3raw = columnasPrecio >= 3 ? parseP(precio3) : 0;
+
   const p1 = p1raw > 0 ? p1raw + extraNum : 0;
   const p2 = p2raw > 0 ? p2raw + extraNum : 0;
   const p3 = p3raw > 0 ? p3raw + extraNum : 0;
 
   const parseCant = (s: string) => parseInt(s.replace(/,/g, ""), 10) || 0;
   const c1 = parseCant(cant1);
-  const c2 = parseCant(cant2);
-  const c3 = parseCant(cant3);
+  const c2 = columnasPrecio >= 2 ? parseCant(cant2) : 0;
+  const c3 = columnasPrecio >= 3 ? parseCant(cant3) : 0;
 
-  // ── Papel del sistema SIGEB (o ya registrado en blanco desde Expo — ahora
-  // es EXACTAMENTE el mismo camino, porque ya vive en producto_papel) ──────
-  if (p.categoria === "papel" && (p.fuente === "sistema" || p.fuente === "expo")) {
+  const opcionesPrecioPapel: OpcionPrecioPapelCotizacionPayload[] = [
+    {
+      referencia: "precio1" as const,
+      cantidad: c1,
+      precio_tablero: p1raw,
+      cargo_extra_unitario: extraNum,
+      precio_final: p1,
+    },
+    {
+      referencia: "precio2" as const,
+      cantidad: c2,
+      precio_tablero: p2raw,
+      cargo_extra_unitario: extraNum,
+      precio_final: p2,
+    },
+    {
+      referencia: "precio3" as const,
+      cantidad: c3,
+      precio_tablero: p3raw,
+      cargo_extra_unitario: extraNum,
+      precio_final: p3,
+    },
+  ].filter(
+    ({ cantidad, precio_tablero, precio_final }) =>
+      cantidad > 0 &&
+      precio_tablero > 0 &&
+      precio_final > 0,
+  );
+
+  const paresCantidadPrecio = [
+  { cantidad: c1, precio: p1 },
+  { cantidad: c2, precio: p2 },
+  { cantidad: c3, precio: p3 },
+].filter(
+  ({ cantidad, precio }) =>
+    cantidad > 0 &&
+    precio > 0
+);
+
+const cantidades = paresCantidadPrecio.map(
+  ({ cantidad }) => cantidad
+);
+
+const precios = paresCantidadPrecio.map(
+  ({ precio }) => precio
+);
+
+  // ── Papel del sistema SIGEB (o ya registrado en blanco desde Expo) ──────
+  // Tintas se mandan como CANTIDAD, no id — el backend resuelve el id real
+  // justo antes de insertar. Sin pantones.
+  if ((p.categoria === "papel" || p.categoria === "carton") && (p.fuente === "sistema" || p.fuente === "expo")) {
     return {
       tipoCotizacion:   "papel",
       tipo_material:    "papel",
@@ -349,21 +429,24 @@ export const mapearProductoAPayload = (
       nombre:            p.nombre,
       idgrupo_papel:     p.idgrupo_papel     ?? null,
       grupo_descripcion: p.grupo_descripcion ?? null,
-      tintasId:          p.tintasId          ?? null,
-      pantones:          fila.pantones        ?? null,
-      tintasDentroId:    null,
-      pantonesDentro:    null,
+      tintasFrenteCantidad: fila.tintasFrente,
+      tintasDentroCantidad: fila.usaTintasDentro ? fila.tintasDentro : null,
       carasId:           p.carasId           ?? null,
-      id_asa:          fila.idAsa      ?? null,
-      idcat_laminado:  fila.idLaminado ?? null,
-      idfoil:          fila.idFoil     ?? null,
-      idcat_textura:   fila.idTextura  ?? null,
+      id_asa:          fila.asa ? (fila.idAsa ?? null) : null,
+      idcat_laminado:  fila.laminacion ? (fila.idLaminado ?? null) : null,
+      idfoil:          fila.hs ? (fila.idFoil ?? null) : null,
+      idcat_textura:   fila.textura ? (fila.idTextura ?? null) : null,
+      laminacion:      fila.laminacion,
+      hs:              fila.hs,
+      textura:         fila.textura,
+      asa:             fila.asa,
       uv:              fila.uv,
       alto_relieve:    fila.ar,
       observacion:     null,
       descripcion:     p.nombre        ?? null,
       cantidades: [c1, c2, c3] as [number, number, number],
       precios:    [p1, p2, p3] as [number, number, number],
+      opciones_precio: opcionesPrecioPapel,
       herramental_descripcion:     null,
       herramental_precio:          null,
       cargo_adicional_descripcion: null,
@@ -371,17 +454,15 @@ export const mapearProductoAPayload = (
     };
   }
 
-  // ── Cartón "en blanco" desde Expo: sigue sin FK directa del sistema
-  // (producto_papel maneja cartón vía idproductos=3, pero por ahora ese
-  // camino sigue como antes hasta que se confirme el detalle con el resto
-  // del flujo de cartón).
+  // ── Cartón "en blanco" desde Expo ───────────────────────────────────────
   if (p.fuente === "expo" && p.categoria === "carton") {
     return {
       tipoCotizacion:  "expo_papel",
       tipo_material:   "expo",
       categoria:       p.categoria,
       nombre:          p.nombre || null,
-      tintas_cantidad: fila.tintas || p.tintas || 1,
+      tintasFrenteCantidad: fila.tintasFrente,
+      tintasDentroCantidad: fila.usaTintasDentro ? fila.tintasDentro : null,
       observacion:     null,
       tipoLaminado:  fila.tipoLaminado || null,
       tipoHs:        fila.tipoHs       || null,
@@ -390,18 +471,18 @@ export const mapearProductoAPayload = (
       uv:            fila.uv,
       ar:            fila.ar,
       hs:            fila.hs,
-      cantidades: [c1, c2, c3],
-      precios:    [p1, p2, p3],
+      cantidades,
+      precios,
+      opciones_precio: opcionesPrecioPapel,
     };
   }
 
-  // ── Plástico (sistema, o ya registrado en blanco desde Expo — mismo
-  // camino ahora, vive en configuracion_plastico) ──────────────────────────
+  // ── Plástico (sistema, o ya registrado en blanco desde Expo) ────────────
   return {
     tipoCotizacion:            "plastico",
     tipo_material:             "plastico",
     configuracion_plastico_id: p.configuracion_plastico_id ?? p.id,
-    tintas_cantidad:           fila.tintas || p.tintas || 1,
+    tintasFrenteCantidad: fila.tintasFrente,
     nombre:                    p.nombre   || null,
     observacion:               null,
     id_laminado: fila.idLaminado ?? null,
@@ -412,7 +493,7 @@ export const mapearProductoAPayload = (
     uv:          fila.uv,
     ar:          fila.ar,
     pigmento:    fila.modoExtra === "pigmento" ? (fila.pigmento || null) : null,
-    cantidades: [c1, c2, c3],
-    precios:    [p1, p2, p3],
+    cantidades,
+    precios,
   };
 };

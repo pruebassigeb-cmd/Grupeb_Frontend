@@ -97,6 +97,10 @@ export default function FormularioSolicitud({
     abierto: boolean; tipoId: number; nombre: string; indice: number | null;
   }>({ abierto: false, tipoId: 0, nombre: "", indice: null });
 
+  // Se incrementa cada vez que se registra un insumo nuevo (pantón/pigmento),
+  // para forzar a TODOS los ComboboxInsumo montados a refrescar su lista.
+  const [catalogoInsumosVersion, setCatalogoInsumosVersion] = useState(0);
+
   const [modoCantidad, setModoCantidad] = useState<"unidad" | "kilo">("unidad");
   const [cantidadesTexto, setCantidadesTexto] = useState<[string, string, string]>(["", "", ""]);
 
@@ -129,13 +133,19 @@ export default function FormularioSolicitud({
   });
 
   const tintasPlastico = useMemo(
-    () => tintas.filter(t => {
-      const cantidad = Number(t.cantidad);
-      return cantidad >= 1 && cantidad <= 6;
-    }),
+    () =>
+      tintas
+        .filter(t => {
+          const cantidad = Number(t.cantidad);
+          return cantidad >= 0;
+        })
+        .sort((a, b) => Number(a.cantidad) - Number(b.cantidad)),
     [tintas]
   );
-  const tintaPlasticoDefault = tintasPlastico[0] ?? null;
+  // El default sigue siendo la primera opción CON tinta (nunca "sin tintas"),
+  // para no cambiar el comportamiento actual de productos nuevos.
+  const tintaPlasticoDefault =
+    tintasPlastico.find(t => Number(t.cantidad) >= 1) ?? tintasPlastico[0] ?? null;
 
   const { bolsas: cantidadesEnBolsas } = calcularDesdeInput(
     cantidadesTexto, modoCantidad, productoActual.porKilo
@@ -145,7 +155,6 @@ export default function FormularioSolicitud({
   const puedeCalcularPrecioPlastico =
     tipoMaterial === "plastico" &&
     porKiloNumerico > 0 &&
-    Number(productoActual.tintas ?? 0) > 0 &&
     Number(productoActual.tintasId ?? 0) > 0 &&
     cantidadesEnBolsas.some(c => c > 0);
 
@@ -174,7 +183,7 @@ export default function FormularioSolicitud({
     const tintaActual = tintas.find(t => t.id === productoActual.tintasId);
     const cantidadTintaActual = Number(tintaActual?.cantidad ?? productoActual.tintas ?? 0);
     const tintaActualInvalida =
-      cantidadTintaActual < 1 ||
+      cantidadTintaActual < 0 ||
       cantidadTintaActual > 6;
 
     if (!tintaActualInvalida) return;
@@ -507,6 +516,7 @@ export default function FormularioSolicitud({
       setProductoActual(prev => ({ ...prev, pigmentos: texto }));
     }
     setModalInsumo({ abierto: false, tipoId: 0, nombre: "", indice: null });
+    setCatalogoInsumosVersion(v => v + 1);
   };
 
   const herramentalTieneData = !!herramentalDescripcion.trim() || (herramentalPrecioTexto !== "" && parseFloat(herramentalPrecioTexto) > 0);
@@ -1156,7 +1166,7 @@ export default function FormularioSolicitud({
                   <div className="relative">
                     <label className="block text-sm font-medium text-gray-700 mb-2">Tintas</label>
                     <div className="flex gap-2">
-                      <input type="text" value={`${productoActual.tintas} tinta${productoActual.tintas > 1 ? "s" : ""}`} readOnly
+                      <input type="text" value={productoActual.tintas === 0 ? "Sin tintas" : `${productoActual.tintas} tinta${productoActual.tintas > 1 ? "s" : ""}`} readOnly
                         className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white cursor-pointer"
                         onClick={() => setMostrarDropdownTintas(!mostrarDropdownTintas)} />
                       <button type="button" onClick={() => setMostrarDropdownTintas(!mostrarDropdownTintas)} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
@@ -1171,7 +1181,7 @@ export default function FormularioSolicitud({
                             setInputsPantones(Array(t.cantidad).fill(""));
                             setModoColor("pantones"); setMostrarDropdownTintas(false);
                           }} className="px-4 py-2 hover:bg-blue-100 cursor-pointer text-gray-900">
-                            {t.cantidad} tinta{t.cantidad > 1 ? "s" : ""}
+                            {Number(t.cantidad) === 0 ? "Sin tintas" : `${t.cantidad} tinta${t.cantidad > 1 ? "s" : ""}`}
                           </li>
                         ))}
                       </ul>
@@ -1222,6 +1232,7 @@ export default function FormularioSolicitud({
                     </div>
                     <ComboboxInsumo
                       tipoId={idTipoPigmento}
+                      refreshKey={catalogoInsumosVersion}
                       placeholder="Buscar pigmento..."
                       value={productoActual.pigmentos || ""}
                       onChange={(val) => setProductoActual((p) => ({ ...p, pigmentos: sanitizarTexto(val) || null }))}
@@ -1234,38 +1245,41 @@ export default function FormularioSolicitud({
                       disabled={esBopp}
                     />
                   </div>
-                  <div className="space-y-2">
-                    <p className="text-sm font-medium text-gray-600">
-                      Pantones{" "}<span className="text-xs text-gray-400 font-normal">({productoActual.tintas} tinta{productoActual.tintas > 1 ? "s" : ""})</span>
-                    </p>
-                    <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 space-y-3">
-                      <div className="grid grid-cols-2 gap-3">
-                        {inputsPantones.map((valor, i) => (
-                          <div key={i} className="flex items-start gap-2">
-                            <span className="flex-shrink-0 w-6 h-6 mt-2 rounded-full bg-purple-200 text-purple-800 text-xs font-bold flex items-center justify-center">{i + 1}</span>
-                            <ComboboxInsumo
-                              tipoId={idTipoPanton}
-                              placeholder={`Tinta ${i + 1}...`}
-                              value={valor}
-                              onChange={(val) => handlePantoneChange(i, val)}
-                              onSeleccionar={(item) => {
-                                const codigo = item.proveedores[0]?.codigo;
-                                const texto = codigo ? `${item.nombre} (${codigo})` : item.nombre;
-                                const nuevos = [...inputsPantones]; nuevos[i] = texto;
-                                setInputsPantones(nuevos);
-                                setProductoActual((prev) => ({ ...prev, pantones: nuevos.join(", ").replace(/^[\s,]+|[\s,]+$/g, "") || null }));
-                              }}
-                              onRegistrarNuevo={(nombre) => abrirModalInsumo(idTipoPanton!, nombre, i)}
-                              className="flex-1"
-                            />
-                          </div>
-                        ))}
+                  {productoActual.tintas > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium text-gray-600">
+                        Pantones{" "}<span className="text-xs text-gray-400 font-normal">({productoActual.tintas} tinta{productoActual.tintas > 1 ? "s" : ""})</span>
+                      </p>
+                      <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 space-y-3">
+                        <div className="grid grid-cols-2 gap-3">
+                          {inputsPantones.map((valor, i) => (
+                            <div key={i} className="flex items-start gap-2">
+                              <span className="flex-shrink-0 w-6 h-6 mt-2 rounded-full bg-purple-200 text-purple-800 text-xs font-bold flex items-center justify-center">{i + 1}</span>
+                              <ComboboxInsumo
+                                tipoId={idTipoPanton}
+                                refreshKey={catalogoInsumosVersion}
+                                placeholder={`Tinta ${i + 1}...`}
+                                value={valor}
+                                onChange={(val) => handlePantoneChange(i, val)}
+                                onSeleccionar={(item) => {
+                                  const codigo = item.proveedores[0]?.codigo;
+                                  const texto = codigo ? `${item.nombre} (${codigo})` : item.nombre;
+                                  const nuevos = [...inputsPantones]; nuevos[i] = texto;
+                                  setInputsPantones(nuevos);
+                                  setProductoActual((prev) => ({ ...prev, pantones: nuevos.join(", ").replace(/^[\s,]+|[\s,]+$/g, "") || null }));
+                                }}
+                                onRegistrarNuevo={(nombre) => abrirModalInsumo(idTipoPanton!, nombre, i)}
+                                className="flex-1"
+                              />
+                            </div>
+                          ))}
+                        </div>
+                        {productoActual.pantones && (
+                          <p className="text-xs text-purple-500">Guardado: <span className="font-medium">{productoActual.pantones}</span></p>
+                        )}
                       </div>
-                      {productoActual.pantones && (
-                        <p className="text-xs text-purple-500">Guardado: <span className="font-medium">{productoActual.pantones}</span></p>
-                      )}
                     </div>
-                  </div>
+                  )}
                 </div>
 
                 {/* Suaje */}
@@ -1565,7 +1579,7 @@ export default function FormularioSolicitud({
                           <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-600 mt-1">
                             {p.medida && <span>Medida: {p.medida}</span>}
                             {p.grupo_descripcion && <span>Material: {p.grupo_descripcion}</span>}
-                            {p.tintas > 0 && <span>Tintas: {p.tintas}</span>}
+                            <span>{p.tintas > 0 ? `Tintas: ${p.tintas}` : "Sin tintas"}</span>
                             {p.tintasDentro > 0 && <span>Tintas dentro: {p.tintasDentro}</span>}
                             {p.caras > 0 && <span>Caras: {p.caras}</span>}
                             {p.uv && <span className="text-amber-600 font-medium">🔆 UV</span>}
@@ -1607,7 +1621,7 @@ export default function FormularioSolicitud({
                           <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-600">
                             <span>Material: {p.material}</span>
                             <span>Calibre: {p.calibre}</span>
-                            <span>Tintas: {p.tintas}</span>
+                            <span>{p.tintas > 0 ? `Tintas: ${p.tintas}` : "Sin tintas"}</span>
                             <span>Caras: {p.caras}</span>
                             {p.suajeTipo && <span className="text-blue-600 font-medium">Suaje: {p.suajeTipo}</span>}
                             {p.colorAsaNombre && <span className="text-teal-600 font-medium capitalize">🎨 Asa: {p.colorAsaNombre}</span>}
@@ -1666,13 +1680,13 @@ export default function FormularioSolicitud({
           </div>
         )}
 
-        {/* Remisión */}
+        {/* Sin remisión */}
         <div className="flex items-center gap-3 py-3 px-4 bg-emerald-50 border border-emerald-200 rounded-lg mb-4">
           <input type="checkbox" id="chk-sin-iva" checked={datos.sin_iva ?? false}
             onChange={e => setDatos(prev => ({ ...prev, sin_iva: e.target.checked }))}
             className="w-5 h-5 rounded border-emerald-400 text-emerald-600 focus:ring-emerald-400 cursor-pointer" />
           <label htmlFor="chk-sin-iva" className="flex items-center gap-2 cursor-pointer select-none">
-            <span className="text-emerald-700 font-semibold text-sm">Remisión</span>
+            <span className="text-emerald-700 font-semibold text-sm">Sin remisión</span>
             <span className="text-emerald-500 text-xs">(exento de IVA en todo el proceso)</span>
           </label>
         </div>

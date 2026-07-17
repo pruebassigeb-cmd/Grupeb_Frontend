@@ -36,6 +36,7 @@ import { crearProductoPapel } from "../services/papel/papel.service";
 import ModalMaquinariaPedidoPapel from "../components/papel/ModalMaquinariaPedidoPapel";
 import type { MaquinariaProductoPedidoPapel } from "../types/papel/maquinaria-pedido.types";
 import api from "../services/api";
+import { coincideBusquedaProductoPapel } from "../utils/papel/buscarProductoPapel";
 
 // ─── Tipos internos ───────────────────────────────────────────────────────────
 interface DetalleEdit {
@@ -92,7 +93,10 @@ interface ProductoPapelEdit {
   idcat_textura: number | null;
   uv: boolean;
   alto_relieve: boolean;
-  metodo_hojeado: MetodoHojeadoPapel | null;
+  // DEPRECATED: ya no se deriva ni se pide (Hojeado/Guillotina se decide
+  // físicamente en producción, no en el sistema). Se deja opcional para no
+  // romper el payload que aún viaja al backend.
+  metodo_hojeado?: MetodoHojeadoPapel | null;
   lleva_armado: boolean;
   maquinaria_seleccionada: Record<
     string,
@@ -118,7 +122,7 @@ const parseSafe = (v: string) => { const n = parseFloat(v); return isNaN(n) ? 0 
 const esDecimal = (v: string) => /^\d*\.?\d{0,4}$/.test(v);
 const esEntero = (v: string) => /^\d*$/.test(v);
 const tintasPapel = (items: CatItem[]) =>
-  items.filter(t => t.cantidad >= 1 && t.cantidad <= 6);
+  items.filter(t => t.cantidad >= 0).sort((a, b) => a.cantidad - b.cantidad);
 
 const numeroONull = (v: any): number | null => {
   const n = Number(v);
@@ -199,8 +203,7 @@ function BuscadorProductoPapel({
   }, []);
 
   const filtrados = lista.filter(p =>
-    !query || [p.tipo_producto, p.descripcion_papel, p.medida, p.primer_tipo_papel]
-      .some(f => f?.toLowerCase().includes(query.toLowerCase()))
+    coincideBusquedaProductoPapel(p, query)
   );
 
   const handleGuardarNuevo = async (form: ProductoPapelForm, pendientes: ArchivoPendiente[]) => {
@@ -370,6 +373,7 @@ function ProductoPapelEditable({
   onAbrirModalInsumo: (tipoId: number, nombre: string, pi: number, campo: "ext" | "int", indice: number) => void;
 }) {
   const catalogoTintasValidas = tintasPapel(catalogoTintas);
+  const catalogoTintasInterior = catalogoTintasValidas.filter(t => t.cantidad >= 1);
   const subtotal =
     prod.detalles.reduce((s, d) => s + parseSafe(d.precio_total), 0)
     + parseSafe(prod.herramental_precio);
@@ -526,7 +530,7 @@ function ProductoPapelEditable({
                 ? catalogoTintasValidas
                 : [1, 2, 3, 4, 5, 6].map(n => ({ id: n, cantidad: n }))
               ).map(t => (
-                <option key={t.id} value={t.cantidad}>{t.cantidad} tinta{t.cantidad > 1 ? "s" : ""}</option>
+                <option key={t.id} value={t.cantidad}>{t.cantidad === 0 ? "Sin tintas" : `${t.cantidad} tinta${t.cantidad > 1 ? "s" : ""}`}</option>
               ))}
             </select>
           </div>
@@ -542,6 +546,7 @@ function ProductoPapelEditable({
         </div>
 
         {/* Pantones exteriores */}
+        {prod.tintas > 0 && (
         <div>
           <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
             Pantones exteriores{" "}
@@ -577,6 +582,7 @@ function ProductoPapelEditable({
             )}
           </div>
         </div>
+        )}
 
         {/* Tintas interiores */}
         <div className="space-y-3">
@@ -602,8 +608,8 @@ function ProductoPapelEditable({
             className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-blue-500"
           >
             <option value={0}>Sin tintas interiores</option>
-            {(catalogoTintasValidas.length > 0
-              ? catalogoTintasValidas
+            {(catalogoTintasInterior.length > 0
+              ? catalogoTintasInterior
               : [1, 2, 3, 4, 5, 6].map(n => ({ id: n, cantidad: n }))
             ).map(t => (
               <option key={t.id} value={t.cantidad}>{t.cantidad} tinta{t.cantidad > 1 ? "s" : ""}</option>
@@ -1241,6 +1247,12 @@ export default function EditarPedidoPapel() {
     };
   };
 
+// Al agregar un producto nuevo al pedido, el catálogo de maquinaria del
+  // producto (definido al darlo de alta) NO es lo mismo que la selección de
+  // maquinaria específica de ESTE pedido (metodo_hojeado, lleva_armado,
+  // maquinaria_seleccionada). Por eso, en cuanto se agrega, abrimos de
+  // inmediato el modal de "Procesos y maquinaria" para completar ese paso
+  // sin que el usuario tenga que acordarse de bajar a buscarlo.
   const handleSeleccionarProducto = async (prod: ProductoPapelBusqueda) => {
     const { piOrigen, modo } = modalBuscador;
     setModalBuscador({ abierto: false, piOrigen: -1, modo: "cambiar" });
@@ -1249,7 +1261,12 @@ export default function EditarPedidoPapel() {
       const nuevo = await crearProductoPapelDesdeSeleccion(
         prod.idproducto_papel, prod.tipo_producto, prod.medida ?? ""
       );
-      setProductos(prev => [...prev, nuevo]);
+      setProductos(prev => {
+        const actualizados = [...prev, nuevo];
+        const piNuevo = actualizados.length - 1;
+        setTimeout(() => abrirMaquinariaProducto(piNuevo), 0);
+        return actualizados;
+      });
     } else {
       await aplicarProductoAlPi(piOrigen, prod.idproducto_papel, prod.tipo_producto, prod.medida ?? "");
     }
@@ -1265,7 +1282,12 @@ export default function EditarPedidoPapel() {
 
     if (modo === "agregar") {
       const nuevo = await crearProductoPapelDesdeSeleccion(idproducto_papel, nombre, medida);
-      setProductos(prev => [...prev, nuevo]);
+      setProductos(prev => {
+        const actualizados = [...prev, nuevo];
+        const piNuevo = actualizados.length - 1;
+        setTimeout(() => abrirMaquinariaProducto(piNuevo), 0);
+        return actualizados;
+      });
     } else {
       await aplicarProductoAlPi(piOrigen, idproducto_papel, nombre, medida);
     }
@@ -1301,18 +1323,11 @@ export default function EditarPedidoPapel() {
       if (!seleccion) return p;
       return {
         ...p,
-        metodo_hojeado: seleccion.metodo_hojeado,
         lleva_armado: seleccion.lleva_armado,
         maquinaria_seleccionada: seleccion.maquinaria_seleccionada ?? {},
       };
     }));
     setModalMaquinaria({ abierto: false, piOrigen: -1 });
-  };
-
-  const etiquetaMetodo = (metodo: MetodoHojeadoPapel | null) => {
-    if (metodo === "guillotina") return "Guillotina";
-    if (metodo === "hojeado") return "Hojeado";
-    return "Sin preparación";
   };
 
   const totalMaquinasSeleccionadas = (p: ProductoPapelEdit) =>
@@ -1323,25 +1338,18 @@ export default function EditarPedidoPapel() {
     if (!pedidoOrig) return;
     setErrorGuardar(null);
 
-    const productoSinMetodo = productos.find(
-      p => !p._eliminado && !p.metodo_hojeado
-    );
-    if (productoSinMetodo) {
-      const pi = productos.indexOf(productoSinMetodo);
-      setErrorGuardar(
-        `Configura procesos y maquinaria para "${productoSinMetodo.nombre}" antes de guardar.`
-      );
-      irAProducto(pi);
-      return;
-    }
+    // NUEVO: ya no se bloquea el guardado por "falta elegir Hojeado o
+    // Guillotina" — eso se decide físicamente en producción, no en el
+    // sistema. Lo único que sigue siendo obligatorio es que el producto
+    // tenga su maquinaria registrada (validado por el backend al guardar).
 
     const productoSinTintas = productos.find(
-      p => !p._eliminado && (!p.tintasId || p.tintas <= 0)
+      p => !p._eliminado && !p.tintasId
     );
     if (productoSinTintas) {
       const pi = productos.indexOf(productoSinTintas);
       setErrorGuardar(
-        `Selecciona las tintas (frente) para "${productoSinTintas.nombre}". Impresión es obligatoria — las tintas interiores sí son opcionales.`
+        `Selecciona una opción de Impresión (frente) para "${productoSinTintas.nombre}" — puede ser "Sin tintas".`
       );
       irAProducto(pi);
       return;
@@ -1651,7 +1659,7 @@ export default function EditarPedidoPapel() {
               productosActivos.map((p, index) => {
                 const piReal = productos.findIndex(x => x.idsolicitud_producto === p.idsolicitud_producto);
                 const maquinasSeleccionadas = totalMaquinasSeleccionadas(p);
-                const configurado = !!p.metodo_hojeado && maquinasSeleccionadas > 0;
+                const configurado = maquinasSeleccionadas > 0;
 
                 return (
                   <div key={p.idsolicitud_producto} className="flex flex-col gap-3 rounded-xl border border-gray-200 bg-gray-50 p-4 lg:flex-row lg:items-center lg:justify-between">
@@ -1668,10 +1676,14 @@ export default function EditarPedidoPapel() {
                       <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-gray-500">
                         {p.medida && <span>📐 {p.medida}</span>}
                         {p.grupo_descripcion && <span>{p.grupo_descripcion}</span>}
-                        <span>{etiquetaMetodo(p.metodo_hojeado)}</span>
                         <span>{p.lleva_armado ? "Con armado" : "Sin armado"}</span>
                         <span>{maquinasSeleccionadas} máquina{maquinasSeleccionadas !== 1 ? "s" : ""} seleccionada{maquinasSeleccionadas !== 1 ? "s" : ""}</span>
                       </div>
+                       {p._esNuevo && !configurado && (
+                        <p className="mt-1 text-xs text-amber-600 font-medium">
+                          ⚠️ Producto nuevo — la maquinaria del catálogo no aplica automáticamente aquí, configura el proceso específico de este pedido antes de guardar.
+                        </p>
+                      )}
                     </div>
 
                     <button

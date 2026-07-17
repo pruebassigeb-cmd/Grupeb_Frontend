@@ -13,8 +13,6 @@ import {
 import { generarPdfPedido } from "../services/generarPdfPedido";
 import { getVentaByPedido } from "../services/ventasservice";
 import { showConfirm } from "./CustomConfirm";
-import ModalMaquinariaPedidoPapel from "./papel/ModalMaquinariaPedidoPapel";
-import type { MaquinariaProductoPedidoPapel } from "../types/papel/maquinaria-pedido.types";
 
 const ESTADO_ID = {
   PENDIENTE: 1,
@@ -240,10 +238,6 @@ export default function EditarCotizacion({
     null,
   );
   const [modalConfirmarOpen, setModalConfirmarOpen] = useState(false);
-  const [modalMaquinariaOpen, setModalMaquinariaOpen] = useState(false);
-  const [maquinariaConversion, setMaquinariaConversion] = useState<
-    MaquinariaProductoPedidoPapel[]
-  >([]);
 
   const totalDetallesAprobados = productos
     .flatMap((producto) => producto.detalles)
@@ -368,29 +362,22 @@ export default function EditarCotizacion({
     if (totalDetallesAprobados === 0) return;
 
     if (esConversionAPedido) {
-      if (productosPapelAprobados.length > 0) {
-        setModalMaquinariaOpen(true);
-      } else {
-        setMaquinariaConversion([]);
-        setModalConfirmarOpen(true);
-      }
+      // NUEVO: ya no se abre un modal para elegir/confirmar maquinaria ni si
+      // lleva armado — ambos datos ya están fijos desde que se dio de alta
+      // el producto (maquinaria por proceso) o desde la cotización
+      // (specs.lleva_armado en FormularioProductoPapel.tsx). El backend los
+      // copia directamente al crear el pedido; aquí solo se confirma la
+      // conversión.
+      setModalConfirmarOpen(true);
       return;
     }
 
     handleCambiarEstado(ESTADO_ID.APROBADO);
   };
 
-  const handleConfirmarMaquinaria = (
-    selecciones: MaquinariaProductoPedidoPapel[],
-  ) => {
-    setMaquinariaConversion(selecciones);
-    setModalMaquinariaOpen(false);
-    setModalConfirmarOpen(true);
-  };
-
   const handleConfirmarConversion = () => {
     setModalConfirmarOpen(false);
-    handleCambiarEstado(ESTADO_ID.APROBADO, maquinariaConversion);
+    handleCambiarEstado(ESTADO_ID.APROBADO);
   };
 
   const descargarPdfPedido = async (noPedido: string) => {
@@ -437,10 +424,7 @@ export default function EditarCotizacion({
     }
   };
 
-  const handleCambiarEstado = async (
-    estadoId: number,
-    maquinariaPapel: MaquinariaProductoPedidoPapel[] = [],
-  ) => {
+  const handleCambiarEstado = async (estadoId: number) => {
     if (estadoId === ESTADO_ID.RECHAZADO) {
       const mensaje =
         totalDetallesAprobados === 0
@@ -457,7 +441,6 @@ export default function EditarCotizacion({
       const respuesta = await actualizarEstado(
         cotizacion.no_cotizacion,
         estadoId,
-        maquinariaPapel,
       );
 
       const estadoNombre =
@@ -545,14 +528,6 @@ export default function EditarCotizacion({
 
   return (
     <div className="space-y-5">
-      {modalMaquinariaOpen && (
-        <ModalMaquinariaPedidoPapel
-          productos={productosPapelAprobados}
-          onCancel={() => setModalMaquinariaOpen(false)}
-          onConfirm={handleConfirmarMaquinaria}
-        />
-      )}
-
       {modalConfirmarOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 p-6 space-y-4">

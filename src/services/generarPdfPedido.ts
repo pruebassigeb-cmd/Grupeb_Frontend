@@ -56,7 +56,15 @@ interface DimensionesFormato {
 
 function resolverDimensiones(formato: FormatoPedidoPdf): DimensionesFormato {
   if (formato === "membretado") {
-    return { PW: 290, PH: 210, formatoJsPdf: [290, 210], ocultarLogo: true };
+    // La hoja membretada física mide 290 × 210 mm — un tamaño NO estándar que
+    // los drivers de impresora no reconocen, lo que provoca escalados y
+    // rotaciones impredecibles al imprimir. En su lugar el PDF se genera en
+    // A4 apaisado (297 × 210 mm), tamaño estándar que todo driver conoce,
+    // pero el contenido se maqueta dentro de 290 mm de ancho (PW = 290).
+    // Así, al imprimir en "Tamaño real / 100%" con papel A4, el contenido cae
+    // exactamente sobre la hoja de 290 mm con márgenes simétricos de 10 mm,
+    // y los 7 mm sobrantes del A4 quedan en blanco fuera de la hoja física.
+    return { PW: 290, PH: 210, formatoJsPdf: "a4", ocultarLogo: true };
   }
   return { PW: 279.4, PH: 215.9, formatoJsPdf: "letter", ocultarLogo: false };
 }
@@ -98,46 +106,14 @@ function dibujarCeldaTintasDiagonal(
 }
 
 // ── Helper: fila observaciones ────────────────────────────────────────────────
-function buildObsRow(prod: ProductoPdf, headLength: number, MID_COL: number) {
-  const tintasInt = (prod as any).tintasDentro != null && (prod as any).tintasDentro > 0
-    ? String((prod as any).tintasDentro) : "—";
-  const tieneDiagonal = tintasInt !== "—";
+function buildObsRow(prod: ProductoPdf, headLength: number): string[] | null {
   const hasHerr = prod.herramental_precio != null && prod.herramental_precio > 0;
-  const tieneKilo = prod.detalles.some(d => d.modo_cantidad === "kilo");
-  const modoLabel = tieneKilo ? "Por kilo" : "Por unidad";
+  const hasObs = !!prod.observacion?.trim();
 
-  const foilMostrar = (prod as any).foil_nombre ? String((prod as any).foil_nombre).trim() : boolLabel(prod.foil);
-  const asaMostrar = (prod as any).asa_nombre ? String((prod as any).asa_nombre).trim() : boolLabel(prod.asa_suaje);
-  const laminadoMostrar = (prod as any).laminado_nombre ? String((prod as any).laminado_nombre).trim() : boolLabel(prod.laminado);
-  const texturaMostrar = (prod as any).textura_nombre ? String((prod as any).textura_nombre).trim() : "—";
-
-  const extras: string[] = [];
-  if (foilMostrar !== "—" && foilMostrar !== "NO") extras.push(`Foil: ${foilMostrar}`);
-  if (asaMostrar !== "—" && asaMostrar !== "NO") extras.push(`Asa: ${asaMostrar}`);
-  if (laminadoMostrar !== "—" && laminadoMostrar !== "NO") extras.push(`Laminado: ${laminadoMostrar}`);
-  if (texturaMostrar !== "—") extras.push(`Textura: ${texturaMostrar}`);
-  if (tieneDiagonal) extras.push(`Tintas dentro: ${tintasInt}`);
-  if ((prod as any).pantonesDentro) extras.push(`Pantones int: ${(prod as any).pantonesDentro}`);
-  if (esPapelProd(prod)) {
-    const metodo = (prod as any).metodo_hojeado;
-    extras.push(
-      `Preparación: ${
-        metodo === "hojeado"
-          ? "Hojeado"
-          : metodo === "guillotina"
-            ? "Guillotina"
-            : "Pendiente"
-      }`
-    );
-    extras.push(`Armado: ${(prod as any).lleva_armado === true ? "SI" : "N/A"}`);
-  }
-
-  const obsPartes: string[] = [`Obs: ${modoLabel}`];
-  if (extras.length) obsPartes.push(extras.join("  ·  "));
-  if (prod.observacion?.trim()) obsPartes.push(prod.observacion.trim());
+  if (!hasObs && !hasHerr) return null;
 
   const comboRow = new Array(headLength).fill("");
-  comboRow[0] = obsPartes.join("  —  ");
+  if (hasObs) comboRow[0] = `Obs: ${prod.observacion!.trim()}`;
   if (hasHerr) {
     const nombreHerr = prod.herramental_descripcion?.trim() || "Herramental / molde";
     comboRow[1] = `Herramental: ${nombreHerr}  —  Cargo único.`;
@@ -225,8 +201,9 @@ function renderTablaPlasticoPedido(
       det ? formatImporte(det, prod.por_kilo) : "—",
     ]);
 
-    bodyRows.push(buildObsRow(prod, headAll.length, MID_COL));
-  });
+const obsRow = buildObsRow(prod, headAll.length);
+    if (obsRow) bodyRows.push(obsRow);
+    });
 
   const availW = PW - M * 2;
   const colW: Record<number, number> = { 0: 30, 1: 17, 2: 12, 3: 10, 4: 20, 5: 13, 6: 16, 7: 25, 8: 16, 9: 8 };
@@ -327,7 +304,8 @@ function renderTablaPapelPedido(
       det ? formatImporte(det, prod.por_kilo) : "—",
     ]);
 
-    bodyRows.push(buildObsRow(prod, headAll.length, MID_COL));
+    const obsRow = buildObsRow(prod, headAll.length);
+    if (obsRow) bodyRows.push(obsRow);
   });
 
   const availW = PW - M * 2;
@@ -437,7 +415,8 @@ function renderTablaMixtaPedido(
       det ? formatImporte(det, prod.por_kilo) : "—",
     ]);
 
-    bodyRows.push(buildObsRow(prod, headAll.length, MID_COL));
+    const obsRow = buildObsRow(prod, headAll.length);
+    if (obsRow) bodyRows.push(obsRow);
   });
 
   const availW = PW - M * 2;
@@ -563,7 +542,7 @@ export async function generarPdfPedido(
     total:    pedido.total,
     anticipo: pedido.anticipo,
     saldo:    pedido.saldo,
-  }, { pageWidth: PW, pageHeight: PH, margin: M });
+  }, { pageWidth: PW, pageHeight: PH, margin: M }, sinIva);
 
   dibujarPiePagina(doc, "PEDIDO", pedido.no_pedido, pedido.fecha, PW, PH);
 

@@ -48,12 +48,20 @@ export const ETIQUETAS_CORTAS_PROCESO_PAPEL: Record<NombreProcesoOrdenPapel, str
   empaque_papel: "Emp",
 };
 
+// CORREGIDO: hojeado_papel y guillotina_papel ya NO comparten una sola
+// clave "hojeado_guillotina" — desde que el producto puede registrar una
+// máquina Hojeadora y una Guillotina por separado (ver cotizacionPapel.
+// helper.ts / FormularioProductoPapelAlta.tsx), maquinaria_seleccionada
+// llega con dos claves independientes: "hojeadora" y "guillotina". Si esto
+// se dejaba en "hojeado_guillotina", el PDF y la validación de máquinas
+// faltantes buscaban una clave que ya no existe y siempre veían "sin
+// máquina", aunque el producto sí la tuviera registrada.
 export const CLAVE_MAQUINA_POR_PROCESO_PAPEL: Record<
   NombreProcesoOrdenPapel,
   ClaveMaquinariaPapel
 > = {
-  hojeado_papel: "hojeado_guillotina",
-  guillotina_papel: "hojeado_guillotina",
+  hojeado_papel: "hojeadora",
+  guillotina_papel: "guillotina",
   impresion_papel: "impresora",
   laminacion_papel: "laminado_maquina",
   barniz_uv_papel: "uv",
@@ -199,16 +207,6 @@ export function ultimaMedidaCm(...values: unknown[]): number | null {
   return null;
 }
 
-// ────────────────────────────────────────────────────────────────────────
-// CORREGIDO: la fórmula estaba multiplicando cantidad * rendimiento, lo
-// cual da un número absurdamente grande. La fórmula correcta es una
-// DIVISIÓN: pliegos necesarios = cantidad pedida / rendimiento de
-// hojeado o guillotina. Esta función solo calcula el dato de REFERENCIA
-// (cuántos pliegos hacen falta hojear/cortar para cubrir el pedido); la
-// multiplicación (pliegos entregados * rendimiento) se hace en otro
-// punto del flujo, en el paso de Empaque, sobre los pliegos REALMENTE
-// entregados por Hojeado/Guillotina — no aquí.
-// ────────────────────────────────────────────────────────────────────────
 export function calcularCantidadHojeada(
   cantidad: unknown,
   rendimiento: unknown
@@ -238,25 +236,6 @@ export function calcularDesarrolloMm(...medidas: unknown[]): number | null {
   return largoCm === null ? null : redondear(largoCm * 10);
 }
 
-// ────────────────────────────────────────────────────────────────────────
-// NUEVO: el desarrollo (y por lo tanto los metros de laminación) no
-// siempre debe calcularse con la medida de "hojeado" — depende de cómo
-// entra el pliego a la laminadora, que se define desde el ALTA del
-// producto (campo `desarrollo_base`, por ahora leído de forma laxa con
-// `as any` porque el tipo OrdenProduccionPapelData todavía no lo declara
-// — pendiente agregarlo ahí cuando se construya el selector en el
-// formulario de alta).
-//
-//   desarrollo_base === "bobina"   → usa hoj_bobina / bobina_cm
-//   desarrollo_base === "hojeado"  → usa pliego_hojeado / hoj_corte /
-//                                     pliego / medida (comportamiento
-//                                     ORIGINAL, y también el que se usa
-//                                     por default si el campo no viene)
-//
-// Mientras el alta de producto no mande `desarrollo_base`, esta función
-// se comporta EXACTAMENTE igual que antes (usa hojeado), para no romper
-// órdenes ya generadas.
-// ────────────────────────────────────────────────────────────────────────
 export function calcularDesarrolloMmPorBase(data: OrdenProduccionPapelData): number | null {
   const base = f((data as any).desarrollo_base).toLowerCase();
 
@@ -264,7 +243,6 @@ export function calcularDesarrolloMmPorBase(data: OrdenProduccionPapelData): num
     return calcularDesarrolloMm(data.hoj_bobina, data.bobina_cm);
   }
 
-  // "hojeado" o cualquier otro valor (incluye vacío/no definido): default.
   return calcularDesarrolloMm(data.pliego_hojeado, data.hoj_corte, data.pliego, data.medida);
 }
 
@@ -274,14 +252,6 @@ export function calcularCtesMod(...medidas: unknown[]): string | null {
   return `${redondear((largoCm - 0.5) * 0.3937)}"`;
 }
 
-// ────────────────────────────────────────────────────────────────────────
-// NUEVO: mismo criterio que calcularDesarrolloMmPorBase — CTES/Mod debe
-// calcularse sobre la MISMA medida que se usó como "desarrollo" (bobina u
-// hojeado), no siempre sobre hojeado. La fórmula en sí (calcularCtesMod)
-// ya era correcta: resta 0.5cm, convierte a mm y divide entre 25.4mm para
-// sacar pulgadas — solo hacía falta alimentarla con la medida correcta
-// según lo que se haya seleccionado al dar de alta el producto.
-// ────────────────────────────────────────────────────────────────────────
 export function calcularCtesModPorBase(data: OrdenProduccionPapelData): string | null {
   const base = f((data as any).desarrollo_base).toLowerCase();
 
@@ -325,6 +295,11 @@ export function ordenarProcesosOrdenPapel(
   return ORDEN_PROCESOS_PAPEL.filter((proceso) => set.has(proceso));
 }
 
+// CORREGIDO: ya no depende de metodo_hojeado (siempre NULL ahora — se
+// decide físicamente en producción, no en el sistema). Hojeado y
+// Guillotina aplican SIEMPRE para un producto de papel, tanto si el dato
+// llega del backend (rama `desdeBackend`, que ya los manda ambos desde
+// seguimiento_controller.ts) como si hay que reconstruirlo aquí.
 export function procesosAplicanDesdeProducto(
   producto: OrdenProduccionPapelData
 ): NombreProcesoOrdenPapel[] {
@@ -336,10 +311,7 @@ export function procesosAplicanDesdeProducto(
     return ordenarProcesosOrdenPapel(desdeBackend);
   }
 
-  const procesos: NombreProcesoOrdenPapel[] = [];
-
-  if (producto.metodo_hojeado === "hojeado") procesos.push("hojeado_papel");
-  if (producto.metodo_hojeado === "guillotina") procesos.push("guillotina_papel");
+  const procesos: NombreProcesoOrdenPapel[] = ["hojeado_papel", "guillotina_papel"];
 
   procesos.push("impresion_papel");
 
@@ -391,15 +363,6 @@ export function valorProcesoOrdenPapelPdf(aplica: boolean): "X" | "N/A" {
   return aplica ? "X" : "N/A";
 }
 
-// ────────────────────────────────────────────────────────────────────────
-// CORREGIDO: ahora lee el registro runtime en TODAS las claves donde el
-// backend puede mandarlo. Antes solo miraba `registros_procesos` y
-// `procesos_runtime`, pero construirDataPapel guarda el mapa en
-// `procesos_papel` / `registros_papel` / `procesos_registros`. Por eso
-// merma/entregadas/máquina/observaciones siempre salían en blanco.
-// El nuevo subquery del backend (getOrdenProduccion) llena
-// `registros_procesos`, que es la primera clave que se revisa aquí.
-// ────────────────────────────────────────────────────────────────────────
 export function obtenerRegistroProcesoPapel(
   data: OrdenProduccionPapelData,
   key: NombreProcesoOrdenPapel
@@ -465,56 +428,28 @@ export function refuerzoTexto(data: OrdenProduccionPapelData): string {
 }
 
 export function getValoresCalculadosPapel(data: OrdenProduccionPapelData): Partial<OrdenProduccionPapelData> {
-  // ────────────────────────────────────────────────────────────────────
-  // CORREGIDO: antes se priorizaba n(data.pliegos_impresion_estimados)
-  // (el valor que manda el backend) sobre el cálculo del cliente. Ese
-  // campo del backend fue generado con la fórmula VIEJA (multiplicando
-  // cantidad * rendimiento), así que aunque calcularCantidadHojeada ya
-  // estaba corregida a división, el "??" nunca llegaba a usarla porque
-  // el campo del backend ya traía un número (incorrecto). Ahora se
-  // invierte la prioridad: el cálculo del cliente (correcto, división)
-  // gana siempre que haya cantidad y rendimiento disponibles; el valor
-  // del backend solo se usa como último respaldo si el cliente no puede
-  // calcularlo (p. ej. falta el rendimiento).
-  // ────────────────────────────────────────────────────────────────────
   const pliegosCalculado = calcularCantidadHojeada(data.cantidad, data.rendimiento);
   const pliegos = pliegosCalculado ?? n(data.pliegos_impresion_estimados);
 
-  // CORREGIDO: mismo bug de prioridad que ya se arregló en `pliegos` y
-  // `ctes_mod_laminacion` — antes n(data.desarrollo_laminacion_mm) (dato
-  // del backend) ganaba primero, así que calcularDesarrolloMmPorBase()
-  // nunca se llegaba a ejecutar aunque ya estuviera corregida. Se invierte
-  // la prioridad: el cálculo del cliente gana siempre que pueda
-  // calcularse; el valor de la ficha solo se usa como último respaldo.
   const desarrollo =
     calcularDesarrolloMmPorBase(data) ??
     n(data.desarrollo_laminacion_mm) ??
     n(data.desarrollo_mm);
 
-  // CORREGIDO: mismo problema — n(data.metros_laminacion_estimados) del
-  // backend ganaba antes que el cálculo real (pliegos × desarrollo / 1000).
   const metros =
     calcularMetrosLaminacion(pliegos, desarrollo) ??
     n(data.metros_laminacion_estimados);
 
   return {
-    // Mismo criterio: el recalculado (pliegos, ya correcto) gana sobre
-    // cualquier cantidad_hojeada_calculada que haya llegado del backend.
     cantidad_hojeada_calculada: pliegosCalculado ?? n(data.cantidad_hojeada_calculada) ?? pliegos,
     pliegos_impresion_estimados: pliegos,
     desarrollo_laminacion_mm: desarrollo,
     desarrollo_mm: n(data.desarrollo_mm) ?? desarrollo,
-    // CORREGIDO: mismo criterio que `pliegos` arriba — el cálculo del
-    // cliente (ahora con la base seleccionable bobina/hojeado) gana
-    // primero; el valor que traiga la ficha solo se usa si el cliente no
-    // pudo calcularlo.
     ctes_mod_laminacion:
       calcularCtesModPorBase(data) ??
       data.ctes_mod_laminacion ??
       data.ctes_mod,
     metros_laminacion_estimados: metros,
-    // CORREGIDO: mismo patrón — el cálculo (metros/3000) gana sobre el
-    // dato viejo de la ficha.
     rollos_laminacion_estimados:
       calcularRollosLaminacion(metros) ?? n(data.rollos_laminacion_estimados),
     bolsas_armadas_calculadas:
@@ -583,6 +518,10 @@ export function validarProductoPapelParaPdf(data: OrdenProduccionPapelData): voi
     throw new Error("Faltan procesos aplicables para generar el PDF de papel.");
   }
 
+  // NOTA: Hojeado/Guillotina ahora siempre aplican (ver
+  // procesosAplicanDesdeProducto), así que esta validación ya nunca
+  // debería disparar en la práctica. Se deja como red de seguridad por si
+  // algún día procesos_aplican llega vacío de esos dos desde el backend.
   const tienePreparacion =
     procesos.includes("hojeado_papel") ||
     procesos.includes("guillotina_papel");

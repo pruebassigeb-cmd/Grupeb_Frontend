@@ -7,6 +7,29 @@ import type {
 
 const BASE = import.meta.env.VITE_API_URL;
 
+// NUEVO: "Tamaño del producto" ahora es FK a cat_tamano_producto — el mismo
+// catálogo que alimenta la matriz de costos (acabado_costo). En vez de
+// duplicar el endpoint, se reutiliza GET /precios-acabados-papel/catalogos
+// (ya existente en precios_acabados_papel.controller.ts) y solo se usa el
+// arreglo "tamanos" de su respuesta.
+// AJUSTA esta ruta si el mount real en app.ts es distinto a
+// "/precios-acabados-papel".
+export interface TamanoProductoOpcion {
+  id: number;
+  clave: string;
+  nombre: string;
+  activo: boolean;
+}
+
+export const fetchTamanosProducto = async (): Promise<TamanoProductoOpcion[]> => {
+  const res = await fetch(`${BASE}/precios-acabados-papel/catalogos`, {
+    headers: headers(),
+  });
+  if (!res.ok) return leerError(res, "Error al cargar tamaños de producto");
+  const data = await res.json();
+  return Array.isArray(data?.tamanos) ? data.tamanos : [];
+};
+
 const headers = () => ({
   "Content-Type": "application/json",
   Authorization: `Bearer ${localStorage.getItem("token") ?? ""}`,
@@ -18,6 +41,7 @@ const normalizarItem = (item: any) => {
   );
   const id =
     item.id ??
+    item.idrollo_lam ??
     (pkKey ? item[pkKey] : undefined) ??
     item.idcat_punto ??
     item.idmatrix;
@@ -29,6 +53,8 @@ const normalizarItem = (item: any) => {
       item.medida_matrix ??
       (item.puntos != null ? String(item.puntos) : ""),
     medida: item.medida,
+    medida_ancho:
+      item.medida_ancho == null ? undefined : Number(item.medida_ancho),
     numero_maquina: item.numero_maquina,
     tipo_maquina: item.tipo_maquina ?? null,
     altura: item.altura,
@@ -193,7 +219,9 @@ const mapFormToApi = (form: ProductoPapelForm) => ({
   medida: form.medida || null,
   tamano_asa_default: form.tamanoAsaDefault.trim() || null,
   // NUEVO: tamaño del producto (Mini/Chico/Mediano/Grande/Extragrande).
-  tamano_prod: form.tamanoProd?.trim() || null,
+  // NUEVO: tamano_prod ahora es FK (idcat_tamano_producto), ya no texto.
+  tamano_prod: form.idcat_tamano_producto ?? null,
+  costo_laminado: form.costoLaminado ?? null,
   grupos: form.grupos.map(grupo => ({
     precio_sugerido: grupo.precioSugerido
       ? parseFloat(grupo.precioSugerido)
@@ -249,6 +277,13 @@ const mapFormToApi = (form: ProductoPapelForm) => ({
     idcat_tipo_pegado: form.acabados.idcat_tipo_pegado,
     idcat_pegamento: form.acabados.idcat_pegamento,
     laminados: form.acabados.laminados,
+    // FK real hacia public.rollo_lam(idrollo_lam).
+    idrollo_lam: form.acabados.idrollo_lam,
+    // NUEVO: "Desarrollo para laminado" — número de captura libre, se manda
+    // parseado como float igual que el resto de los campos numéricos.
+    desarrollo_laminado: form.acabados.desarrolloLaminado?.trim()
+      ? parseFloat(form.acabados.desarrolloLaminado.replace(",", "."))
+      : null,
     asas: form.acabados.asas,
     idcat_refuerzo_material: form.acabados.idcat_refuerzo_material,
     idcat_refuerzo_medidas: form.acabados.idcat_refuerzo_medidas,

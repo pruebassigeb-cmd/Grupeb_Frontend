@@ -17,9 +17,6 @@ import { showConfirm } from '../components/CustomConfirm';
 import ModalRepetirPedido from "../components/ModalRepetirPedido";
 import { buildPayloadDesdePedido } from "../utils/buildPayloadDesdePedido";
 import { getHistorialPedidosPorCliente } from "../services/pedidosService";
-import { guardarMaquinariaPedidoPapel } from "../services/pedidosService";
-import ModalMaquinariaPedidoPapel from "../components/papel/ModalMaquinariaPedidoPapel";
-import type { MaquinariaProductoPedidoPapel } from "../types/papel/maquinaria-pedido.types";
 
 const ITEMS_POR_PAGINA = 7;
 
@@ -42,11 +39,6 @@ export default function Pedidos() {
   const [expandidas, setExpandidas] = useState<Set<string>>(new Set());
   const [paginaActual, setPaginaActual] = useState(1);
   const [modalRepetirOpen, setModalRepetirOpen] = useState(false);
-  const [pasoMaquinaria, setPasoMaquinaria] = useState<{
-    noPedido: string;
-    pedido: Pedido;
-    datosFormulario: any;
-  } | null>(null);
   const [menuPdfAbierto, setMenuPdfAbierto] = useState<string | null>(null);
   const [descargandoPdf, setDescargandoPdf] = useState<string | null>(null);
 
@@ -235,148 +227,54 @@ export default function Pedidos() {
         throw new Error("No se pudo recuperar el pedido repetido");
       }
 
-      setModalOpen(true);
-      if (pedidoCompleto.productos.some(esLineaPapel)) {
-        setPasoMaquinaria({
-          noPedido,
-          pedido: pedidoCompleto,
-          datosFormulario: payload,
-        });
-        return;
-      }
-
+      // NUEVO: la maquinaria ya se fija automática en el backend al crear
+      // el pedido (igual que en handleSubmit) — ya no hay paso 2 manual.
       await finalizarLevantamiento(noPedido, pedidoCompleto, payload);
     } catch (e: any) {
       showAlert(e.response?.data?.error || e.message || "Error al crear el pedido");
     }
   };
 
-  const generarPdfPedidoCreado = async (
-    noPedido: string,
-    pedidoCompleto: Pedido,
-    datos: any
-  ) => {
-    const venta = await getVentaByPedido(noPedido);
+ const generarPdfPedidoCreado = async (
+  noPedido: string,
+  pedidoCompleto: Pedido,
+  datos: any
+) => {
+  const venta = await getVentaByPedido(noPedido);
 
-    const productosPdf = datos.productos.map((prod: any) => {
-      if (esLineaPapel(prod)) {
-        const productoPersistido = pedidoCompleto.productos.find(
-          (item: any) =>
-            esLineaPapel(item) &&
-            Number(item.idproducto_papel) === Number(prod.idproducto_papel) &&
-            Number(item.idgrupo_papel ?? 0) ===
-            Number(prod.idgrupo_papel ?? 0)
-        );
-        const base = buildPapelPdf({
-          ...prod,
-          ...(productoPersistido ?? {}),
-        });
-        if (Array.isArray(prod.cantidades) && Array.isArray(prod.precios)) {
-          base.detalles = prod.cantidades
-            .map((cant: number, i: number) => {
-              if (cant <= 0 || prod.precios[i] <= 0) return null;
-              return {
-                cantidad: cant,
-                precio_total:
-                  Math.round(cant * prod.precios[i] * 100) / 100,
-                kilogramos: null,
-                modo_cantidad: "unidad",
-              };
-            })
-            .filter(Boolean) as any[];
-        }
-        return base;
-      }
+  // ── Usar los productos YA PERSISTIDOS (igual que la descarga manual) ──
+  // en vez de reconstruir desde "datos.productos" (datos crudos del formulario)
+  const productosPdf = buildProductosPdf(pedidoCompleto.productos);
 
-      if (!Array.isArray(prod.cantidades) || !Array.isArray(prod.precios)) {
-        return buildProductosPdf([prod])[0];
-      }
-
-      const modo = prod.modoCantidad || "unidad";
-      return {
-        nombre: prod.nombre || `Producto #${prod.productoId}`,
-        material: prod.material || "",
-        calibre: resolverCalibre(prod),
-        tintas: prod.tintas ?? "—",
-        caras: prod.caras ?? "—",
-        medidasFormateadas: prod.medidasFormateadas || "",
-        medidas: prod.medidas || {},
-        bk: null,
-        foil: null,
-        laminado: null,
-        uvBr: null,
-        pigmentos: prod.pigmentos || null,
-        pantones: prod.pantones || null,
-        asa_suaje: prod.suajeTipo || null,
-        observacion: prod.observacion || null,
-        descripcion: prod.descripcion || null,
-        perforacion: prod.perforacion ?? false,
-        por_kilo: prod.porKilo || null,
-        herramental_descripcion: prod.herramental_descripcion ?? null,
-        herramental_precio:
-          prod.herramental_precio != null
-            ? Number(prod.herramental_precio)
-            : null,
-        herramental_aprobado: prod.herramental_aprobado ?? null,
-        detalles: prod.cantidades
-          .map((cant: number, i: number) => {
-            if (cant <= 0 || prod.precios[i] <= 0) return null;
-            let precioTotal: number;
-            if (
-              modo === "kilo" &&
-              prod.kilogramos?.[i] > 0 &&
-              prod.porKilo
-            ) {
-              const precioKg =
-                Math.round(
-                  prod.precios[i] * Number(prod.porKilo) * 10000
-                ) / 10000;
-              precioTotal =
-                Math.round(prod.kilogramos[i] * precioKg * 100) / 100;
-            } else {
-              precioTotal =
-                Math.round(cant * prod.precios[i] * 100) / 100;
-            }
-            return {
-              cantidad: cant,
-              precio_total: precioTotal,
-              kilogramos:
-                prod.kilogramos?.[i] > 0 ? prod.kilogramos[i] : null,
-              modo_cantidad: modo,
-            };
-          })
-          .filter(Boolean),
-      };
-    });
-
-    await generarPdfPedido({
-      no_pedido: noPedido,
-      no_cotizacion: null,
-      fecha: new Date().toISOString(),
-      cliente: pedidoCompleto.cliente ?? datos.cliente ?? "",
-      empresa: pedidoCompleto.empresa ?? datos.empresa ?? "",
-      telefono: pedidoCompleto.telefono ?? datos.telefono ?? "",
-      correo: pedidoCompleto.correo ?? datos.correo ?? "",
-      impresion: pedidoCompleto.impresion ?? datos.impresion ?? null,
-      celular: pedidoCompleto.celular ?? null,
-      razon_social: pedidoCompleto.razon_social ?? null,
-      rfc: pedidoCompleto.rfc ?? null,
-      domicilio: pedidoCompleto.domicilio ?? null,
-      numero: pedidoCompleto.numero ?? null,
-      colonia: pedidoCompleto.colonia ?? null,
-      codigo_postal: pedidoCompleto.codigo_postal ?? null,
-      poblacion: pedidoCompleto.poblacion ?? null,
-      estado_cliente: pedidoCompleto.estado_cliente ?? null,
-      cliente_id: pedidoCompleto.cliente_id ?? null,
-      identificar: pedidoCompleto.identificar ?? null,
-      subtotal: Number(venta.subtotal),
-      iva: Number(venta.iva),
-      total: Number(venta.total),
-      anticipo: Number(venta.anticipo),
-      saldo: Number(venta.saldo),
-      productos: productosPdf,
-    }, true);
-  };
+  await generarPdfPedido({
+    no_pedido: noPedido,
+    no_cotizacion: null,
+    fecha: new Date().toISOString(),
+    cliente: pedidoCompleto.cliente ?? datos.cliente ?? "",
+    empresa: pedidoCompleto.empresa ?? datos.empresa ?? "",
+    telefono: pedidoCompleto.telefono ?? datos.telefono ?? "",
+    correo: pedidoCompleto.correo ?? datos.correo ?? "",
+    impresion: pedidoCompleto.impresion ?? datos.impresion ?? null,
+    celular: pedidoCompleto.celular ?? null,
+    razon_social: pedidoCompleto.razon_social ?? null,
+    rfc: pedidoCompleto.rfc ?? null,
+    domicilio: pedidoCompleto.domicilio ?? null,
+    numero: pedidoCompleto.numero ?? null,
+    colonia: pedidoCompleto.colonia ?? null,
+    codigo_postal: pedidoCompleto.codigo_postal ?? null,
+    poblacion: pedidoCompleto.poblacion ?? null,
+    estado_cliente: pedidoCompleto.estado_cliente ?? null,
+    cliente_id: pedidoCompleto.cliente_id ?? null,
+    identificar: pedidoCompleto.identificar ?? null,
+    sin_iva: pedidoCompleto.sin_iva ?? false,
+    subtotal: Number(venta.subtotal),
+    iva: Number(venta.iva),
+    total: Number(venta.total),
+    anticipo: Number(venta.anticipo),
+    saldo: Number(venta.saldo),
+    productos: productosPdf,
+  }, true);
+};
 
   const finalizarLevantamiento = async (
     noPedido: string,
@@ -389,45 +287,9 @@ export default function Pedidos() {
       console.warn("⚠️ PDF:", pdfErr);
     }
 
-    setPasoMaquinaria(null);
     setModalOpen(false);
     await cargarPedidos();
     showAlert(`✅ Pedido creado: ${noPedido}`);
-  };
-
-  const handleConfirmarMaquinaria = async (
-    selecciones: MaquinariaProductoPedidoPapel[]
-  ) => {
-    if (!pasoMaquinaria) return;
-
-    setGuardando(true);
-    setErrorGuardar(null);
-    try {
-      await guardarMaquinariaPedidoPapel(
-        pasoMaquinaria.noPedido,
-        selecciones
-      );
-      const pedidosActualizados = await getPedidos();
-      const pedidoActualizado = (pedidosActualizados as Pedido[]).find(
-        pedido => pedido.no_pedido === pasoMaquinaria.noPedido
-      );
-      if (!pedidoActualizado) {
-        throw new Error("No se pudo recargar el pedido configurado");
-      }
-      await finalizarLevantamiento(
-        pasoMaquinaria.noPedido,
-        pedidoActualizado,
-        pasoMaquinaria.datosFormulario
-      );
-    } catch (e: any) {
-      setErrorGuardar(
-        e.response?.data?.error ||
-        e.message ||
-        "No se pudo guardar la maquinaria"
-      );
-    } finally {
-      setGuardando(false);
-    }
   };
 
   const handleSubmit = async (datos: any) => {
@@ -446,15 +308,10 @@ export default function Pedidos() {
         throw new Error("No se pudo recuperar el pedido recién creado");
       }
 
-      if (pedidoCompleto.productos.some(esLineaPapel)) {
-        setPasoMaquinaria({
-          noPedido,
-          pedido: pedidoCompleto,
-          datosFormulario: datos,
-        });
-        return;
-      }
-
+      // NUEVO: la maquinaria de los productos de papel ya se fija
+      // automáticamente en el backend (crearCotizacion → insertarProductoPapel)
+      // al crear el pedido, leyendo el default registrado en cada producto.
+      // Ya no hay un paso 2 manual.
       await finalizarLevantamiento(noPedido, pedidoCompleto, datos);
 
     } catch (e: any) {
@@ -489,6 +346,7 @@ export default function Pedidos() {
         estado_cliente: ped.estado_cliente ?? null,
         cliente_id: ped.cliente_id ?? null,
         identificar: ped.identificar ?? null,
+        sin_iva: ped.sin_iva ?? false,
         subtotal: Number(venta.subtotal),
         iva: Number(venta.iva),
         total: Number(venta.total),
@@ -890,9 +748,9 @@ export default function Pedidos() {
       <Modal
         isOpen={modalOpen}
         onClose={() => {
-          if (!pasoMaquinaria && !guardando) setModalOpen(false);
+          if (!guardando) setModalOpen(false);
         }}
-        title={pasoMaquinaria ? "Paso 2 de 2 - Maquinaria" : "Nuevo Pedido Directo"}
+        title="Nuevo Pedido Directo"
       >
         {cargandoCatalogos ? (
           <div className="flex items-center justify-center p-8">
@@ -918,38 +776,15 @@ export default function Pedidos() {
                 <p className="text-blue-700 text-sm">Guardando pedido y generando PDF...</p>
               </div>
             )}
-            {pasoMaquinaria ? (
-              <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
-                <p className="text-sm font-semibold text-blue-900">
-                  Pedido {pasoMaquinaria.noPedido} registrado.
-                </p>
-                <p className="mt-1 text-xs text-blue-700">
-                  Completa la maquinaria para finalizar el levantamiento.
-                </p>
-              </div>
-            ) : (
-              <FormularioCotizacion
-                onSubmit={handleSubmit}
-                onCancel={() => setModalOpen(false)}
-                catalogos={catalogos}
-                modo="pedido"
-              />
-            )}
+            <FormularioCotizacion
+              onSubmit={handleSubmit}
+              onCancel={() => setModalOpen(false)}
+              catalogos={catalogos}
+              modo="pedido"
+            />
           </div>
         )}
       </Modal>
-
-      {pasoMaquinaria && (
-        <ModalMaquinariaPedidoPapel
-          productos={pasoMaquinaria.pedido.productos}
-          onCancel={() => {
-            setErrorGuardar(
-              "Debes configurar la maquinaria para finalizar el pedido."
-            );
-          }}
-          onConfirm={handleConfirmarMaquinaria}
-        />
-      )}
 
       {modalRepetirOpen && (
         <ModalRepetirPedido

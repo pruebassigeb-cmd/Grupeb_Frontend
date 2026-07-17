@@ -1,10 +1,11 @@
+// src/pages/Expo.tsx
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   CATS, CLIENTE_VACIO, filaDesdeProducto, sumarTotales, claveProducto,
   mapearCatalogoExpoAProducto, mapearPlasticoSistemaAProducto, mapearPapelSistemaAProducto,
 } from "../../types/expo/expo.types";
-import { getOpcionesProductoPapel } from "../../services/papel/papelCotizacionService";
+import { getOpcionesProductoPapel, getFoils, getTexturas } from "../../services/papel/papelCotizacionService";
 import type { Producto, FilaProducto, ClienteExpo, CotizacionGuardada, ItemPedidoAprobado } from "../../types/expo/expo.types";
 import api from "../../services/api";
 
@@ -27,7 +28,6 @@ import {
 } from "../../services/expo/expoService";
 
 import { useCatalogosPapel } from "../../hooks/papel/useCatalogosPapel";
-import { getFoils, getTexturas } from "../../services/papel/papelCotizacionService";
 import type { FoilOpcion, TexturaOpcion } from "../../types/papel/cotizacion-papel.types";
 import type { CatalogosPlastico, PigmentoDB } from "../../components/expo/Tablacontroles";
 import { getTiposInsumo, buscarInsumos, type Insumo } from "../../services/proveedoresService";
@@ -36,9 +36,40 @@ import { generarPdfCotizacionExpo, cotizacionBackDataAPdfParams } from "../../ut
 import { generarPdfCotizacion } from "../../services/generarPdfCotizacion";
 import { useEnvioDocumentoPdf } from "../../hooks/useEnvioDocumentoPdf";
 import { getClienteById } from "../../services/clientesService";
+import { useCalculoPrecioPapel } from "../../hooks/expo/useCalculoPrecioPapel";
+import { useCalculoPrecioPlastico } from "../../hooks/expo/useCalculoPrecioPlastico";
 
 const TODAY_NOW = () =>
   new Date().toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" });
+
+// Sube y VINCULA la foto de un producto de Catálogo Expo directo a
+// producto_papel/configuracion_plastico (vía idproducto_papel /
+// idconfiguracion_plastico en `archivos`) — mismo patrón que ya usan
+// Papel.tsx (subirArchivoPendiente) y Plastico.tsx
+// (subirArchivoProductoPlastico). No se guarda ninguna URL en el producto:
+// el backend la resuelve solo, leyendo `archivos` por esa relación.
+const subirImagenProductoExpo = async (
+  file: File,
+  categoria: "papel" | "plastico" | "carton",
+  idReal: number,
+) => {
+  const formData = new FormData();
+  formData.append("archivo", file);
+  if (categoria === "plastico") {
+    formData.append("carpeta", "suaje");
+    formData.append("subcarpeta", "plastico-producto");
+    formData.append("categoria", "imagen-producto-plastico");
+    formData.append("idconfiguracion_plastico", String(idReal));
+  } else {
+    formData.append("carpeta", "suaje");
+    formData.append("subcarpeta", "imagen");
+    formData.append("categoria", "imagen-suaje-papel");
+    formData.append("idproducto_papel", String(idReal));
+  }
+  await api.post("/archivos/upload", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+};
 
 export default function Expo() {
   const navigate = useNavigate();
@@ -72,7 +103,7 @@ export default function Expo() {
   const [expanded,     setExpanded]     = useState<Record<string, boolean>>({ papel: true, plastico: true, carton: true });
   const [sistemaOpen,  setSistemaOpen]  = useState<Record<string, boolean>>({ papel: false, plastico: false, carton: false });
   const [busquedaTick, setBusquedaTick] = useState(0);
-  const [addedId,      setAddedId]      = useState<number | null>(null);
+  const [addedId,      setAddedId]      = useState<string | null>(null);
   const [w,            setW]            = useState(1200);
 
   const [modalOpen,   setModalOpen]   = useState(false);
@@ -92,6 +123,15 @@ export default function Expo() {
   const [catalogosPlast, setCatalogosPlast] = useState<CatalogosPlastico>({
     tiposProducto: [], materiales: [], calibres: [],
   });
+
+  // Calcula papel/cartón por fila y por todas sus columnas activas en una
+  // sola petición, con debounce y cancelación de solicitudes obsoletas.
+  useCalculoPrecioPapel({ filas, setFilas, columnasPrecio });
+
+  // Reutiliza el calculador de plástico del cotizador general. Cada fila
+  // manda en una sola petición sus cantidades visibles, bolsas por kilo y
+  // cantidad de tintas. El precio continúa siendo editable manualmente.
+  useCalculoPrecioPlastico({ filas, setFilas, columnasPrecio });
 
   // ── Envío de PDFs (imprimir membretado / mandar por correo el bueno) ──────
   const {
@@ -246,8 +286,6 @@ useEffect(() => {
     const prod = catalogo.find(p => p.id === id);
     if (!prod || prod.fuente !== "expo") return;
     try {
-      // El backend nuevo necesita saber en qué tabla borrar (producto_papel
-      // vs configuracion_plastico) — ya no hay una sola tabla catalogo_expo.
       await eliminarProductoCatalogoAPI(id, prod.categoria);
       setCatalogo(prev => prev.filter(p => p.id !== id));
       setFilas(prev => prev.filter(f => f.producto.id !== id));
@@ -257,7 +295,7 @@ useEffect(() => {
   };
 
   // ── guardarProd ──────────────────────────────────────────────────────────
-  const guardarProd = async (p: Producto) => {
+  const guardarProd = async (p: Producto, imagenPendiente: File | null) => {
     setSavingModal(true);
     try {
       const parseN = (v: string | undefined) => parseFloat(v || "0") || null;
@@ -265,13 +303,27 @@ useEffect(() => {
       const esPlastico = p.categoria === "plastico";
 
       const payload = {
-        nombre:        p.nombre,
-        categoria:     p.categoria,
-        medida:        p.medida        || null,
-        material:      p.material      || null,
-        calibre:       p.calibre       || null,
-        tintas:        p.tintas        || null,
-        tipo_producto: p.tipoProducto  || p.tipo || null,
+  nombre: p.nombre,
+
+  // Plástico guarda este valor en configuracion_plastico.descripcion.
+  // Papel sigue utilizando nombre para descripcion_papel.
+  descripcion:
+    p.categoria === "plastico"
+      ? (p.nombre?.trim() || null)
+      : null,
+
+  categoria: p.categoria,
+  medida:        p.medida        || null,
+  material:      p.material      || null,
+  calibre:       p.calibre       || null,
+
+  // Tamaño normalizado para papel/cartón.
+  id_tamano_producto: esPapel ? (p.idTamanoProducto ?? null) : null,
+  tamano_prod: esPapel ? (p.tamanoProd || null) : null,
+  idgrupo_papel: esPapel ? (p.idgrupo_papel ?? null) : null,
+
+  tintas:        p.tintas        || null,
+  tipo_producto: p.tipoProducto  || p.tipo || null,
         laminacion:    p.laminacion,
         tipo_laminado: p.tipoLaminado  || null,
         hs:            p.hs,
@@ -284,10 +336,18 @@ useEffect(() => {
         tipo_asa:      p.tipoAsa       || null,
         otro:          p.otro          || null,
         pigmento:      esPlastico ? (p.pigmento || null) : null,
-        precio_500:    parseFloat(p.precio500.replace(/[^0-9.]/g, ""))  || null,
-        precio_1000:   parseFloat(p.precio1000.replace(/[^0-9.]/g, "")) || null,
-        precio_3000:   parseFloat(p.precio3000.replace(/[^0-9.]/g, "")) || null,
-        imagen_url:    p.imagen        || null,
+        precio_base: esPapel
+          ? (parseFloat((p.precioBase || "").replace(/[^0-9.]/g, "")) || null)
+          : null,
+        precio_500: esPlastico
+          ? (parseFloat(p.precio500.replace(/[^0-9.]/g, "")) || null)
+          : null,
+        precio_1000: esPlastico
+          ? (parseFloat(p.precio1000.replace(/[^0-9.]/g, "")) || null)
+          : null,
+        precio_3000: esPlastico
+          ? (parseFloat(p.precio3000.replace(/[^0-9.]/g, "")) || null)
+          : null,
         origen:        "expo",
         altura:             parseN(p.altura),
         ancho:              parseN(p.ancho),
@@ -296,17 +356,47 @@ useEffect(() => {
         fuelle_lateral_iz:  esPlastico ? parseN(p.fuelLateral) : null,
         fuelle_lateral_de:  esPlastico ? parseN(p.fuelLateral2): null,
         refuerzo:           esPlastico ? parseN(p.refuerzo)    : null,
+        // NUEVO: defaults de tintas — CANTIDAD, sin pantones.
+        tintas_frente_default: p.tintasFrenteDefault ?? null,
+        tintas_dentro_default: esPapel ? (p.tintasDentroDefault ?? null) : null,
       };
 
+      let idReal: number;
       if (editando) {
         const actualizado = await actualizarProductoCatalogo(editando.id, payload as any);
         const mapeado = mapearCatalogoExpoAProducto(actualizado);
-        setCatalogo(prev => prev.map(x => x.id === editando.id ? mapeado : x));
+        idReal = actualizado.idcatalogo_expo;
+        setCatalogo(prev => prev.map(x =>
+          x.id === editando.id &&
+          (x.idgrupo_papel ?? null) === (editando.idgrupo_papel ?? null)
+            ? mapeado
+            : x
+        ));
       } else {
         const creado = await crearProductoCatalogo(payload as any);
         const mapeado = mapearCatalogoExpoAProducto(creado);
+        idReal = creado.idcatalogo_expo;
         setCatalogo(prev => [...prev, mapeado]);
       }
+
+      // La foto de un producto NUEVO se guardó como "pendiente" en el modal
+      // (no había id todavía a quien vincularla) — ahora que ya existe,
+      // se sube y se vincula. Si era edición, la foto ya se subió de
+      // inmediato dentro del modal y esto no aplica.
+      if (imagenPendiente) {
+        try {
+          await subirImagenProductoExpo(imagenPendiente, p.categoria, idReal);
+        } catch (e) {
+          console.error("No se pudo subir la imagen del producto:", e);
+          alert("El producto se guardó, pero la imagen no se pudo subir. Puedes agregarla editando el producto.");
+        }
+      }
+
+      // Recarga completa del catálogo para que la imagen recién vinculada
+      // (o cualquier acabado resuelto del lado del backend) se refleje ya
+      // mismo en el sidebar/buscador, en vez de esperar al próximo refresh.
+      await cargarCatalogo();
+
       setModalOpen(false);
       setEditando(null);
     } catch (err: any) {
@@ -344,11 +434,26 @@ useEffect(() => {
 
     const filaBase = filaDesdeProducto(p);
 
-    if (p.fuente === "sistema" && p.categoria === "papel" && p.idproducto_papel) {
+    const esPapelOCarton = p.categoria === "papel" || p.categoria === "carton";
+    const faltanOpcionesEmbebidas =
+      p.asasPermitidas === undefined ||
+      p.laminadosPermitidos === undefined;
+
+    // Compatibilidad temporal: el backend nuevo ya incluye estas opciones en
+    // la consulta principal. Solo se hace la petición extra si todavía se está
+    // usando una respuesta antigua.
+    if (
+      p.fuente === "sistema" &&
+      esPapelOCarton &&
+      p.idproducto_papel &&
+      faltanOpcionesEmbebidas
+    ) {
       try {
         const opciones = await getOpcionesProductoPapel(p.idproducto_papel);
-        filaBase.asasPermitidas      = opciones.asas.length > 0 ? opciones.asas : null;
-        filaBase.laminadosPermitidos = opciones.laminados.length > 0 ? opciones.laminados : null;
+        filaBase.asasPermitidas = opciones.asas.length > 0 ? opciones.asas : null;
+        filaBase.laminadosPermitidos = opciones.laminados.length > 0
+          ? opciones.laminados
+          : null;
       } catch (err) {
         console.error("[EXPO] No se pudieron cargar opciones del producto de papel:", err);
       }
@@ -358,7 +463,7 @@ useEffect(() => {
       if (prev.length >= LIMITE_PRODUCTOS) return prev;
       return [...prev, filaBase];
     });
-    setAddedId(p.id);
+    setAddedId(claveProducto(p));
     setTimeout(() => setAddedId(null), 1000);
   }, []);
 
@@ -379,11 +484,6 @@ useEffect(() => {
       const esEnBlanco = !p.fuente;
       if (esEnBlanco) {
         try {
-          // Ahora se registra directo en producto_papel / configuracion_plastico
-          // (las tablas del sistema), marcado con origen_expo=true — ya no en
-          // catalogo_expo. fuente:"sistema" porque, a partir de este punto, es
-          // literalmente el mismo tipo de registro que un producto normal de
-          // Papel/Plástico (solo que con datos parciales, a completar después).
           const { id, fuente } = await registrarProductoEnBlanco(fila, fila.precio1, fila.precio2, fila.precio3);
           const productoActualizado = fuente === "papel"
             ? { ...p, id, fuente: "sistema" as const, idproducto_papel: id }
@@ -402,10 +502,7 @@ useEffect(() => {
 
   // ── Construye el payload para generarPdfCotizacion (el PDF "bueno" de
   // correo) usando datos FRESCOS DEL BACKEND — ya no el estado local del
-  // formulario. Este era el origen del bug: material/calibre/tintas se
-  // leían del <select> en pantalla, que puede no coincidir 1:1 con lo que
-  // el backend realmente guardó y resuelve (mismo problema que ya se había
-  // corregido para el PDF de imprimir, replicado aquí para el de correo).
+  // formulario.
   const construirPayloadPdfCotizacionDesdeBackData = async (backData: any, folio: string, fecha: string) => {
     const clienteCompleto = backData.cliente_id
       ? await getClienteById(backData.cliente_id).catch(() => null)
@@ -516,9 +613,6 @@ useEffect(() => {
   };
 
   // ── Cotizaciones ──────────────────────────────────────────────────────────
-  // Guarda SIEMPRE, y según las opciones elegidas, imprime el membretado y/o
-  // envía el correo — ambos ahora releen del backend recién guardado (un
-  // solo origen de verdad, ya no el formulario local).
   const guardarConOpciones = async (opciones: { imprimir: boolean; correo: boolean }) => {
     if (filas.length === 0) { alert("Agrega al menos un producto."); return; }
     if (!cliente.trim())    { alert("Falta el nombre del cliente."); return; }
@@ -526,23 +620,32 @@ useEffect(() => {
 
     setGuardando(true);
     try {
-      const filasListas = await prepararFilas(filas);
-      // Solo se manda lo que el vendedor de verdad seleccionó/ve en pantalla
-      // — columnasPrecio dice cuántas columnas están visibles ahora mismo.
-      // Sin esto, una fila que se agregó cuando había 3 columnas y luego se
-      // quitó a 1 podía seguir cargando cant2/cant3/precio2/precio3
-      // "flotando" sin que el vendedor los viera, y se registraban de todos
-      // modos.
-      const productos = filasListas.map(f =>
+      // IMPORTANTE: las columnas ocultas pueden conservar valores internos
+      // por el estado de React, pero no deben registrarse en la cotización.
+      // Se crean copias de las filas para no modificar visualmente el tablero.
+      const filasVisibles: FilaProducto[] = filas.map((fila) => ({
+        ...fila,
+        precio2: columnasPrecio >= 2 ? fila.precio2 : "",
+        cant2: columnasPrecio >= 2 ? fila.cant2 : "",
+        precio3: columnasPrecio >= 3 ? fila.precio3 : "",
+        cant3: columnasPrecio >= 3 ? fila.cant3 : "",
+      }));
+
+      // También se preparan los productos en blanco usando únicamente las
+      // columnas visibles, para evitar que se reutilicen precios ocultos.
+      const filasListas = await prepararFilas(filasVisibles);
+
+      const productos = filasListas.map((fila) =>
         mapearProductoAPayload(
-          f,
-          f.precio1,
-          columnasPrecio >= 2 ? f.precio2 : "",
-          columnasPrecio >= 3 ? f.precio3 : "",
-          f.cant1,
-          columnasPrecio >= 2 ? f.cant2 : "",
-          columnasPrecio >= 3 ? f.cant3 : "",
-        )
+          fila,
+          fila.precio1,
+          fila.precio2,
+          fila.precio3,
+          fila.cant1,
+          fila.cant2,
+          fila.cant3,
+          columnasPrecio,
+        ),
       );
       const resultado = await crearCotizacionExpo({ clienteId: clienteIdReal, productos, comentarios: coment });
       setFolioActual(resultado.no_cotizacion);
@@ -566,9 +669,6 @@ useEffect(() => {
         console.warn("No se pudo obtener el correo registrado del cliente:", e);
       }
 
-      // ── Un solo fetch fresco del backend, reutilizado tanto por
-      // "Imprimir" como por "Correo" — así ambos parten exactamente de
-      // los mismos datos ya guardados, sin discrepancias entre ellos.
       let backDataFresco: any = null;
       try {
         const data = await getCotizacionesExpo();
@@ -669,9 +769,7 @@ useEffect(() => {
     asesor: user ? `${user.nombre} ${user.apellido}`.trim() : "Asesor de Ventas",
   };
 
-  // ── Botones rápidos: acceso directo sin abrir el menú del split-button,
-  // para que quien prefiera un clic fijo (en vez de marcar checkboxes) lo
-  // tenga a la mano. Todos guardan por defecto, igual que el botón principal.
+  // ── Botones rápidos ────────────────────────────────────────────────────
   const BotonesRapidos = () => (
     <div className="no-print" style={{ display: "flex", gap: 6 }}>
       <button
@@ -954,10 +1052,6 @@ useEffect(() => {
         <ModalCatalogoExpo
           onClose={() => {
             setCatalogoExpoAbierto(false);
-            // Lo que se creó/editó/eliminó ahí adentro debe reflejarse en el
-            // sidebar y en el buscador del cotizador — como ambos manejan
-            // su propio estado, se refresca al cerrar en vez de compartir
-            // estado en vivo entre los dos.
             cargarCatalogo();
           }}
         />

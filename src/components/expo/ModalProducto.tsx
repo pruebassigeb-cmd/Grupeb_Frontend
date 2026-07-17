@@ -1,15 +1,40 @@
-import { useState, useRef, useEffect } from "react";
-import { CATS, OPCIONES_TINTAS } from "../../types/expo/expo.types";
-import type { Producto } from "../../types/expo/expo.types";
+// src/components/expo/ModalProducto.tsx
+import { useState, useRef, useEffect, useMemo } from "react";
+import { CATS } from "../../types/expo/expo.types";
+import type {
+  Producto,
+  OpcionesRegistroExpoResponse,
+  ProductoSistemaPapelExpo,
+  ProductoSistemaPlasticoExpo,
+} from "../../types/expo/expo.types";
 import type { Catalogs } from "../../types/papel/papel.types";
 import type { FoilOpcion, TexturaOpcion } from "../../types/papel/cotizacion-papel.types";
 import api from "../../services/api";
-import { subirArchivo } from "../../services/archivos.service";
+import { getOpcionesRegistroExpo } from "../../services/expo/expoService";
+import { getTiposInsumo, buscarInsumos, type Insumo } from "../../services/proveedoresService";
+import {
+  construirMedidaPapel,
+  construirMedidaPlastico,
+} from "../../utils/expo/formatoMedidas";
+import {
+  calibresPapelCompatibles,
+  grupoPapelPorCalibre,
+  precioFormulario,
+  productosPapelCompatibles,
+  productosPlasticoCompatibles,
+  valorFormulario,
+} from "../../utils/expo/opcionesRegistroExpo";
 
 // ─── Tipos catálogos plástico ─────────────────────────────────────────────────
 interface TipoProducto { id: number; nombre: string; }
 interface Material     { id: number; nombre: string; }
 interface Calibre      { id: number; valor: string | number; gramos?: number | null; }
+interface PigmentoOpcion { id: number; nombre: string; codigo: string | null; }
+
+// Cantidades de tintas soportadas — número plano; el backend resuelve el id
+// real de la tabla `tintas` justo antes de guardar. No se maneja pantones
+// en este cotizador — solo el número de tintas.
+const OPCIONES_CANTIDAD_TINTAS = [0, 1, 2, 3, 4, 5, 6];
 
 // ─── CONFIG medidas por tipo ──────────────────────────────────────────────────
 type MedidaPos = "top" | "left" | "bottom" | "right" | "right-top" | "left-bottom" | "top-inside";
@@ -25,17 +50,6 @@ const CONFIG_MEDIDAS: Record<string, MedidaDef[]> = {
 };
 const MEDIDAS_VACIAS: Record<MedidaKey, string> = { altura:"",ancho:"",fuelleFondo:"",fuelleLateral1:"",fuelleLateral2:"",refuerzo:"" };
 
-// ─── Opciones locales papel / cartón ─────────────────────────────────────────
-const TINTAS_DEFAULT = ["1x0","1x1","2x0","2x1","2x2","3x0","4x0","4x4"];
-const MEDIDAS_PAPEL: Record<string, string[]> = {
-  "Bolsas":    ["15x8x20 cm","20x10x30 cm","25x12x35 cm","30x15x40 cm","35x18x45 cm","10x5x15 cm","40x20x50 cm","12x6x25 cm"],
-  "Cajas":     ["10x10x5 cm","15x10x8 cm","20x15x8 cm","22x15x5 cm","25x20x10 cm","30x20x12 cm","30x30x5 cm","40x30x15 cm"],
-  "Sobres":    ["10x7 cm","11x22 cm","15x10 cm","20x15 cm","23x11 cm","25x18 cm","30x22 cm","32x24 cm"],
-  "Etiquetas": ["Ø3 cm","Ø5 cm","Ø8 cm","5x3 cm","7x4 cm","10x5 cm","10x7 cm","12x8 cm"],
-  "default":   ["10x7 cm","15x10x5 cm","20x10x30 cm","22x15x8 cm","25x12x35 cm","30x20x10 cm","35x25x12 cm","40x30x15 cm"],
-};
-const MEDIDAS_CARTON = ["15x10x6 cm","20x15x8 cm","25x20x10 cm","30x20x12 cm","30x20x60 cm","35x25x15 cm","40x30x15 cm","40x30x25 cm"];
-
 const LS: React.CSSProperties = { display:"block",fontSize:10,fontWeight:700,color:"#888",letterSpacing:1,textTransform:"uppercase",marginBottom:4 };
 const IS: React.CSSProperties = { width:"100%",background:"#111",border:"1px solid #333",borderRadius:6,padding:"8px 10px",color:"#EEE",fontSize:12,outline:"none",fontFamily:"'Inter',sans-serif",marginBottom:2 };
 const ROW2: React.CSSProperties = { display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:14 };
@@ -44,151 +58,46 @@ const ROW3: React.CSSProperties = { display:"grid",gridTemplateColumns:"1fr 1fr 
 // ─── Helper parsear medida string → inputs ────────────────────────────────────
 const parsearMedidaAInputs = (medida: string): Record<MedidaKey, string> => {
   if (!medida) return { ...MEDIDAS_VACIAS };
+
   const clean = medida.replace(/\s*cm\s*$/i, "").trim();
-  const [vertStr, horizStr] = clean.split("x");
-  const verts = (vertStr || "").split("+").filter(Boolean);
-  const horiz = horizStr || "";
+  const [verticalStr = "", horizontalStr = ""] = clean.split("x");
+  const verticales = verticalStr.split("+").filter(Boolean);
+  const horizontales = horizontalStr.split("+").filter(Boolean);
+
   return {
-    altura:         verts[0] || "",
-    fuelleLateral1: verts[1] || "",
-    fuelleLateral2: verts[1] || "",
-    fuelleFondo:    verts[2] || "",
-    refuerzo:       verts[3] || "",
-    ancho:          horiz,
+    altura: verticales[0] || "",
+    fuelleFondo: verticales[1] || "",
+    refuerzo: verticales[2] || "",
+    ancho: horizontales[0] || "",
+    fuelleLateral1: horizontales[1] || "",
+    fuelleLateral2: horizontales[2] || horizontales[1] || "",
   };
 };
 
-// ─── Draft de imagen en sessionStorage ───────────────────────────────────────
-const DRAFT_KEY_BASE = "modalProducto_imagenDraft";
-const draftKeyFor = (editando: Producto | null) =>
-  editando ? `${DRAFT_KEY_BASE}_edit_${editando.id}` : `${DRAFT_KEY_BASE}_nuevo`;
-
-const FLAG_KEY_BASE = "modalProducto_subiendoFlag";
-const flagKeyFor = (editando: Producto | null) =>
-  editando ? `${FLAG_KEY_BASE}_edit_${editando.id}` : `${FLAG_KEY_BASE}_nuevo`;
-
-const subirFotoInmediato = async (
+// ─── Imagen: mismo patrón que Papel.tsx/Plastico.tsx ─────────────────────────
+const subirImagenVinculada = async (
   file: File,
   categoria: "papel" | "plastico" | "carton" | undefined,
-  setF: (k: keyof Producto, v: unknown) => void,
-  setSubiendoFoto: (v: boolean) => void,
-  editando: Producto | null,
+  idReal: number,
 ) => {
-  const draftKey = draftKeyFor(editando);
-  const flagKey  = flagKeyFor(editando);
-  setSubiendoFoto(true);
-  sessionStorage.setItem(flagKey, "1");
-  try {
-    const subcarpeta  = categoria === "plastico" ? "plastico"
-                       : categoria === "carton"   ? "carton"
-                       : "papel";
-    const archivo = await subirArchivo(file, "catalogoproductos", subcarpeta);
-    const base = (api.defaults.baseURL || "").replace(/\/$/, "");
-    const url = `${base}/archivos/${archivo.id_archivo}/ver`;
-    setF("imagen", url);
-    sessionStorage.setItem(draftKey, url);
-    sessionStorage.removeItem(flagKey);
-  } catch (e) {
-    console.error("❌ No se pudo subir la imagen:", e);
-    alert("No se pudo subir la imagen. Intenta de nuevo.");
-    sessionStorage.removeItem(flagKey);
-  } finally {
-    setSubiendoFoto(false);
+  const formData = new FormData();
+  formData.append("archivo", file);
+  if (categoria === "plastico") {
+    formData.append("carpeta", "suaje");
+    formData.append("subcarpeta", "plastico-producto");
+    formData.append("categoria", "imagen-producto-plastico");
+    formData.append("idconfiguracion_plastico", String(idReal));
+  } else {
+    formData.append("carpeta", "suaje");
+    formData.append("subcarpeta", "imagen");
+    formData.append("categoria", "imagen-suaje-papel");
+    formData.append("idproducto_papel", String(idReal));
   }
+  const { data } = await api.post("/archivos/upload", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return data.url as string;
 };
-
-// ─── TintasSelectModal ────────────────────────────────────────────────────────
-function TintasSelectModal({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const [open, setOpen] = useState(false);
-  const [busq, setBusq] = useState("");
-  const triggerRef = useRef<HTMLDivElement>(null);
-  const inputRef   = useRef<HTMLInputElement>(null);
-  const lista = busq.trim() ? OPCIONES_TINTAS.filter(o => o.includes(busq.trim())) : TINTAS_DEFAULT;
-  useEffect(() => {
-    if (!open) return;
-    const fn = (e: MouseEvent) => {
-      if (!triggerRef.current?.contains(e.target as Node) && !document.getElementById("tintas-drop-modal")?.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", fn);
-    return () => document.removeEventListener("mousedown", fn);
-  }, [open]);
-  return (
-    <div style={{ position:"relative" }}>
-      <div ref={triggerRef} onClick={() => { setOpen(v=>!v); setTimeout(()=>inputRef.current?.focus(),30); }}
-        style={{ ...IS,display:"flex",alignItems:"center",justifyContent:"space-between",cursor:"pointer",marginBottom:0 }}>
-        <span style={{ color:value?"#EEE":"#555" }}>{value||"— Selecciona —"}</span>
-        <span style={{ color:"#666",fontSize:10 }}>▾</span>
-      </div>
-      {open && (
-        <div id="tintas-drop-modal" style={{ position:"absolute",top:"calc(100% + 4px)",left:0,right:0,background:"#1A1A1A",border:"1px solid #444",borderRadius:8,zIndex:500,boxShadow:"0 8px 28px rgba(0,0,0,.8)",overflow:"hidden" }}>
-          <div style={{ padding:"6px 8px 4px",borderBottom:"1px solid #2A2A2A" }}>
-            <input ref={inputRef} value={busq} onChange={e=>setBusq(e.target.value)} placeholder="ej: 3x0"
-              style={{ width:"100%",background:"#111",border:"1px solid #333",borderRadius:4,padding:"5px 8px",color:"#EEE",fontSize:11,outline:"none",fontFamily:"'Inter',sans-serif" }} />
-          </div>
-          <div style={{ maxHeight:180,overflowY:"auto" }}>
-            {lista.length===0 ? <div style={{ padding:"10px",color:"#555",fontSize:11,textAlign:"center" }}>Sin resultados</div>
-              : lista.map(o=>(
-                <div key={o} onMouseDown={()=>{ onChange(o); setOpen(false); setBusq(""); }}
-                  style={{ padding:"7px 12px",cursor:"pointer",fontSize:12,color:value===o?"#C9922A":"#CCC",background:value===o?"#C9922A18":"transparent" }}>
-                  {o}
-                </div>
-              ))}
-            {!busq && <div style={{ padding:"4px 12px 8px",color:"#444",fontSize:9 }}>Escribe para buscar más opciones</div>}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── MedidaSelectModal ────────────────────────────────────────────────────────
-function MedidaSelectModal({ opciones, value, onChange }: { opciones: string[]; value: string; onChange: (v: string) => void }) {
-  const [open, setOpen] = useState(false);
-  const [custom, setCustom] = useState("");
-  const triggerRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const fn = (e: MouseEvent) => {
-      if (!triggerRef.current?.contains(e.target as Node) && !document.getElementById("medida-drop-modal")?.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", fn);
-    return () => document.removeEventListener("mousedown", fn);
-  }, [open]);
-  const seleccionar = (v: string) => { onChange(v); setOpen(false); setCustom(""); };
-  return (
-    <div style={{ position:"relative" }}>
-      <div ref={triggerRef} onClick={()=>setOpen(v=>!v)}
-        style={{ ...IS,display:"flex",alignItems:"center",justifyContent:"space-between",cursor:"pointer",marginBottom:0 }}>
-        <span style={{ color:value?"#EEE":"#555" }}>{value||"— Selecciona o escribe —"}</span>
-        <span style={{ color:"#666",fontSize:10 }}>▾</span>
-      </div>
-      {open && (
-        <div id="medida-drop-modal" style={{ position:"absolute",top:"calc(100% + 4px)",left:0,right:0,background:"#1A1A1A",border:"1px solid #444",borderRadius:8,zIndex:500,boxShadow:"0 8px 28px rgba(0,0,0,.8)",overflow:"hidden" }}>
-          <div style={{ maxHeight:220,overflowY:"auto" }}>
-            {opciones.map(o=>(
-              <div key={o} onMouseDown={()=>seleccionar(o)}
-                style={{ padding:"8px 12px",cursor:"pointer",fontSize:12,color:value===o?"#C9922A":"#CCC",background:value===o?"#C9922A18":"transparent" }}>
-                {o}
-              </div>
-            ))}
-          </div>
-          <div style={{ borderTop:"1px solid #2A2A2A",padding:"6px 8px" }}>
-            <input value={custom} onChange={e=>setCustom(e.target.value)} placeholder="Otra medida personalizada..."
-              onMouseDown={e=>e.stopPropagation()}
-              onKeyDown={e=>{ if(e.key==="Enter"&&custom.trim()) seleccionar(custom.trim()); }}
-              style={{ width:"100%",background:"#111",border:"1px solid #333",borderRadius:4,padding:"5px 8px",color:"#EEE",fontSize:11,outline:"none",fontFamily:"'Inter',sans-serif" }} />
-            {custom.trim() && (
-              <button onMouseDown={()=>seleccionar(custom.trim())}
-                style={{ marginTop:4,width:"100%",background:"#C9922A",border:"none",borderRadius:4,padding:"5px",color:"#1A1A1A",fontSize:11,fontWeight:700,cursor:"pointer" }}>
-                ✓ Usar "{custom.trim()}"
-              </button>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
 
 // ─── DropdownDB ───────────────────────────────────────────────────────────────
 function DropdownDB({ label, value, opciones, loading, disabled, onSelect, placeholder }: {
@@ -235,14 +144,21 @@ function DropdownDB({ label, value, opciones, loading, disabled, onSelect, place
 }
 
 // ─── Form vacío ───────────────────────────────────────────────────────────────
+// NUEVO: tintasFrenteDefault arranca en 1 explícitamente. Sin esto, el
+// <select> se ve en "1 tinta" (por el fallback `?? 1` del render) pero el
+// estado real queda `undefined` hasta que el usuario lo toca a mano — y si
+// no lo toca, el payload nunca manda el campo y el backend guarda null.
 const formVacio = (): Partial<Producto> => ({
   nombre:"",categoria:"papel",medida:"",material:"",calibre:"",tintas:"1x0",
   laminacion:false,hs:false,ar:false,textura:false,uv:false,asa:false,otro:"",
-  precio500:"",precio1000:"",precio3000:"",imagen:"",
+  precio500:"",precio1000:"",precio3000:"",precioBase:"",imagen:"",
   tipo:"",ancho:"",fuelle:"",altura:"",tipoPapel:"",
   tipoProducto:"",fuelLateral:"",fuelFondo:"",troquel:false,perforado:false,
   tipoLaminado:"",tipoAsa:"",tipoTextura:"",tipoHs:"",
   pigmento:"",
+  tamanoProd:"",
+  idTamanoProducto: undefined,
+  tintasFrenteDefault: 0,
   fuente:"expo",
 });
 
@@ -251,7 +167,7 @@ interface Props {
   catInicial?: "papel" | "plastico" | "carton";
   saving:      boolean;
   onClose:     () => void;
-  onGuardar:   (p: Producto) => Promise<void>;
+  onGuardar:   (p: Producto, imagenPendiente: File | null) => Promise<void>;
   catalogs:    Catalogs;
   foils:       FoilOpcion[];
   texturas:    TexturaOpcion[];
@@ -268,29 +184,118 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
     tipo:         editando.tipo         || "",
     tipoPapel:    editando.tipoPapel    || editando.material || "",
     pigmento:     editando.pigmento     || "",
+    tamanoProd:    editando.tamanoProd   || "",
+    // Papel/cartón permiten cero tintas. Plástico conserva una tinta como
+    // valor inicial por compatibilidad con su flujo actual.
+    tintasFrenteDefault: editando.tintasFrenteDefault
+      ?? (editando.categoria === "plastico" ? 1 : 0),
   } : { ...formVacio(), categoria: catInicial });
 
   const [formCat, setFormCat] = useState<"papel"|"plastico"|"carton">(editando?.categoria ?? catInicial);
 
   const [subiendoFoto, setSubiendoFoto] = useState(false);
+  const [imagenPendiente, setImagenPendiente] = useState<File | null>(null);
 
-  const [draftRecuperado, setDraftRecuperado] = useState(false);
-  const [intentoFallido, setIntentoFallido] = useState(false);
+  // Toggle de "¿tintas por dentro?" en el registro (solo papel/cartón)
+  const [usaTintasDentroModal, setUsaTintasDentroModal] = useState(!!editando?.tintasDentroDefault);
+
+  // Productos del catálogo del sistema usados únicamente como plantilla.
+  // El producto nuevo sigue guardándose como producto Expo independiente.
+  const [opcionesSistema, setOpcionesSistema] = useState<OpcionesRegistroExpoResponse>({
+    papel: [],
+    plastico: [],
+    tamanos: [],
+  });
+  const [loadingOpcionesSistema, setLoadingOpcionesSistema] = useState(true);
+  const [errorOpcionesSistema, setErrorOpcionesSistema] = useState("");
+  const [productoPapelBaseId, setProductoPapelBaseId] = useState<number | null>(null);
+  const [productoPlasticoBaseId, setProductoPlasticoBaseId] = useState<number | null>(null);
+
+  // Pigmentos: reutiliza el mismo catálogo de insumos que usa el cotizador.
+  // El input conserva texto libre, así que el usuario puede escribir uno nuevo
+  // aunque no aparezca entre las sugerencias.
+  const [pigmentosDB, setPigmentosDB] = useState<PigmentoOpcion[]>([]);
+  const [loadingPigmentos, setLoadingPigmentos] = useState(false);
+  const [errorPigmentos, setErrorPigmentos] = useState("");
 
   useEffect(() => {
-    const draftKey = draftKeyFor(editando);
-    const flagKey  = flagKeyFor(editando);
-    const draft = sessionStorage.getItem(draftKey);
-    const huboIntentoFallido = sessionStorage.getItem(flagKey) === "1";
+    let activo = true;
+    setLoadingOpcionesSistema(true);
+    getOpcionesRegistroExpo()
+      .then(data => {
+        if (!activo) return;
+        setOpcionesSistema(data);
+        setErrorOpcionesSistema("");
+      })
+      .catch(error => {
+        console.error("No se pudieron cargar las opciones del sistema para Expo:", error);
+        if (activo) setErrorOpcionesSistema("No se pudo cargar el catálogo del sistema. Puedes continuar capturando manualmente.");
+      })
+      .finally(() => { if (activo) setLoadingOpcionesSistema(false); });
+    return () => { activo = false; };
+  }, []);
 
-    if (draft && draft !== form.imagen) {
-      setForm(prev => ({ ...prev, imagen: draft }));
-      setDraftRecuperado(true);
-    } else if (huboIntentoFallido) {
-      setIntentoFallido(true);
-    }
-    sessionStorage.removeItem(flagKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    let activo = true;
+
+    const cargarPigmentos = async () => {
+      setLoadingPigmentos(true);
+      setErrorPigmentos("");
+
+      try {
+        const tipos = await getTiposInsumo();
+        const tipoPigmento = tipos.find(
+          tipo => tipo.nombre.trim().toLocaleLowerCase("es-MX") === "pigmento"
+        );
+
+        if (!tipoPigmento) {
+          if (activo) setPigmentosDB([]);
+          return;
+        }
+
+        const items: Insumo[] = await buscarInsumos(tipoPigmento.idtipo_insumo, "");
+        if (!activo) return;
+
+        const unicos = new Map<string, PigmentoOpcion>();
+        for (const item of items) {
+          const nombre = item.nombre?.trim();
+          if (!nombre) continue;
+
+          const codigo =
+            item.proveedores?.length === 1
+              ? item.proveedores[0]?.codigo || null
+              : null;
+
+          const clave = nombre.toLocaleLowerCase("es-MX");
+          if (!unicos.has(clave)) {
+            unicos.set(clave, {
+              id: item.idinsumo,
+              nombre,
+              codigo,
+            });
+          }
+        }
+
+        setPigmentosDB(
+          Array.from(unicos.values()).sort((a, b) =>
+            a.nombre.localeCompare(b.nombre, "es-MX")
+          )
+        );
+      } catch (error) {
+        console.error("No se pudieron cargar los pigmentos:", error);
+        if (activo) {
+          setPigmentosDB([]);
+          setErrorPigmentos(
+            "No se pudo cargar el catálogo de pigmentos. Puedes escribirlo manualmente."
+          );
+        }
+      } finally {
+        if (activo) setLoadingPigmentos(false);
+      }
+    };
+
+    cargarPigmentos();
+    return () => { activo = false; };
   }, []);
 
   // ─── Catálogos plástico desde DB ─────────────────────────────────────────
@@ -368,6 +373,97 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
   const soloNums = (v: string) => v.replace(/[^0-9.]/g,"").replace(/^(\d*\.?\d*).*$/,"$1");
   const esPapelCarton = form.categoria === "papel" || form.categoria === "carton";
 
+  const productosPapelFiltrados = useMemo(
+    () => productosPapelCompatibles(opcionesSistema.papel, form.tipo || "", form.tipoPapel || ""),
+    [opcionesSistema.papel, form.tipo, form.tipoPapel],
+  );
+
+  const productoPapelBase = useMemo<ProductoSistemaPapelExpo | null>(
+    () => opcionesSistema.papel.find(p => p.id === productoPapelBaseId) || null,
+    [opcionesSistema.papel, productoPapelBaseId],
+  );
+
+  const calibresPapelBase = useMemo(
+    () => calibresPapelCompatibles(productoPapelBase, form.tipoPapel || ""),
+    [productoPapelBase, form.tipoPapel],
+  );
+
+  const productosPlasticoFiltrados = useMemo(
+    () => productosPlasticoCompatibles(opcionesSistema.plastico, tipoPlastNom, materialNom),
+    [opcionesSistema.plastico, tipoPlastNom, materialNom],
+  );
+
+  const limpiarPlantillaPapel = () => {
+    setProductoPapelBaseId(null);
+  };
+
+  const aplicarProductoPapelBase = (producto: ProductoSistemaPapelExpo) => {
+    setProductoPapelBaseId(producto.id);
+    const calibres = calibresPapelCompatibles(producto, form.tipoPapel || "");
+    const primerCalibre = calibres[0] || "";
+    const grupoInicial = grupoPapelPorCalibre(
+      producto,
+      form.tipoPapel || "",
+      primerCalibre,
+    );
+
+    setForm(prev => ({
+      ...prev,
+      medida: producto.medida || "",
+      ancho: valorFormulario(producto.ancho),
+      fuelle: valorFormulario(producto.fuelle),
+      altura: valorFormulario(producto.altura),
+      tamanoProd: producto.tamano_producto || producto.tamano_prod || "",
+      idTamanoProducto: producto.id_tamano_producto ?? undefined,
+      calibre: primerCalibre,
+      precioBase: precioFormulario(grupoInicial?.precio_sugerido ?? null),
+      costoLaminado: producto.costo_laminado != null
+        ? Number(producto.costo_laminado)
+        : 0,
+      tintasFrenteDefault: producto.tintas_frente_default ?? 0,
+      tintasDentroDefault: producto.tintas_dentro_default ?? undefined,
+      laminacion: (producto.laminados || []).length > 0,
+      tipoLaminado: producto.laminados?.[0]?.nombre || "",
+      asa: (producto.asas || []).length > 0,
+      tipoAsa: producto.asas?.[0]?.nombre || "",
+      hs: producto.hs === true,
+      tipoHs: producto.tipo_hs || "",
+      textura: producto.textura === true,
+      tipoTextura: producto.tipo_textura || "",
+      ar: producto.ar === true,
+      uv: producto.uv === true,
+      imagen: prev.imagen || producto.imagen_url || "",
+    }));
+    setUsaTintasDentroModal(producto.tintas_dentro_default != null);
+  };
+
+  const aplicarProductoPlasticoBase = (producto: ProductoSistemaPlasticoExpo) => {
+    setProductoPlasticoBaseId(producto.id);
+    const calibre = producto.calibre || "";
+    const calibreCatalogo = calibresDB.find(c => String(c.valor) === String(calibre));
+    setCalibreNom(calibre);
+    setCalibreId(calibreCatalogo?.id || 0);
+    setMedidas({
+      altura: valorFormulario(producto.altura),
+      ancho: valorFormulario(producto.ancho),
+      fuelleFondo: valorFormulario(producto.fuelle_fondo),
+      fuelleLateral1: valorFormulario(producto.fuelle_lateral_izquierdo),
+      fuelleLateral2: valorFormulario(producto.fuelle_lateral_derecho),
+      refuerzo: valorFormulario(producto.refuerzo),
+    });
+    setForm(prev => ({
+      ...prev,
+      calibre,
+      tamanoProd: "",
+      pigmento: producto.pigmento || "",
+      tintasFrenteDefault: producto.tintas_frente_default ?? 1,
+      precio500: precioFormulario(producto.precio_500),
+      precio1000: precioFormulario(producto.precio_1000),
+      precio3000: precioFormulario(producto.precio_3000),
+      imagen: prev.imagen || producto.imagen_url || "",
+    }));
+  };
+
   const setMedida = (key: MedidaKey, value: string) => {
     if (!/^\d*\.?\d{0,2}$/.test(value)) return;
     setMedidas(prev => {
@@ -387,37 +483,36 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
   const tieneLateral        = Number(medidas.fuelleLateral1)>0||Number(medidas.fuelleLateral2)>0;
   const tieneFondoORefuerzo = Number(medidas.fuelleFondo)>0||Number(medidas.refuerzo)>0;
 
-  const construirMedida = () => {
-    const v: string[] = [];
-    if (medidas.altura)         v.push(medidas.altura);
-    if (medidas.fuelleLateral1) v.push(medidas.fuelleLateral1);
-    if (medidas.fuelleFondo)    v.push(medidas.fuelleFondo);
-    if (medidas.refuerzo)       v.push(medidas.refuerzo);
-    const h = [medidas.ancho].filter(Boolean);
-    if (!v.length&&!h.length) return "";
-    if (!h.length) return v.join("+");
-    if (!v.length) return h.join("+");
-    return `${v.join("+")}x${h.join("+")}`;
-  };
-
-  const resolverImagen = async (): Promise<string | null> => {
-    return form.imagen || "";
-  };
+  const construirMedida = () =>
+    construirMedidaPlastico({
+      altura: medidas.altura,
+      ancho: medidas.ancho,
+      fuelleFondo: medidas.fuelleFondo,
+      fuelleLateral1: medidas.fuelleLateral1,
+      fuelleLateral2: medidas.fuelleLateral2,
+      refuerzo: medidas.refuerzo,
+    });
 
   const guardar = async () => {
     if (!form.nombre?.trim()) return;
 
-    const imagenFinal = await resolverImagen();
-    if (imagenFinal === null) return;
-
-    const draftKey = draftKeyFor(editando);
-
     try {
       if (esPapelCarton) {
-        let medida = form.medida || "";
-        if (form.ancho && form.altura)
-          medida = `${form.ancho}x${form.fuelle||"0"}x${form.altura} cm`;
-        await onGuardar({ ...(form as Producto), id: editando?.id??0, fuente:"expo", medida, imagen: imagenFinal });
+        const medida = construirMedidaPapel(
+          form.ancho,
+          form.fuelle,
+          form.altura
+        );
+
+        await onGuardar(
+          {
+            ...(form as Producto),
+            id: editando?.id ?? 0,
+            fuente: "expo",
+            medida,
+          },
+          imagenPendiente
+        );
       } else {
         const medida = construirMedida();
         await onGuardar({
@@ -434,18 +529,34 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
           fuelFondo:    medidas.fuelleFondo,
           fuelLateral:  medidas.fuelleLateral1,
           pigmento:     form.pigmento || "",
-          imagen:       imagenFinal,
-        });
+          tamanoProd:    "",
+        }, imagenPendiente);
       }
-      sessionStorage.removeItem(draftKey);
     } catch {
       // onGuardar ya mostró su propio alert con el error
     }
   };
 
   const cerrarSinGuardar = () => {
-    sessionStorage.removeItem(draftKeyFor(editando));
     onClose();
+  };
+
+  const handleSeleccionImagen = async (file: File) => {
+    if (editando?.id) {
+      setSubiendoFoto(true);
+      try {
+        const url = await subirImagenVinculada(file, form.categoria, editando.id);
+        setF("imagen", url);
+      } catch (e) {
+        console.error("❌ No se pudo subir la imagen:", e);
+        alert("No se pudo subir la imagen. Intenta de nuevo.");
+      } finally {
+        setSubiendoFoto(false);
+      }
+    } else {
+      setImagenPendiente(file);
+      setF("imagen", URL.createObjectURL(file));
+    }
   };
 
   const opTipos = tiposProducto.map(t => ({ id:t.id, label:t.nombre }));
@@ -475,7 +586,24 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
             <label style={LS}>Categoría</label>
             <div style={{ display:"flex",gap:8,marginTop:6 }}>
               {CATS.map(c=>(
-                <button key={c.key} onClick={()=>{ setFormCat(c.key as typeof formCat); setF("categoria",c.key); setTipoPlastNom(""); setMaterialNom(""); setCalibreNom(""); setMedidas({...MEDIDAS_VACIAS}); }}
+                <button key={c.key} onClick={()=>{
+                  const categoria = c.key as typeof formCat;
+                  setFormCat(categoria);
+                  setForm(prev=>({
+                    ...prev,
+                    categoria,
+                    tamanoProd: categoria === "plastico" ? "" : prev.tamanoProd,
+                    idTamanoProducto: categoria === "plastico" ? undefined : prev.idTamanoProducto,
+                    precioBase: categoria === "plastico" ? "" : prev.precioBase,
+                    tintasFrenteDefault: categoria === "plastico"
+                      ? (prev.tintasFrenteDefault ?? 1)
+                      : (prev.tintasFrenteDefault ?? 0),
+                  }));
+                  setTipoPlastNom("");
+                  setMaterialNom("");
+                  setCalibreNom("");
+                  setMedidas({...MEDIDAS_VACIAS});
+                }}
                   style={{ flex:1,padding:"8px 4px",borderRadius:7,border:`1.5px solid ${formCat===c.key?c.color:"#333"}`,background:formCat===c.key?`${c.color}22`:"#111",color:formCat===c.key?c.color:"#666",cursor:"pointer",fontSize:11,fontWeight:700 }}>
                   {c.emoji} {c.label}
                 </button>
@@ -486,40 +614,59 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
 
         {/* Nombre */}
         <div style={{ marginBottom:14 }}>
-          <label style={LS}>Nombre del producto *</label>
+          <label style={LS}>Descripción *</label>
           <input style={IS} value={form.nombre||""} onChange={e=>setF("nombre",e.target.value)} placeholder="Ej. Bolsa Kraft Boutique" />
         </div>
+
+        {errorOpcionesSistema && (
+          <div style={{ marginBottom:14, padding:"8px 10px", border:"1px solid #7C5B24", borderRadius:6, background:"#2A210F", color:"#E0B96A", fontSize:11 }}>
+            {errorOpcionesSistema}
+          </div>
+        )}
 
         {/* ── PAPEL / CARTÓN ── */}
         {esPapelCarton && (<>
           <div style={ROW3}>
             <div>
               <label style={LS}>Tipo</label>
-              <select style={IS} value={form.tipo||""} onChange={e=>setF("tipo",e.target.value)}>
+              <select style={IS} value={form.tipo||""} onChange={e=>{ setF("tipo",e.target.value); limpiarPlantillaPapel(); }}>
                 <option value="">— Selecciona —</option>
                 {catalogs.tipo_producto.map(item=><option key={item.id} value={item.nombre}>{item.nombre}</option>)}
               </select>
             </div>
             <div>
               <label style={LS}>Tipo de papel</label>
-              <select style={IS} value={form.tipoPapel||""} onChange={e=>{ setF("tipoPapel",e.target.value); setF("material",e.target.value); }}>
+              <select style={IS} value={form.tipoPapel||""} onChange={e=>{ setF("tipoPapel",e.target.value); setF("material",e.target.value); limpiarPlantillaPapel(); }}>
                 <option value="">— Selecciona —</option>
                 {catalogs.tipo_papel.map(item=><option key={item.id} value={item.nombre}>{item.nombre}</option>)}
               </select>
             </div>
             <div>
-              <label style={LS}>Medida</label>
-              <MedidaSelectModal
-                opciones={form.categoria==="carton"?MEDIDAS_CARTON:(MEDIDAS_PAPEL[form.tipo||"default"]||MEDIDAS_PAPEL["default"])}
-                value={form.medida||""}
-                onChange={v=>{
-                  setF("medida",v);
-                  const m3=v.match(/^([\d.]+)x([\d.]+)x([\d.]+)/);
-                  const m2=v.match(/^([\d.]+)x([\d.]+)/);
-                  if(m3){setF("ancho",m3[1]);setF("fuelle",m3[2]);setF("altura",m3[3]);}
-                  else if(m2){setF("ancho",m2[1]);setF("altura",m2[2]);setF("fuelle","0");}
+              <label style={LS}>Producto / medida del sistema</label>
+              <select
+                style={{...IS, marginBottom:0}}
+                value={productoPapelBaseId ?? ""}
+                disabled={!form.tipo || !form.tipoPapel || loadingOpcionesSistema}
+                onChange={e=>{
+                  const id = Number(e.target.value);
+                  if (!id) { limpiarPlantillaPapel(); return; }
+                  const producto = opcionesSistema.papel.find(p=>p.id===id);
+                  if (producto) aplicarProductoPapelBase(producto);
                 }}
-              />
+              >
+                <option value="">
+                  {loadingOpcionesSistema
+                    ? "Cargando productos del sistema..."
+                    : !form.tipo || !form.tipoPapel
+                      ? "Primero selecciona tipo y papel"
+                      : productosPapelFiltrados.length
+                        ? "— Selecciona para autocompletar —"
+                        : "Sin productos compatibles"}
+                </option>
+                {productosPapelFiltrados.map(producto=><option key={producto.id} value={producto.id}>
+                  {producto.medida || "Sin medida"}{producto.descripcion ? ` · ${producto.descripcion}` : ""}
+                </option>)}
+              </select>
             </div>
           </div>
           <div style={ROW3}>
@@ -529,35 +676,93 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
           </div>
           {(form.ancho||form.altura)&&(
             <div style={{ background:"#111",border:"1px solid #333",borderRadius:6,padding:"6px 10px",marginBottom:14,fontSize:11,color:"#C9922A",fontWeight:600 }}>
-              📐 Medida: {form.ancho||"?"}x{form.fuelle||"0"}x{form.altura||"?"} cm
+              📐 Medida: {construirMedidaPapel(form.ancho, form.fuelle, form.altura) || "—"}
             </div>
           )}
           <div style={ROW3}>
             <div>
-              <label style={LS}>Calibre</label>
-              <select style={IS} value={form.calibre||""} onChange={e=>setF("calibre",e.target.value)}>
+              <label style={LS}>Tamaño</label>
+              <select
+                style={IS}
+                value={form.idTamanoProducto ?? ""}
+                onChange={e => {
+                  const id = e.target.value ? Number(e.target.value) : undefined;
+                  const tamano = opcionesSistema.tamanos.find(item => item.id === id);
+                  setF("idTamanoProducto", id);
+                  setF("tamanoProd", tamano?.nombre || "");
+                }}
+              >
                 <option value="">— Selecciona —</option>
-                {catalogs.calibre.map(item=><option key={item.id} value={item.nombre}>{item.nombre}</option>)}
+                {opcionesSistema.tamanos.map(tamano => (
+                  <option key={tamano.id} value={tamano.id}>{tamano.nombre}</option>
+                ))}
               </select>
             </div>
             <div>
-              <label style={LS}>Tintas</label>
-              <TintasSelectModal value={form.tintas||""} onChange={v=>setF("tintas",v)} />
+              <label style={LS}>Calibre</label>
+              <select style={IS} value={form.calibre||""} onChange={e=>{
+                const calibre=e.target.value;
+                setF("calibre",calibre);
+                const material=grupoPapelPorCalibre(productoPapelBase, form.tipoPapel||"", calibre);
+                if (material?.precio_sugerido != null) {
+                  setF("precioBase", precioFormulario(material.precio_sugerido));
+                }
+              }}>
+                <option value="">— Selecciona —</option>
+                {productoPapelBase
+                  ? calibresPapelBase.map(calibre=><option key={calibre} value={calibre}>{calibre}</option>)
+                  : catalogs.calibre.map(item=><option key={item.id} value={item.nombre}>{item.nombre}</option>)}
+              </select>
             </div>
             <div>
-              <label style={LS}>Asa</label>
-              <select style={IS} value={form.tipoAsa||""} onChange={e=>{ setF("tipoAsa",e.target.value); setF("asa",e.target.value!==""); }}>
-                <option value="">Sin asa</option>
-                {(form.categoria==="plastico" ? coloresAsa : catalogs.tipo_asa).map(item=><option key={item.id} value={item.nombre}>{item.nombre}</option>)}
+              <label style={LS}>Tintas (frente)</label>
+              <select style={IS} value={form.tintasFrenteDefault ?? 0}
+                onChange={e=>setF("tintasFrenteDefault", Number(e.target.value))}>
+                {OPCIONES_CANTIDAD_TINTAS.map(n=><option key={n} value={n}>{n} tinta{n!==1?"s":""}</option>)}
               </select>
             </div>
           </div>
+
+          <div style={{ marginBottom:14, maxWidth:"calc((100% - 24px) / 3)" }}>
+            <label style={LS}>Asa</label>
+            <select style={IS} value={form.tipoAsa||""} onChange={e=>{ setF("tipoAsa",e.target.value); setF("asa",e.target.value!==""); }}>
+              <option value="">Sin asa</option>
+              {(productoPapelBase
+                ? productoPapelBase.asas
+                : catalogs.tipo_asa
+              ).map(item=><option key={item.id} value={item.nombre}>{item.nombre}</option>)}
+            </select>
+          </div>
+
+          {/* Toggle de tintas por dentro (solo cantidad — sin pantones) */}
+          <div style={{ marginBottom:14 }}>
+            <label style={{...LS, display:"flex", alignItems:"center", gap:6, cursor:"pointer"}}>
+              <input type="checkbox" checked={usaTintasDentroModal}
+                onChange={e=>{
+                  const checked=e.target.checked;
+                  setUsaTintasDentroModal(checked);
+                  setForm(prev=>({ ...prev, tintasDentroDefault: checked ? (prev.tintasDentroDefault ?? 1) : undefined }));
+                }}
+                style={{accentColor:"#C9922A"}} />
+              ¿Tintas por dentro?
+            </label>
+            {usaTintasDentroModal && (
+              <select style={{...IS, maxWidth:220, marginTop:6}} value={form.tintasDentroDefault ?? 1}
+                onChange={e=>setF("tintasDentroDefault", Number(e.target.value))}>
+                {OPCIONES_CANTIDAD_TINTAS.map(n=><option key={n} value={n}>{n} tinta{n!==1?"s":""}</option>)}
+              </select>
+            )}
+          </div>
+
           <div style={ROW3}>
             <div>
               <label style={LS}>Laminado</label>
               <select style={IS} value={form.laminacion?(form.tipoLaminado||""):""} onChange={e=>{ setF("laminacion",e.target.value!==""); setF("tipoLaminado",e.target.value); }}>
                 <option value="">Sin laminado</option>
-                {catalogs.laminado.map(item=><option key={item.id} value={item.nombre}>{item.nombre}</option>)}
+                {(productoPapelBase
+                  ? productoPapelBase.laminados
+                  : catalogs.laminado
+                ).map(item=><option key={item.id} value={item.nombre}>{item.nombre}</option>)}
               </select>
             </div>
             <div>
@@ -594,7 +799,7 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
 
           <DropdownDB label="Tipo de producto" value={tipoPlastNom} opciones={opTipos} loading={loadingCats}
             onSelect={(id,label)=>{
-              setTipoPlastId(id); setTipoPlastNom(label);
+              setTipoPlastId(id); setTipoPlastNom(label); setProductoPlasticoBaseId(null);
               setF("tipoProducto",label);
               setMedidas({...MEDIDAS_VACIAS});
               if (label==="Bolsa celofán") {
@@ -609,8 +814,36 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
           <DropdownDB label="Material" value={materialNom}
             opciones={opMats} loading={loadingCats}
             disabled={esCelofan}
-            onSelect={(id,label)=>{ setMaterialId(id); setMaterialNom(label); setF("material",label); }}
+            onSelect={(id,label)=>{ setMaterialId(id); setMaterialNom(label); setF("material",label); setProductoPlasticoBaseId(null); }}
           />
+
+          <div style={{ marginBottom:14 }}>
+            <label style={LS}>Producto / medida del sistema</label>
+            <select
+              style={IS}
+              value={productoPlasticoBaseId ?? ""}
+              disabled={!tipoPlastNom || !materialNom || loadingOpcionesSistema}
+              onChange={e=>{
+                const id=Number(e.target.value);
+                if(!id){ setProductoPlasticoBaseId(null); return; }
+                const producto=opcionesSistema.plastico.find(p=>p.id===id);
+                if(producto) aplicarProductoPlasticoBase(producto);
+              }}
+            >
+              <option value="">
+                {loadingOpcionesSistema
+                  ? "Cargando productos del sistema..."
+                  : !tipoPlastNom || !materialNom
+                    ? "Primero elige tipo y material"
+                    : productosPlasticoFiltrados.length
+                      ? "— Selecciona para autocompletar —"
+                      : "Sin coincidencias · captura manual"}
+              </option>
+              {productosPlasticoFiltrados.map(producto=><option key={producto.id} value={producto.id}>
+                {producto.medida || "Sin medida"}{producto.calibre ? ` · calibre ${producto.calibre}` : ""}
+              </option>)}
+            </select>
+          </div>
 
           <DropdownDB label="Calibre" value={calibreNom}
             opciones={opCals} loading={loadingCal}
@@ -635,7 +868,7 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
                       </label>
                       <input type="text" inputMode="decimal"
                         value={medidas[m.key]} disabled={bloqueado}
-                        onChange={e=>setMedida(m.key,e.target.value)}
+                        onChange={e=>{ setProductoPlasticoBaseId(null); setMedida(m.key,e.target.value); }}
                         placeholder="0"
                         style={{ ...IS, opacity:bloqueado?.4:1, cursor:bloqueado?"not-allowed":"text", marginBottom:0 }}
                       />
@@ -656,48 +889,91 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
           <div style={ROW2}>
             <div>
               <label style={LS}>Tintas</label>
-              <TintasSelectModal value={form.tintas||""} onChange={v=>setF("tintas",v)} />
+              <select style={IS} value={form.tintasFrenteDefault ?? 1}
+                onChange={e=>setF("tintasFrenteDefault", Number(e.target.value))}>
+                {OPCIONES_CANTIDAD_TINTAS.map(n=><option key={n} value={n}>{n} tinta{n!==1?"s":""}</option>)}
+              </select>
             </div>
             <div>
-              {/* NUEVO: pigmento — antes no existía en este modal. Se guarda
-                  en producto_acabado_default.pigmento_default. Es texto
-                  libre porque no hay catálogo con ID para pigmentos aquí
-                  (a diferencia del resto de catálogos plástico). */}
               <label style={LS}>Pigmento</label>
-              <input style={IS} value={form.pigmento||""} onChange={e=>setF("pigmento",e.target.value)} placeholder="Ej. Natural, Blanco, Pantone 186C..." />
+              <input
+                list="pigmentos-expo-opciones"
+                style={IS}
+                value={form.pigmento||""}
+                onChange={e=>setF("pigmento",e.target.value)}
+                placeholder={loadingPigmentos ? "Cargando pigmentos..." : "Selecciona o escribe un pigmento"}
+                autoComplete="off"
+              />
+              <datalist id="pigmentos-expo-opciones">
+                {pigmentosDB.map(pigmento => (
+                  <option
+                    key={pigmento.id}
+                    value={pigmento.nombre}
+                    label={pigmento.codigo ? `${pigmento.nombre} · ${pigmento.codigo}` : pigmento.nombre}
+                  />
+                ))}
+              </datalist>
+              <div style={{ color:errorPigmentos?"#E0B96A":"#666", fontSize:10, marginTop:4 }}>
+                {errorPigmentos ||
+                  (pigmentosDB.length
+                    ? "Elige una sugerencia o escribe un pigmento diferente."
+                    : "Puedes escribir el pigmento libremente.")}
+              </div>
             </div>
           </div>
         </>)}
 
         {/* ── PRECIOS ── */}
         <div style={{ borderTop:"1px solid #2A2A2A",paddingTop:14,marginBottom:14 }}>
-          <label style={LS}>Precios unitarios (expo)</label>
-          <div style={ROW3}>
-            <div><label style={{ ...LS,color:"#C9922A" }}>500 pzs</label><input style={IS} value={form.precio500||""} onChange={e=>setF("precio500",e.target.value)} placeholder="$0.00" /></div>
-            <div><label style={{ ...LS,color:"#C9922A" }}>1,000 pzs</label><input style={IS} value={form.precio1000||""} onChange={e=>setF("precio1000",e.target.value)} placeholder="$0.00" /></div>
-            <div><label style={{ ...LS,color:"#C9922A" }}>3,000 pzs</label><input style={IS} value={form.precio3000||""} onChange={e=>setF("precio3000",e.target.value)} placeholder="$0.00" /></div>
-          </div>
+          {esPapelCarton ? (
+            <>
+              <label style={LS}>Precio base unitario</label>
+              <div style={{ maxWidth: 260 }}>
+                <input
+                  style={IS}
+                  type="text"
+                  inputMode="decimal"
+                  value={form.precioBase || ""}
+                  onChange={e => {
+                    const limpio = e.target.value.replace(/[^0-9.]/g, "");
+                    const partes = limpio.split(".");
+                    const normalizado = partes.length > 2
+                      ? `${partes.shift()}.${partes.join("")}`
+                      : limpio;
+                    setF("precioBase", normalizado);
+                  }}
+                  placeholder="$0.00"
+                />
+              </div>
+              <div style={{ color:"#666",fontSize:10,marginTop:4 }}>
+                Se guarda en el grupo de papel y será la base del cálculo por cantidad y acabados.
+              </div>
+            </>
+          ) : (
+            <>
+              <label style={LS}>Precios unitarios (expo)</label>
+              <div style={ROW3}>
+                <div><label style={{ ...LS,color:"#C9922A" }}>500 pzs</label><input style={IS} value={form.precio500||""} onChange={e=>setF("precio500",e.target.value)} placeholder="$0.00" /></div>
+                <div><label style={{ ...LS,color:"#C9922A" }}>1,000 pzs</label><input style={IS} value={form.precio1000||""} onChange={e=>setF("precio1000",e.target.value)} placeholder="$0.00" /></div>
+                <div><label style={{ ...LS,color:"#C9922A" }}>3,000 pzs</label><input style={IS} value={form.precio3000||""} onChange={e=>setF("precio3000",e.target.value)} placeholder="$0.00" /></div>
+              </div>
+            </>
+          )}
         </div>
 
         {/* ── IMAGEN ── */}
         <div style={{ marginBottom:20 }}>
           <label style={LS}>Imagen del producto</label>
 
-          {draftRecuperado && (
-            <div style={{ background:"#3A2A0D", border:"1px solid #C9922A55", borderRadius:6, padding:"8px 10px", marginBottom:10, fontSize:11, color:"#E0B96A", lineHeight:1.4 }}>
-              📸 Recuperamos una foto que se quedó pendiente de una sesión anterior (ya está subida). Revísala y no olvides darle a "Guardar" para que quede en el catálogo.
-            </div>
-          )}
-
-          {intentoFallido && (
-            <div style={{ background:"#3A0D0D", border:"1px solid #C9556655", borderRadius:6, padding:"8px 10px", marginBottom:10, fontSize:11, color:"#E08A8A", lineHeight:1.4 }}>
-              ⚠️ La página se reinició mientras se procesaba una foto y no llegó a subirse. Intenta subirla de nuevo.
-            </div>
-          )}
-
           {form.imagen && (
             <div style={{ display:"flex", justifyContent:"center", marginBottom:10 }}>
               <img src={form.imagen} alt="preview" style={{ width:90,height:90,objectFit:"cover",borderRadius:6,border:"1px solid #333" }} />
+            </div>
+          )}
+
+          {!editando && imagenPendiente && (
+            <div style={{ background:"#3A2A0D", border:"1px solid #C9922A55", borderRadius:6, padding:"6px 10px", marginBottom:10, fontSize:10.5, color:"#E0B96A", textAlign:"center" }}>
+              ⏳ Esta foto se subirá al guardar el producto.
             </div>
           )}
 
@@ -711,9 +987,7 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
               </span>
               <input type="file" accept="image/*" disabled={subiendoFoto} style={{ display:"none" }} onChange={e=>{
                 const file=e.target.files?.[0]; if(!file) return;
-                setDraftRecuperado(false);
-                setIntentoFallido(false);
-                subirFotoInmediato(file, form.categoria, setF, setSubiendoFoto, editando);
+                handleSeleccionImagen(file);
               }} />
             </label>
 
@@ -726,9 +1000,7 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
               </span>
               <input type="file" accept="image/*" capture="environment" disabled={subiendoFoto} style={{ display:"none" }} onChange={e=>{
                 const file=e.target.files?.[0]; if(!file) return;
-                setDraftRecuperado(false);
-                setIntentoFallido(false);
-                subirFotoInmediato(file, form.categoria, setF, setSubiendoFoto, editando);
+                handleSeleccionImagen(file);
               }} />
             </label>
           </div>
@@ -741,7 +1013,7 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
 
           {form.imagen && !subiendoFoto && (
             <div style={{ textAlign:"center", marginTop:6 }}>
-              <button onClick={()=>{ setF("imagen",""); sessionStorage.removeItem(draftKeyFor(editando)); setDraftRecuperado(false); }} style={{ background:"transparent",border:"none",color:"#666",fontSize:11,cursor:"pointer",textDecoration:"underline" }}>✕ Quitar imagen</button>
+              <button onClick={()=>{ setF("imagen",""); setImagenPendiente(null); }} style={{ background:"transparent",border:"none",color:"#666",fontSize:11,cursor:"pointer",textDecoration:"underline" }}>✕ Quitar imagen</button>
             </div>
           )}
         </div>

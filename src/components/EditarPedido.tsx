@@ -317,7 +317,7 @@ function ProductoEditable({
               }}
               className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-blue-500">
               {(catalogoTintas.length > 0 ? catalogoTintas : [1, 2, 3, 4, 5, 6].map(n => ({ id: n, cantidad: n }))).map((t: any) => (
-                <option key={t.id} value={t.cantidad}>{t.cantidad} tinta{t.cantidad > 1 ? "s" : ""}</option>
+                <option key={t.id} value={t.cantidad}>{t.cantidad === 0 ? "Sin tintas" : `${t.cantidad} tinta${t.cantidad > 1 ? "s" : ""}`}</option>
               ))}
             </select>
           </div>
@@ -334,6 +334,7 @@ function ProductoEditable({
         </div>
 
         {/* ── Pantones ── */}
+        {prod.tintas > 0 && (
         <div className="grid grid-cols-2 gap-2">
   {Array(prod.tintas).fill("").map((_, ti) => {
     const pantoneArr = prod.pantones
@@ -374,6 +375,7 @@ function ProductoEditable({
     );
   })}
 </div>
+        )}
 
         {/* ── Pigmentos ── */}
         <div>

@@ -12,6 +12,10 @@ interface ComboboxInsumoProps {
   onRegistrarNuevo?: (nombre: string) => void;
   disabled?: boolean;
   className?: string;
+  /** Incrementa este valor (o cambia el string) desde el padre cada vez que se
+   * registre un insumo nuevo, para forzar que este combobox vuelva a pedir
+   * la lista al backend aunque tipoId no haya cambiado. */
+  refreshKey?: number | string;
 }
 
 export default function ComboboxInsumo({
@@ -23,6 +27,7 @@ export default function ComboboxInsumo({
   onRegistrarNuevo,
   disabled = false,
   className = "",
+  refreshKey,
 }: ComboboxInsumoProps) {
   const [abierto, setAbierto] = useState(false);
   const [todos, setTodos] = useState<Insumo[]>([]);
@@ -44,7 +49,7 @@ export default function ComboboxInsumo({
       })
       .catch(() => {})
       .finally(() => setCargando(false));
-  }, [tipoId]);
+  }, [tipoId, refreshKey]);
 
   useEffect(() => {
     const q = value.trim().toLowerCase();

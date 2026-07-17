@@ -127,24 +127,20 @@ function renderTablaPlastico(
     rowIdx++;
 
     // Fila observaciones
-    const tieneKilo = prod.detalles.some(d => d.modo_cantidad === "kilo");
-    const modoLabel = tieneKilo ? "Cotizado por kilo" : "Cotizado por unidad";
     const hasHerr = prod.herramental_precio != null && prod.herramental_precio > 0;
-    const MID_COL = Math.floor(headAll.length / 2);
+    const hasObs = !!prod.observacion?.trim();
 
-    const obsPartes: string[] = [`Obs: ${modoLabel}`];
-    if (prod.observacion?.trim()) obsPartes.push(prod.observacion.trim());
-    const obsTexto = obsPartes.join("  —  ");
-
-    const comboRow = new Array(headAll.length).fill("");
-    comboRow[0] = obsTexto;
-    if (hasHerr) {
-      const nombreHerr = prod.herramental_descripcion?.trim() || "Herramental / molde";
-      comboRow[1] = `Herramental: ${nombreHerr}  —  Cargo único.`;
-      comboRow[headAll.length - 1] = `$${Number(prod.herramental_precio).toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    if (hasObs || hasHerr) {
+      const comboRow = new Array(headAll.length).fill("");
+      if (hasObs) comboRow[0] = `Obs: ${prod.observacion!.trim()}`;
+      if (hasHerr) {
+        const nombreHerr = prod.herramental_descripcion?.trim() || "Herramental / molde";
+        comboRow[1] = `Herramental: ${nombreHerr}  —  Cargo único.`;
+        comboRow[headAll.length - 1] = `$${Number(prod.herramental_precio).toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      }
+      bodyRows.push(comboRow);
+      rowIdx++;
     }
-    bodyRows.push(comboRow);
-    rowIdx++;
   });
 
   const availW = PW - M * 2;
@@ -309,24 +305,10 @@ function renderTablaPapel(
     // Fila observaciones
     const hasHerr = prod.herramental_precio != null && prod.herramental_precio > 0;
     const MID_COL = Math.floor(headAll.length / 2);
-    const extras: string[] = [];
-    if (tieneDiagonal) extras.push(`Tintas dentro: ${tintasInt}`);
-    if ((prod as any).pantonesDentro) extras.push(`Pantones int: ${(prod as any).pantonesDentro}`);
-    const metodo = (prod as any).metodo_hojeado;
-    extras.push(
-      `Preparación: ${
-        metodo === "hojeado"
-          ? "Hojeado"
-          : metodo === "guillotina"
-            ? "Guillotina"
-            : "Pendiente"
-      }`
-    );
-    extras.push(`Armado: ${(prod as any).lleva_armado === true ? "SI" : "N/A"}`);
-    const obsPartes: string[] = ["Obs: Por unidad"];
-    if (extras.length) obsPartes.push(extras.join("  ·  "));
+
+    const obsPartes: string[] = [];
     if (prod.observacion?.trim()) obsPartes.push(prod.observacion.trim());
-    const obsTexto = obsPartes.join("  —  ");
+    const obsTexto = obsPartes.length ? `Obs: ${obsPartes.join("  —  ")}` : "";
 
     const comboRow = new Array(headAll.length).fill("");
     comboRow[0] = obsTexto;
@@ -506,34 +488,12 @@ function renderTablaMixta(
     rowIdx++;
 
     // Fila observaciones
-    const tieneKilo = prod.detalles.some(d => d.modo_cantidad === "kilo");
-    const modoLabel = tieneKilo ? "Por kilo" : "Por unidad";
+    // Fila observaciones
     const hasHerr = prod.herramental_precio != null && prod.herramental_precio > 0;
-    const extras: string[] = [];
-    if (foilMostrar !== "—" && foilMostrar !== "NO") extras.push(`Foil: ${foilMostrar}`);
-    if (asaMostrar !== "—" && asaMostrar !== "NO") extras.push(`Asa: ${asaMostrar}`);
-    if (laminadoMostrar !== "—" && laminadoMostrar !== "NO") extras.push(`Laminado: ${laminadoMostrar}`);
-    if (texturaMostrar !== "—") extras.push(`Textura: ${texturaMostrar}`);
-    if (tieneDiagonal) extras.push(`Tintas dentro: ${tintasInt}`);
-    if ((prod as any).pantonesDentro) extras.push(`Pantones int: ${(prod as any).pantonesDentro}`);
-    if (esPapel) {
-      const metodo = (prod as any).metodo_hojeado;
-      extras.push(
-        `Preparación: ${
-          metodo === "hojeado"
-            ? "Hojeado"
-            : metodo === "guillotina"
-              ? "Guillotina"
-              : "Pendiente"
-        }`
-      );
-      extras.push(`Armado: ${(prod as any).lleva_armado === true ? "SI" : "N/A"}`);
-    }
 
-    const obsPartes: string[] = [`Obs: ${modoLabel}`];
-    if (extras.length) obsPartes.push(extras.join("  ·  "));
+    const obsPartes: string[] = [];
     if (prod.observacion?.trim()) obsPartes.push(prod.observacion.trim());
-    const obsTexto = obsPartes.join("  —  ");
+    const obsTexto = obsPartes.length ? `Obs: ${obsPartes.join("  —  ")}` : "";
 
     const comboRow = new Array(headAll.length).fill("");
     comboRow[0] = obsTexto;

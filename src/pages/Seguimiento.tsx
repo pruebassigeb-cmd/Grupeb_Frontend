@@ -141,6 +141,9 @@ const IconoPdf = () => (
 function BotonPdfPedido({ pedido, puedePdf }: { pedido: PedidoSeguimiento; puedePdf: boolean }) {
   const [descargando, setDescargando] = useState(false);
 
+  const esLineaPapel = (p: any): boolean =>
+    p?.tipo_material === "papel" || p?.tipoCotizacion === "papel";
+
   const resolverCalibre = (p: any): string => {
     const mat = (p.material || "").toUpperCase();
     const esBopp = mat.includes("BOPP") || mat.includes("CELOFAN") || mat.includes("CELOFÁN");
@@ -154,19 +157,48 @@ function BotonPdfPedido({ pedido, puedePdf }: { pedido: PedidoSeguimiento; puede
     return cb2 && cb2 !== "0" ? cb2 : "";
   };
 
-  const buildProductosPdf = (productos: any[]) =>
-    productos.map((p: any) => ({
+  const buildPapelPdf = (p: any) => {
+    const grupDesc: string = p.grupo_descripcion ?? "";
+    const partes = grupDesc.split(/\s*\+\s*/).map((s: string) => s.trim());
+    const regexCalibre = /(\d+(?:\.\d+)?\s*(?:pts|gms|ect))/gi;
+
+    const materialStr = partes
+      .map((parte: string) => parte.replace(regexCalibre, "").trim())
+      .filter(Boolean)
+      .join(" + ") || grupDesc;
+
+    const calibreStr = partes
+      .map((parte: string) => {
+        const m = parte.match(/(\d+(?:\.\d+)?\s*(?:pts|gms|ect))/i);
+        return m ? m[1] : "";
+      })
+      .filter(Boolean)
+      .join(" / ") || "";
+
+    return {
+      tipo_material: "papel",
+      tipoCotizacion: "papel",
       nombre: p.nombre,
-      material: p.material || "",
-      calibre: resolverCalibre(p),
-      tintas: p.tintas,
-      caras: p.caras,
-      medidasFormateadas: p.medidasFormateadas || "",
-      medidas: p.medidas || {},
-      pigmentos: p.pigmentos || null,
+      material: materialStr,
+      calibre: calibreStr,
+      grupo_descripcion: grupDesc,
+      tintas: p.tintas ?? 0,
+      tintasDentro: p.tintasDentro ?? 0,
+      caras: p.caras ?? 0,
+      medidasFormateadas: p.medida || "",
+      medidas: {},
+      bk: null,
+      foil: p.foil_nombre ? true : null,
+      foil_nombre: p.foil_nombre || null,
+      laminado_nombre: p.laminado_nombre || null,
+      textura_nombre: p.textura_nombre || null,
+      asa_nombre: p.asa_nombre || null,
+      uv: p.uv ?? null,
+      alto_relieve: p.alto_relieve ?? null,
       pantones: p.pantones || null,
-      asa_suaje: p.asa_suaje || null,
+      pantonesDentro: p.pantonesDentro || null,
       observacion: p.observacion || null,
+      descripcion: p.descripcion || null,
       perforacion: p.perforacion ?? false,
       por_kilo: p.por_kilo || null,
       herramental_descripcion: p.herramental_descripcion ?? null,
@@ -178,7 +210,42 @@ function BotonPdfPedido({ pedido, puedePdf }: { pedido: PedidoSeguimiento; puede
         kilogramos: d.kilogramos ?? null,
         modo_cantidad: d.modo_cantidad || "unidad",
       })),
-    }));
+    };
+  };
+
+  const buildProductosPdf = (productos: any[]) =>
+    productos.map((p: any) => {
+      if (esLineaPapel(p)) return buildPapelPdf(p);
+      return {
+        nombre: p.nombre,
+        material: p.material || "",
+        calibre: resolverCalibre(p),
+        tintas: p.tintas,
+        caras: p.caras,
+        medidasFormateadas: p.medidasFormateadas || "",
+        medidas: p.medidas || {},
+        bk: null,
+        foil: null,
+        laminado: null,
+        uvBr: null,
+        pigmentos: p.pigmentos || null,
+        pantones: p.pantones || null,
+        asa_suaje: p.asa_suaje || null,
+        observacion: p.observacion || null,
+        descripcion: p.descripcion || null,
+        perforacion: p.perforacion ?? false,
+        por_kilo: p.por_kilo || null,
+        herramental_descripcion: p.herramental_descripcion ?? null,
+        herramental_precio: p.herramental_precio != null ? Number(p.herramental_precio) : null,
+        herramental_aprobado: p.herramental_aprobado ?? null,
+        detalles: (p.detalles || []).map((d: any) => ({
+          cantidad: d.cantidad,
+          precio_total: d.precio_total,
+          kilogramos: d.kilogramos ?? null,
+          modo_cantidad: d.modo_cantidad || "unidad",
+        })),
+      };
+    });
 
   const handleDescargar = async () => {
     setDescargando(true);
@@ -205,6 +272,8 @@ function BotonPdfPedido({ pedido, puedePdf }: { pedido: PedidoSeguimiento; puede
         codigo_postal: ped.codigo_postal ?? null,
         poblacion: ped.poblacion ?? null,
         estado_cliente: ped.estado_cliente ?? null,
+        identificar: ped.identificar ?? null,
+        sin_iva: ped.sin_iva ?? false,
         cliente_id: ped.cliente_id ?? null,
         subtotal: Number(venta.subtotal),
         iva: Number(venta.iva),
@@ -434,7 +503,7 @@ export default function Seguimiento() {
   const puedeVerEnvio = esAccesoTotal || usePermiso("Gestionar Envios");
   const puedeVerOD = esAccesoTotal || usePermiso("Orden de Diseño");
   const puedePdfPedido = esAccesoTotal || usePermiso("Descargar PDF Pedido");
-const [ordenFecha, setOrdenFecha] = useState<"reciente" | "antiguo">("antiguo");
+  const [ordenFecha, setOrdenFecha] = useState<"reciente" | "antiguo">("antiguo");
   useEffect(() => {
     cargar();
     const onVisible = () => { if (document.visibilityState === "visible") cargar(); };
@@ -525,9 +594,9 @@ const [ordenFecha, setOrdenFecha] = useState<"reciente" | "antiguo">("antiguo");
       ) === idx
     )
     .sort((a, b) => {
-  const diff = new Date(b.fecha).getTime() - new Date(a.fecha).getTime();
-  return ordenFecha === "reciente" ? diff : -diff;
-});
+      const diff = new Date(b.fecha).getTime() - new Date(a.fecha).getTime();
+      return ordenFecha === "reciente" ? diff : -diff;
+    });
 
   // REEMPLAZA por:
   const inicio = 0;
@@ -927,16 +996,16 @@ const [ordenFecha, setOrdenFecha] = useState<"reciente" | "antiguo">("antiguo");
             ))}
           </div>
           <div className="flex items-center gap-2">
-  <label className="text-sm font-medium text-gray-700">Orden:</label>
-  <select
-    value={ordenFecha}
-    onChange={e => setOrdenFecha(e.target.value as "antiguo" | "reciente")}
-    className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-700 bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-  >
-    <option value="antiguo">Más antiguo</option>
-    <option value="reciente">Más reciente</option>
-  </select>
-</div>
+            <label className="text-sm font-medium text-gray-700">Orden:</label>
+            <select
+              value={ordenFecha}
+              onChange={e => setOrdenFecha(e.target.value as "antiguo" | "reciente")}
+              className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-700 bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value="antiguo">Más antiguo</option>
+              <option value="reciente">Más reciente</option>
+            </select>
+          </div>
           {(busqueda || filtroTipo !== "todos") && (
             <span className="text-sm text-gray-500 ml-auto">
               {pedidosFiltrados.length} resultado{pedidosFiltrados.length !== 1 ? "s" : ""}

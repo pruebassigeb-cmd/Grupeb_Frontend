@@ -8,6 +8,15 @@ import {
   fetchCatalogosPapel,
   reactivarItemCatalogo,
 } from "../../services/papel/papel.service";
+// ✅ NUEVO — puente hacia el sistema de Proveedores/Insumos. Dar de alta
+// estos 6 catálogos desde CUALQUIER lado (Catálogos o el formulario de
+// producto de papel) debe terminar siempre en el mismo `insumo`, para no
+// generar registros "huérfanos" en cat_* sin proveedor/precio/código y sin
+// aparecer en el panel unificado de Catálogos.
+import {
+  crearCatalogoInsumo,
+  type CatKeySincronizado,
+} from "../../services/papel/catalogoPapelInsumoService";
 
 const CAT_KEYS: CatKey[] = [
   "tipo_producto",
@@ -18,6 +27,7 @@ const CAT_KEYS: CatKey[] = [
   "tipo_asa",
   "laminado",
   "laminado_maquina",
+  "rollo_lam",
   "textura",
   "refuerzo_medidas",
   "refuerzo_material",
@@ -40,6 +50,22 @@ const CAT_KEYS: CatKey[] = [
   "dobles",
   "puntos",
 ];
+
+// ✅ NUEVO — los 6 catálogos unificados con Proveedores/Insumos. El resto de
+// CAT_KEYS sigue exactamente igual que antes, sin tocarse.
+// NOTA: "rollo_lam" NO entra aquí — es un catálogo simple, propio de este
+// formulario, sin relación con Proveedores/Insumos.
+const CATKEYS_UNIFICADOS: CatKey[] = [
+  "tipo_papel",
+  "pegamento",
+  "laminado",
+  "sacabocados",
+  "perforado",
+  "matrix",
+];
+
+const esCatalogoUnificado = (catalogo: CatKey): catalogo is CatKeySincronizado =>
+  CATKEYS_UNIFICADOS.includes(catalogo);
 
 const emptyCatalogs = (): Catalogs => {
   const acc = {} as Catalogs;
@@ -94,6 +120,30 @@ export function useCatalogosPapel() {
       idcatPunto?: number | null,
       tipoMaquina?: string | null
     ) => {
+      // ✅ NUEVO — para los 6 catálogos unificados, pasa por el puente hacia
+      // `insumo` (mismo endpoint que ya usa InsumoCatalogoPanel) en vez de
+      // escribir directo en cat_*. La medida (si aplica, sacabocados/perforado)
+      // se manda por separado y el backend la combina en el nombre, igual
+      // que ya hace el panel de Catálogos.
+      if (esCatalogoUnificado(catalogo)) {
+        const resultado = await crearCatalogoInsumo(catalogo, nombre, medida);
+        const item = {
+          id: resultado.id,
+          nombre: resultado.nombre,
+          activo: resultado.activo,
+        } as CatItem;
+
+        setCatalogs(prev => ({
+          ...prev,
+          [catalogo]: ordenar([...(prev[catalogo] ?? []), item]),
+        }));
+        return item;
+      }
+
+      // "rollo_lam" (y el resto de catálogos simples) pasan por el flujo
+      // normal de agregarItemCatalogo. Ahí, el usuario escribe solo el
+      // número (ej. "38.5") y el backend arma el nombre final ("38.5 cm")
+      // — ver catalogos_papel.controller.ts, rama esRolloLam.
       const item = await agregarItemCatalogo(
         catalogo,
         nombre,
@@ -123,6 +173,11 @@ export function useCatalogosPapel() {
       idcatPunto?: number | null,
       tipoMaquina?: string | null
     ) => {
+      // NOTA: la edición (renombrar) de los 6 catálogos unificados NO pasa
+      // por aquí actualmente — este formulario (FormularioProductoPapelAlta)
+      // solo expone alta (onAdd) para esos catKeys, no edición. Si en algún
+      // punto se necesita editar desde este hook, avisa para agregarle el
+      // mismo enrutamiento al puente.
       await editarItemCatalogo(
         catalogo,
         id,

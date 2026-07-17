@@ -1,326 +1,704 @@
 import jsPDF from "jspdf";
 
-// ─── Hoja membretada: 300mm × 210mm landscape ────────────────────────────────
-// Coordenadas calibradas a tanteo sobre el PDF de muestra.
-// Ajustar X/Y cuando llegue la hoja física impresa.
+// ============================================================================
+// PDF OVERLAY PARA LA HOJA PREIMPRESA DE COTIZACION EXPO
+//
+// Sistema de coordenadas usando milimetros:
+//   X aumenta hacia la derecha.
+//   Y aumenta hacia abajo.
+//   dx positivo  = mueve a la derecha.
+//   dx negativo  = mueve a la izquierda.
+//   dy positivo  = mueve hacia abajo.
+//   dy negativo  = mueve hacia arriba.
+//
+// El PDF solamente contiene los datos. El diseño ya existe en la hoja fisica.
+// ============================================================================
 
 const PAGE_W = 300;
 const PAGE_H = 210;
 
-// ── SECCIÓN 1: FOLIO ─────────────────────────────────────────────────────────
-const Y_FOLIO        = 7;
-const X_FOLIO         = 256;
+// Mueve absolutamente todo el overlay.
+// Utilizalo primero cuando toda la impresion salga desplazada por igual.
+const OFFSET_GLOBAL_X = 0;
+const OFFSET_GLOBAL_Y = 0;
 
-// ── SECCIÓN 2: CLIENTE / EMPRESA / FECHA / ASESOR ───────────────────────────
-const Y_HEADER       = 59;
-const X_CLIENTE      = 70;
-const X_EMPRESA      = 119;
-const X_FECHA        = 161;
-const X_ASESOR       = 206;
+const gx = (x: number): number => x + OFFSET_GLOBAL_X;
+const gy = (y: number): number => y + OFFSET_GLOBAL_Y;
 
-// ── SECCIÓN 3: TABLA ─────────────────────────────────────────────────────────
-const Y_TABLA        = 102;
-const ROW_H          = 8;
+interface AjusteXY { dx: number; dy: number; }
 
-// Columnas de la tabla — todas corridas 10mm a la izquierda
-const X_PRODUCTO     = 70;
-const X_MEDIDA       = 107;
-const X_MATERIAL     = 131;
-const X_TINTAS       = 156;
-const X_LAM          = 166;
-const X_HS           = 186;
-const X_AR           = 196;
-const X_TEX          = 202;
-const X_UV           = 218;
-const X_ASA          = 225;
-const X_PIGMENTO     = 239;
+const SIN_AJUSTE: AjusteXY = { dx: 0, dy: 0 };
 
-// Columnas de precio — cada producto trae su propia cantidad, así que esta
-// sección ya no tiene un encabezado de cantidad compartido: la cantidad se
-// imprime por fila, en el lugar donde antes iba el precio.
-const X_PRECIOS_INI  = 259;
-const X_PRECIOS_FIN  = 297;
-const GUTTER_PRECIOS = 3;
-// Cuando una fila trae solo 2 precios, se usa un gutter más grande para que
-// no se vean pegados entre sí (el bloque completo se sigue centrando).
-const GUTTER_PRECIOS_DOS = GUTTER_PRECIOS + 6;
-const PRECIO_Y_OFFSET = 0; // bajado 1mm respecto al original (-1)
+function sumarAjustes(...ajustes: Array<Partial<AjusteXY> | undefined>): AjusteXY {
+  return ajustes.reduce<AjusteXY>(
+    (resultado, ajuste) => ({
+      dx: resultado.dx + (ajuste?.dx ?? 0),
+      dy: resultado.dy + (ajuste?.dy ?? 0),
+    }),
+    { ...SIN_AJUSTE }
+  );
+}
 
-// ── SECCIÓN 4: COMENTARIOS ──────────────────────────────────────────────────
-const Y_COMENTARIOS  = 155;
-const X_COMENTARIOS  = 70;
+// ============================================================================
+// 1. CAMPOS SUPERIORES Y COMENTARIOS
+// ============================================================================
 
+interface CampoPosicion {
+  x: number;
+  y: number;
+  ancho: number;
+  fontSize: number;
+  align: "left" | "center" | "right";
+}
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-function txt(
-  doc: jsPDF,
-  text: string,
-  x: number,
-  y: number,
-  size = 7,
-  align: "left" | "center" | "right" = "left",
-  bold = false
-) {
-  if (!text) return;
+const CAMPOS = {
+  folio:   { x: 271, y: 13, ancho: 27, fontSize: 13, align: "center" },
+  cliente: { x: 114, y: 65, ancho: 36, fontSize: 8,  align: "center" },
+  empresa: { x: 153, y: 65, ancho: 34, fontSize: 8,  align: "center" },
+  fecha:   { x: 190, y: 65, ancho: 31, fontSize: 8,  align: "center" },
+  asesor:  { x: 225, y: 65, ancho: 34, fontSize: 8,  align: "center" },
+} satisfies Record<string, CampoPosicion>;
+
+type NombreCampoSuperior = keyof typeof CAMPOS;
+
+// ---------------------------------------------------------------------------
+// ACOMODO INDIVIDUAL DE FOLIO, CLIENTE, EMPRESA, FECHA, ASESOR Y COMENTARIOS
+// ---------------------------------------------------------------------------
+// Cambia solamente estos valores para mover cada objeto de manera independiente.
+// Ejemplo: cliente: { dx: 2, dy: -1 } lo mueve 2 mm a la derecha y 1 mm arriba.
+const AJUSTES_CAMPOS = {
+  folio:       { dx: 1, dy: 5 },
+  cliente:     { dx: 0, dy: 0 },
+  empresa:     { dx: 0, dy: 0 },
+  fecha:       { dx: 0, dy: 0 },
+  asesor:      { dx: 0, dy: 0 },
+  comentarios: { dx: 2, dy: 1 },
+} satisfies Record<NombreCampoSuperior | "comentarios", AjusteXY>;
+
+const COMENTARIOS = { x: 95, y: 150, ancho: 190, maxLineas: 3, fontSize: 8 };
+
+// ============================================================================
+// 2. TABLA PREIMPRESA
+// ============================================================================
+
+const TABLA = { xInicio: 90, xFin: 289, yEncabezado: 85, altoEncabezado: 13, yFilasInicio: 98, yFilasFin: 135 };
+
+interface ColumnaLayout {
+  x1: number;
+  x2: number;
+  align: "left" | "center" | "right";
+  dx: number;
+  dy: number;
+  paddingX: number;
+}
+
+// dx/dy en COLUMNAS mueve la columna completa en todos los productos.
+// Cada columna con su propio dx, ajustado de forma independiente.
+const COLUMNAS = {
+  producto:        { x1: 90,    x2: 121.8, align: "left",   dx: 2, dy: 2, paddingX: 1.2 },
+  medida:          { x1: 121.8, x2: 142.4, align: "center", dx: 1, dy: 2, paddingX: 0.8 },
+  materialCalibre: { x1: 142.4, x2: 163.9, align: "center", dx: 3, dy: 2, paddingX: 0.8 },
+  tintasFV:        { x1: 163.9, x2: 172.5, align: "center", dx: 2, dy: 2, paddingX: 0.5 },
+  laminacion:      { x1: 172.5, x2: 189.6, align: "center", dx: 1, dy: 2, paddingX: 0.7 },
+  hs:              { x1: 189.6, x2: 198.2, align: "center", dx: 3, dy: 2, paddingX: 0.4 },
+  ar:              { x1: 198.2, x2: 203.4, align: "center", dx: 4, dy: 2, paddingX: 0.3 },
+  textura:         { x1: 203.4, x2: 217.1, align: "center", dx: 6, dy: 2, paddingX: 0.5 },
+  uv:              { x1: 217.1, x2: 223.2, align: "center", dx: 5, dy: 2, paddingX: 0.3 },
+  asa:             { x1: 223.2, x2: 235.2, align: "center", dx: 5, dy: 2, paddingX: 0.5 },
+  otroPigmento:    { x1: 235.2, x2: 252.4, align: "center", dx: 5, dy: 2, paddingX: 0.5 },
+  cantidad:        { x1: 252.4, x2: 289,   align: "center", dx: 5, dy: 2, paddingX: 0.5 },
+} satisfies Record<string, ColumnaLayout>;
+
+type NombreColumna = keyof typeof COLUMNAS;
+
+// ============================================================================
+// 3. ACOMODO POR OBJETO DENTRO DE CADA FILA
+// ============================================================================
+
+interface AjusteCantidad {
+  // bloque mueve cantidad, linea y precio juntos.
+  bloque?: Partial<AjusteXY>;
+  cantidad?: Partial<AjusteXY>;
+  linea?: Partial<AjusteXY>;
+  precio?: Partial<AjusteXY>;
+}
+
+interface AjusteProducto {
+  // producto mueve las dos lineas del nombre juntas.
+  producto?: Partial<AjusteXY>;
+  productoLinea1?: Partial<AjusteXY>;
+  productoLinea2?: Partial<AjusteXY>;
+  medida?: Partial<AjusteXY>;
+  material?: Partial<AjusteXY>;
+  calibre?: Partial<AjusteXY>;
+  tintasFV?: Partial<AjusteXY>;
+  laminacion?: Partial<AjusteXY>;
+  hs?: Partial<AjusteXY>;
+  ar?: Partial<AjusteXY>;
+  textura?: Partial<AjusteXY>;
+  uv?: Partial<AjusteXY>;
+  asa?: Partial<AjusteXY>;
+  otroPigmento?: Partial<AjusteXY>;
+  cantidad1?: AjusteCantidad;
+  cantidad2?: AjusteCantidad;
+  cantidad3?: AjusteCantidad;
+}
+
+// 0 = primer producto, 1 = segundo, 2 = tercero, etc.
+//
+// Estos ajustes se suman a los dx/dy generales de COLUMNAS.
+// Deja todo en cero hasta hacer la primera impresion de calibracion.
+const AJUSTES_POR_PRODUCTO: Record<number, AjusteProducto> = {
+  0: {
+    producto:     { dx: 0, dy: 0 },
+    productoLinea1: { dx: 0, dy: 0 },
+    productoLinea2: { dx: 0, dy: 0 },
+    medida:       { dx: 0, dy: 0 },
+    material:     { dx: 0, dy: 0 },
+    calibre:      { dx: 0, dy: 0 },
+    tintasFV:     { dx: 0, dy: 0 },
+    laminacion:   { dx: 0, dy: 0 },
+    hs:           { dx: 0, dy: 0 },
+    ar:           { dx: 0, dy: 0 },
+    textura:      { dx: 0, dy: 0 },
+    uv:           { dx: 0, dy: 0 },
+    asa:          { dx: 0, dy: 0 },
+    otroPigmento: { dx: 0, dy: 0 },
+    // Bloque de cantidad/precio de los 5 renglones: se les da la MISMA
+    // separacion entre ellos (cancelando el AJUSTE_EXTRA_FILA de las filas
+    // 3, 4 y 5, que solo afecta al resto de la fila) y se bajan 1mm parejo
+    // a todos. No toca producto/medida/material/etc. de esta fila.
+    cantidad1: { bloque: { dx: 0, dy: -1 } },
+    cantidad2: { bloque: { dx: 0, dy: -1 } },
+    cantidad3: { bloque: { dx: 0, dy: -1 } },
+  },
+
+  // Copia este bloque cuando quieras ajustar otra fila:
+  // 1: {
+  //   producto: { dx: 0, dy: 0 },
+  //   medida:   { dx: 0, dy: 0 },
+  //   material: { dx: 0, dy: 0 },
+  //   calibre:  { dx: 0, dy: 0 },
+  // },
+
+  1: {
+    cantidad1: { bloque: { dx: 0, dy: -1 } },
+    cantidad2: { bloque: { dx: 0, dy: -1 } },
+    cantidad3: { bloque: { dx: 0, dy: -1 } },
+  },
+  2: {
+    cantidad1: { bloque: { dx: 0, dy: 0 } },
+    cantidad2: { bloque: { dx: 0, dy: 0 } },
+    cantidad3: { bloque: { dx: 0, dy: 0 } },
+  },
+  3: {
+    cantidad1: { bloque: { dx: 0, dy: 0 } },
+    cantidad2: { bloque: { dx: 0, dy: 0 } },
+    cantidad3: { bloque: { dx: 0, dy: 0 } },
+  },
+  4: {
+    cantidad1: { bloque: { dx: 0, dy: 0 } },
+    cantidad2: { bloque: { dx: 0, dy: 0 } },
+    cantidad3: { bloque: { dx: 0, dy: 0 } },
+  },
+};
+
+function obtenerAjusteProducto(
+  indiceProducto: number,
+  objeto: keyof Omit<AjusteProducto, "cantidad1" | "cantidad2" | "cantidad3">
+): AjusteXY {
+  return sumarAjustes(AJUSTES_POR_PRODUCTO[indiceProducto]?.[objeto]);
+}
+
+function obtenerAjusteCantidad(indiceProducto: number, indiceDetalle: number, parte: keyof AjusteCantidad): AjusteXY {
+  const clave = `cantidad${indiceDetalle + 1}` as "cantidad1" | "cantidad2" | "cantidad3";
+  const ajusteCantidad = AJUSTES_POR_PRODUCTO[indiceProducto]?.[clave];
+  return sumarAjustes(ajusteCantidad?.bloque, parte === "bloque" ? undefined : ajusteCantidad?.[parte]);
+}
+
+// ============================================================================
+// 4. HELPERS DE TEXTO
+// ============================================================================
+
+function limitarTexto(doc: jsPDF, valor: unknown, maxWidth: number, fontSize: number): string {
+  const texto = String(valor ?? "").trim();
+  if (!texto) return "";
+
+  doc.setFontSize(fontSize);
+  if (doc.getTextWidth(texto) <= maxWidth) return texto;
+
+  let resultado = texto;
+  while (resultado.length > 1 && doc.getTextWidth(resultado) > maxWidth) {
+    resultado = resultado.slice(0, -1);
+  }
+
+  return resultado.trimEnd();
+}
+
+// Recorte fijo por numero de caracteres (independiente del ancho en mm).
+// Se usa para pigmento (max 8) y textura (max 7): de ahi en mas se corta la palabra.
+function recortarCaracteres(valor: unknown, maxCaracteres: number): string {
+  const texto = String(valor ?? "").trim();
+  if (texto.length <= maxCaracteres) return texto;
+  return texto.slice(0, maxCaracteres).trimEnd();
+}
+
+function textoEnCampo(doc: jsPDF, valor: unknown, nombreCampo: NombreCampoSuperior, bold = true): void {
+  const campo = CAMPOS[nombreCampo];
+  const ajuste = AJUSTES_CAMPOS[nombreCampo];
+  const texto = limitarTexto(doc, valor, campo.ancho, campo.fontSize);
+  if (!texto) return;
+
   doc.setFont("helvetica", bold ? "bold" : "normal");
-  doc.setFontSize(size);
-  doc.text(text, x, y, { align });
-  if (bold) doc.setFont("helvetica", "normal");
+  doc.setFontSize(campo.fontSize);
+  doc.text(texto, gx(campo.x + ajuste.dx), gy(campo.y + ajuste.dy), { align: campo.align });
 }
 
-function truncar(doc: jsPDF, text: string, maxWidth: number, size = 7): string {
-  doc.setFontSize(size);
-  const words = String(text).split(" ");
-  let line = "";
-  for (const word of words) {
-    const test = line ? `${line} ${word}` : word;
-    if (doc.getTextWidth(test) > maxWidth) break;
-    line = test;
+function obtenerXColumna(columna: ColumnaLayout): number {
+  if (columna.align === "left") return columna.x1 + columna.paddingX + columna.dx;
+  if (columna.align === "right") return columna.x2 - columna.paddingX + columna.dx;
+  return (columna.x1 + columna.x2) / 2 + columna.dx;
+}
+
+function anchoUtilColumna(columna: ColumnaLayout): number {
+  return columna.x2 - columna.x1 - columna.paddingX * 2;
+}
+
+function textoEnColumna(
+  doc: jsPDF,
+  columnaNombre: NombreColumna,
+  valor: unknown,
+  y: number,
+  fontSize: number,
+  ajusteObjeto: Partial<AjusteXY> = SIN_AJUSTE,
+  bold = true
+): void {
+  const columna = COLUMNAS[columnaNombre];
+  const texto = limitarTexto(doc, valor, anchoUtilColumna(columna), fontSize);
+  if (!texto) return;
+
+  doc.setFont("helvetica", bold ? "bold" : "normal");
+  doc.setFontSize(fontSize);
+  doc.text(
+    texto,
+    gx(obtenerXColumna(columna) + (ajusteObjeto.dx ?? 0)),
+    gy(y + columna.dy + (ajusteObjeto.dy ?? 0)),
+    { align: columna.align }
+  );
+}
+
+function dividirEnDosLineas(doc: jsPDF, valor: unknown, maxWidth: number, fontSize: number): [string, string] {
+  const texto = String(valor ?? "").trim();
+  if (!texto) return ["", ""];
+
+  doc.setFontSize(fontSize);
+  if (doc.getTextWidth(texto) <= maxWidth) return [texto, ""];
+
+  const palabras = texto.split(/\s+/);
+  let primera = "";
+  let indice = 0;
+
+  for (; indice < palabras.length; indice += 1) {
+    const prueba = primera ? `${primera} ${palabras[indice]}` : palabras[indice];
+    if (doc.getTextWidth(prueba) > maxWidth) break;
+    primera = prueba;
   }
-  return line || String(text).slice(0, 18);
+
+  if (!primera) return [limitarTexto(doc, texto, maxWidth, fontSize), ""];
+
+  const segundaCompleta = palabras.slice(indice).join(" ");
+  const segunda = limitarTexto(doc, segundaCompleta, maxWidth, fontSize);
+  return [primera, segunda];
 }
 
-// Trunca por número de CARACTERES (no ancho en mm).
-function truncarConPuntos(text: string, maxChars: number): string {
-  const t = String(text || "");
-  return t.length > maxChars ? t.slice(0, maxChars) : t;
-}
-
-function partirNombre(doc: jsPDF, nombre: string, maxWidth: number): [string, string] {
-  const texto = String(nombre || "");
-  const separador = "—";
-
-  if (texto.includes(separador)) {
-    const idx = texto.indexOf(separador);
-    const linea1 = texto.slice(0, idx).trim();
-    const linea2 = texto.slice(idx + separador.length).trim();
-    return [truncar(doc, linea1, maxWidth), truncar(doc, linea2, maxWidth)];
-  }
-
-  doc.setFontSize(7);
-  const palabras = texto.split(" ");
-  let linea1 = "";
-  let i = 0;
-  for (; i < palabras.length; i++) {
-    const test = linea1 ? `${linea1} ${palabras[i]}` : palabras[i];
-    if (doc.getTextWidth(test) > maxWidth) break;
-    linea1 = test;
-  }
-  const resto = palabras.slice(i).join(" ");
-  return [linea1 || texto, resto ? truncar(doc, resto, maxWidth) : ""];
-}
-
-// ─── Helper: separar material y calibre desde grupo_descripcion ─────────────
-// El backend solo llena material_nombre/calibre_numero para PLÁSTICO — para
-// productos de PAPEL, esos dos campos vienen null y lo único poblado es
-// grupo_descripcion (ej. "Couché 12pts + Cartulina 14pts"). Sin este
-// respaldo, el PDF de cotización imprimía material/calibre vacíos en papel.
 function parsearMaterialYCalibreExpo(grupDesc: string): { materialStr: string; calibreStr: string } {
   if (!grupDesc) return { materialStr: "", calibreStr: "" };
-  const partes = grupDesc.split(/\s*\+\s*/).map((s: string) => s.trim());
-  const regexCalibre = /(\d+(?:\.\d+)?\s*(?:pts|gms|ect))/gi;
+
+  const partes = grupDesc.split(/\s*\+\s*/).map((parte: string) => parte.trim());
+  const regexCalibre = /(\d+(?:\.\d+)?\s*(?:pts|gms|gsm|ect))/gi;
+
   const materialStr = partes
-    .map((p: string) => p.replace(regexCalibre, "").trim())
+    .map((parte: string) => parte.replace(regexCalibre, "").trim())
     .filter(Boolean)
     .join(" + ");
+
   const calibreStr = partes
-    .map((p: string) => { const m = p.match(/(\d+(?:\.\d+)?\s*(?:pts|gms|ect))/i); return m ? m[1] : ""; })
+    .map((parte: string) => {
+      const coincidencia = parte.match(/(\d+(?:\.\d+)?\s*(?:pts|gms|gsm|ect))/i);
+      return coincidencia ? coincidencia[1] : "";
+    })
     .filter(Boolean)
     .join(" / ");
+
   return { materialStr, calibreStr };
 }
 
-// ─── Tipos ───────────────────────────────────────────────────────────────────
+function formatearTintasExpo(tintasFrente: unknown, tintasVuelta: unknown): string | null {
+  if (tintasFrente === null || tintasFrente === undefined || tintasFrente === "") return null;
+
+  const frente = String(tintasFrente);
+  const tieneVuelta =
+    tintasVuelta !== null && tintasVuelta !== undefined && tintasVuelta !== "" && Number(tintasVuelta) > 0;
+
+  return tieneVuelta ? `${frente}x${tintasVuelta}` : frente;
+}
+
+function limpiarTextoCatalogo(valor: unknown): string | null {
+  const texto = String(valor ?? "").trim();
+  if (!texto) return null;
+
+  // Los catálogos pueden traer códigos o IDs entre paréntesis.
+  // En el overlay se imprime únicamente el nombre visible.
+  const limpio = texto.replace(/\s*\([^)]*\)\s*/g, " ").replace(/\s+/g, " ").trim();
+  return limpio || null;
+}
+
+function numeroSeguro(valor: unknown): number {
+  const numero = Number(valor);
+  return Number.isFinite(numero) ? numero : 0;
+}
+
+// ============================================================================
+// 5. MODO DE CALIBRACION
+// ============================================================================
+
+function dibujarCalibracion(doc: jsPDF): void {
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(4);
+  doc.setLineWidth(0.1);
+
+  doc.setDrawColor(180, 180, 180);
+  doc.setTextColor(140, 140, 140);
+
+  for (let x = 0; x <= PAGE_W; x += 10) {
+    doc.line(gx(x), gy(0), gx(x), gy(PAGE_H));
+    doc.text(String(x), gx(x + 0.4), gy(4));
+  }
+
+  for (let y = 0; y <= PAGE_H; y += 10) {
+    doc.line(gx(0), gy(y), gx(PAGE_W), gy(y));
+    doc.text(String(y), gx(0.5), gy(y + 3));
+  }
+
+  // Limites de encabezado y filas.
+  doc.setDrawColor(255, 0, 0);
+  doc.setLineWidth(0.35);
+  doc.rect(gx(TABLA.xInicio), gy(TABLA.yEncabezado), TABLA.xFin - TABLA.xInicio, TABLA.altoEncabezado);
+  doc.rect(gx(TABLA.xInicio), gy(TABLA.yFilasInicio), TABLA.xFin - TABLA.xInicio, TABLA.yFilasFin - TABLA.yFilasInicio);
+
+  // Limites verticales de las columnas.
+  doc.setDrawColor(0, 80, 220);
+  doc.setLineWidth(0.2);
+  const limites = Array.from(
+    new Set(Object.values(COLUMNAS).flatMap((columna) => [columna.x1, columna.x2]))
+  ).sort((a, b) => a - b);
+
+  limites.forEach((x) => {
+    doc.line(gx(x), gy(TABLA.yEncabezado), gx(x), gy(TABLA.yFilasFin));
+  });
+
+  // Cruces de los campos superiores con sus ajustes individuales aplicados.
+  doc.setDrawColor(0, 150, 70);
+  (Object.keys(CAMPOS) as NombreCampoSuperior[]).forEach((nombreCampo) => {
+    const campo = CAMPOS[nombreCampo];
+    const ajuste = AJUSTES_CAMPOS[nombreCampo];
+    const xCentro = campo.x + ajuste.dx;
+    const yBase = campo.y + ajuste.dy;
+
+    doc.line(gx(xCentro - 2), gy(yBase), gx(xCentro + 2), gy(yBase));
+    doc.line(gx(xCentro), gy(yBase - 2), gx(xCentro), gy(yBase + 2));
+  });
+
+  const ajusteComentarios = AJUSTES_CAMPOS.comentarios;
+  doc.rect(gx(COMENTARIOS.x + ajusteComentarios.dx), gy(COMENTARIOS.y + ajusteComentarios.dy - 3), COMENTARIOS.ancho, 18);
+
+  doc.setTextColor(0, 0, 0);
+}
+
+// ============================================================================
+// 6. TIPOS PUBLICOS
+// ============================================================================
+
 export interface ProductoPdfExpo {
-  nombre:         string;
-  medida?:        string | null;
-  material?:      string | null;
-  calibre?:       string | null;
-  tintas?:        string | null;
-  laminado?:      string | null;
-  hs?:            string | null;
-  ar?:            string | null;
-  textura?:       string | null;
-  uv?:            string | null;
-  asa?:           string | null;
-  pigmento?:      string | null;
-  detalles: {
-    cantidad:       number;
-    precio_unitario: number | null;
-    precio_total:   number;
-  }[];
+  nombre: string;
+  medida?: string | null;
+  material?: string | null;
+  calibre?: string | null;
+  tintas?: string | null;
+  laminado?: string | null;
+  hs?: string | null;
+  ar?: string | null;
+  textura?: string | null;
+  uv?: string | null;
+  asa?: string | null;
+  pigmento?: string | null;
+  detalles: { cantidad: number; precio_unitario: number | null; precio_total: number }[];
 }
 
 export interface PdfCotizacionExpoParams {
-  folio:      string;
-  cliente:    string;
-  empresa:    string;
-  asesor:     string;
-  fecha:      string;
+  folio: string;
+  cliente: string;
+  empresa: string;
+  asesor: string;
+  fecha: string;
   comentarios?: string;
-  productos:  ProductoPdfExpo[];
+  productos: ProductoPdfExpo[];
 }
 
-// ─── Generador ───────────────────────────────────────────────────────────────
-export function generarPdfCotizacionExpo(params: PdfCotizacionExpoParams): void {
-  const { folio, cliente, empresa, asesor, fecha, comentarios = "", productos } = params;
+// ============================================================================
+// 7. GENERADOR
+// ============================================================================
 
-  const doc = new jsPDF({
-    orientation: "landscape",
-    unit:        "mm",
-    format:      [PAGE_H, PAGE_W],
-  });
+export function generarPdfCotizacionExpo(params: PdfCotizacionExpoParams, modoCalibracion = false): void {
+  const { folio, cliente, empresa, asesor, fecha, comentarios = "", productos = [] } = params;
 
-  doc.setFont("helvetica", "normal");
+  const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: [PAGE_H, PAGE_W], compress: true });
+
   doc.setTextColor(0, 0, 0);
+  doc.setFont("helvetica", "normal");
 
-  // ── FOLIO ──────────────────────────────────────────────────────────────────
-  txt(doc, folio, X_FOLIO + 15, Y_FOLIO, 13, "center", true);
+  // Campos superiores, cada uno con ajuste independiente.
+  textoEnCampo(doc, folio, "folio", true);
+  textoEnCampo(doc, cliente, "cliente", true);
+  textoEnCampo(doc, empresa, "empresa", true);
+  textoEnCampo(doc, fecha, "fecha", true);
+  textoEnCampo(doc, asesor, "asesor", true);
 
-  // ── HEADER — Cliente / Empresa / Fecha / Asesor ───────────────────────────
-  txt(doc, cliente,      X_CLIENTE  + 18, Y_HEADER, 9, "center", true);
-  txt(doc, empresa || "—", X_EMPRESA + 18, Y_HEADER, 9, "center", true);
-  txt(doc, fecha,        X_FECHA    + 18, Y_HEADER, 9, "center", true);
-  txt(doc, asesor,       X_ASESOR   + 14, Y_HEADER, 9, "center", true);
+  const totalFilas = Math.max(productos.length, 1);
+  const altoFila = (TABLA.yFilasFin - TABLA.yFilasInicio) / totalFilas;
 
-  // ── TABLA DE PRODUCTOS ────────────────────────────────────────────────────
-  const numPrecios = Math.min(
-    3,
-    Math.max(...productos.map(p => p.detalles?.length || 0), 0)
-  );
-  const anchoTotalPrecios = X_PRECIOS_FIN - X_PRECIOS_INI;
-  const anchoPrecio = numPrecios > 0
-    ? (anchoTotalPrecios - GUTTER_PRECIOS * (numPrecios - 1)) / numPrecios
-    : 0;
+  // Separación extra entre cada renglón de producto (además del alto propio
+  // de la fila). Con 5 productos esto hace que la tabla ocupe más espacio
+  // vertical del que originalmente delimitaba TABLA.yFilasFin — es
+  // intencional, la fila 5 quedará más abajo del límite original.
+  const SEPARACION_ENTRE_FILAS = 0;
 
-  productos.forEach((prod, idx) => {
-    const y = Y_TABLA + idx * ROW_H;
+  // Ajuste extra SOLO para los renglones 3, 4 y 5 (indices 2, 3 y 4).
+  // El renglon 1 y 2 quedan como estan (son el punto base correcto).
+  // Cada renglon tomado independiente respecto a su posicion anterior:
+  // renglon 3 subio 1mm, renglon 4 subio 2mm y renglon 5 subio 3mm sobre
+  // su propia posicion actual (que ya traia +1/+2/+3mm hacia abajo), por
+  // lo que el resultado neto queda en 0 para los tres.
+  const AJUSTE_EXTRA_FILA: Record<number, number> = { 2: -1, 3: -1, 4: -1 };
 
-    // Producto — apilado en 2 líneas.
-    const [nombreL1, nombreL2] = partirNombre(doc, prod.nombre, 32);
-    txt(doc, nombreL1, X_PRODUCTO, y, 9, "left", true);
-    if (nombreL2) txt(doc, nombreL2, X_PRODUCTO, y + 2.8, 8, "left", true);
+  // Con la letra grande, el tamaño ya NO se encoge cuando hay más productos
+  // (a diferencia de la versión "pequeña"), así que si vienen muchos
+  // productos, la fila se angosta pero la letra sigue del mismo tamaño y
+  // puede encimarse con la fila de abajo — sobre todo en productos que
+  // necesiten 2 líneas (nombre largo, o material+calibre juntos). Probado:
+  // se ve bien hasta ~5-6 productos; de 7 en adelante conviene revisar.
+  if (altoFila < 6) {
+    console.warn(
+      `[cotizacion-expo] ${productos.length} productos → filas de ${altoFila.toFixed(1)}mm, ` +
+      `pero la letra quedó fija en tamaño grande (no se ajusta sola). Con nombres o ` +
+      `material+calibre que ocupen 2 líneas, es probable que se encimen con la fila de abajo.`
+    );
+  }
 
-    if (prod.medida)   txt(doc, truncar(doc, prod.medida, 22, 8), X_MEDIDA, y, 8, "left", true);
+  // Estos tamaños auxiliares se usan SOLAMENTE para conservar exactamente
+  // las posiciones verticales que ya tenía el archivo. No son tamaños visibles.
+  const fontPrincipalPosicion = altoFila >= 7.2 ? 6.5 : altoFila >= 6 ? 5.8 : 5;
+  const fontSecundariaPosicion = Math.max(4.5, fontPrincipalPosicion - 0.7);
 
-    // Material (línea 1) + Calibre (línea 2)
-    if (prod.material) txt(doc, truncar(doc, prod.material, 22, 8), X_MATERIAL, y, 8, "left", true);
-    if (prod.calibre)  txt(doc, String(prod.calibre), X_MATERIAL, y + 3.5, 7, "left", true);
+  // Tamaños visibles restaurados a los del archivo original.
+  // Cambiar estos valores no modifica las coordenadas ni el acomodo.
+  const TAMANO = {
+    producto: 7, productoSegundaLinea: 7, medida: 7, material: 7, calibre: 7,
+    tintas: 7, laminacion: 7, hs: 7, ar: 7, textura: 7, uv: 7, asa: 7,
+    pigmento: 7, cantidad: 8, precio: 7.5,
+  } as const;
 
-    if (prod.tintas) txt(doc, String(prod.tintas), X_TINTAS, y, 8, "center", true);
+  productos.forEach((producto, indiceProducto) => {
+    const yFilaInicio =
+      TABLA.yFilasInicio +
+      indiceProducto * altoFila +
+      indiceProducto * SEPARACION_ENTRE_FILAS +
+      (AJUSTE_EXTRA_FILA[indiceProducto] ?? 0);
+    const yCentro = yFilaInicio + altoFila / 2;
 
-    if (prod.laminado) txt(doc, truncar(doc, prod.laminado, 18, 8), X_LAM, y, 8, "left", true);
-    if (prod.hs)       txt(doc, truncarConPuntos(prod.hs, 5),     X_HS, y, 7.5, "center", true);
-    if (prod.ar)       txt(doc, prod.ar,                          X_AR, y, 7.5, "center", true);
-    if (prod.textura)  txt(doc, truncarConPuntos(prod.textura, 8), X_TEX, y, 8, "left", true);
-    if (prod.uv)       txt(doc, prod.uv,                          X_UV, y, 7.5, "center", true);
-    if (prod.asa)      txt(doc, truncar(doc, prod.asa, 9, 8), X_ASA, y, 8, "left", true);
-    if (prod.pigmento) txt(doc, truncar(doc, prod.pigmento, 9, 8), X_PIGMENTO, y, 8, "left", true);
+    // Con la letra 2 puntos más chica, se necesita menos espacio entre las
+    // 2 líneas de un mismo producto (nombre en 2 líneas, o material+calibre)
+    // para que no se encimen. Se deja el mínimo necesario.
+    const separacionLineas = Math.min(2.0, altoFila * 0.32);
+    const yLineaUnica = yCentro + fontPrincipalPosicion * 0.12;
+    const yLinea1 = yCentro - separacionLineas / 2 + fontSecundariaPosicion * 0.12;
+    const yLinea2 = yCentro + separacionLineas / 2 + fontSecundariaPosicion * 0.12;
 
-    // Precios — cada renglón imprime SU propia cantidad, una línea real
-    // dibujada debajo como separador, y luego SU propio precio unitario.
-    // El bloque de columnas de esta fila se centra dentro del área total de
-    // precios: si trae 1 sola cantidad, queda centrada; si trae 2, se
-    // centran como pareja pero con más separación entre ellas para que no
-    // se vean pegadas; si trae 3, ocupa el ancho completo como antes.
-    const detalles = (prod.detalles || []).slice(0, numPrecios);
-    const n = detalles.length;
-    const gutterFila = n === 2 ? GUTTER_PRECIOS_DOS : GUTTER_PRECIOS;
-    const anchoUsado = n * anchoPrecio + Math.max(n - 1, 0) * gutterFila;
-    const xInicioFila = X_PRECIOS_INI + (anchoTotalPrecios - anchoUsado) / 2;
+    // PRODUCTO: ajuste general y ajustes particulares de linea 1 y linea 2.
+    const columnaProducto = COLUMNAS.producto;
+    const [productoL1, productoL2] = dividirEnDosLineas(
+      doc, producto.nombre, anchoUtilColumna(columnaProducto), TAMANO.productoSegundaLinea
+    );
 
-    detalles.forEach((d, i) => {
-      const xCol = xInicioFila + i * (anchoPrecio + gutterFila) + anchoPrecio / 2;
-      const pxPz = d.precio_unitario != null
-        ? Number(d.precio_unitario)
-        : Number(d.precio_total) / Number(d.cantidad);
+    const ajusteProductoGeneral = obtenerAjusteProducto(indiceProducto, "producto");
+    const ajusteProductoL1 = sumarAjustes(ajusteProductoGeneral, obtenerAjusteProducto(indiceProducto, "productoLinea1"));
+    const ajusteProductoL2 = sumarAjustes(ajusteProductoGeneral, obtenerAjusteProducto(indiceProducto, "productoLinea2"));
 
-      txt(doc, Number(d.cantidad).toLocaleString("es-MX"), xCol, y + PRECIO_Y_OFFSET, 10, "center", true);
+    textoEnColumna(
+      doc, "producto", productoL1,
+      productoL2 ? yLinea1 : yLineaUnica,
+      productoL2 ? TAMANO.productoSegundaLinea : TAMANO.producto,
+      ajusteProductoL1, true
+    );
 
-      const lineaY = y + 0.8 + PRECIO_Y_OFFSET;
-      const medioAncho = anchoPrecio * 0.28;
+    if (productoL2) {
+      textoEnColumna(doc, "producto", productoL2, yLinea2, TAMANO.productoSegundaLinea, ajusteProductoL2, true);
+    }
+
+    textoEnColumna(doc, "medida", producto.medida, yLineaUnica, TAMANO.medida, obtenerAjusteProducto(indiceProducto, "medida"), true);
+
+    const tieneMaterial = Boolean(String(producto.material ?? "").trim());
+    const tieneCalibre = Boolean(String(producto.calibre ?? "").trim());
+
+    if (tieneMaterial && tieneCalibre) {
+      textoEnColumna(doc, "materialCalibre", producto.material, yLinea1, TAMANO.material, obtenerAjusteProducto(indiceProducto, "material"), true);
+      textoEnColumna(doc, "materialCalibre", producto.calibre, yLinea2, TAMANO.calibre, obtenerAjusteProducto(indiceProducto, "calibre"), true);
+    } else {
+      const objeto = tieneMaterial ? "material" : "calibre";
+      textoEnColumna(
+        doc, "materialCalibre", producto.material || producto.calibre, yLineaUnica,
+        tieneMaterial ? TAMANO.material : TAMANO.calibre,
+        obtenerAjusteProducto(indiceProducto, objeto), true
+      );
+    }
+
+    textoEnColumna(doc, "tintasFV", producto.tintas, yLineaUnica, TAMANO.tintas, obtenerAjusteProducto(indiceProducto, "tintasFV"), true);
+    textoEnColumna(doc, "laminacion", producto.laminado, yLineaUnica, TAMANO.laminacion, obtenerAjusteProducto(indiceProducto, "laminacion"), true);
+    textoEnColumna(doc, "hs", producto.hs, yLineaUnica, TAMANO.hs, obtenerAjusteProducto(indiceProducto, "hs"), true);
+    textoEnColumna(doc, "ar", producto.ar, yLineaUnica, TAMANO.ar, obtenerAjusteProducto(indiceProducto, "ar"), true);
+    textoEnColumna(doc, "textura", recortarCaracteres(producto.textura, 8), yLineaUnica, TAMANO.textura, obtenerAjusteProducto(indiceProducto, "textura"), true);
+    textoEnColumna(doc, "uv", producto.uv, yLineaUnica, TAMANO.uv, obtenerAjusteProducto(indiceProducto, "uv"), true);
+    textoEnColumna(doc, "asa", producto.asa, yLineaUnica, TAMANO.asa, obtenerAjusteProducto(indiceProducto, "asa"), true);
+    textoEnColumna(doc, "otroPigmento", recortarCaracteres(producto.pigmento, 8), yLineaUnica, TAMANO.pigmento, obtenerAjusteProducto(indiceProducto, "otroPigmento"), true);
+
+    // CANTIDADES: cada cantidad, linea y precio se puede mover por separado.
+    const detalles = (producto.detalles || []).slice(0, 3);
+    const columnaCantidad = COLUMNAS.cantidad;
+    const anchoCantidad = columnaCantidad.x2 - columnaCantidad.x1;
+    const totalOpciones = Math.max(detalles.length, 1);
+    const anchoOpcion = anchoCantidad / totalOpciones;
+
+    detalles.forEach((detalle, indiceDetalle) => {
+      const xCentroBase = columnaCantidad.x1 + anchoOpcion * indiceDetalle + anchoOpcion / 2 + columnaCantidad.dx;
+
+      const cantidad = numeroSeguro(detalle.cantidad);
+      const total = numeroSeguro(detalle.precio_total);
+      const precioUnitario =
+        detalle.precio_unitario !== null && detalle.precio_unitario !== undefined
+          ? numeroSeguro(detalle.precio_unitario)
+          : cantidad > 0 ? total / cantidad : 0;
+
+      const yCantidadBase = yFilaInicio + altoFila * 0.38 + columnaCantidad.dy;
+      const ySeparadorBase = yFilaInicio + altoFila * 0.48 + columnaCantidad.dy;
+      const yPrecioBase = yFilaInicio + altoFila * 0.82 + columnaCantidad.dy;
+
+      const ajusteCantidad = obtenerAjusteCantidad(indiceProducto, indiceDetalle, "cantidad");
+      const ajusteLinea = obtenerAjusteCantidad(indiceProducto, indiceDetalle, "linea");
+      const ajustePrecio = obtenerAjusteCantidad(indiceProducto, indiceDetalle, "precio");
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(TAMANO.cantidad);
+      doc.text(
+        cantidad.toLocaleString("es-MX"),
+        gx(xCentroBase + ajusteCantidad.dx),
+        gy(yCantidadBase + ajusteCantidad.dy),
+        { align: "center" }
+      );
+
       doc.setDrawColor(0, 0, 0);
-      doc.setLineWidth(0.2);
-      doc.line(xCol - medioAncho, lineaY, xCol + medioAncho, lineaY);
+      doc.setLineWidth(0.15);
+      const medioSeparador = Math.min(anchoOpcion * 0.31, 5.2);
+      doc.line(
+        gx(xCentroBase - medioSeparador + ajusteLinea.dx),
+        gy(ySeparadorBase + ajusteLinea.dy),
+        gx(xCentroBase + medioSeparador + ajusteLinea.dx),
+        gy(ySeparadorBase + ajusteLinea.dy)
+      );
 
-      txt(doc, `$${pxPz.toFixed(2)}`, xCol, y + 3.5 + PRECIO_Y_OFFSET, 9.5, "center", true);
+      doc.setFontSize(TAMANO.precio);
+      doc.text(`$${precioUnitario.toFixed(2)}`, gx(xCentroBase + ajustePrecio.dx), gy(yPrecioBase + ajustePrecio.dy), { align: "center" });
     });
   });
 
-  // ── COMENTARIOS ────────────────────────────────────────────────────────────
+  // Comentarios con ajuste independiente.
   if (comentarios.trim()) {
+    const ajuste = AJUSTES_CAMPOS.comentarios;
+
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(8);
-    const lineas = doc.splitTextToSize(comentarios, 240);
-    doc.text(lineas.slice(0, 3), X_COMENTARIOS, Y_COMENTARIOS);
-    doc.setFont("helvetica", "normal");
+    doc.setFontSize(COMENTARIOS.fontSize);
+
+    const lineas = doc.splitTextToSize(comentarios.trim(), COMENTARIOS.ancho) as string[];
+    doc.text(lineas.slice(0, COMENTARIOS.maxLineas), gx(COMENTARIOS.x + ajuste.dx), gy(COMENTARIOS.y + ajuste.dy));
   }
 
-  // ── GUARDAR ────────────────────────────────────────────────────────────────
+  if (modoCalibracion) dibujarCalibracion(doc);
+
   doc.save(`Cotizacion_${folio}.pdf`);
 }
 
-// ─── Helper para construir params desde backData (ListaCotizaciones) ─────────
-// backData es lo que regresa getCotizacionesExpo() — se usa TANTO para
-// reimprimir manualmente desde la lista COMO para el PDF que se genera
-// automáticamente al guardar (ver expo.tsx → guardarConOpciones →
-// paraImprimir, que ahora relee del backend y llama a esta misma función).
-// Un solo lugar arma los datos del PDF membretado para ambos caminos.
+// ============================================================================
+// 8. ADAPTADOR DESDE LOS DATOS DEL BACKEND
+// ============================================================================
+
 export function cotizacionBackDataAPdfParams(
   backData: any,
   folio: string,
   fecha: string,
   asesor: string
 ): PdfCotizacionExpoParams {
-  const productos: ProductoPdfExpo[] = (backData.productos || []).map((p: any) => {
-    const laminadoOTipo = p.laminado_nombre || p.tipo_producto || null;
-    const hs = p.foil_nombre || null;
+  const productos: ProductoPdfExpo[] = (backData.productos || []).map((producto: any) => {
+    const esPapel = producto.tipo_material === "papel";
 
-    // Asa: mostrar el COLOR (color_asa_nombre / asa_nombre en papel), NO la
-    // etiqueta genérica "asa" que trae suaje_tipo — esa solo describe el
-    // tipo de troquel, no aporta información útil al cliente en el PDF.
-    const asa = p.asa_nombre || p.color_asa_nombre || null;
-
-    const esPapel = p.tipo_material === "papel";
     const { materialStr, calibreStr } = esPapel
-      ? parsearMaterialYCalibreExpo(p.grupo_descripcion || "")
+      ? parsearMaterialYCalibreExpo(producto.grupo_descripcion || "")
       : { materialStr: "", calibreStr: "" };
 
     return {
-      nombre:   p.nombre   || p.descripcion || "Producto",
-      medida:   p.medida   || null,
-      material: p.material || (esPapel ? materialStr : "") || null,
-      calibre:  p.calibre  || (esPapel ? calibreStr : "") || null,
-      tintas:   p.tintas   ?? null,
-      laminado: laminadoOTipo,
-      hs,
-      ar:       p.alto_relieve ? 'SI' : null,
-      textura:  p.textura_nombre || null,
-      uv:       p.uv ? 'SI' : null,
-      asa,
-      pigmento: p.pigmento || p.pigmentos || null,
-      detalles: (p.detalles || []).map((d: any) => ({
-        cantidad:        Number(d.cantidad),
-        precio_unitario: d.precio_unitario != null ? Number(d.precio_unitario) : null,
-        precio_total:    Number(d.precio_total),
+      nombre: producto.nombre || producto.descripcion || "Producto",
+      medida: producto.medida || null,
+      material: producto.material || (esPapel ? materialStr : "") || null,
+      calibre: producto.calibre || (esPapel ? calibreStr : "") || null,
+      tintas: formatearTintasExpo(producto.tintas, producto.tintas_dentro),
+      laminado: limpiarTextoCatalogo(producto.laminado_nombre),
+      hs: limpiarTextoCatalogo(producto.foil_nombre),
+      ar: producto.alto_relieve ? "SI" : null,
+      textura: limpiarTextoCatalogo(producto.textura_nombre),
+      uv: producto.uv ? "SI" : null,
+
+      // En ASA se muestra únicamente el COLOR.
+      // No se imprime el tipo de asa, código, ID ni texto entre paréntesis.
+      asa: limpiarTextoCatalogo(producto.color_asa_nombre || producto.asa_color),
+
+      // En OTRO/PIGMENTO se muestra únicamente el pigmento limpio.
+      pigmento: limpiarTextoCatalogo(producto.pigmento || producto.pigmentos),
+      detalles: (producto.detalles || []).map((detalle: any) => ({
+        cantidad: numeroSeguro(detalle.cantidad),
+        precio_unitario:
+          detalle.precio_unitario !== null && detalle.precio_unitario !== undefined
+            ? numeroSeguro(detalle.precio_unitario)
+            : null,
+        precio_total: numeroSeguro(detalle.precio_total),
       })),
     };
   });
 
-  const observacionesUnicas = Array.from(new Set(
-    (backData.productos || [])
-      .map((p: any) => (p.observacion || "").trim())
-      .filter(Boolean)
-  ));
+  const observacionesUnicas = Array.from(
+    new Set<string>(
+      (backData.productos || [])
+        .map((producto: any) => String(producto.observacion || "").trim())
+        .filter(Boolean)
+    )
+  );
+
   const comentariosFallback = observacionesUnicas.join(" | ");
 
   return {
     folio,
-    cliente:    backData.cliente || "",
-    empresa:    backData.impresion || "",
+    cliente: backData.cliente || "",
+    empresa: backData.impresion || "",
     asesor,
     fecha,
     comentarios: backData.comentarios || comentariosFallback || "",
     productos,
   };
-} 
+}

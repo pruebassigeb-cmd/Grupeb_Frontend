@@ -75,7 +75,10 @@ export interface ProductoPapelActualizar extends ProductoActualizarBase {
   alto_relieve: boolean;
   tintasDentroId: number | null;
   pantonesDentro: string | null;
-  metodo_hojeado: "hojeado" | "guillotina" | null;
+  // DEPRECATED: ya no se elige/deriva en el sistema (se decide físicamente
+  // en producción). Se deja opcional para no romper código que aún la lea,
+  // pero no debería seguir escribiéndose.
+  metodo_hojeado?: "hojeado" | "guillotina" | null;
   lleva_armado: boolean;
   maquinaria_seleccionada: Record<string, { id: number; nombre: string } | null>;
   cargo_adicional_descripcion?: string | null;
@@ -137,7 +140,10 @@ export interface ProductoNuevoPapel extends ProductoNuevoBase {
   alto_relieve: boolean;
   tintasDentroId: number | null;
   pantonesDentro: string | null;
-  metodo_hojeado: "hojeado" | "guillotina" | null;
+  // DEPRECATED: ya no se elige/deriva en el sistema (se decide físicamente
+  // en producción). Se deja opcional para no romper código que aún la lea,
+  // pero no debería seguir escribiéndose.
+  metodo_hojeado?: "hojeado" | "guillotina" | null;
   lleva_armado: boolean;
   maquinaria_seleccionada: Record<string, { id: number; nombre: string } | null>;
 }

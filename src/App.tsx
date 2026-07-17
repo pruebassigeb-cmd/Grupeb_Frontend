@@ -21,6 +21,7 @@ import GestorBackups from "./components/GestorBackups.tsx";
 import ProveedoresPage from "./pages/ProveedoresPage";
 import Papel from "./pages/papel/Papel";
 import Catalogos from "./pages/papel/catalogos.tsx";
+import PreciosAcabadosPapel from "./pages/papel/PreciosAcabadosPapel";
 import Expo from "./pages/expo/expo.tsx";
 import EditarPedidoPapel from "./pages/EditarPedidoPapel.tsx";
 import EditarCotizacionCompleta from "./pages/EditarCotizacionCompleta.tsx";
@@ -109,24 +110,24 @@ function App() {
           />
 
           {/* Cotizaciones — editar (antes de aprobar) */}
-<Route
-  path="/cotizar/:noCotizacion/editar"
-  element={
-    <ProtectedRoute permiso={PERMISOS.cotizar}>
-      <EditarCotizacionCompleta />
-    </ProtectedRoute>
-  }
-/>
+          <Route
+            path="/cotizar/:noCotizacion/editar"
+            element={
+              <ProtectedRoute permiso={PERMISOS.cotizar}>
+                <EditarCotizacionCompleta />
+              </ProtectedRoute>
+            }
+          />
 
-{/* Cotizaciones de papel — editar (antes de aprobar) */}
-<Route
-  path="/cotizar/:noCotizacion/editar-papel"
-  element={
-    <ProtectedRoute permiso={PERMISOS.cotizar}>
-      <EditarCotizacionPapelCompleta />
-    </ProtectedRoute>
-  }
-/>
+          {/* Cotizaciones de papel — editar (antes de aprobar) */}
+          <Route
+            path="/cotizar/:noCotizacion/editar-papel"
+            element={
+              <ProtectedRoute permiso={PERMISOS.cotizar}>
+                <EditarCotizacionPapelCompleta />
+              </ProtectedRoute>
+            }
+          />
 
           {/* Cotizaciones */}
           <Route
@@ -188,12 +189,22 @@ function App() {
             }
           />
 
-          {/* Catálogo de precios */}
+          {/* Catálogo de precios plástico */}
           <Route
             path="/precioplastico"
             element={
               <ProtectedRoute permiso={PERMISOS.precios}>
                 <PrecioPlastico />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Catálogo de precios de acabados de papel */}
+          <Route
+            path="/precios-acabados-papel"
+            element={
+              <ProtectedRoute permiso={PERMISOS.precios}>
+                <PreciosAcabadosPapel />
               </ProtectedRoute>
             }
           />

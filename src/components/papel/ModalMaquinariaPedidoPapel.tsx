@@ -5,7 +5,6 @@ import type { ProductoCotizacion } from "../../types/cotizaciones.types";
 import type {
   MaquinariaProductoPedidoPapel,
   MaquinariaSeleccionadaPedidoPapel,
-  MetodoHojeadoPedidoPapel,
 } from "../../types/papel/maquinaria-pedido.types";
 import type { MaquinaPapelOpcion } from "../../types/papel/cotizacion-papel.types";
 
@@ -15,11 +14,6 @@ type Props = {
   productos: ProductoEntrada[];
   onCancel: () => void;
   onConfirm: (selecciones: MaquinariaProductoPedidoPapel[]) => void;
-};
-
-type ConfigProcesoProducto = {
-  metodo_hojeado: MetodoHojeadoPedidoPapel | null;
-  lleva_armado: boolean;
 };
 
 const asAny = (producto: ProductoEntrada) => producto as any;
@@ -55,52 +49,9 @@ const esPapel = (producto: ProductoEntrada) => {
   );
 };
 
-const labelMetodo = (metodo: MetodoHojeadoPedidoPapel | null) =>
-  metodo === "guillotina"
-    ? "Guillotina"
-    : metodo === "hojeado"
-      ? "Hojeado"
-      : "Preparación";
-
-const tipoMaquinaParaMetodo = (
-  metodo: MetodoHojeadoPedidoPapel | null,
-): "hojeadora" | "guillotina" | null => {
-  if (metodo === "hojeado") return "hojeadora";
-  if (metodo === "guillotina") return "guillotina";
-  return null;
-};
-
-const metodoPorTipoMaquina = (
-  tipo: string | null | undefined,
-): MetodoHojeadoPedidoPapel | null => {
-  if (tipo === "hojeadora") return "hojeado";
-  if (tipo === "guillotina") return "guillotina";
-  return null;
-};
-
-const resolverMetodoAutomatico = (
-  opciones: MaquinaPapelOpcion[],
-): MetodoHojeadoPedidoPapel | null => {
-  const tipos = Array.from(
-    new Set(
-      opciones
-        .map((opcion) => opcion.tipo_maquina)
-        .filter((tipo): tipo is "hojeadora" | "guillotina" =>
-          tipo === "hojeadora" || tipo === "guillotina",
-        ),
-    ),
-  );
-
-  if (tipos.length === 1) return metodoPorTipoMaquina(tipos[0]);
-  return null;
-};
-
-const procesosProducto = (producto: any, config: ConfigProcesoProducto) => [
-  {
-    key: "hojeado_guillotina",
-    label: labelMetodo(config.metodo_hojeado),
-    aplica: config.metodo_hojeado != null,
-  },
+const procesosProducto = (producto: any) => [
+  { key: "hojeadora", label: "Hojeadora", aplica: true },
+  { key: "guillotina", label: "Guillotina", aplica: true },
   { key: "impresora", label: "Impresión", aplica: true },
   {
     key: "laminado_maquina",
@@ -127,26 +78,13 @@ const procesosProducto = (producto: any, config: ConfigProcesoProducto) => [
   {
     key: "armado",
     label: "Armado",
-    aplica: config.lleva_armado === true,
+    // NUEVO: "¿lleva armado?" ya no se decide aquí — se captura en
+    // FormularioProductoPapel.tsx (specs.lleva_armado), junto a UV y Alto
+    // relieve, como parte de la cotización del producto. Aquí solo se lee.
+    aplica: producto.lleva_armado === true,
   },
   { key: "empaque_maquina", label: "Empaque", aplica: true },
 ];
-
-function filtrarMaquinasPorProceso(
-  procesoKey: string,
-  opciones: MaquinaPapelOpcion[],
-  metodo: MetodoHojeadoPedidoPapel | null,
-): MaquinaPapelOpcion[] {
-  if (procesoKey !== "hojeado_guillotina") return opciones;
-
-  const tipoRequerido = tipoMaquinaParaMetodo(metodo);
-  if (!tipoRequerido) return [];
-
-  const existenTipos = opciones.some((opcion) => opcion.tipo_maquina != null);
-  if (!existenTipos) return opciones;
-
-  return opciones.filter((opcion) => opcion.tipo_maquina === tipoRequerido);
-}
 
 const nombreMaquina = (maquina: MaquinaPapelOpcion) => {
   const numero = maquina.numero_maquina ? ` (${maquina.numero_maquina})` : "";
@@ -157,6 +95,22 @@ const nombreMaquina = (maquina: MaquinaPapelOpcion) => {
         ? " — Guillotina"
         : "";
   return `${maquina.nombre}${numero}${tipo}`;
+};
+
+// NUEVO: "hojeadora" y "guillotina" ya no son procesos separados en el
+// catálogo de maquinaria del producto — siguen viviendo juntos bajo la
+// clave "hojeado_guillotina" (getMaquinaria en producto_papel.controller.ts
+// no cambió). Aquí se separan las opciones por tipo_maquina para mostrar
+// dos selects independientes.
+const opcionesParaProceso = (
+  detalle: ProductoPapelDetalleCotizacion | undefined,
+  procesoKey: string,
+): MaquinaPapelOpcion[] => {
+  const combinadas = detalle?.maquinaria?.["hojeado_guillotina"] ?? [];
+  if (procesoKey === "hojeadora" || procesoKey === "guillotina") {
+    return combinadas.filter((m) => m.tipo_maquina === procesoKey);
+  }
+  return detalle?.maquinaria?.[procesoKey] ?? [];
 };
 
 const detallesAprobados = (producto: any) => {
@@ -234,11 +188,6 @@ const chipsProducto = (
   return chips.filter(Boolean) as string[];
 };
 
-const mismaMaquina = (
-  a: { id: number; nombre: string } | null | undefined,
-  b: MaquinaPapelOpcion,
-) => a?.id === b.id;
-
 export default function ModalMaquinariaPedidoPapel({
   productos,
   onCancel,
@@ -248,13 +197,11 @@ export default function ModalMaquinariaPedidoPapel({
 
   const [detalles, setDetalles] = useState<Record<number, ProductoPapelDetalleCotizacion>>({});
   const [selecciones, setSelecciones] = useState<Record<number, MaquinariaSeleccionadaPedidoPapel>>({});
-  const [configProcesos, setConfigProcesos] = useState<Record<number, ConfigProcesoProducto>>({});
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const seleccionesIniciales: Record<number, MaquinariaSeleccionadaPedidoPapel> = {};
-    const configInicial: Record<number, ConfigProcesoProducto> = {};
 
     for (const producto of productosPapel) {
       const id = getIdSolicitudProducto(producto);
@@ -262,17 +209,9 @@ export default function ModalMaquinariaPedidoPapel({
       if (!id) continue;
 
       seleccionesIniciales[id] = p.maquinaria_seleccionada ?? {};
-      configInicial[id] = {
-        metodo_hojeado:
-          p.metodo_hojeado === "hojeado" || p.metodo_hojeado === "guillotina"
-            ? p.metodo_hojeado
-            : null,
-        lleva_armado: p.lleva_armado !== false,
-      };
     }
 
     setSelecciones(seleccionesIniciales);
-    setConfigProcesos(configInicial);
   }, [productosPapel]);
 
   useEffect(() => {
@@ -317,36 +256,10 @@ export default function ModalMaquinariaPedidoPapel({
     };
   }, [productosPapel]);
 
-  // Si el producto solo tiene máquinas de un tipo en Hojeado/Guillotina,
-  // el método se resuelve automáticamente.
-  useEffect(() => {
-    if (cargando) return;
-
-    setConfigProcesos((prev) => {
-      let cambio = false;
-      const next = { ...prev };
-
-      for (const producto of productosPapel) {
-        const id = getIdSolicitudProducto(producto);
-        const detalle = detalles[id];
-        if (!id || !detalle) continue;
-
-        const actual = next[id] ?? { metodo_hojeado: null, lleva_armado: true };
-        if (actual.metodo_hojeado) continue;
-
-        const metodo = resolverMetodoAutomatico(detalle.maquinaria?.hojeado_guillotina ?? []);
-        if (metodo) {
-          next[id] = { ...actual, metodo_hojeado: metodo };
-          cambio = true;
-        }
-      }
-
-      return cambio ? next : prev;
-    });
-  }, [cargando, detalles, productosPapel]);
-
-  // Si un proceso aplicable tiene una sola máquina posible, queda seleccionada
-  // por defecto. Esto aplica al crear pedido, aprobar cotización y editar pedido.
+  // NUEVO: como cada proceso ahora tiene, cuando mucho, UNA máquina
+  // registrada en el producto (single-select desde el alta), esta
+  // auto-selección se dispara siempre que exista esa única opción — el
+  // usuario ya no necesita elegir manualmente entre varias.
   useEffect(() => {
     if (cargando) return;
 
@@ -360,22 +273,11 @@ export default function ModalMaquinariaPedidoPapel({
         const p = asAny(producto);
         if (!id || !detalle) continue;
 
-        const config = configProcesos[id] ?? {
-          metodo_hojeado: null,
-          lleva_armado: true,
-        };
-
-        for (const proceso of procesosProducto(p, config).filter((proc) => proc.aplica)) {
-          const opciones = filtrarMaquinasPorProceso(
-            proceso.key,
-            detalle.maquinaria?.[proceso.key] ?? [],
-            config.metodo_hojeado,
-          );
-
+        for (const proceso of procesosProducto(p).filter((proc) => proc.aplica)) {
+          const opciones = opcionesParaProceso(detalle, proceso.key);
           if (opciones.length !== 1) continue;
 
           const actual = next[id]?.[proceso.key];
-          if (mismaMaquina(actual, opciones[0])) continue;
           if (actual) continue;
 
           next[id] = {
@@ -388,57 +290,7 @@ export default function ModalMaquinariaPedidoPapel({
 
       return cambio ? next : prev;
     });
-  }, [cargando, detalles, configProcesos, productosPapel]);
-
-  const actualizarMetodo = (
-    idsolicitudProducto: number,
-    metodo: MetodoHojeadoPedidoPapel,
-  ) => {
-    setError(null);
-    setConfigProcesos((prev) => ({
-      ...prev,
-      [idsolicitudProducto]: {
-        ...(prev[idsolicitudProducto] ?? {
-          metodo_hojeado: null,
-          lleva_armado: true,
-        }),
-        metodo_hojeado: metodo,
-      },
-    }));
-    setSelecciones((prev) => ({
-      ...prev,
-      [idsolicitudProducto]: {
-        ...(prev[idsolicitudProducto] ?? {}),
-        hojeado_guillotina: null,
-      },
-    }));
-  };
-
-  const actualizarArmado = (
-    idsolicitudProducto: number,
-    llevaArmado: boolean,
-  ) => {
-    setError(null);
-    setConfigProcesos((prev) => ({
-      ...prev,
-      [idsolicitudProducto]: {
-        ...(prev[idsolicitudProducto] ?? {
-          metodo_hojeado: null,
-          lleva_armado: true,
-        }),
-        lleva_armado: llevaArmado,
-      },
-    }));
-    if (!llevaArmado) {
-      setSelecciones((prev) => ({
-        ...prev,
-        [idsolicitudProducto]: {
-          ...(prev[idsolicitudProducto] ?? {}),
-          armado: null,
-        },
-      }));
-    }
-  };
+  }, [cargando, detalles, productosPapel]);
 
   const seleccionar = (
     idsolicitudProducto: number,
@@ -446,15 +298,7 @@ export default function ModalMaquinariaPedidoPapel({
     maquinaId: string,
   ) => {
     setError(null);
-    const config = configProcesos[idsolicitudProducto] ?? {
-      metodo_hojeado: null,
-      lleva_armado: true,
-    };
-    const opciones = filtrarMaquinasPorProceso(
-      proceso,
-      detalles[idsolicitudProducto]?.maquinaria?.[proceso] ?? [],
-      config.metodo_hojeado,
-    );
+    const opciones = opcionesParaProceso(detalles[idsolicitudProducto], proceso);
     const maquina = opciones.find((item) => item.id === Number(maquinaId)) ?? null;
 
     setSelecciones((prev) => ({
@@ -471,24 +315,9 @@ export default function ModalMaquinariaPedidoPapel({
       const id = getIdSolicitudProducto(producto);
       const detalle = detalles[id];
       const p = asAny(producto);
-      const config = configProcesos[id] ?? {
-        metodo_hojeado: null,
-        lleva_armado: true,
-      };
 
-      if (!config.metodo_hojeado) {
-        setError(
-          `Selecciona si el producto "${p.nombre}" lleva Hojeado o Guillotina.`,
-        );
-        return;
-      }
-
-      for (const proceso of procesosProducto(p, config).filter((proc) => proc.aplica)) {
-        const opciones = filtrarMaquinasPorProceso(
-          proceso.key,
-          detalle?.maquinaria?.[proceso.key] ?? [],
-          config.metodo_hojeado,
-        );
+      for (const proceso of procesosProducto(p).filter((proc) => proc.aplica)) {
+        const opciones = opcionesParaProceso(detalle, proceso.key);
         if (opciones.length > 0 && !selecciones[id]?.[proceso.key]) {
           setError(
             `Selecciona la máquina de ${proceso.label} para "${p.nombre}".`,
@@ -501,11 +330,12 @@ export default function ModalMaquinariaPedidoPapel({
     onConfirm(
       productosPapel.map((producto) => {
         const id = getIdSolicitudProducto(producto);
-        const config = configProcesos[id];
+        const p = asAny(producto);
         return {
           idsolicitud_producto: id,
-          metodo_hojeado: config.metodo_hojeado as MetodoHojeadoPedidoPapel,
-          lleva_armado: config.lleva_armado,
+          // NUEVO: se lee directo del producto (specs.lleva_armado, capturado
+          // en FormularioProductoPapel.tsx) en vez de un checkbox de este modal.
+          lleva_armado: p.lleva_armado !== false,
           maquinaria_seleccionada: selecciones[id] ?? {},
         };
       }),
@@ -520,8 +350,8 @@ export default function ModalMaquinariaPedidoPapel({
             Procesos y maquinaria de papel
           </h3>
           <p className="mt-1 text-xs text-gray-500">
-            Configura la preparación del material y las máquinas del producto.
-            Cuando un proceso tiene una sola máquina disponible, se selecciona automáticamente.
+            Revisa la máquina asignada a cada proceso. Cuando el producto
+            tiene una sola máquina registrada, se selecciona automáticamente.
           </p>
         </div>
 
@@ -549,10 +379,6 @@ export default function ModalMaquinariaPedidoPapel({
               const id = getIdSolicitudProducto(producto);
               const p = asAny(producto);
               const detalle = detalles[id];
-              const config = configProcesos[id] ?? {
-                metodo_hojeado: null,
-                lleva_armado: true,
-              };
               return (
                 <section
                   key={id}
@@ -611,59 +437,32 @@ export default function ModalMaquinariaPedidoPapel({
                     </div>
                   </div>
 
-                  <div className="border-b border-gray-100 p-4">
-                    <p className="mb-2 text-xs font-bold uppercase tracking-wide text-gray-500">
-                      Preparación del material
-                    </p>
-                    <div className="grid grid-cols-2 gap-3">
-                      {(
-                        [
-                          ["hojeado", "Hojeado"],
-                          ["guillotina", "Guillotina"],
-                        ] as [MetodoHojeadoPedidoPapel, string][]
-                      ).map(([value, label]) => (
-                        <label
-                          key={value}
-                          className={`flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm font-semibold ${
-                            config.metodo_hojeado === value
-                              ? "border-blue-500 bg-blue-50 text-blue-800"
-                              : "border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
-                          }`}
+                  {/* NUEVO: ya no se muestra "Preparación" (Hojeado/
+                      Guillotina) — ambas opciones quedan disponibles en la
+                      orden de producción y se decide físicamente en piso,
+                      no en el sistema. Armado sigue siendo informativo: se
+                      decide en FormularioProductoPapel como parte de la
+                      cotización. */}
+                  <div className="border-b border-gray-100 px-4 py-3">
+                    <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-sm">
+                      <div>
+                        <span className="mr-1.5 text-xs font-bold uppercase tracking-wide text-gray-500">
+                          Armado:
+                        </span>
+                        <span
+                          className={`font-semibold ${p.lleva_armado !== false ? "text-green-700" : "text-gray-400"}`}
                         >
-                          <input
-                            type="radio"
-                            checked={config.metodo_hojeado === value}
-                            onChange={() => actualizarMetodo(id, value)}
-                          />
-                          {label}
-                        </label>
-                      ))}
+                          {p.lleva_armado !== false ? "Sí" : "No"}
+                        </span>
+                      </div>
                     </div>
-
-                    <label className="mt-3 flex cursor-pointer items-center gap-2 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700">
-                      <input
-                        type="checkbox"
-                        checked={config.lleva_armado}
-                        onChange={(event) =>
-                          actualizarArmado(id, event.target.checked)
-                        }
-                      />
-                      Armado
-                      <span className="text-xs font-normal text-gray-500">
-                        Activarlo solo cuando este producto requiera ensamble.
-                      </span>
-                    </label>
                   </div>
 
                   <div className="divide-y divide-gray-100">
-                    {procesosProducto(p, config)
+                    {procesosProducto(p)
                       .filter((proceso) => proceso.aplica)
                       .map((proceso) => {
-                        const opciones = filtrarMaquinasPorProceso(
-                          proceso.key,
-                          detalle?.maquinaria?.[proceso.key] ?? [],
-                          config.metodo_hojeado,
-                        );
+                        const opciones = opcionesParaProceso(detalle, proceso.key);
                         const seleccion = selecciones[id]?.[proceso.key];
 
                         return (
@@ -675,17 +474,6 @@ export default function ModalMaquinariaPedidoPapel({
                               <span className="block text-sm font-medium text-gray-800">
                                 {proceso.label}
                               </span>
-                              {proceso.key === "hojeado_guillotina" &&
-                                config.metodo_hojeado && (
-                                  <span className="text-xs text-gray-500">
-                                    Mostrando máquinas tipo{" "}
-                                    {tipoMaquinaParaMetodo(
-                                      config.metodo_hojeado,
-                                    ) === "hojeadora"
-                                      ? "Hojeadora"
-                                      : "Guillotina"}
-                                  </span>
-                                )}
                               {proceso.key === "texturizadora" && (
                                 <span className="text-xs text-gray-500">
                                   Acabado: {p.textura_nombre ?? "N/A"}

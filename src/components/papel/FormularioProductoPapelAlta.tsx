@@ -1,6 +1,6 @@
 // src/components/papel/FormularioProductoPapelAlta.tsx
 // Extraído de pages/papel/Papel.tsx para ser reutilizable
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import type React from "react";
 import {
   newProductoForm,
@@ -13,6 +13,12 @@ import type {
   CatKey,
 } from "../../types/papel/papel.types";
 import { useCatalogosPapel } from "../../hooks/papel/useCatalogosPapel";
+import { fetchTamanosProducto, type TamanoProductoOpcion } from "../../services/papel/papel.service";
+import { getCostoMetroLaminado } from "../../services/papel/preciosAcabadosPapel.service";
+import {
+  calcularCostoLaminado,
+  formatearCostoLaminado,
+} from "../../utils/papel/costoLaminado.utils";
 import SelConAlta from "./SelConAlta";
 import GrupoBlock from "./GrupoBlock";
 
@@ -38,12 +44,12 @@ const CATEGORIA_A_SUBCARPETA: Record<string, string> = {
 };
 
 const SEC_COLORS = {
-  tipo:      { border: "#94A3B8", headerBg: "#CBD5E1", headerText: "#0F172A", leftBar: "#334155" },
-  suaje:     { border: "#94A3B8", headerBg: "#CBD5E1", headerText: "#0F172A", leftBar: "#334155" },
-  acabados:  { border: "#94A3B8", headerBg: "#CBD5E1", headerText: "#0F172A", leftBar: "#334155" },
-  maquinaria:{ border: "#94A3B8", headerBg: "#CBD5E1", headerText: "#0F172A", leftBar: "#334155" },
-  archivos:  { border: "#94A3B8", headerBg: "#CBD5E1", headerText: "#0F172A", leftBar: "#334155" },
-  papel:     { border: "#E2E8F0", headerBg: "#F8FAFC", headerText: "#475569", leftBar: "#94A3B8" },
+  tipo: { border: "#94A3B8", headerBg: "#CBD5E1", headerText: "#0F172A", leftBar: "#334155" },
+  suaje: { border: "#94A3B8", headerBg: "#CBD5E1", headerText: "#0F172A", leftBar: "#334155" },
+  acabados: { border: "#94A3B8", headerBg: "#CBD5E1", headerText: "#0F172A", leftBar: "#334155" },
+  maquinaria: { border: "#94A3B8", headerBg: "#CBD5E1", headerText: "#0F172A", leftBar: "#334155" },
+  archivos: { border: "#94A3B8", headerBg: "#CBD5E1", headerText: "#0F172A", leftBar: "#334155" },
+  papel: { border: "#E2E8F0", headerBg: "#F8FAFC", headerText: "#475569", leftBar: "#94A3B8" },
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -217,9 +223,105 @@ function AsaMultiSelect({
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// HOJEADO/GUILLOTINA — dos selects independientes (uno por tipo de máquina),
+// pero ambos leen/escriben el MISMO arreglo `hojeado_guillotina` (0 a 2
+// elementos: como mucho una Hojeadora + una Guillotina). Antes era un solo
+// MaquinariaSelectUnica que forzaba elegir UNA máquina para todo el proceso;
+// ahora ambas quedan disponibles siempre en producción (se decide
+// físicamente en piso), así que el producto necesita poder registrar una
+// máquina de cada tipo.
+// ═══════════════════════════════════════════════════════════════════════════
+function MaquinariaSelectPorTipo({
+  tipoMaquina,
+  label,
+  selectedIds,
+  selectedNames,
+  catItems,
+  onChange,
+}: {
+  tipoMaquina: "hojeadora" | "guillotina";
+  label: string;
+  selectedIds: number[];
+  selectedNames: string[];
+  catItems: { id: number; nombre: string; tipo_maquina?: string | null; numero_maquina?: string | null }[];
+  onChange: (ids: number[], nombres: string[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, []);
+
+  const itemsDeEsteTipo = catItems.filter(i => i.tipo_maquina === tipoMaquina);
+
+  // Cuál de los ids ya seleccionados (0 a 2 en total) pertenece a ESTE tipo
+  const idDeEsteTipo = selectedIds.find(id =>
+    catItems.find(i => i.id === id)?.tipo_maquina === tipoMaquina
+  ) ?? null;
+  const indiceEnArreglo = idDeEsteTipo != null ? selectedIds.indexOf(idDeEsteTipo) : -1;
+  const nombreDeEsteTipo = indiceEnArreglo >= 0 ? selectedNames[indiceEnArreglo] : null;
+
+  const reemplazarSeleccionDeEsteTipo = (nuevoId: number | null, nuevoNombre: string | null) => {
+    // Quita cualquier id previo de ESTE tipo (si había), sin tocar el del
+    // otro tipo, y agrega el nuevo (o nada, si se deselecciona).
+    const pares = selectedIds.map((id, i) => ({ id, nombre: selectedNames[i] }));
+    const sinEsteTipo = pares.filter(p => p.id !== idDeEsteTipo);
+    const siguiente = nuevoId != null
+      ? [...sinEsteTipo, { id: nuevoId, nombre: nuevoNombre ?? "" }]
+      : sinEsteTipo;
+    onChange(siguiente.map(p => p.id), siguiente.map(p => p.nombre));
+  };
+
+  const etiquetaMaquina = (item: { nombre: string; numero_maquina?: string | null }) =>
+    item.numero_maquina ? `${item.nombre} (${item.numero_maquina})` : item.nombre;
+
+  return (
+    <div ref={ref} style={{ position: "relative", minWidth: 0, maxWidth: "100%" }}>
+      <div style={{ height: 34, overflow: "hidden", borderRadius: 5 }}>
+        <button type="button" onClick={() => setOpen(!open)}
+          style={{ width: "100%", height: 34, padding: "0 8px", border: "1px solid #D1D5DB", borderRadius: 5, fontSize: 13, color: idDeEsteTipo != null ? "#111827" : "#9CA3AF", background: "#fff", outline: "none", cursor: "pointer", textAlign: "left", display: "flex", alignItems: "center", justifyContent: "space-between", boxSizing: "border-box", overflow: "hidden" }}>
+          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, minWidth: 0 }}>
+            {nombreDeEsteTipo ?? ""}
+          </span>
+          <span style={{ fontSize: 11, color: "#6B7280", flexShrink: 0, marginLeft: 4, userSelect: "none" }}>▾</span>
+        </button>
+      </div>
+      {open && (
+        <div style={{ position: "absolute", top: "calc(100% + 3px)", left: 0, right: 0, background: "#fff", border: "1px solid #D1D5DB", borderRadius: 6, zIndex: 50, boxShadow: "0 4px 12px rgba(0,0,0,0.1)", padding: "4px 0", maxHeight: 220, overflowY: "auto" }}>
+          {idDeEsteTipo != null && (
+            <button type="button" onClick={() => { reemplazarSeleccionDeEsteTipo(null, null); setOpen(false); }}
+              style={{ width: "100%", padding: "5px 12px", border: "none", background: "transparent", color: "#DC2626", fontSize: 12, cursor: "pointer", textAlign: "left", fontWeight: 600, borderBottom: "1px solid #F3F4F6" }}>
+              ✕ Quitar selección
+            </button>
+          )}
+          {itemsDeEsteTipo.length === 0 && (
+            <div style={{ padding: "6px 12px", color: "#9CA3AF", fontSize: 12 }}>
+              Sin máquinas tipo {label} en el catálogo.
+            </div>
+          )}
+          {itemsDeEsteTipo.map(item => (
+            <button key={item.id} type="button"
+              onClick={() => { reemplazarSeleccionDeEsteTipo(item.id, item.nombre); setOpen(false); }}
+              style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "6px 12px", border: "none", cursor: "pointer", fontSize: 13, textAlign: "left", color: idDeEsteTipo === item.id ? "#1D4ED8" : "#111827", background: idDeEsteTipo === item.id ? "#F1F5F9" : "transparent", fontWeight: idDeEsteTipo === item.id ? 600 : 400 }}>
+              {idDeEsteTipo === item.id ? "● " : ""}{etiquetaMaquina(item)}
+            </button>
+          ))}
+          <div style={{ padding: "6px 12px", color: "#9CA3AF", fontSize: 11, borderTop: "1px solid #F3F4F6", marginTop: 2 }}>
+            Para agregar una máquina nueva, ve a Catálogos y márcala como {label}.
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // MAQUINARIA MULTI-SELECT CON ALTA
 // ═══════════════════════════════════════════════════════════════════════════
-function MaquinariaMultiSelect({
+function MaquinariaSelectUnica({
   catKey,
   selectedIds = [],
   selectedNames = [],
@@ -248,12 +350,18 @@ function MaquinariaMultiSelect({
   }, []);
   useEffect(() => { if (adding) addRef.current?.focus(); }, [adding]);
 
-  const toggle = (item: { id: number; nombre: string; tipo_maquina?: string | null; numero_maquina?: string | null }) => {
-    const exists = selectedIds.includes(item.id);
-    onChange(
-      exists ? selectedIds.filter(i => i !== item.id) : [...selectedIds, item.id],
-      exists ? selectedNames.filter(n => n !== item.nombre) : [...selectedNames, item.nombre],
-    );
+  // NUEVO: selección única — antes este componente (MaquinariaMultiSelect)
+  // dejaba marcar varias máquinas por proceso (checkboxes). Ahora la
+  // máquina que se elige aquí ES la máquina con la que se hará el proceso
+  // en producción, no una opción entre varias a decidir después en el
+  // pedido. Se sigue mandando como array de 0 o 1 elemento (ids/nombres)
+  // para no tener que tocar el tipo Maquinaria, el backend, ni
+  // papel.service.ts / Papel.tsx — todos ya soportan arrays de cualquier
+  // longitud, incluyendo 0 o 1.
+  const seleccionar = (item: { id: number; nombre: string }) => {
+    const yaSeleccionado = selectedIds[0] === item.id;
+    onChange(yaSeleccionado ? [] : [item.id], yaSeleccionado ? [] : [item.nombre]);
+    setOpen(false);
   };
 
   const handleAdd = async () => {
@@ -269,38 +377,30 @@ function MaquinariaMultiSelect({
     return `${item.nombre}${numero}${tipo}`;
   };
 
-  const todosSeleccionados = catItems.length > 0 && catItems.every(item => selectedIds.includes(item.id));
-  const handleToggleTodos = () => {
-    if (todosSeleccionados) onChange([], []);
-    else onChange(catItems.map(i => i.id), catItems.map(i => i.nombre));
-  };
-
   return (
     <div ref={ref} style={{ position: "relative", minWidth: 0, maxWidth: "100%" }}>
       <div style={{ height: 34, overflow: "hidden", borderRadius: 5 }}>
         <button type="button" onClick={() => { setOpen(!open); setAdding(false); }}
           style={{ width: "100%", height: 34, padding: "0 8px", border: "1px solid #D1D5DB", borderRadius: 5, fontSize: 13, color: selectedIds.length ? "#111827" : "#9CA3AF", background: "#fff", outline: "none", cursor: "pointer", textAlign: "left", display: "flex", alignItems: "center", justifyContent: "space-between", boxSizing: "border-box", overflow: "hidden" }}>
           <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, minWidth: 0 }}>
-            {selectedIds.length === 0 ? "" : selectedNames.join(", ")}
+            {selectedIds.length === 0 ? "" : selectedNames[0]}
           </span>
           <span style={{ fontSize: 11, color: "#6B7280", flexShrink: 0, marginLeft: 4, userSelect: "none" }}>▾</span>
         </button>
       </div>
       {open && (
         <div style={{ position: "absolute", top: "calc(100% + 3px)", left: 0, right: 0, background: "#fff", border: "1px solid #D1D5DB", borderRadius: 6, zIndex: 50, boxShadow: "0 4px 12px rgba(0,0,0,0.1)", padding: "4px 0", maxHeight: 220, overflowY: "auto" }}>
-          {catItems.length > 0 && (
-            <div style={{ borderBottom: "1px solid #F3F4F6", padding: "3px 8px 5px" }}>
-              <button type="button" onClick={handleToggleTodos}
-                style={{ width: "100%", padding: "3px 4px", border: "none", background: "transparent", color: todosSeleccionados ? "#DC2626" : "#374151", fontSize: 12, cursor: "pointer", textAlign: "left", fontWeight: 600 }}>
-                {todosSeleccionados ? "✕ Deseleccionar todo" : "✓ Seleccionar todo"}
-              </button>
-            </div>
+          {selectedIds.length > 0 && (
+            <button type="button" onClick={() => onChange([], [])}
+              style={{ width: "100%", padding: "5px 12px", border: "none", background: "transparent", color: "#DC2626", fontSize: 12, cursor: "pointer", textAlign: "left", fontWeight: 600, borderBottom: "1px solid #F3F4F6" }}>
+              ✕ Quitar selección
+            </button>
           )}
           {catItems.map(item => (
-            <label key={item.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 12px", cursor: "pointer", fontSize: 13, color: "#111827", background: selectedIds.includes(item.id) ? "#F1F5F9" : "transparent" }}>
-              <input type="checkbox" checked={selectedIds.includes(item.id)} onChange={() => toggle(item)} style={{ width: 14, height: 14, accentColor: "#64748B", cursor: "pointer", flexShrink: 0 }} />
-              {etiquetaMaquina(item)}
-            </label>
+            <button key={item.id} type="button" onClick={() => seleccionar(item)}
+              style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "6px 12px", border: "none", cursor: "pointer", fontSize: 13, textAlign: "left", color: selectedIds[0] === item.id ? "#1D4ED8" : "#111827", background: selectedIds[0] === item.id ? "#F1F5F9" : "transparent", fontWeight: selectedIds[0] === item.id ? 600 : 400 }}>
+              {selectedIds[0] === item.id ? "● " : ""}{etiquetaMaquina(item)}
+            </button>
           ))}
           <div style={{ borderTop: "1px solid #F3F4F6", marginTop: 2, paddingTop: 2 }}>
             {adding ? (
@@ -538,8 +638,15 @@ export default function FormularioProductoPapelAlta({ initial, onSave, onCancel,
 }) {
   const isEdit = !!initial;
   const { catalogs, names, addItem } = useCatalogosPapel();
+  const [tamanosProducto, setTamanosProducto] = useState<TamanoProductoOpcion[]>([]);
+  useEffect(() => {
+    fetchTamanosProducto().then(setTamanosProducto).catch(() => setTamanosProducto([]));
+  }, []);
   const [form, setForm] = useState<ProductoPapelForm>(initial ?? newProductoForm());
   const [expandedGrupoId, setExpandedGrupoId] = useState<number | null>(form.grupos[0]?.id ?? null);
+  const [costoMetroLaminado, setCostoMetroLaminado] = useState<number | null>(null);
+  const [cargandoCostoMetro, setCargandoCostoMetro] = useState(true);
+  const [errorCostoLaminado, setErrorCostoLaminado] = useState("");
   const pendientesRef = useRef<ArchivoPendiente[]>([]);
 
   const upd = (patch: Partial<ProductoPapelForm>) => setForm(prev => ({ ...prev, ...patch }));
@@ -548,6 +655,38 @@ export default function FormularioProductoPapelAlta({ initial, onSave, onCancel,
   const updMaq = (patch: any) => upd({ maquinaria: { ...form.maquinaria, ...patch } });
 
   const contRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    let activo = true;
+
+    setCargandoCostoMetro(true);
+    getCostoMetroLaminado()
+      .then((data) => {
+        if (!activo) return;
+        const costo = Number(data.costo);
+        if (!Number.isFinite(costo) || costo < 0) {
+          throw new Error("El costo del laminado no es válido");
+        }
+        setCostoMetroLaminado(costo);
+        setErrorCostoLaminado("");
+      })
+      .catch((error: any) => {
+        if (!activo) return;
+        setCostoMetroLaminado(null);
+        setErrorCostoLaminado(
+          error?.response?.data?.error ||
+          error?.message ||
+          "No se pudo cargar el costo del laminado"
+        );
+      })
+      .finally(() => {
+        if (activo) setCargandoCostoMetro(false);
+      });
+
+    return () => {
+      activo = false;
+    };
+  }, []);
 
   useEffect(() => {
     const b = calcBase(form.ancho, form.fuelle);
@@ -575,9 +714,30 @@ export default function FormularioProductoPapelAlta({ initial, onSave, onCancel,
     if (expandedGrupoId === id) setExpandedGrupoId(form.grupos.find(x => x.id !== id)?.id ?? null);
   };
 
-  // ── Sin validación obligatoria — campos opcionales en contexto de cotización ──
+  // ── Validación de duplicados (descripción + medida) delegada al backend ──
+  // El backend (crearProductoPapel / actualizarProductoPapel) responde 409
+  // cuando ya existe un producto activo con la misma descripción y medida.
+  // Aquí solo se captura ese error y se muestra al usuario sin tronar la app.
+  const [errorDuplicado, setErrorDuplicado] = useState<string | null>(null);
+
   const handleSubmit = async () => {
-    await onSave(form, pendientesRef.current);
+    setErrorDuplicado(null);
+    try {
+      const costoParaGuardar = tieneDatosLaminado
+        ? costoLaminadoCalculado ?? form.costoLaminado ?? null
+        : null;
+
+      await onSave(
+        {
+          ...form,
+          costoLaminado: costoParaGuardar,
+        },
+        pendientesRef.current
+      );
+    } catch (err: any) {
+      const msg = err?.message || "Ya existe un producto registrado con esa descripción y medida.";
+      setErrorDuplicado(msg);
+    }
   };
 
 
@@ -605,6 +765,45 @@ export default function FormularioProductoPapelAlta({ initial, onSave, onCancel,
 
   const puntosItems = catalogItems<{ id: number; nombre: string; puntos?: number }>("puntos" as CatKey);
 
+  const rolloLaminadoSeleccionado = catalogItems<{
+    id: number;
+    nombre: string;
+    medida_ancho?: number;
+  }>("rollo_lam" as CatKey).find(
+    item => item.id === form.acabados.idrollo_lam
+  );
+
+  const anchoRolloLaminadoCm = useMemo(() => {
+    const medida = Number(rolloLaminadoSeleccionado?.medida_ancho);
+    return Number.isFinite(medida) && medida > 0 ? medida : null;
+  }, [rolloLaminadoSeleccionado?.medida_ancho]);
+
+  const costoLaminadoCalculado = useMemo(
+    () => calcularCostoLaminado({
+      rolloCentimetros: anchoRolloLaminadoCm,
+      desarrolloCentimetros: form.acabados.desarrolloLaminado,
+      costoMetro: costoMetroLaminado,
+    }),
+    [
+      anchoRolloLaminadoCm,
+      form.acabados.desarrolloLaminado,
+      costoMetroLaminado,
+    ]
+  );
+
+  const desarrolloLaminadoNumero = Number(
+    form.acabados.desarrolloLaminado.replace(",", ".")
+  );
+
+  const tieneDatosLaminado =
+    anchoRolloLaminadoCm !== null &&
+    Number.isFinite(desarrolloLaminadoNumero) &&
+    desarrolloLaminadoNumero > 0;
+
+  const costoLaminadoMostrado = tieneDatosLaminado
+    ? costoLaminadoCalculado ?? form.costoLaminado ?? null
+    : null;
+
   const sublbl: React.CSSProperties = {
     display: "block", fontSize: 10, fontWeight: 700, color: "#9CA3AF",
     marginBottom: 6, letterSpacing: "0.08em", textTransform: "uppercase",
@@ -629,13 +828,18 @@ export default function FormularioProductoPapelAlta({ initial, onSave, onCancel,
         borderBottom: "1px solid #E5E7EB",
         boxShadow: "0 2px 4px rgba(0,0,0,0.04)",
       }}>
-        
+
         <button onClick={onCancel} disabled={saving} style={{ height: 36, padding: "0 18px", border: "1px solid #D1D5DB", borderRadius: 7, background: "#fff", color: "#374151", fontSize: 13, fontWeight: 600, cursor: saving ? "not-allowed" : "pointer" }}>
           ← Regresar
         </button>
         <button onClick={handleSubmit} disabled={saving} style={{ height: 36, padding: "0 20px", border: "none", borderRadius: 7, background: saving ? "#93C5FD" : "#1D4ED8", color: "#fff", fontSize: 13, fontWeight: 600, cursor: saving ? "wait" : "pointer" }}>
           {saving ? "Guardando..." : isEdit ? "Guardar cambios" : "Registrar producto"}
         </button>
+        {errorDuplicado && (
+          <span style={{ display: "flex", alignItems: "center", fontSize: 12, fontWeight: 600, color: "#B91C1C", background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 6, padding: "0 10px", height: 36 }}>
+            {errorDuplicado}
+          </span>
+        )}
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1.4fr", gap: 10, marginBottom: 10 }}>
@@ -646,21 +850,24 @@ export default function FormularioProductoPapelAlta({ initial, onSave, onCancel,
                 onChange={(v) => { const item = catalogItems<any>("tipo_producto" as CatKey).find(i => i.nombre === v); upd({ tipoProductoNombre: v, idcat_tipo_producto_papel: item?.id ?? null }); }}
                 onAdd={addItem} />
             </Field>
-            {/* NUEVO: Tamaño del producto — desplegable fijo (no viene de
-                catálogo dinámico), se guarda en form.tamanoProd y viaja
-                a producto_papel.tamano_prod. */}
+            {/* NUEVO: Tamaño del producto — ahora es FK a cat_tamano_producto
+                (mismo catálogo que la matriz de costos en Precios/Acabados).
+                Se guarda en form.idcat_tamano_producto y viaja a
+                producto_papel.tamano_prod. Ya no es un desplegable fijo. */}
             <Field label="Tamaño">
               <select
-                value={form.tamanoProd ?? ""}
-                onChange={(e) => upd({ tamanoProd: e.target.value })}
-                style={{ width: "100%", height: 34, padding: "0 8px", border: "1px solid #D1D5DB", borderRadius: 5, fontSize: 13, color: form.tamanoProd ? "#111827" : "#9CA3AF", background: "#fff", outline: "none", boxSizing: "border-box", cursor: "pointer" }}
+                value={form.idcat_tamano_producto ?? ""}
+                onChange={(e) => {
+                  const id = e.target.value ? Number(e.target.value) : null;
+                  const item = tamanosProducto.find(t => t.id === id);
+                  upd({ idcat_tamano_producto: id, tamanoProdNombre: item?.nombre ?? "" });
+                }}
+                style={{ width: "100%", height: 34, padding: "0 8px", border: "1px solid #D1D5DB", borderRadius: 5, fontSize: 13, color: form.idcat_tamano_producto ? "#111827" : "#9CA3AF", background: "#fff", outline: "none", boxSizing: "border-box", cursor: "pointer" }}
               >
                 <option value="" style={{ color: "#9CA3AF" }}>Selecciona...</option>
-                <option value="Mini" style={{ color: "#111827" }}>Mini</option>
-                <option value="Chico" style={{ color: "#111827" }}>Chico</option>
-                <option value="Mediano" style={{ color: "#111827" }}>Mediano</option>
-                <option value="Grande" style={{ color: "#111827" }}>Grande</option>
-                <option value="Extragrande" style={{ color: "#111827" }}>Extragrande</option>
+                {tamanosProducto.filter(t => t.activo).map(t => (
+                  <option key={t.id} value={t.id} style={{ color: "#111827" }}>{t.nombre}</option>
+                ))}
               </select>
             </Field>
             <Field label="Descripción" style={{ gridColumn: "span 2" }}>
@@ -816,6 +1023,56 @@ export default function FormularioProductoPapelAlta({ initial, onSave, onCancel,
                 onChange={(ids, nombres) => updAcabados({ laminados: ids, laminadosNombres: nombres })}
                 onAdd={addItem} catKeyForAdd={"laminado" as CatKey} />
             </Field>
+            {/* NUEVO: Rollo de laminado a utilizar — selección única (no
+                multi-select como Laminado), porque se usa como base para
+                los cálculos de rendimiento/corte. Guarda idrollo_lam en acabados_papel y toma el ancho numérico
+                desde rollo_lam.medida_ancho. El usuario captura solo el ancho (ej.
+                "38.5") al dar de alta uno nuevo; el backend arma el
+                nombre final ("38.5 cm") — ver catalogos_papel.controller.ts. */}
+            <Field label="Rollo de laminado">
+              <SelConAlta catKey={"rollo_lam" as CatKey} options={namesOf("rollo_lam" as CatKey)}
+                value={nombrePor("rollo_lam" as CatKey, form.acabados.idrollo_lam)}
+                onChange={(v) => { const item = catalogItems<any>("rollo_lam" as CatKey).find(i => i.nombre === v); updAcabados({ idrollo_lam: item?.id ?? null, rolloLamNombre: v }); }}
+                onAdd={addItem} placeholder="" />
+            </Field>
+            {/* NUEVO: Desarrollo para laminado — captura libre (no viene de
+                catálogo), lo escribe quien da de alta el producto. Se usa
+                después en el cálculo de la orden de producción. Viaja como
+                acabados_papel.desarrollo_laminado. */}
+            <Field label="Desarrollo de laminado">
+              <input type="text" inputMode="decimal" value={form.acabados.desarrolloLaminado}
+                onChange={e => {
+                  // Solo dígitos y un único punto decimal — se limpia
+                  // cualquier otro carácter antes de guardarlo en el form.
+                  let v = e.target.value.replace(/[^0-9.]/g, "");
+                  const partes = v.split(".");
+                  if (partes.length > 2) v = `${partes[0]}.${partes.slice(1).join("")}`;
+                  updAcabados({ desarrolloLaminado: v });
+                }}
+                style={{ width: "100%", height: 34, padding: "0 8px", border: "1px solid #D1D5DB", borderRadius: 5, fontSize: 13, color: "#111827", background: "#fff", outline: "none", boxSizing: "border-box" }} />
+            </Field>
+            <Field label="Costo de laminado" style={{ gridColumn: "span 2" }}>
+              <div style={{
+                height: 34,
+                padding: "0 10px",
+                border: `1px solid ${errorCostoLaminado ? "#FCA5A5" : "#BFDBFE"}`,
+                borderRadius: 6,
+                background: errorCostoLaminado ? "#FEF2F2" : "#EFF6FF",
+                display: "flex",
+                alignItems: "center",
+                boxSizing: "border-box",
+              }}>
+                <span style={{ fontSize: 14, fontWeight: 800, color: errorCostoLaminado ? "#B91C1C" : "#1E3A8A" }}>
+                  {cargandoCostoMetro
+                    ? "Cargando..."
+                    : errorCostoLaminado
+                      ? errorCostoLaminado
+                      : costoLaminadoMostrado !== null
+                        ? formatearCostoLaminado(costoLaminadoMostrado)
+                        : "—"}
+                </span>
+              </div>
+            </Field>
             {/* NUEVO: Tamaño de asa — se captura UNA sola vez, aquí, al dar
                 de alta el producto. Este valor es el que se usará como
                 default en pedidos/cotizaciones (ya NO se vuelve a pedir
@@ -879,16 +1136,35 @@ export default function FormularioProductoPapelAlta({ initial, onSave, onCancel,
       </div>
 
       <Sec title="Maquinaria" colorKey="maquinaria">
-        <FG cols={5} gap="6px 10px" style={{ marginBottom: 8, alignItems: "start" }}>
+        <FG cols={6} gap="6px 10px" style={{ marginBottom: 8, alignItems: "start" }}>
+          <Field label="Hojeadora">
+            <MaquinariaSelectPorTipo
+              tipoMaquina="hojeadora"
+              label="Hojeadora"
+              selectedIds={(form.maquinaria as any).hojeado_guillotina ?? []}
+              selectedNames={(form.maquinaria as any).hojeado_guillotina_nombres ?? []}
+              catItems={(catalogs?.["hojeado_guillotina" as CatKey] ?? []) as { id: number; nombre: string; tipo_maquina?: string | null; numero_maquina?: string | null }[]}
+              onChange={(ids, nombres) => updMaq({ hojeado_guillotina: ids, hojeado_guillotina_nombres: nombres })}
+            />
+          </Field>
+          <Field label="Guillotina">
+            <MaquinariaSelectPorTipo
+              tipoMaquina="guillotina"
+              label="Guillotina"
+              selectedIds={(form.maquinaria as any).hojeado_guillotina ?? []}
+              selectedNames={(form.maquinaria as any).hojeado_guillotina_nombres ?? []}
+              catItems={(catalogs?.["hojeado_guillotina" as CatKey] ?? []) as { id: number; nombre: string; tipo_maquina?: string | null; numero_maquina?: string | null }[]}
+              onChange={(ids, nombres) => updMaq({ hojeado_guillotina: ids, hojeado_guillotina_nombres: nombres })}
+            />
+          </Field>
           {([
-            ["hojeado_guillotina", "Hojeado / Guill."],
             ["impresora", "Impresora"],
             ["hs_ar", "Hs y AR"],
             ["suaje_maquina", "Suaje"],
             ["uv", "UV"],
           ] as [string, string][]).map(([key, label]) => (
             <Field key={key} label={label}>
-              <MaquinariaMultiSelect catKey={key as CatKey}
+              <MaquinariaSelectUnica catKey={key as CatKey}
                 selectedIds={(form.maquinaria as any)[key] ?? []}
                 selectedNames={(form.maquinaria as any)[`${key}_nombres`] ?? []}
                 catItems={(catalogs?.[key as CatKey] ?? []) as { id: number; nombre: string; tipo_maquina?: string | null; numero_maquina?: string | null }[]}
@@ -908,7 +1184,7 @@ export default function FormularioProductoPapelAlta({ initial, onSave, onCancel,
             ["desbarbe", "Desbarbe"],
           ] as [string, string][]).map(([key, label]) => (
             <Field key={key} label={label}>
-              <MaquinariaMultiSelect catKey={key as CatKey}
+              <MaquinariaSelectUnica catKey={key as CatKey}
                 selectedIds={(form.maquinaria as any)[key] ?? []}
                 selectedNames={(form.maquinaria as any)[`${key}_nombres`] ?? []}
                 catItems={(catalogs?.[key as CatKey] ?? []) as { id: number; nombre: string; tipo_maquina?: string | null; numero_maquina?: string | null }[]}

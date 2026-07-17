@@ -115,7 +115,24 @@ function DetalleProducto({ prod, seleccion, onChange, esPedido }: DetalleProduct
   if (prod.uv) acabados.push({ label: "UV", color: "#EAB308" });
   if (prod.alto_relieve) acabados.push({ label: "AR", color: "#3B82F6" });
 
-  const tintasLabel = prod.tintas != null ? `${prod.tintas} tintas` : null;
+  const tieneTintasFrente =
+    prod.tintas !== null &&
+    prod.tintas !== undefined;
+
+  const tieneTintasDentro =
+    prod.tintas_dentro !== null &&
+    prod.tintas_dentro !== undefined &&
+    Number(prod.tintas_dentro) > 0;
+
+  const tintasValor = tieneTintasFrente
+    ? tieneTintasDentro
+      ? `${prod.tintas}x${prod.tintas_dentro}`
+      : String(prod.tintas)
+    : null;
+
+  const tintasLabel = tintasValor
+    ? `${tintasValor} tintas`
+    : null;
   const pigmento = prod.pigmento || prod.pigmentos || null;
 
   return (
@@ -406,7 +423,7 @@ export default function ListaCotizaciones({
           material: p.material || "",
           calibre: p.calibre || "",
           tintas: p.tintas ?? 0,
-          tintasDentro: 0,
+          tintasDentro: p.tintas_dentro ?? 0,
           caras: p.caras ?? 0,
           medidasFormateadas: p.medida || "",
           medidas: {},
@@ -525,7 +542,7 @@ export default function ListaCotizaciones({
             material: p.material || "",
             calibre: p.calibre || "",
             tintas: p.tintas ?? 0,
-            tintasDentro: 0,
+            tintasDentro: p.tintas_dentro ?? 0,
             caras: p.caras ?? 0,
             medidasFormateadas: p.medida || "",
             medidas: {},

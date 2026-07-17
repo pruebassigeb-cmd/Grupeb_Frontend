@@ -11,8 +11,14 @@ export type NombreProcesoOrdenPapel =
   | "armado_papel"
   | "empaque_papel";
 
+// CORREGIDO: "hojeado_guillotina" se partió en dos claves independientes
+// ("hojeadora" y "guillotina") desde que el producto puede registrar una
+// máquina de cada tipo por separado (ver cotizacionPapel.helper.ts /
+// FormularioProductoPapelAlta.tsx). maquinaria_seleccionada ahora llega
+// con esas dos claves en vez de la combinada.
 export type ClaveMaquinariaPapel =
-  | "hojeado_guillotina"
+  | "hojeadora"
+  | "guillotina"
   | "impresora"
   | "laminado_maquina"
   | "uv"
@@ -115,6 +121,9 @@ export interface OrdenProduccionPapelData {
   kilogramos?: number | null;
   modo_cantidad?: "unidad" | "kilo" | string;
 
+  // DEPRECATED: ya no se elige/deriva en el sistema (Hojeado/Guillotina
+  // se decide físicamente en producción). Se deja opcional para no
+  // romper lecturas de datos históricos; siempre llega null en adelante.
   metodo_hojeado?: "hojeado" | "guillotina" | null;
   lleva_armado?: boolean;
   procesos_aplican?: NombreProcesoOrdenPapel[];

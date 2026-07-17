@@ -7,6 +7,7 @@ export interface CatItem {
   altura?: string;
   puntos?: number;
   idcat_punto?: number;
+  medida_ancho?: number;
 }
 
 export type CatKey =
@@ -18,6 +19,7 @@ export type CatKey =
   | "tipo_asa"
   | "laminado"
   | "laminado_maquina"
+  | "rollo_lam"
   | "textura"
   | "refuerzo_medidas"
   | "refuerzo_material"
@@ -104,6 +106,15 @@ export interface Acabados {
   idcat_pegamento: number | null;
   laminados: number[];
   laminadosNombres: string[];
+
+  // FK real hacia public.rollo_lam(idrollo_lam).
+  idrollo_lam: number | null;
+  rolloLamNombre: string;
+
+  // Captura libre en centímetros. Se guarda en
+  // acabados_papel.desarrollo_laminado.
+  desarrolloLaminado: string;
+
   asas: number[];
   asasNombres: string[];
   idcat_refuerzo_material: number | null;
@@ -156,10 +167,15 @@ export interface ProductoPapelForm {
   acabados: Acabados;
   maquinaria: Maquinaria;
   tamanoAsaDefault: string;
-  // NUEVO: tamaño del producto (Mini / Chico / Mediano / Grande / Extragrande),
-  // desplegable fijo en la sección "Tipo de producto". Viaja como
-  // producto_papel.tamano_prod.
-  tamanoProd: string;
+
+  // FK a cat_tamano_producto. La columna de producto_papel conserva el
+  // nombre tamano_prod, pero ahora contiene el id numérico.
+  idcat_tamano_producto: number | null;
+  tamanoProdNombre: string;
+
+  // Resultado calculado en el frontend y guardado en
+  // producto_papel.costo_laminado.
+  costoLaminado: number | null;
 }
 
 export interface ProductoPapelListItem {
@@ -174,17 +190,11 @@ export interface ProductoPapelListItem {
   created_at: string;
   creado_por: string | null;
   tamano_asa_default: string | null;
-  tamano_prod: string | null;
-  // NUEVO: true cuando el producto se creó automáticamente desde Expo
-  // (catalogo_expo → resolverFKsProductoExpo), en vez de darse de alta a
-  // mano desde esta página. Se usa para mostrar el badge "⭐ Expo" en la tabla.
+  tamano_prod: number | null;
+  tamano_prod_nombre: string | null;
   origen_expo: boolean;
-  // NUEVO: % de completitud de la información del producto (generales +
-  // suaje + acabados + maquinaria + materiales + archivos), calculado en
-  // el backend dentro de GET /productos-papel para no requerir peticiones
-  // extra por producto. Se usa para pintar el badge de color junto a
-  // "Editar" en la tabla (verde >=90, amarillo 65-89, rojo <65).
   completitud_pct: number;
+  costo_laminado: number | null;
 }
 
 export const newHojeado = (): Hojeado => ({
@@ -248,6 +258,9 @@ export const newAcabados = (): Acabados => ({
   idcat_pegamento: null,
   laminados: [],
   laminadosNombres: [],
+  idrollo_lam: null,
+  rolloLamNombre: "",
+  desarrolloLaminado: "",
   asas: [],
   asasNombres: [],
   idcat_refuerzo_material: null,
@@ -299,5 +312,7 @@ export const newProductoForm = (): ProductoPapelForm => ({
   acabados: newAcabados(),
   maquinaria: newMaquinaria(),
   tamanoAsaDefault: "",
-  tamanoProd: "",
+  idcat_tamano_producto: null,
+  tamanoProdNombre: "",
+  costoLaminado: null,
 });

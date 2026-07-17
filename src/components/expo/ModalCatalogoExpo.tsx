@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import api from "../../services/api";
 import ModalProducto from "./ModalProducto";
 import {
   getCatalogoPropio, crearProductoCatalogo, actualizarProductoCatalogo,
@@ -14,6 +15,32 @@ import type { FoilOpcion, TexturaOpcion } from "../../types/papel/cotizacion-pap
 interface Props {
   onClose: () => void;
 }
+
+// Mismo helper que en Expo.tsx — duplicado a propósito porque son dos
+// archivos/entradas distintas al mismo modal (ModalProducto), no vale la
+// pena crear un módulo compartido solo para esta función chica.
+const subirImagenProductoExpo = async (
+  file: File,
+  categoria: "papel" | "plastico" | "carton",
+  idReal: number,
+) => {
+  const formData = new FormData();
+  formData.append("archivo", file);
+  if (categoria === "plastico") {
+    formData.append("carpeta", "suaje");
+    formData.append("subcarpeta", "plastico-producto");
+    formData.append("categoria", "imagen-producto-plastico");
+    formData.append("idconfiguracion_plastico", String(idReal));
+  } else {
+    formData.append("carpeta", "suaje");
+    formData.append("subcarpeta", "imagen");
+    formData.append("categoria", "imagen-suaje-papel");
+    formData.append("idproducto_papel", String(idReal));
+  }
+  await api.post("/archivos/upload", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+};
 
 export default function ModalCatalogoExpo({ onClose }: Props) {
   const [productos, setProductos] = useState<Producto[]>([]);
@@ -63,42 +90,110 @@ export default function ModalCatalogoExpo({ onClose }: Props) {
     setModalOpen(true);
   };
 
-  const guardarProd = async (p: Producto) => {
+  const guardarProd = async (p: Producto, imagenPendiente: File | null) => {
     setSaving(true);
     try {
       const parseN = (v: string | undefined) => parseFloat(v || "0") || null;
       const esPapel = p.categoria === "papel" || p.categoria === "carton";
       const esPlastico = p.categoria === "plastico";
-      const payload = {
-        nombre: p.nombre, categoria: p.categoria, medida: p.medida || null,
-        material: p.material || null, calibre: p.calibre || null, tintas: p.tintas || null,
-        tipo_producto: p.tipoProducto || p.tipo || null,
-        laminacion: p.laminacion, tipo_laminado: p.tipoLaminado || null,
-        hs: p.hs, tipo_hs: p.tipoHs || null,
-        ar: p.ar, textura: p.textura, tipo_textura: p.tipoTextura || null,
-        uv: p.uv, asa: p.asa, tipo_asa: p.tipoAsa || null, otro: p.otro || null,
-        // NUEVO: pigmento (plástico) — se guarda en producto_acabado_default
-        pigmento: esPlastico ? (p.pigmento || null) : null,
-        precio_500: parseFloat(p.precio500.replace(/[^0-9.]/g, "")) || null,
-        precio_1000: parseFloat(p.precio1000.replace(/[^0-9.]/g, "")) || null,
-        precio_3000: parseFloat(p.precio3000.replace(/[^0-9.]/g, "")) || null,
-        imagen_url: p.imagen || null, origen: "expo",
-        altura: parseN(p.altura), ancho: parseN(p.ancho),
-        fuelle: esPapel ? parseN(p.fuelle) : null,
-        fuelle_fondo: esPlastico ? parseN(p.fuelFondo) : null,
-        fuelle_lateral_iz: esPlastico ? parseN(p.fuelLateral) : null,
-        fuelle_lateral_de: esPlastico ? parseN(p.fuelLateral2) : null,
-        refuerzo: esPlastico ? parseN(p.refuerzo) : null,
-      };
+     const payload = {
+  nombre: p.nombre,
+
+  descripcion:
+    p.categoria === "plastico"
+      ? (p.nombre?.trim() || null)
+      : null,
+
+  categoria: p.categoria,
+  medida: p.medida || null,
+  material: p.material || null,
+  calibre: p.calibre || null,
+
+  // Tamaño normalizado para papel/cartón.
+  id_tamano_producto: esPapel ? (p.idTamanoProducto ?? null) : null,
+  tamano_prod: esPapel ? (p.tamanoProd || null) : null,
+  idgrupo_papel: esPapel ? (p.idgrupo_papel ?? null) : null,
+
+  tintas: p.tintas || null,
+  tipo_producto: p.tipoProducto || p.tipo || null,
+
+  laminacion: p.laminacion,
+  tipo_laminado: p.tipoLaminado || null,
+
+  hs: p.hs,
+  tipo_hs: p.tipoHs || null,
+
+  ar: p.ar,
+  textura: p.textura,
+  tipo_textura: p.tipoTextura || null,
+
+  uv: p.uv,
+  asa: p.asa,
+  tipo_asa: p.tipoAsa || null,
+  otro: p.otro || null,
+
+  pigmento: esPlastico ? (p.pigmento || null) : null,
+
+  precio_base: esPapel
+    ? (parseFloat((p.precioBase || "").replace(/[^0-9.]/g, "")) || null)
+    : null,
+  precio_500: esPlastico
+    ? (parseFloat(p.precio500.replace(/[^0-9.]/g, "")) || null)
+    : null,
+  precio_1000: esPlastico
+    ? (parseFloat(p.precio1000.replace(/[^0-9.]/g, "")) || null)
+    : null,
+  precio_3000: esPlastico
+    ? (parseFloat(p.precio3000.replace(/[^0-9.]/g, "")) || null)
+    : null,
+
+  origen: "expo",
+
+  altura: parseN(p.altura),
+  ancho: parseN(p.ancho),
+  fuelle: esPapel ? parseN(p.fuelle) : null,
+  fuelle_fondo: esPlastico ? parseN(p.fuelFondo) : null,
+  fuelle_lateral_iz: esPlastico ? parseN(p.fuelLateral) : null,
+  fuelle_lateral_de: esPlastico ? parseN(p.fuelLateral2) : null,
+  refuerzo: esPlastico ? parseN(p.refuerzo) : null,
+
+  tintas_frente_default: p.tintasFrenteDefault ?? null,
+  tintas_dentro_default: esPapel
+    ? (p.tintasDentroDefault ?? null)
+    : null,
+};
+
+let idReal: number;
       if (editando) {
         const actualizado = await actualizarProductoCatalogo(editando.id, payload as any);
         const mapeado = mapearCatalogoExpoAProducto(actualizado);
-        setProductos(prev => prev.map(x => x.id === editando.id ? mapeado : x));
+        idReal = actualizado.idcatalogo_expo;
+        setProductos(prev => prev.map(x =>
+          x.id === editando.id &&
+          (x.idgrupo_papel ?? null) === (editando.idgrupo_papel ?? null)
+            ? mapeado
+            : x
+        ));
       } else {
         const creado = await crearProductoCatalogo(payload as any);
         const mapeado = mapearCatalogoExpoAProducto(creado);
+        idReal = creado.idcatalogo_expo;
         setProductos(prev => [...prev, mapeado]);
       }
+
+      // Foto de producto NUEVO: se guardó como "pendiente" en el modal (no
+      // había id todavía). Se sube y vincula ahora que ya existe. Si era
+      // edición, ya se subió de inmediato dentro del modal.
+      if (imagenPendiente) {
+        try {
+          await subirImagenProductoExpo(imagenPendiente, p.categoria, idReal);
+        } catch (e) {
+          console.error("No se pudo subir la imagen del producto:", e);
+          alert("El producto se guardó, pero la imagen no se pudo subir. Puedes agregarla editando el producto.");
+        }
+      }
+
+      await cargar();
       setModalOpen(false);
       setEditando(null);
     } catch (err: any) {
@@ -188,7 +283,7 @@ export default function ModalCatalogoExpo({ onClose }: Props) {
           {!loading && filtrados.length > 0 && (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 10 }}>
               {filtrados.map(p => (
-                <div key={p.id} style={{ background: "#1A1A1A", border: "1px solid #222", borderRadius: 10, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+                <div key={`${p.categoria}:${p.id}:${p.idgrupo_papel ?? 0}`} style={{ background: "#1A1A1A", border: "1px solid #222", borderRadius: 10, overflow: "hidden", display: "flex", flexDirection: "column" }}>
 
                   <div style={{ width: "100%", height: 110, background: "#0D0D0D", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                     {p.imagen ? (
@@ -210,9 +305,15 @@ export default function ModalCatalogoExpo({ onClose }: Props) {
                     </div>
                     {p.medida && <div style={{ color: "#666", fontSize: 10.5 }}>{p.medida}</div>}
                     <div style={{ display: "flex", gap: 10, fontSize: 10.5, color: "#C9922A", fontWeight: 700 }}>
-                      {p.precio500 && <span>{p.precio500}</span>}
-                      {p.precio1000 && <span>{p.precio1000}</span>}
-                      {p.precio3000 && <span>{p.precio3000}</span>}
+                      {p.categoria === "plastico" ? (
+                        <>
+                          {p.precio500 && <span>{p.precio500}</span>}
+                          {p.precio1000 && <span>{p.precio1000}</span>}
+                          {p.precio3000 && <span>{p.precio3000}</span>}
+                        </>
+                      ) : (
+                        p.precioBase && <span>Base: {p.precioBase}</span>
+                      )}
                     </div>
                     <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
                       <button onClick={() => abrirEditar(p)}

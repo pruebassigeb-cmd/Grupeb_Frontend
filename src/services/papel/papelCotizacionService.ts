@@ -1,3 +1,4 @@
+// src/services/papel/papelCotizacionService.ts
 import api from "../api";
 import type {
   ProductoPapelBusqueda,
@@ -102,4 +103,24 @@ export const getColoresAsa = async (): Promise<ColorAsaOpcion[]> => {
     const { data } = await api.get("/colores-asa");
     return Array.isArray(data) ? data : [];
   }
+};
+
+// ═══════════════════════════════════════════════════════════
+// NUEVO — Catálogo real de tintas (tabla `tintas`), compartido por
+// plástico y papel. Reemplaza el string libre "2x3" que usaba Expo por
+// IDs reales, igual que ya hace FormularioProductoPapel.
+// ═══════════════════════════════════════════════════════════
+export interface TintaOpcion {
+  id: number;
+  cantidad: number;
+}
+
+export const getTintas = async (): Promise<TintaOpcion[]> => {
+  const { data } = await api.get("/tintas");
+  return Array.isArray(data)
+    ? data.map((t: any) => ({
+        id: Number(t.idtintas ?? t.id),
+        cantidad: Number(t.cantidad),
+      }))
+    : [];
 };

@@ -1,6 +1,6 @@
+// src/components/expo/Tablacontroles.tsx
 import { useState, useRef, useCallback, memo, useEffect } from "react";
 import {
-  OPCIONES_TINTAS, OPCIONES_TINTAS_PLASTICO,
   MEDIDAS_CAT, CATS,
 } from "../../types/expo/expo.types";
 import type { FilaProducto, Producto, AsaPermitida, LaminadoPermitido } from "../../types/expo/expo.types";
@@ -52,8 +52,11 @@ export const pill = (active: boolean): React.CSSProperties => ({
 });
 
 export const CANT_OPCIONES = ["500", "1,000", "1,500", "2,000", "3,000", "5,000", "10,000", "20,000", "50,000"];
-const TINTAS_DEFAULT = ["1x0", "1x1", "2x0", "2x1", "2x2", "3x0", "4x0", "4x4"];
 const TIPOS_PLASTICO = ["Bolsa plana", "Bolsa troquelada", "Bolsa celofán", "Bolsa envíos", "Bolsa asa flexible"];
+
+// Cantidades de tintas soportadas — número plano, el backend resuelve el
+// id real de la tabla `tintas` justo antes de guardar. Sin pantones.
+const OPCIONES_CANTIDAD_TINTAS = [1, 2, 3, 4, 5, 6];
 
 // ─── Estado global: solo un dropdown abierto a la vez ─────────────────────────
 let _openId = "";
@@ -93,7 +96,6 @@ export function BuscadorProductoModal({ catalogoPropio, sistemaProductos, onEleg
   const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => { inputRef.current?.focus(); }, []);
 
-  // Catálogo propio (Expo) + catálogo del sistema (SIGEB), todo en un solo buscador.
   const LIMITE_RESULTADOS = 10;
   const todos = [...catalogoPropio, ...sistemaProductos];
   const filtrados = busq.trim()
@@ -139,12 +141,6 @@ export function BuscadorProductoModal({ catalogoPropio, sistemaProductos, onEleg
           <button onClick={onClose} style={{ background: "#2A2A2A", border: "none", color: "#AAA", width: 26, height: 26, borderRadius: "50%", cursor: "pointer", fontSize: 15 }}>✕</button>
         </div>
 
-        {/* ── Crear producto en blanco (a la medida del cliente) ──────────────
-            Escondido detrás de un desplegable cerrado por default: la mayoría
-            de las veces se elige un producto ya existente, así que esta
-            opción (armar uno desde cero directo en el tablero) no debe
-            competir visualmente con la búsqueda. La funcionalidad queda
-            intacta, solo cambia la presentación. */}
         <div style={{ borderBottom: "1px solid #2A2A2A" }}>
           <button
             onClick={() => setCrearAbierto(v => !v)}
@@ -178,7 +174,7 @@ export function BuscadorProductoModal({ catalogoPropio, sistemaProductos, onEleg
                 <input
                   value={nombreNuevo}
                   onChange={e => setNombreNuevo(e.target.value)}
-                  placeholder="Nombre del producto *"
+                  placeholder="Descripción del producto *"
                   onKeyDown={e => { if (e.key === "Enter" && nombreNuevo.trim()) confirmarNuevo(); }}
                   style={{
                     flex: 2, background: "#111", border: `1px solid ${nombreNuevo.trim() ? catColor : "#333"}`,
@@ -227,9 +223,6 @@ export function BuscadorProductoModal({ catalogoPropio, sistemaProductos, onEleg
           {CATS.map(cat => {
             const psCat = filtrados.filter(p => p.categoria === cat.key);
             if (psCat.length === 0) return null;
-            // Límite independiente por categoría — que "papel" tenga muchos
-            // resultados no debe recortar lo que se ve de "plástico" o
-            // "cartón", cada una se corta a sus propios 10.
             const ps = psCat.slice(0, LIMITE_RESULTADOS);
             const hayMasEnCat = psCat.length > LIMITE_RESULTADOS;
             return (
@@ -329,67 +322,15 @@ export function MedidaSelect({ id, value, categoria, onChange }: MedidaSelectPro
   );
 }
 
-// ─── TintasSelect ─────────────────────────────────────────────────────────────
-interface TintasProps { id: string; value: string; onChange: (v: string) => void; }
-export function TintasSelect({ id, value, onChange }: TintasProps) {
-  const triggerRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [busq, setBusq] = useState("");
-  const [pos, setPos] = useState<DropPos | null>(null);
-  const openId = useOpenId();
-  const isOpen = openId === id;
-  const abrir = () => {
-    if (isOpen) { closeDrop(); return; }
-    if (triggerRef.current) setPos(calcPos(triggerRef.current));
-    openDrop(id);
-    setTimeout(() => inputRef.current?.focus(), 30);
-  };
-  useEffect(() => {
-    if (!isOpen) return;
-    const fn = (e: MouseEvent) => {
-      const el = document.getElementById(`drop-${id}`);
-      if (el && !el.contains(e.target as Node) && !triggerRef.current?.contains(e.target as Node)) closeDrop();
-    };
-    document.addEventListener("mousedown", fn);
-    return () => document.removeEventListener("mousedown", fn);
-  }, [isOpen, id]);
-  const lista = busq.trim() ? OPCIONES_TINTAS.filter(o => o.includes(busq.trim())) : TINTAS_DEFAULT;
-  const seleccionar = (v: string) => { onChange(v); closeDrop(); setBusq(""); };
-  return (
-    <>
-      <div ref={triggerRef} onClick={abrir}
-        style={{ ...iSel, display: "flex", alignItems: "center", justifyContent: "center", gap: 2, cursor: "pointer", padding: "2px 4px" }}>
-        <span>{value}</span><span style={{ fontSize: 7 }}>▾</span>
-      </div>
-      {isOpen && pos && (
-        <div id={`drop-${id}`} style={{ position: "fixed", top: pos.top, left: pos.left, width: 100, background: "#1A1A1A", border: "1px solid #444", borderRadius: 8, zIndex: 9999, boxShadow: "0 8px 28px rgba(0,0,0,.7)", overflow: "hidden" }}>
-          <div style={{ padding: "5px 6px 3px", borderBottom: "1px solid #2A2A2A" }}>
-            <input ref={inputRef} value={busq} onChange={e => setBusq(e.target.value)} placeholder="ej: 3"
-              style={{ width: "100%", background: "#111", border: "1px solid #333", borderRadius: 4, padding: "4px 6px", color: "#EEE", fontSize: 10, outline: "none", fontFamily: "'Inter',sans-serif" }} />
-          </div>
-          <div style={{ maxHeight: 160, overflowY: "auto" }}>
-            {lista.length === 0
-              ? <div style={{ padding: "8px", color: "#555", fontSize: 10, textAlign: "center" }}>Sin resultados</div>
-              : lista.map(o => (
-                <div key={o} onMouseDown={() => seleccionar(o)}
-                  style={{ padding: "5px 10px", cursor: "pointer", fontSize: 11, color: value === o ? "#C9922A" : "#CCC", fontWeight: value === o ? 700 : 400, background: value === o ? "#C9922A18" : "transparent" }}
-                  onMouseEnter={e => (e.currentTarget.style.background = "#2A2A2A")}
-                  onMouseLeave={e => (e.currentTarget.style.background = value === o ? "#C9922A18" : "transparent")}>
-                  {o}
-                </div>
-              ))
-            }
-            {!busq && <div style={{ padding: "4px 10px 6px", color: "#444", fontSize: 9, textAlign: "center" }}>Escribe para buscar más</div>}
-          </div>
-        </div>
-      )}
-    </>
-  );
+// ─── TintasNumeroSelect ───────────────────────────────────────────────────────
+// Selector simple de CANTIDAD de tintas (1-6) — no ids, sin pantones. El
+// backend resuelve el id real de la tabla `tintas` justo antes de guardar.
+interface TintasNumeroProps {
+  id: string;
+  value: number;
+  onChange: (cantidad: number) => void;
 }
-
-// ─── TintasPlasticoSelect ─────────────────────────────────────────────────────
-interface TintasPlasticoProps { id: string; value: string; onChange: (v: string) => void; }
-export function TintasPlasticoSelect({ id, value, onChange }: TintasPlasticoProps) {
+export function TintasNumeroSelect({ id, value, onChange }: TintasNumeroProps) {
   const triggerRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<DropPos | null>(null);
   const openId = useOpenId();
@@ -404,7 +345,6 @@ export function TintasPlasticoSelect({ id, value, onChange }: TintasPlasticoProp
     document.addEventListener("mousedown", fn);
     return () => document.removeEventListener("mousedown", fn);
   }, [isOpen, id]);
-  const seleccionar = (v: string) => { onChange(v); closeDrop(); };
   return (
     <>
       <div ref={triggerRef} onClick={abrir}
@@ -412,15 +352,81 @@ export function TintasPlasticoSelect({ id, value, onChange }: TintasPlasticoProp
         <span>{value}</span><span style={{ fontSize: 7 }}>▾</span>
       </div>
       {isOpen && pos && (
-        <div id={`drop-${id}`} style={{ position: "fixed", top: pos.top, left: pos.left, width: 60, background: "#1A1A1A", border: "1px solid #444", borderRadius: 8, zIndex: 9999, boxShadow: "0 8px 28px rgba(0,0,0,.7)", overflow: "hidden" }}>
-          {OPCIONES_TINTAS_PLASTICO.map(o => (
-            <div key={o} onMouseDown={() => seleccionar(o)}
-              style={{ padding: "6px 0", textAlign: "center", cursor: "pointer", fontSize: 11, color: value === o ? "#C9922A" : "#CCC", fontWeight: value === o ? 700 : 400, background: value === o ? "#C9922A18" : "transparent" }}
+        <div id={`drop-${id}`} style={{ position: "fixed", top: pos.top, left: pos.left, width: 70, background: "#1A1A1A", border: "1px solid #444", borderRadius: 8, zIndex: 9999, boxShadow: "0 8px 28px rgba(0,0,0,.7)", overflow: "hidden" }}>
+          {OPCIONES_CANTIDAD_TINTAS.map(n => (
+            <div key={n} onMouseDown={() => { onChange(n); closeDrop(); }}
+              style={{ padding: "6px 0", textAlign: "center", cursor: "pointer", fontSize: 11, color: value === n ? "#C9922A" : "#CCC", fontWeight: value === n ? 700 : 400, background: value === n ? "#C9922A18" : "transparent" }}
               onMouseEnter={e => (e.currentTarget.style.background = "#2A2A2A")}
-              onMouseLeave={e => (e.currentTarget.style.background = value === o ? "#C9922A18" : "transparent")}>
-              {o}
+              onMouseLeave={e => (e.currentTarget.style.background = value === n ? "#C9922A18" : "transparent")}>
+              {n}
             </div>
           ))}
+        </div>
+      )}
+    </>
+  );
+}
+
+// ─── TintasPapelCell ──────────────────────────────────────────────────────────
+// Popover con tintas frente (cantidad) + toggle de tintas dentro (cantidad).
+// Sin pantones — este cotizador solo necesita el número de tintas.
+interface TintasPapelProps {
+  id: string;
+  tintasFrente: number;
+  usaTintasDentro: boolean;
+  tintasDentro: number;
+  onChangeFrente: (cantidad: number) => void;
+  onToggleDentro: (v: boolean) => void;
+  onChangeDentro: (cantidad: number) => void;
+}
+export function TintasPapelCell({
+  id, tintasFrente, usaTintasDentro, tintasDentro,
+  onChangeFrente, onToggleDentro, onChangeDentro,
+}: TintasPapelProps) {
+  const triggerRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<DropPos | null>(null);
+  const openId = useOpenId();
+  const isOpen = openId === id;
+  const abrir = () => { if (isOpen) { closeDrop(); return; } if (triggerRef.current) setPos(calcPos(triggerRef.current)); openDrop(id); };
+  useEffect(() => {
+    if (!isOpen) return;
+    const fn = (e: MouseEvent) => {
+      const el = document.getElementById(`drop-${id}`);
+      if (el && !el.contains(e.target as Node) && !triggerRef.current?.contains(e.target as Node)) closeDrop();
+    };
+    document.addEventListener("mousedown", fn);
+    return () => document.removeEventListener("mousedown", fn);
+  }, [isOpen, id]);
+
+  const resumen = `${tintasFrente}x${usaTintasDentro ? tintasDentro : 0}`;
+
+  return (
+    <>
+      <div ref={triggerRef} onClick={abrir}
+        style={{ ...iSel, display: "flex", alignItems: "center", justifyContent: "center", gap: 2, cursor: "pointer", padding: "2px 4px" }}>
+        <span>{resumen}</span><span style={{ fontSize: 7 }}>▾</span>
+      </div>
+      {isOpen && pos && (
+        <div id={`drop-${id}`} style={{ position: "fixed", top: pos.top, left: pos.left, width: 150, background: "#1A1A1A", border: "1px solid #444", borderRadius: 8, zIndex: 9999, boxShadow: "0 8px 28px rgba(0,0,0,.7)", padding: 8 }}
+          onMouseDown={e => e.stopPropagation()}>
+          <div style={{ fontSize: 9, color: "#888", marginBottom: 3 }}>Tintas frente</div>
+          <select style={{ ...iSel, width: "100%", marginBottom: 6 }} value={tintasFrente}
+            onChange={e => onChangeFrente(Number(e.target.value))}>
+            {OPCIONES_CANTIDAD_TINTAS.map(n => <option key={n} value={n}>{n} tinta{n !== 1 ? "s" : ""}</option>)}
+          </select>
+          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10, color: "#CCC", cursor: "pointer", marginBottom: 6 }}>
+            <input type="checkbox" checked={usaTintasDentro} onChange={e => onToggleDentro(e.target.checked)} style={{ accentColor: "#C9922A" }} />
+            ¿Tintas por dentro?
+          </label>
+          {usaTintasDentro && (
+            <>
+              <div style={{ fontSize: 9, color: "#888", marginBottom: 3 }}>Tintas dentro</div>
+              <select style={{ ...iSel, width: "100%" }} value={tintasDentro}
+                onChange={e => onChangeDentro(Number(e.target.value))}>
+                {OPCIONES_CANTIDAD_TINTAS.map(n => <option key={n} value={n}>{n} tinta{n !== 1 ? "s" : ""}</option>)}
+              </select>
+            </>
+          )}
         </div>
       )}
     </>
@@ -577,14 +583,7 @@ interface FilaVaciaProps {
 }
 export function FilaVacia({ onElegir, catalogoPropio, sistemaProductos, catalogs, columnasPrecio }: FilaVaciaProps) {
   const [open, setOpen] = useState(false);
-  // Total de columnas reales de la tabla: 11 fijas antes del precio
-  // (Producto, Medida, Material, Tintas, Acabados x7) + 1 de eliminar
-  // + las columnas de precio visibles (1 a 3). Debe coincidir siempre con
-  // el colgroup/headers de HojaCotizacion.tsx.
   const totalCols = 12 + columnasPrecio;
-  // Al elegir un producto del catálogo (expo o sistema), va COMPLETO (con su
-  // medida, material y calibre registrados) — igual que si se arrastrara del
-  // catálogo. Solo los productos creados desde cero (sin fuente) nacen editables.
   const elegirProducto = (p: Producto) => {
     onElegir(p);
     setOpen(false);
@@ -627,12 +626,8 @@ interface FilaProps {
   pigmentosDB:    PigmentoDB[];
   coloresAsa:     { id: number; nombre: string }[];
   suajesPlast:    { id: number; tipo: string }[];
-  // Opciones filtradas del producto de papel del sistema
-  // Si vienen, se usan en lugar del catálogo completo
   asasPermitidas?:      AsaPermitida[]      | null;
   laminadosPermitidos?: LaminadoPermitido[] | null;
-  // Cuántas columnas de precio están visibles en la tabla (1, 2 o 3) —
-  // controlado desde HojaCotizacion.tsx, compartido por todas las filas.
   columnasPrecio: 1 | 2 | 3;
 }
 
@@ -645,9 +640,6 @@ export const FilaTabla = memo(function FilaTabla({
   const pre = `r${rowIdx}`;
   const esPlastico = p.categoria === "plastico";
 
-  // Productos del sistema SIGEB o del catálogo expo ya están registrados:
-  // medida, material y calibre son fijos. Solo los productos tablero
-  // (creados en blanco, sin fuente) permiten editarlos.
   const esRegistrado = p.fuente === "sistema" || p.fuente === "expo";
 
   const [nombre,     setNombre]     = useState(p.nombre);
@@ -656,30 +648,14 @@ export const FilaTabla = memo(function FilaTabla({
   const [precio2,    setPrecio2]    = useState(fila.precio2);
   const [precio3,    setPrecio3]    = useState(fila.precio3);
 
-  // ── BUGFIX ────────────────────────────────────────────────────────────
-  // precio1/2/3 son estado LOCAL (para que escribir sea fluido y solo se
-  // propague al padre en onBlur), pero antes NUNCA se resincronizaban si
-  // `fila.precioN` cambiaba desde afuera (por ejemplo, por una limpieza
-  // automática al agregar/quitar columnas de precio en HojaCotizacion.tsx).
-  // Eso provocaba que el input siguiera mostrando un valor "fantasma" ya
-  // borrado en el estado real — pasaba siempre en la primera fila porque
-  // es la que se crea mientras `columnasPrecio` aún no se ha ampliado a 2/3.
-  // Con este efecto, cualquier cambio externo a fila.precioN se refleja de
-  // inmediato en el input, igual que ya se hace con cant1/cant2/cant3.
   useEffect(() => { setPrecio1(fila.precio1); }, [fila.precio1]);
   useEffect(() => { setPrecio2(fila.precio2); }, [fila.precio2]);
   useEffect(() => { setPrecio3(fila.precio3); }, [fila.precio3]);
-  // ─────────────────────────────────────────────────────────────────────
 
-  // Cantidades PROPIAS de esta fila — ya NO son estado local (useState solo
-  // tomaba el valor inicial al montar y se desincronizaba cuando el padre
-  // limpiaba cant2/cant3 al quitar/agregar columnas). Ahora se derivan
-  // directo de `fila`, la fuente de verdad, y siempre reflejan el valor real.
   const cant1Fila = fila.cant1 || "500";
   const cant2Fila = fila.cant2 || "1,000";
   const cant3Fila = fila.cant3 || "3,000";
   const [extra,      setExtra]      = useState(fila.extra || "");
-  const [tintas,     setTintas]     = useState(fila.tintas);
   const [laminacion, setLaminacion] = useState(fila.laminacion);
   const [tipoLam,    setTipoLam]    = useState(fila.tipoLaminado);
   const [hs,         setHs]         = useState(fila.hs);
@@ -718,9 +694,6 @@ export const FilaTabla = memo(function FilaTabla({
     </span>
   );
 
-  // ── Opciones de catálogo ──────────────────────────────────────────────────
-  // Para papel del sistema: usar las opciones filtradas si existen.
-  // Para papel expo propio o plástico: usar el catálogo completo.
   const laminadoOpts = (laminadosPermitidos && laminadosPermitidos.length > 0)
     ? laminadosPermitidos.map(l => ({ id: l.idcat_laminado, nombre: l.nombre }))
     : (catalogs.laminado ?? []);
@@ -757,6 +730,105 @@ export const FilaTabla = memo(function FilaTabla({
   const precio2ConExtra = extraNum > 0 && modoExtra === "precio" ? conExtra(precio2, extraNum) : precio2;
   const precio3ConExtra = extraNum > 0 && modoExtra === "precio" ? conExtra(precio3, extraNum) : precio3;
 
+  const restablecerPrecioCalculado = (numero: 1 | 2 | 3) => {
+    if (numero === 1 && fila.precioCalculado1) {
+      setPrecio1(fila.precioCalculado1);
+      propagar("precio1", fila.precioCalculado1);
+      propagar("precioManual1", false);
+    }
+    if (numero === 2 && fila.precioCalculado2) {
+      setPrecio2(fila.precioCalculado2);
+      propagar("precio2", fila.precioCalculado2);
+      propagar("precioManual2", false);
+    }
+    if (numero === 3 && fila.precioCalculado3) {
+      setPrecio3(fila.precioCalculado3);
+      propagar("precio3", fila.precioCalculado3);
+      propagar("precioManual3", false);
+    }
+  };
+
+  const estadoCalculoPrecio = (numero: 1 | 2 | 3) => {
+    const calculado = numero === 1
+      ? fila.precioCalculado1
+      : numero === 2
+        ? fila.precioCalculado2
+        : fila.precioCalculado3;
+    const manual = numero === 1
+      ? fila.precioManual1
+      : numero === 2
+        ? fila.precioManual2
+        : fila.precioManual3;
+    const advertencias = (numero === 1
+      ? fila.advertenciasPrecio1
+      : numero === 2
+        ? fila.advertenciasPrecio2
+        : fila.advertenciasPrecio3) ?? [];
+    const tituloAdvertencias = advertencias.map(a => a.mensaje).join("\n");
+
+    return (
+      <div className="no-print-show" style={{ minHeight: 10, display: "flex", alignItems: "center", justifyContent: "center", gap: 3, lineHeight: 1 }}>
+        {fila.calculandoPrecio && (
+          <span style={{ fontSize: 8, color: "#777" }}>calculando…</span>
+        )}
+        {!fila.calculandoPrecio && manual && calculado && (
+          <>
+            <span style={{ fontSize: 8, color: "#777" }}>Calc. {calculado}</span>
+            <button
+  type="button"
+  title="Restablecer el precio calculado"
+  onClick={() => restablecerPrecioCalculado(numero)}
+  style={{
+    background: "transparent",
+    border: "none",
+    color: "#C9922A",
+    cursor: "pointer",
+    padding: "1px 3px",
+    fontSize: 14,
+    fontWeight: 700,
+    lineHeight: 1,
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+  }}
+>
+  ↺
+</button>
+          </>
+        )}
+        {advertencias.length > 0 && (
+          <span title={tituloAdvertencias} style={{ fontSize: 10, color: "#B45309", cursor: "help" }}>
+            ⚠ {advertencias.length}
+          </span>
+        )}
+        {numero === 1 && fila.errorCalculoPrecio && (
+  <button
+    type="button"
+    title={fila.errorCalculoPrecio}
+    onClick={() =>
+      window.alert(
+        fila.errorCalculoPrecio ??
+          "No se pudo calcular el precio automáticamente."
+      )
+    }
+    style={{
+      background: "transparent",
+      border: "none",
+      padding: 0,
+      fontSize: 9,
+      fontWeight: 800,
+      color: "#B91C1C",
+      cursor: "pointer",
+      lineHeight: 1,
+    }}
+  >
+    !
+  </button>
+)}
+      </div>
+    );
+  };
+
   return (
     <tr>
       {/* Nombre */}
@@ -765,12 +837,12 @@ export const FilaTabla = memo(function FilaTabla({
           onChange={e => setNombre(e.target.value)}
           onBlur={() => { if (nombre.trim()) onEditNombre(uid, nombre.trim()); else setNombre(p.nombre); }}
           onKeyDown={e => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
-          placeholder="Nombre del producto"
+          placeholder="Descripción del producto..."
           style={{ background: "transparent", border: "none", borderBottom: "1px dashed #C9922A66", color: "#1A1A1A", fontWeight: 600, fontSize: 9.5, width: "100%", outline: "none", fontFamily: "'Inter',sans-serif", padding: "1px 0" }} />
         <span className="print-only">{nombre}</span>
       </td>
 
-      {/* Medida — fija para productos registrados (sistema/expo), editable en tablero */}
+      {/* Medida */}
       <td style={{ ...TD, cursor: esRegistrado ? "default" : "pointer" }}
         title={esRegistrado ? "Producto registrado — medida fija" : undefined}>
         {esRegistrado ? (
@@ -785,7 +857,7 @@ export const FilaTabla = memo(function FilaTabla({
         )}
       </td>
 
-      {/* Material / Calibre — fijos para productos registrados, editables en tablero */}
+      {/* Material / Calibre */}
       <td style={{ ...TD, lineHeight: 1.4 }}
         title={esRegistrado ? "Producto registrado — material y calibre fijos" : undefined}>
         {esRegistrado ? (
@@ -834,15 +906,26 @@ export const FilaTabla = memo(function FilaTabla({
         )}
       </td>
 
-      {/* Tintas */}
+      {/* Tintas — cantidad plana; el backend resuelve el id real. Sin pantones. */}
       <td style={TD}>
         <span className="no-print-show">
-          {esPlastico
-            ? <TintasPlasticoSelect id={`${pre}-tin`} value={tintas} onChange={v => { setTintas(v); propagar("tintas", v); }} />
-            : <TintasSelect id={`${pre}-tin`} value={tintas} onChange={v => { setTintas(v); propagar("tintas", v); }} />
-          }
+          {esPlastico ? (
+            <TintasNumeroSelect id={`${pre}-tin`} value={fila.tintasFrente} onChange={v => propagar("tintasFrente", v)} />
+          ) : (
+            <TintasPapelCell
+              id={`${pre}-tin`}
+              tintasFrente={fila.tintasFrente}
+              usaTintasDentro={fila.usaTintasDentro} tintasDentro={fila.tintasDentro}
+              onChangeFrente={v => propagar("tintasFrente", v)}
+              onToggleDentro={v => {
+                propagar("usaTintasDentro", v);
+                if (!v) propagar("tintasDentro", 0);
+              }}
+              onChangeDentro={v => propagar("tintasDentro", v)}
+            />
+          )}
         </span>
-        <span className="print-only">{tintas || "—"}</span>
+        <span className="print-only">{fila.tintasFrente}x{fila.usaTintasDentro ? fila.tintasDentro : 0}</span>
       </td>
 
       {esPlastico ? (
@@ -866,7 +949,6 @@ export const FilaTabla = memo(function FilaTabla({
         </>
       ) : (
         <>
-          {/* Laminado — usa opciones filtradas si el producto es del sistema */}
           <td style={{ ...TD, fontSize: 8 }}>
             <select className="no-print-show" style={{ ...iSel, maxWidth: 82 }} value={laminacion ? tipoLam : ""}
               onChange={e => {
@@ -881,7 +963,6 @@ export const FilaTabla = memo(function FilaTabla({
             </select>
             <span className="print-only">{lamTipoPrint}</span>
           </td>
-          {/* Foil */}
           <td style={{ ...TD, fontSize: 8 }}>
             <select className="no-print-show" style={iSel} value={hs ? tipoHs : ""}
               onChange={e => {
@@ -899,12 +980,10 @@ export const FilaTabla = memo(function FilaTabla({
             </select>
             <span className="print-only">{hsPrint}</span>
           </td>
-          {/* AR */}
           <td style={TD}>
             <span className="no-print-show">{chkPill(ar, () => { setAr(v => { propagar("ar", !v); return !v; }); })}</span>
             <span className="print-only">{arPrint}</span>
           </td>
-          {/* Textura */}
           <td style={{ ...TD, fontSize: 8 }}>
             <select className="no-print-show" style={iSel} value={textura ? tipoTex : ""}
               onChange={e => {
@@ -919,7 +998,6 @@ export const FilaTabla = memo(function FilaTabla({
             </select>
             <span className="print-only">{texturaPrint}</span>
           </td>
-          {/* UV */}
           <td style={TD}>
             <span className="no-print-show">{chkPill(uv, () => { setUv(v => { propagar("uv", !v); return !v; }); })}</span>
             <span className="print-only">{uvPrint}</span>
@@ -927,7 +1005,7 @@ export const FilaTabla = memo(function FilaTabla({
         </>
       )}
 
-      {/* Asa — plástico: tipo (idsuaje) + color; papel: tipo de asa filtrado si es del sistema */}
+      {/* Asa */}
       <td style={{ ...TD, fontSize: 8 }}>
         {esPlastico ? (
           <div className="no-print-show" style={{ display: "flex", flexDirection: "column", gap: 2 }}>
@@ -965,7 +1043,6 @@ export const FilaTabla = memo(function FilaTabla({
             )}
           </div>
         ) : (
-          // Papel: usa asaOpts (filtradas o catálogo completo según fuente del producto)
           <select className="no-print-show" style={iSel} value={asa ? tipoAsa : ""}
             onChange={e => {
               const v = e.target.value;
@@ -996,19 +1073,17 @@ export const FilaTabla = memo(function FilaTabla({
         <span className="print-only">{extraPrint}</span>
       </td>
 
-      {/* Precios — cada fila trae su propia cantidad + precio para cada
-          columna visible (controlado por columnasPrecio desde
-          HojaCotizacion.tsx). Las cantidades se leen directo de `fila`
-          (fuente de verdad) y los cambios se propagan al padre — así el
-          selector nunca se desincroniza al quitar/agregar columnas. Los
-          precios (precio1/2/3) son estado local para escritura fluida,
-          pero se resincronizan con `fila.precioN` vía los useEffect de
-          arriba si el padre los cambia desde afuera. */}
+      {/* Precios */}
       <td style={TDP}>
         <div className="no-print-show" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
           <CantidadSelect id={`${pre}-cant1`} value={cant1Fila} onChange={v => propagar("cant1", v)} />
           <input style={iP} value={precio1} placeholder="$0.00"
-            onChange={e => { setPrecio1(e.target.value); propagar("precio1", e.target.value); }} />
+            onChange={e => {
+              setPrecio1(e.target.value);
+              propagar("precio1", e.target.value);
+              propagar("precioManual1", true);
+            }} />
+          {estadoCalculoPrecio(1)}
         </div>
         {extraNum > 0 && modoExtra === "precio" && (
           <div className="no-print-show" style={{ fontSize: 7, color: "#22C55E", lineHeight: 1 }}>{precio1ConExtra}</div>
@@ -1020,7 +1095,12 @@ export const FilaTabla = memo(function FilaTabla({
           <div className="no-print-show" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
             <CantidadSelect id={`${pre}-cant2`} value={cant2Fila} onChange={v => propagar("cant2", v)} />
             <input style={iP} value={precio2} placeholder="$0.00"
-              onChange={e => { setPrecio2(e.target.value); propagar("precio2", e.target.value); }} />
+              onChange={e => {
+                setPrecio2(e.target.value);
+                propagar("precio2", e.target.value);
+                propagar("precioManual2", true);
+              }} />
+            {estadoCalculoPrecio(2)}
           </div>
           {extraNum > 0 && modoExtra === "precio" && (
             <div className="no-print-show" style={{ fontSize: 7, color: "#22C55E", lineHeight: 1 }}>{precio2ConExtra}</div>
@@ -1033,7 +1113,12 @@ export const FilaTabla = memo(function FilaTabla({
           <div className="no-print-show" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
             <CantidadSelect id={`${pre}-cant3`} value={cant3Fila} onChange={v => propagar("cant3", v)} />
             <input style={iP} value={precio3} placeholder="$0.00"
-              onChange={e => { setPrecio3(e.target.value); propagar("precio3", e.target.value); }} />
+              onChange={e => {
+                setPrecio3(e.target.value);
+                propagar("precio3", e.target.value);
+                propagar("precioManual3", true);
+              }} />
+            {estadoCalculoPrecio(3)}
           </div>
           {extraNum > 0 && modoExtra === "precio" && (
             <div className="no-print-show" style={{ fontSize: 7, color: "#22C55E", lineHeight: 1 }}>{precio3ConExtra}</div>

@@ -14,7 +14,7 @@ interface Props {
   loadingCatalogo: boolean;
   expanded: Record<string, boolean>;
   sistemaOpen: Record<string, boolean>;
-  addedId: number | null;
+  addedId: string | null;
   busquedaTick: number;
   setBusquedaTick: React.Dispatch<React.SetStateAction<number>>;
   toggleExp: (k: string) => void;
@@ -67,12 +67,16 @@ export default function Catalogo({
         // clave de dedupe (no claveProducto, porque el `fuente` puede venir
         // distinto entre los dos arrays para el mismo producto).
         const propiosCat = catalogo.filter(p => p.categoria === cat.key);
-        const idsPropios = new Set(propiosCat.map(p => p.id));
         const sistemaCat = sistemaProductos.filter(p => p.categoria === cat.key);
-        const idsEnSistema = new Set(sistemaCat.map(p => p.id));
+        const claveVariante = (p: Producto) =>
+          `${p.categoria}:${p.id}:${p.idgrupo_papel ?? 0}`;
+        const variantesPropias = new Set(propiosCat.map(claveVariante));
+        const variantesEnSistema = new Set(sistemaCat.map(claveVariante));
         // Los propios que por algún motivo no vinieron en sistemaProductos
-        // (ej. inactivo, o carrera de red) igual se muestran — no se pierden.
-        const soloEnPropios = propiosCat.filter(p => !idsEnSistema.has(p.id));
+        // (ej. carrera de red) igual se muestran — no se pierden.
+        const soloEnPropios = propiosCat.filter(
+          p => !variantesEnSistema.has(claveVariante(p))
+        );
         const todosCat = [...sistemaCat, ...soloEnPropios];
 
         const busq = busquedaStore[cat.key]?.toLowerCase() || "";
@@ -123,14 +127,14 @@ export default function Catalogo({
                         {busq ? "Sin resultados" : "Sin productos en esta categoría"}
                       </div>
                     : listaFiltrada.map(p => (
-                      <TarjetaProducto key={p.id} p={p} catColor={cat.color}
+                      <TarjetaProducto key={claveProducto(p)} p={p} catColor={cat.color}
                         grid={false} mob={mob} tab={tab} desk={desk} addedId={addedId}
                         onDragStart={onDragStart} onDragEnd={onDragEnd}
                         productoSeleccionadoKey={productoSeleccionadoKey}
                         productoSeleccionadoRef={productoSeleccionadoRef}
                         seleccionarProducto={seleccionarProducto}
                         addProd={addProd} abrirEditar={abrirEditar} eliminarProd={eliminarProd}
-                        esPropio={idsPropios.has(p.id)} compacto />
+                        esPropio={variantesPropias.has(claveVariante(p))} compacto />
                     ))
                   }
                 </div>
@@ -151,7 +155,7 @@ interface TarjetaProps {
   mob:          boolean;
   tab:          boolean;
   desk:         boolean;
-  addedId:      number | null;
+  addedId:      string | null;
   esPropio:     boolean;
   compacto?:    boolean;
   onDragStart:  (e: React.DragEvent,  p: Producto) => void;
@@ -177,7 +181,7 @@ function TarjetaProducto({
   // Props por compatibilidad con quien llama a este componente.
   void abrirEditar; void eliminarProd;
   const productoKey    = claveProducto(p);
-  const agregado       = addedId === p.id;
+  const agregado       = addedId === productoKey;
   const preciosMostrar = p.precio500 || p.precio1000 || p.precio3000;
 
   // Algunos iPad/tablets pueden caer como "desk" por el ancho de pantalla.

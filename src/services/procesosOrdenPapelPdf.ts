@@ -6,7 +6,6 @@ export type ProcesoOrdenPapelPdf = {
 };
 
 type ProductoOrdenPapel = {
-  metodo_hojeado?: "hojeado" | "guillotina" | null;
   procesos_aplican?: string[];
   maquinaria_seleccionada?: Record<
     string,
@@ -15,8 +14,8 @@ type ProductoOrdenPapel = {
 };
 
 const PROCESOS = [
-  ["hojeado_papel", "Hojeado", "hojeado_guillotina"],
-  ["guillotina_papel", "Guillotina", "hojeado_guillotina"],
+  ["hojeado_papel", "Hojeado", "hojeadora"],
+  ["guillotina_papel", "Guillotina", "guillotina"],
   ["impresion_papel", "Impresión", "impresora"],
   ["laminacion_papel", "Laminación", "laminado_maquina"],
   ["barniz_uv_papel", "UV", "uv"],
@@ -28,6 +27,13 @@ const PROCESOS = [
   ["empaque_papel", "Empaque", "empaque_maquina"],
 ] as const;
 
+// NUEVO: Hojeado y Guillotina ya no son un método que se decide en el
+// sistema (antes: metodo_hojeado elegido o derivado de la máquina
+// registrada). El operador elige en piso cuál de las dos usar según la
+// orden, así que ambas opciones se muestran siempre disponibles (aplica:
+// true) en vez de estar condicionadas a un único método guardado.
+const PROCESOS_SIEMPRE_DISPONIBLES = new Set(["hojeado_papel", "guillotina_papel"]);
+
 export function construirProcesosOrdenPapelPdf(
   producto: ProductoOrdenPapel
 ): ProcesoOrdenPapelPdf[] {
@@ -36,7 +42,7 @@ export function construirProcesosOrdenPapelPdf(
   return PROCESOS.map(([key, etiqueta, claveMaquina]) => ({
     key,
     etiqueta,
-    aplica: procesos.has(key),
+    aplica: PROCESOS_SIEMPRE_DISPONIBLES.has(key) ? true : procesos.has(key),
     maquina:
       producto.maquinaria_seleccionada?.[claveMaquina]?.nombre ?? null,
   }));

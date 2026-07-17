@@ -1,3 +1,91 @@
+import type { AdvertenciaCalculoPrecioPapel } from "../papel/calculador-precio-papel.types";
+
+// src/types/expo/expo.types.ts
+// ═══════════════════════════════════════════════════════════════════════════
+// PRODUCTOS DEL SISTEMA DISPONIBLES PARA PRECARGAR EL REGISTRO EXPO
+// GET /expo/catalogo/opciones-registro
+// ═══════════════════════════════════════════════════════════════════════════
+
+export interface MaterialSistemaPapelExpo {
+  idgrupo_papel: number;
+  precio_sugerido: number | string | null;
+  idcat_tipo_papel: number | null;
+  tipo_papel: string | null;
+  idcat_calibre: number | null;
+  calibre: string | null;
+}
+
+export interface OpcionSimpleSistemaExpo {
+  id: number;
+  nombre: string;
+}
+
+export interface ProductoSistemaPapelExpo {
+  id: number;
+  categoria: "papel" | "carton";
+  tipo_producto: string | null;
+  descripcion: string | null;
+  medida: string | null;
+  ancho: number | string | null;
+  fuelle: number | string | null;
+  altura: number | string | null;
+  tamano_prod: string | null;
+  id_tamano_producto: number | null;
+  tamano_producto?: string | null;
+  costo_laminado: number | string | null;
+  precio_500: number | string | null;
+  precio_1000: number | string | null;
+  precio_3000: number | string | null;
+  materiales: MaterialSistemaPapelExpo[];
+  laminados: OpcionSimpleSistemaExpo[];
+  asas: OpcionSimpleSistemaExpo[];
+  tintas_frente_default: number | null;
+  tintas_dentro_default: number | null;
+  hs: boolean;
+  tipo_hs: string | null;
+  ar: boolean;
+  textura: boolean;
+  tipo_textura: string | null;
+  uv: boolean;
+  imagen_url: string | null;
+}
+
+export interface ProductoSistemaPlasticoExpo {
+  id: number;
+  categoria: "plastico";
+  tipo_producto: string | null;
+  descripcion?: string | null;
+  material: string | null;
+  calibre: string | null;
+  medida: string | null;
+  altura: number | string | null;
+  ancho: number | string | null;
+  fuelle_fondo: number | string | null;
+  fuelle_lateral_izquierdo: number | string | null;
+  fuelle_lateral_derecho: number | string | null;
+  refuerzo: number | string | null;
+  tamano_prod: string | null;
+  por_kilo: number | string | null;
+  precio_500: number | string | null;
+  precio_1000: number | string | null;
+  precio_3000: number | string | null;
+  pigmento: string | null;
+  tintas_frente_default: number | null;
+  imagen_url: string | null;
+}
+
+export interface TamanoProductoExpoOpcion {
+  id: number;
+  clave: string;
+  nombre: string;
+}
+
+export interface OpcionesRegistroExpoResponse {
+  papel: ProductoSistemaPapelExpo[];
+  plastico: ProductoSistemaPlasticoExpo[];
+  tamanos: TamanoProductoExpoOpcion[];
+}
+
 export interface Producto {
   id:          number;
   fuente?:     "expo" | "sistema";
@@ -21,6 +109,12 @@ export interface Producto {
   precio500:   string;
   precio1000:  string;
   precio3000:  string;
+  // Papel/cartón: precio base del grupo. Plástico conserva las tres tarifas.
+  precioBase?: string;
+  costoLaminado?: number;
+  idTamanoProducto?: number;
+  asasPermitidas?: AsaPermitida[] | null;
+  laminadosPermitidos?: LaminadoPermitido[] | null;
   imagen:      string;
   tipo?:         string;
   ancho?:        string;
@@ -29,10 +123,14 @@ export interface Producto {
   tipoPapel?:    string;
   otro2?:        string;
   tipoProducto?: string;
+  tamanoProd?:    string;
   fuelLateral?:  string;
   fuelLateral2?: string;
   fuelFondo?:    string;
   refuerzo?:     string;
+  // Bolsas por kilo calculadas y guardadas en configuracion_plastico.
+  // Es la base física que utiliza el calculador de precios de plástico.
+  porKilo?:      number;
   troquel?:      boolean;
   perforado?:    boolean;
   configuracion_plastico_id?: number;
@@ -56,6 +154,12 @@ export interface Producto {
   idAsaDefault?:      number;  // papel: idcat_tipo_asa
   idSuajeDefault?:    number;  // plástico: tipo de asa/suaje
   idColorDefault?:    number;  // plástico: color de asa
+  // NUEVO: defaults de tintas — CANTIDAD (1-6), nunca un id. El backend es
+  // quien resuelve la cantidad al id real de la tabla `tintas` justo antes
+  // de guardar. Frente aplica a papel y plástico; dentro solo aplica a
+  // papel/cartón. No se maneja pantones en este cotizador.
+  tintasFrenteDefault?: number;
+  tintasDentroDefault?: number;
 }
 
 // Opciones filtradas por producto de papel del sistema
@@ -68,6 +172,19 @@ export interface FilaProducto {
   precio1:      string;
   precio2:      string;
   precio3:      string;
+  // Referencia automática del calculador. El precio final continúa siendo
+  // editable; cuando precioManualN=true, un recálculo no lo sobrescribe.
+  precioCalculado1: string;
+  precioCalculado2: string;
+  precioCalculado3: string;
+  precioManual1: boolean;
+  precioManual2: boolean;
+  precioManual3: boolean;
+  advertenciasPrecio1: AdvertenciaCalculoPrecioPapel[];
+  advertenciasPrecio2: AdvertenciaCalculoPrecioPapel[];
+  advertenciasPrecio3: AdvertenciaCalculoPrecioPapel[];
+  calculandoPrecio: boolean;
+  errorCalculoPrecio: string | null;
   // Cantidades PROPIAS de este producto — ya no son compartidas entre
   // productos de la misma cotización. Cada fila elige su propia cantidad
   // para cada una de sus hasta 3 columnas de precio.
@@ -89,7 +206,13 @@ export interface FilaProducto {
   tipoAsa:      string;
   idAsa:        number | null;
   idSuaje:      number | null;
-  tintas:       string;
+  // NUEVO: tintas como CANTIDAD (no id) — reemplaza al string libre "2x3".
+  // Plástico solo usa tintasFrente; papel/cartón usan ambos lados. El id
+  // real se resuelve del lado del backend justo antes de guardar. Sin
+  // pantones — este cotizador solo necesita el número.
+  tintasFrente:    number;
+  usaTintasDentro: boolean;
+  tintasDentro:    number;
   otro:         string;
   medida:       string;
   material:     string;
@@ -103,6 +226,19 @@ export interface FilaProducto {
   // Si viene con datos, FilaTabla usará estas en vez del catálogo completo
   asasPermitidas?:      AsaPermitida[]     | null;
   laminadosPermitidos?: LaminadoPermitido[] | null;
+}
+
+export type ReferenciaOpcionPrecioPapelCotizacion =
+  | "precio1"
+  | "precio2"
+  | "precio3";
+
+export interface OpcionPrecioPapelCotizacionPayload {
+  referencia: ReferenciaOpcionPrecioPapelCotizacion;
+  cantidad: number;
+  precio_tablero: number;
+  cargo_extra_unitario: number;
+  precio_final: number;
 }
 
 export interface ClienteExpo {
@@ -212,8 +348,15 @@ export const uid = () => Math.random().toString(36).slice(2, 9);
 // Clave única real de un producto: el id solo NO alcanza porque
 // configuracion_plastico.id y producto_papel.id son autoincrementales
 // independientes y pueden colisionar (ej: plástico id=7 y papel id=7).
-export const claveProducto = (p: { id: number; categoria: string; fuente?: string }) =>
-  `${p.fuente || "sistema"}:${p.categoria}:${p.id}`;
+export const claveProducto = (p: {
+  id: number;
+  categoria: string;
+  fuente?: string;
+  idgrupo_papel?: number;
+}) =>
+  `${p.fuente || "sistema"}:${p.categoria}:${p.id}${
+    p.idgrupo_papel ? `:g${p.idgrupo_papel}` : ""
+  }`;
 
 export const TODAY = new Date().toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" });
 
@@ -234,9 +377,20 @@ export const filaDesdeProducto = (p: Producto): FilaProducto => {
   return {
     uid:          uid(),
     producto:     p,
-    precio1:      p.precio500,
-    precio2:      p.precio1000,
-    precio3:      p.precio3000,
+    precio1:      esPapelOCarton ? (p.precioBase || "") : p.precio500,
+    precio2:      esPapelOCarton ? (p.precioBase || "") : p.precio1000,
+    precio3:      esPapelOCarton ? (p.precioBase || "") : p.precio3000,
+    precioCalculado1: esPapelOCarton ? (p.precioBase || "") : "",
+    precioCalculado2: esPapelOCarton ? (p.precioBase || "") : "",
+    precioCalculado3: esPapelOCarton ? (p.precioBase || "") : "",
+    precioManual1: false,
+    precioManual2: false,
+    precioManual3: false,
+    advertenciasPrecio1: [],
+    advertenciasPrecio2: [],
+    advertenciasPrecio3: [],
+    calculandoPrecio: false,
+    errorCalculoPrecio: null,
     cant1:        "500",
     cant2:        "1,000",
     cant3:        "3,000",
@@ -255,7 +409,11 @@ export const filaDesdeProducto = (p: Producto): FilaProducto => {
     tipoAsa:      p.tipoAsa || "",
     idAsa:        esPapelOCarton ? (p.idAsaDefault ?? null) : (p.idColorDefault ?? null),
     idSuaje:      esPlastico ? (p.idSuajeDefault ?? null) : null,
-    tintas:       p.tintas || (esPlastico ? "1" : "1x0"),
+    // NUEVO: tintas como cantidad plana — frente aplica a todos, dentro
+    // solo a papel/cartón. Sin pantones.
+    tintasFrente:    p.tintasFrenteDefault ?? (esPapelOCarton ? 0 : 1),
+    usaTintasDentro: esPapelOCarton ? !!p.tintasDentroDefault : false,
+    tintasDentro:    esPapelOCarton ? (p.tintasDentroDefault ?? 0) : 0,
     otro:         p.otro || "",
     medida:       p.medida || "",
     material:     p.material || "",
@@ -269,15 +427,17 @@ export const filaDesdeProducto = (p: Producto): FilaProducto => {
     extra:        "",
     pigmento:     esPlastico ? (p.pigmento || "") : "",
     pantones:     null,
-    // Se populan en Expo.tsx al hacer addProd, solo para papel del sistema
-    asasPermitidas:      null,
-    laminadosPermitidos: null,
+    // Ya viajan en la consulta principal del catálogo. Se conserva fallback
+    // en Expo.tsx para compatibilidad con un backend anterior.
+    asasPermitidas:      p.asasPermitidas ?? null,
+    laminadosPermitidos: p.laminadosPermitidos ?? null,
   };
 };
 
 export const mapearCatalogoExpoAProducto = (p: {
   idcatalogo_expo:   number;
   nombre:            string;
+  descripcion?:      string | null;
   categoria:         "papel" | "plastico" | "carton";
   medida:            string | null;
   material:          string | null;
@@ -297,6 +457,15 @@ export const mapearCatalogoExpoAProducto = (p: {
   precio_500:        number | null;
   precio_1000:       number | null;
   precio_3000:       number | null;
+  precio_base?:      number | null;
+  costo_laminado?:   number | null;
+  id_tamano_producto?: number | null;
+  tamano_producto?:  string | null;
+  idproducto_papel?: number | null;
+  idgrupo_papel?:    number | null;
+  grupo_descripcion?: string | null;
+  laminados_permitidos?: LaminadoPermitido[] | null;
+  asas_permitidas?: AsaPermitida[] | null;
   imagen_url:        string | null;
   tipo_producto:     string | null;
   altura?:           number | null;
@@ -306,21 +475,26 @@ export const mapearCatalogoExpoAProducto = (p: {
   fuelle_lateral_iz?: number | null;
   fuelle_lateral_de?: number | null;
   refuerzo?:         number | null;
+  por_kilo?:         number | string | null;
   origen?:           string | null;
   // NUEVO: pigmento (plástico) — de producto_acabado_default.pigmento_default
   pigmento?:         string | null;
+  // NUEVO: defaults de tintas — ya vienen como CANTIDAD (el backend hace el
+  // join a `tintas` y regresa cantidad, no idtintas). Sin pantones.
+  tintas_frente_default?: number | null;
+  tintas_dentro_default?: number | null;
 }): Producto => {
   const esPlastico = p.categoria === "plastico";
   const esPapelOCarton = p.categoria === "papel" || p.categoria === "carton";
   return {
     id:           p.idcatalogo_expo,
     fuente:       "expo",
-    nombre:       p.nombre,
+    nombre:       esPlastico ? (p.descripcion || p.nombre || "") : p.nombre,
     categoria:    p.categoria,
     medida:       p.medida         || "",
     material:     p.material       || "",
     calibre:      p.calibre        || "",
-    tintas:       p.tintas         || (esPlastico ? "1" : "1x0"),
+    tintas:       p.tintas         || (esPlastico ? "1" : "0x0"),
     laminacion:   esPapelOCarton ? p.laminacion : false,
     tipoLaminado: esPapelOCarton ? (p.tipo_laminado || "") : "",
     hs:           esPapelOCarton ? p.hs : false,
@@ -335,9 +509,12 @@ export const mapearCatalogoExpoAProducto = (p: {
     precio500:    p.precio_500  != null ? `$${Number(p.precio_500).toFixed(2)}`  : "",
     precio1000:   p.precio_1000 != null ? `$${Number(p.precio_1000).toFixed(2)}` : "",
     precio3000:   p.precio_3000 != null ? `$${Number(p.precio_3000).toFixed(2)}` : "",
+    precioBase:   p.precio_base != null ? `$${Number(p.precio_base).toFixed(2)}` : "",
+    costoLaminado: p.costo_laminado != null ? Number(p.costo_laminado) : 0,
+    idTamanoProducto: p.id_tamano_producto ?? undefined,
     imagen:       p.imagen_url     || "",
-    tipo:         esPlastico ? (p.tipo_producto || "") : "",
-    tipoProducto: esPlastico ? (p.tipo_producto || "") : "",
+    tipo:         p.tipo_producto || "",
+    tipoProducto: p.tipo_producto || "",
     altura:       p.altura            != null ? String(p.altura)            : "",
     ancho:        p.ancho             != null ? String(p.ancho)             : "",
     fuelle:       esPapelOCarton && p.fuelle != null ? String(p.fuelle)    : "",
@@ -345,8 +522,20 @@ export const mapearCatalogoExpoAProducto = (p: {
     fuelLateral:  esPlastico && p.fuelle_lateral_iz != null ? String(p.fuelle_lateral_iz) : "",
     fuelLateral2: esPlastico && p.fuelle_lateral_de != null ? String(p.fuelle_lateral_de) : "",
     refuerzo:     esPlastico && p.refuerzo          != null ? String(p.refuerzo)          : "",
+    porKilo:      esPlastico && p.por_kilo != null ? Number(p.por_kilo) : undefined,
+    configuracion_plastico_id: esPlastico ? p.idcatalogo_expo : undefined,
     origen:       p.origen            || "expo",
+    idproducto_papel: esPapelOCarton
+      ? (p.idproducto_papel ?? p.idcatalogo_expo)
+      : undefined,
+    idgrupo_papel: esPapelOCarton ? (p.idgrupo_papel ?? undefined) : undefined,
+    grupo_descripcion: esPapelOCarton ? (p.grupo_descripcion || undefined) : undefined,
+    asasPermitidas: esPapelOCarton ? (p.asas_permitidas || null) : null,
+    laminadosPermitidos: esPapelOCarton ? (p.laminados_permitidos || null) : null,
+    tamanoProd: esPapelOCarton ? (p.tamano_producto || "") : undefined,
     pigmento:     esPlastico ? (p.pigmento || "") : "",
+    tintasFrenteDefault: p.tintas_frente_default ?? undefined,
+    tintasDentroDefault: p.tintas_dentro_default ?? undefined,
   };
 };
 
@@ -363,27 +552,17 @@ export const mapearPlasticoSistemaAProducto = (p: {
   material: string | null; calibre: number | null; calibre_bopp: number | null; por_kilo: number | null;
   altura?: number | null; ancho?: number | null; fuelle_fondo?: number | null;
   fuelle_latiz?: number | null; fuelle_latde?: number | null; refuerzo?: number | null;
-  // NUEVO: URL firmada de la imagen registrada en Plastico.tsx (categoria
-  // 'imagen-producto-plastico' en `archivos`), o la de backfill desde
-  // Catálogo Expo si aplicó. Viene ya resuelta del backend (getCatalogoSistema).
   imagen_url?: string | null;
-  // NUEVO: precios de referencia (500/1000/3000 pzs) — antes vivían en
-  // catalogo_expo, ahora en configuracion_plastico. Son solo el valor con
-  // el que arranca la fila al agregar el producto a la cotización; se
-  // pueden seguir editando libremente ahí, igual que siempre.
   precio_500?: number | null;
   precio_1000?: number | null;
   precio_3000?: number | null;
-  // NUEVO: acabados por default (producto_acabado_default) — antes esta
-  // función los ignoraba por completo (hardcodeados en false/""), por eso
-  // no se veían al arrastrar el producto al cotizador aunque sí estuvieran
-  // guardados en la base de datos.
   pigmento?: string | null;
   asa?: boolean;
   tipo_asa?: string | null;
-  // NUEVO: IDs reales — ver comentario en la interfaz Producto.
   idsuaje?: number | null;
   id_color?: number | null;
+  // NUEVO: default de tintas frente como CANTIDAD (join a `tintas` en backend)
+  tintas_frente_default?: number | null;
 }): Producto => {
   const materialNorm = normalizarMaterialPlastico(p.material);
   const esBopp = materialNorm === "BOPP";
@@ -413,6 +592,7 @@ export const mapearPlasticoSistemaAProducto = (p: {
     pigmento:     p.pigmento || "",
     idSuajeDefault: p.idsuaje  ?? undefined,
     idColorDefault: p.id_color ?? undefined,
+    tintasFrenteDefault: p.tintas_frente_default ?? undefined,
     precio500:    p.precio_500  != null ? `$${Number(p.precio_500).toFixed(2)}`  : "",
     precio1000:   p.precio_1000 != null ? `$${Number(p.precio_1000).toFixed(2)}` : "",
     precio3000:   p.precio_3000 != null ? `$${Number(p.precio_3000).toFixed(2)}` : "",
@@ -426,31 +606,32 @@ export const mapearPlasticoSistemaAProducto = (p: {
     fuelLateral: p.fuelle_latiz != null ? String(p.fuelle_latiz) : "",
     fuelLateral2:p.fuelle_latde != null ? String(p.fuelle_latde) : "",
     fuelle:      "",
-    refuerzo:    "",
+    refuerzo:    p.refuerzo != null ? String(p.refuerzo) : "",
+    porKilo:     p.por_kilo != null ? Number(p.por_kilo) : undefined,
     origen:      "sistema",
   };
 };
 
 export const mapearPapelSistemaAProducto = (p: {
   id: number; nombre: string; medida: string | null;
+  tipo_producto?: string | null;
   descripcion_papel: string | null; primer_material?: string | null;
   primer_calibre?: string | null;
   ancho?: number | null; fuelle?: number | null; altura?: number | null;
-  // NUEVO: URL firmada de la imagen registrada en "Productos Papel" →
-  // subcarpeta "imagen" (categoria='imagen-suaje-papel' en `archivos`).
-  // Viene del backend ya resuelta (getCatalogoSistema), lista para usarse
-  // directo como src de <img>.
   imagen_url?: string | null;
-  // NUEVO: precios de referencia — mismo comentario que en el mapeo de
-  // plástico: solo el valor con el que arranca la fila al agregar el
-  // producto a la cotización, se sigue pudiendo editar libremente.
   precio_500?: number | null;
   precio_1000?: number | null;
   precio_3000?: number | null;
-  // NUEVO: acabados reales (acabados_papel/acabados_laminado/acabados_asas
-  // + producto_acabado_default) — antes esta función los ignoraba por
-  // completo (hardcodeados en false/""), por eso no se veían al arrastrar
-  // el producto al cotizador aunque sí estuvieran guardados en la BD.
+  precio_base?: number | null;
+  costo_laminado?: number | null;
+  id_tamano_producto?: number | null;
+  tamano_producto?: string | null;
+  idgrupo_papel?: number | null;
+  grupo_descripcion?: string | null;
+  laminados_permitidos?: LaminadoPermitido[] | null;
+  asas_permitidas?: AsaPermitida[] | null;
+  categoria?: "papel" | "carton";
+  origen?: "sistema" | "expo";
   laminacion?: boolean;
   tipo_laminado?: string | null;
   hs?: boolean;
@@ -461,22 +642,24 @@ export const mapearPapelSistemaAProducto = (p: {
   uv?: boolean;
   asa?: boolean;
   tipo_asa?: string | null;
-  // NUEVO: IDs reales — ver comentario en la interfaz Producto.
   idcat_laminado?: number | null;
   idfoil?: number | null;
   idcat_textura?: number | null;
   idcat_tipo_asa?: number | null;
+  // NUEVO: defaults de tintas como CANTIDAD (join a `tintas` en backend)
+  tintas_frente_default?: number | null;
+  tintas_dentro_default?: number | null;
 }): Producto => ({
   id:           p.id,
-  fuente:       "sistema",
+  fuente:       p.origen === "expo" ? "expo" : "sistema",
   nombre:       p.descripcion_papel
     ? `${p.nombre} — ${p.descripcion_papel}`
     : p.nombre,
-  categoria:    "papel",
+  categoria:    p.categoria || "papel",
   medida:       p.medida || "",
   material:     p.primer_material || "",
   calibre:      p.primer_calibre || "",
-  tintas:       "1x0",
+  tintas:       "0x0",
   laminacion:   p.laminacion === true,
   tipoLaminado: p.tipo_laminado || "",
   hs:           p.hs === true,
@@ -492,13 +675,23 @@ export const mapearPapelSistemaAProducto = (p: {
   idFoilDefault:     p.idfoil            ?? undefined,
   idTexturaDefault:  p.idcat_textura     ?? undefined,
   idAsaDefault:      p.idcat_tipo_asa    ?? undefined,
+  tintasFrenteDefault: p.tintas_frente_default ?? undefined,
+  tintasDentroDefault: p.tintas_dentro_default ?? undefined,
   precio500:    p.precio_500  != null ? `$${Number(p.precio_500).toFixed(2)}`  : "",
   precio1000:   p.precio_1000 != null ? `$${Number(p.precio_1000).toFixed(2)}` : "",
   precio3000:   p.precio_3000 != null ? `$${Number(p.precio_3000).toFixed(2)}` : "",
+  precioBase:   p.precio_base != null ? `$${Number(p.precio_base).toFixed(2)}` : "",
+  costoLaminado: p.costo_laminado != null ? Number(p.costo_laminado) : 0,
+  idTamanoProducto: p.id_tamano_producto ?? undefined,
+  tamanoProd: p.tamano_producto || "",
   imagen:       p.imagen_url || "",
   idproducto_papel: p.id,
-  tipo:         "",
-  tipoProducto: "",
+  idgrupo_papel: p.idgrupo_papel ?? undefined,
+  grupo_descripcion: p.grupo_descripcion || undefined,
+  asasPermitidas: p.asas_permitidas || null,
+  laminadosPermitidos: p.laminados_permitidos || null,
+  tipo:         p.tipo_producto || p.nombre || "",
+  tipoProducto: p.tipo_producto || p.nombre || "",
   ancho:   p.ancho  != null ? String(p.ancho)  : "",
   fuelle:  p.fuelle != null ? String(p.fuelle) : "",
   altura:  p.altura != null ? String(p.altura) : "",
@@ -506,5 +699,5 @@ export const mapearPapelSistemaAProducto = (p: {
   fuelLateral:  "",
   fuelLateral2: "",
   refuerzo:     "",
-  origen:  "sistema",
+  origen:  p.origen === "expo" ? "expo" : "sistema",
 });
