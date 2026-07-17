@@ -40,6 +40,7 @@ interface DatosActuales {
   tipo_producto_nombre: string;
   material_id:          number;
   calibre_id:           number;
+  descripcion?:         string | null;
   medidas: {
     altura:         string;
     ancho:          string;
@@ -209,7 +210,7 @@ export default function ModalCambiarProducto({
 
   const [prodBuscado, setProdBuscado] = useState<ProductoBusqueda | null>(null);
   const [datosNuevos, setDatosNuevos] = useState<DatosProducto | null>(null);
-
+ 
   const datosIniciales: DatosProducto | null = datosActuales
     ? {
         tipoProducto:       datosActuales.tipo_producto_nombre,
@@ -221,6 +222,7 @@ export default function ModalCambiarProducto({
         medidas:            datosActuales.medidas,
         medidasFormateadas: datosActuales.medidasFormateadas,
         nombreCompleto:     datosActuales.nombre,
+        descripcion:        datosActuales.descripcion ?? "",
       }
     : null;
 

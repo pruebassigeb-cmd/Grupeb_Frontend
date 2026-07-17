@@ -129,9 +129,9 @@ export default function FormularioSolicitud({
     material: "", materialId: 0,
     calibre: "", calibreId: 0,
     medidas: { ...ESTADO_INICIAL_PRODUCTO_MEDIDAS },
-    medidasFormateadas: "", nombreCompleto: "",
+    medidasFormateadas: "", nombreCompleto: "", descripcion: "",
   });
-
+ 
   const tintasPlastico = useMemo(
     () =>
       tintas
@@ -707,7 +707,7 @@ export default function FormularioSolicitud({
     });
     setDatosProductoNuevo({
       tipoProducto: "", tipoProductoId: 0, material: "", materialId: 0, calibre: "", calibreId: 0,
-      medidas: { ...ESTADO_INICIAL_PRODUCTO_MEDIDAS }, medidasFormateadas: "", nombreCompleto: "",
+      medidas: { ...ESTADO_INICIAL_PRODUCTO_MEDIDAS }, medidasFormateadas: "", nombreCompleto: "", descripcion: "",
     });
     setPreciosEditadosManualmente([false, false, false]);
     setPreciosTexto(["", "", ""]); setCantidadesTexto(["", "", ""]);
