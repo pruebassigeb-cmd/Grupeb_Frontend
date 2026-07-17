@@ -40,7 +40,6 @@ export interface ProductoCatalogoExpo {
   tipo_producto: string | null;
   tamano_prod?: string | null;
   pigmento?: string | null;
-  por_kilo?: number | string | null;
   // NUEVO: defaults de tintas — CANTIDAD (1-6), sin pantones.
   tintas_frente_default?: number | null;
   tintas_dentro_default?: number | null;
@@ -335,6 +334,19 @@ export const registrarProductoEnBlanco = async (
 };
 
 // ═══════════════════════════════════════════════════════════
+// Regla de costo de asa para papel/cartón
+// ═══════════════════════════════════════════════════════════
+// La opción de asa se sigue guardando normalmente mediante id_asa, pero el
+// incremento de la matriz "asa" solo se aplica cuando el texto contiene
+// "listón". Se ignoran mayúsculas y acentos.
+const esAsaDeListon = (valor: unknown): boolean =>
+  String(valor ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .includes("liston");
+
+// ═══════════════════════════════════════════════════════════
 // mapearProductoAPayload
 // ═══════════════════════════════════════════════════════════
 
@@ -354,6 +366,12 @@ export const mapearProductoAPayload = (
   const parseP = (s: string) => parseFloat(s.replace(/[^0-9.]/g, "")) || 0;
 
   const extraNum = fila.modoExtra === "precio" ? parseP(fila.extra || "0") : 0;
+
+  // Importante: "fila.asa" indica que sí hay una opción seleccionada y se
+  // conserva para mostrarla/guardarla. Este boolean separado únicamente
+  // decide si la tarifa de asa debe incrementar el precio de papel/cartón.
+  const aplicaCostoAsaPapel =
+    fila.asa && esAsaDeListon(fila.tipoAsa);
 
   // La cantidad de columnas visibles es la fuente de verdad del guardado.
   // Aunque React conserve valores antiguos en una columna oculta, aquí se
@@ -439,7 +457,7 @@ const precios = paresCantidadPrecio.map(
       laminacion:      fila.laminacion,
       hs:              fila.hs,
       textura:         fila.textura,
-      asa:             fila.asa,
+      asa:             aplicaCostoAsaPapel,
       uv:              fila.uv,
       alto_relieve:    fila.ar,
       observacion:     null,

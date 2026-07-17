@@ -23,6 +23,19 @@ const formatearPrecio = (value: number): string => `$${Number(value).toFixed(2)}
 const esPapel = (fila: FilaProducto): boolean =>
   fila.producto.categoria === "papel" || fila.producto.categoria === "carton";
 
+/**
+ * El costo configurado para "asa" solo aplica cuando el nombre de la opción
+ * contiene la palabra "listón". La comparación ignora mayúsculas y acentos,
+ * por lo que acepta ejemplos como "Listón satinado", "LISTON" o
+ * "Asa de listón reforzado".
+ */
+const esAsaDeListon = (valor: unknown): boolean =>
+  String(valor ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .includes("liston");
+
 function construirFirma(fila: FilaProducto, columnasPrecio: 1 | 2 | 3): string {
   const p = fila.producto;
   return JSON.stringify({
@@ -42,7 +55,9 @@ function construirFirma(fila: FilaProducto, columnasPrecio: 1 | 2 | 3): string {
       ar: fila.ar,
       textura: fila.textura,
       uv: fila.uv,
-      asa: fila.asa,
+      asaSeleccionada: fila.asa,
+      tipoAsa: fila.tipoAsa,
+      aplicaCostoAsa: fila.asa && esAsaDeListon(fila.tipoAsa),
     },
   });
 }
@@ -128,7 +143,7 @@ export function useCalculoPrecioPapel({
           alto_relieve: fila.ar,
           textura: fila.textura,
           uv: fila.uv,
-          asa: fila.asa,
+          asa: fila.asa && esAsaDeListon(fila.tipoAsa),
         },
       }, controller.signal);
 

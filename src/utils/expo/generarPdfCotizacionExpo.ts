@@ -83,6 +83,53 @@ const COMENTARIOS = { x: 95, y: 150, ancho: 190, maxLineas: 3, fontSize: 8 };
 
 const TABLA = { xInicio: 90, xFin: 289, yEncabezado: 85, altoEncabezado: 13, yFilasInicio: 98, yFilasFin: 135 };
 
+// ---------------------------------------------------------------------------
+// POSICIONES FIJAS DE LOS 5 RENGLONES DE LA HOJA
+// ---------------------------------------------------------------------------
+// La hoja preimpresa SIEMPRE tiene 5 renglones y 3 celdas de cantidad, vengan
+// los productos que vengan. Por eso las coordenadas son constantes y NO se
+// calculan a partir de cuantos productos o cuantas cantidades llegaron.
+//
+// Regla: el producto 1 va SIEMPRE en FILAS[0], el 2 en FILAS[1], etc.
+// Con 1 producto se usa FILAS[0] y las demas quedan vacias. Con 3 productos
+// se usan FILAS[0..2]. Nunca se recentra ni se reparte el espacio sobrante.
+//
+// Cada valor es la Y en mm, ANTES de sumarle el dy de su columna y el ajuste
+// individual de AJUSTES_POR_PRODUCTO. Para mover un renglon completo, cambia
+// aqui sus numeros; para mover un solo dato, usa AJUSTES_POR_PRODUCTO.
+//
+//   lineaUnica = dato de una sola linea (medida, tintas, laminacion, etc.)
+//   linea1 / linea2 = las dos lineas de un mismo dato (nombre largo,
+//                     o material arriba y calibre abajo)
+//   cantidad / separador / precio = los tres renglones de la celda de cantidad
+interface PosicionFila {
+  lineaUnica: number;
+  linea1: number;
+  linea2: number;
+  cantidad: number;
+  separador: number;
+  precio: number;
+}
+
+const FILAS: PosicionFila[] = [
+  { lineaUnica: 102.48, linea1: 101.396, linea2: 103.396, cantidad: 100.812, separador: 101.552, precio: 104.068 },
+  { lineaUnica: 109.88, linea1: 108.796, linea2: 110.796, cantidad: 108.212, separador: 108.952, precio: 111.468 },
+  { lineaUnica: 116.28, linea1: 115.196, linea2: 117.196, cantidad: 114.612, separador: 115.352, precio: 117.868 },
+  { lineaUnica: 123.68, linea1: 122.596, linea2: 124.596, cantidad: 122.012, separador: 122.752, precio: 125.268 },
+  { lineaUnica: 131.08, linea1: 129.996, linea2: 131.996, cantidad: 129.412, separador: 130.152, precio: 132.668 },
+];
+
+// Centro X fijo de cada una de las 3 celdas de cantidad, ANTES de sumarle el
+// dx de la columna cantidad. La cantidad 1 va SIEMPRE en SLOTS_CANTIDAD[0],
+// aunque el producto traiga una sola cantidad.
+const SLOTS_CANTIDAD: number[] = [258.5, 270.7, 282.9];
+
+// Mitad del largo de la rayita que separa cantidad de precio.
+const SEPARADOR_MEDIO_ANCHO = 3.782;
+
+const MAX_FILAS = FILAS.length;
+const MAX_CANTIDADES = SLOTS_CANTIDAD.length;
+
 interface ColumnaLayout {
   x1: number;
   x2: number;
@@ -464,41 +511,15 @@ export function generarPdfCotizacionExpo(params: PdfCotizacionExpoParams, modoCa
   textoEnCampo(doc, fecha, "fecha", true);
   textoEnCampo(doc, asesor, "asesor", true);
 
-  const totalFilas = Math.max(productos.length, 1);
-  const altoFila = (TABLA.yFilasFin - TABLA.yFilasInicio) / totalFilas;
-
-  // Separación extra entre cada renglón de producto (además del alto propio
-  // de la fila). Con 5 productos esto hace que la tabla ocupe más espacio
-  // vertical del que originalmente delimitaba TABLA.yFilasFin — es
-  // intencional, la fila 5 quedará más abajo del límite original.
-  const SEPARACION_ENTRE_FILAS = 0;
-
-  // Ajuste extra SOLO para los renglones 3, 4 y 5 (indices 2, 3 y 4).
-  // El renglon 1 y 2 quedan como estan (son el punto base correcto).
-  // Cada renglon tomado independiente respecto a su posicion anterior:
-  // renglon 3 subio 1mm, renglon 4 subio 2mm y renglon 5 subio 3mm sobre
-  // su propia posicion actual (que ya traia +1/+2/+3mm hacia abajo), por
-  // lo que el resultado neto queda en 0 para los tres.
-  const AJUSTE_EXTRA_FILA: Record<number, number> = { 2: -1, 3: -1, 4: -1 };
-
-  // Con la letra grande, el tamaño ya NO se encoge cuando hay más productos
-  // (a diferencia de la versión "pequeña"), así que si vienen muchos
-  // productos, la fila se angosta pero la letra sigue del mismo tamaño y
-  // puede encimarse con la fila de abajo — sobre todo en productos que
-  // necesiten 2 líneas (nombre largo, o material+calibre juntos). Probado:
-  // se ve bien hasta ~5-6 productos; de 7 en adelante conviene revisar.
-  if (altoFila < 6) {
+  // La hoja fisica solo tiene 5 renglones y el acomodo ya no se comprime,
+  // asi que un producto 6 se imprimiria fuera de la tabla.
+  const productosVisibles = productos.slice(0, MAX_FILAS);
+  if (productos.length > MAX_FILAS) {
     console.warn(
-      `[cotizacion-expo] ${productos.length} productos → filas de ${altoFila.toFixed(1)}mm, ` +
-      `pero la letra quedó fija en tamaño grande (no se ajusta sola). Con nombres o ` +
-      `material+calibre que ocupen 2 líneas, es probable que se encimen con la fila de abajo.`
+      `[cotizacion-expo] Llegaron ${productos.length} productos y la hoja preimpresa ` +
+      `solo tiene ${MAX_FILAS} renglones. Se imprimen los primeros ${MAX_FILAS}.`
     );
   }
-
-  // Estos tamaños auxiliares se usan SOLAMENTE para conservar exactamente
-  // las posiciones verticales que ya tenía el archivo. No son tamaños visibles.
-  const fontPrincipalPosicion = altoFila >= 7.2 ? 6.5 : altoFila >= 6 ? 5.8 : 5;
-  const fontSecundariaPosicion = Math.max(4.5, fontPrincipalPosicion - 0.7);
 
   // Tamaños visibles restaurados a los del archivo original.
   // Cambiar estos valores no modifica las coordenadas ni el acomodo.
@@ -508,21 +529,13 @@ export function generarPdfCotizacionExpo(params: PdfCotizacionExpoParams, modoCa
     pigmento: 7, cantidad: 8, precio: 7.5,
   } as const;
 
-  productos.forEach((producto, indiceProducto) => {
-    const yFilaInicio =
-      TABLA.yFilasInicio +
-      indiceProducto * altoFila +
-      indiceProducto * SEPARACION_ENTRE_FILAS +
-      (AJUSTE_EXTRA_FILA[indiceProducto] ?? 0);
-    const yCentro = yFilaInicio + altoFila / 2;
-
-    // Con la letra 2 puntos más chica, se necesita menos espacio entre las
-    // 2 líneas de un mismo producto (nombre en 2 líneas, o material+calibre)
-    // para que no se encimen. Se deja el mínimo necesario.
-    const separacionLineas = Math.min(2.0, altoFila * 0.32);
-    const yLineaUnica = yCentro + fontPrincipalPosicion * 0.12;
-    const yLinea1 = yCentro - separacionLineas / 2 + fontSecundariaPosicion * 0.12;
-    const yLinea2 = yCentro + separacionLineas / 2 + fontSecundariaPosicion * 0.12;
+  productosVisibles.forEach((producto, indiceProducto) => {
+    // Posiciones FIJAS del renglon que le toca a este producto.
+    // No dependen de cuantos productos llegaron.
+    const fila = FILAS[indiceProducto];
+    const yLineaUnica = fila.lineaUnica;
+    const yLinea1 = fila.linea1;
+    const yLinea2 = fila.linea2;
 
     // PRODUCTO: ajuste general y ajustes particulares de linea 1 y linea 2.
     const columnaProducto = COLUMNAS.producto;
@@ -572,14 +585,14 @@ export function generarPdfCotizacionExpo(params: PdfCotizacionExpoParams, modoCa
     textoEnColumna(doc, "otroPigmento", recortarCaracteres(producto.pigmento, 8), yLineaUnica, TAMANO.pigmento, obtenerAjusteProducto(indiceProducto, "otroPigmento"), true);
 
     // CANTIDADES: cada cantidad, linea y precio se puede mover por separado.
-    const detalles = (producto.detalles || []).slice(0, 3);
+    // Cada una va en su celda FIJA: la 1a en SLOTS_CANTIDAD[0], la 2a en el
+    // [1] y la 3a en el [2]. Si el producto trae menos de 3, las celdas
+    // sobrantes quedan vacias; las que si vienen no se mueven ni se recentran.
+    const detalles = (producto.detalles || []).slice(0, MAX_CANTIDADES);
     const columnaCantidad = COLUMNAS.cantidad;
-    const anchoCantidad = columnaCantidad.x2 - columnaCantidad.x1;
-    const totalOpciones = Math.max(detalles.length, 1);
-    const anchoOpcion = anchoCantidad / totalOpciones;
 
     detalles.forEach((detalle, indiceDetalle) => {
-      const xCentroBase = columnaCantidad.x1 + anchoOpcion * indiceDetalle + anchoOpcion / 2 + columnaCantidad.dx;
+      const xCentroBase = SLOTS_CANTIDAD[indiceDetalle] + columnaCantidad.dx;
 
       const cantidad = numeroSeguro(detalle.cantidad);
       const total = numeroSeguro(detalle.precio_total);
@@ -588,9 +601,9 @@ export function generarPdfCotizacionExpo(params: PdfCotizacionExpoParams, modoCa
           ? numeroSeguro(detalle.precio_unitario)
           : cantidad > 0 ? total / cantidad : 0;
 
-      const yCantidadBase = yFilaInicio + altoFila * 0.38 + columnaCantidad.dy;
-      const ySeparadorBase = yFilaInicio + altoFila * 0.48 + columnaCantidad.dy;
-      const yPrecioBase = yFilaInicio + altoFila * 0.82 + columnaCantidad.dy;
+      const yCantidadBase = fila.cantidad + columnaCantidad.dy;
+      const ySeparadorBase = fila.separador + columnaCantidad.dy;
+      const yPrecioBase = fila.precio + columnaCantidad.dy;
 
       const ajusteCantidad = obtenerAjusteCantidad(indiceProducto, indiceDetalle, "cantidad");
       const ajusteLinea = obtenerAjusteCantidad(indiceProducto, indiceDetalle, "linea");
@@ -607,7 +620,7 @@ export function generarPdfCotizacionExpo(params: PdfCotizacionExpoParams, modoCa
 
       doc.setDrawColor(0, 0, 0);
       doc.setLineWidth(0.15);
-      const medioSeparador = Math.min(anchoOpcion * 0.31, 5.2);
+      const medioSeparador = SEPARADOR_MEDIO_ANCHO;
       doc.line(
         gx(xCentroBase - medioSeparador + ajusteLinea.dx),
         gy(ySeparadorBase + ajusteLinea.dy),

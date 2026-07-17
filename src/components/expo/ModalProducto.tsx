@@ -20,7 +20,6 @@ import {
   calibresPapelCompatibles,
   grupoPapelPorCalibre,
   precioFormulario,
-  productosPapelCompatibles,
   productosPlasticoCompatibles,
   valorFormulario,
 } from "../../utils/expo/opcionesRegistroExpo";
@@ -54,6 +53,15 @@ const LS: React.CSSProperties = { display:"block",fontSize:10,fontWeight:700,col
 const IS: React.CSSProperties = { width:"100%",background:"#111",border:"1px solid #333",borderRadius:6,padding:"8px 10px",color:"#EEE",fontSize:12,outline:"none",fontFamily:"'Inter',sans-serif",marginBottom:2 };
 const ROW2: React.CSSProperties = { display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:14 };
 const ROW3: React.CSSProperties = { display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12,marginBottom:14 };
+
+// Compara los tipos sin importar mayúsculas, espacios ni acentos.
+// El material/tipo de papel no participa en este filtro.
+const normalizarTexto = (valor: unknown): string =>
+  String(valor ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLocaleLowerCase("es-MX");
 
 // ─── Helper parsear medida string → inputs ────────────────────────────────────
 const parsearMedidaAInputs = (medida: string): Record<MedidaKey, string> => {
@@ -373,10 +381,23 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
   const soloNums = (v: string) => v.replace(/[^0-9.]/g,"").replace(/^(\d*\.?\d*).*$/,"$1");
   const esPapelCarton = form.categoria === "papel" || form.categoria === "carton";
 
-  const productosPapelFiltrados = useMemo(
-    () => productosPapelCompatibles(opcionesSistema.papel, form.tipo || "", form.tipoPapel || ""),
-    [opcionesSistema.papel, form.tipo, form.tipoPapel],
-  );
+  const productosPapelFiltrados = useMemo(() => {
+    const tipoSeleccionado = normalizarTexto(form.tipo);
+
+    if (!tipoSeleccionado) return [];
+
+    return opcionesSistema.papel
+      .filter((producto) =>
+        normalizarTexto(producto.tipo_producto) === tipoSeleccionado
+      )
+      .sort((a, b) =>
+        String(a.medida ?? "").localeCompare(
+          String(b.medida ?? ""),
+          "es-MX",
+          { numeric: true, sensitivity: "base" }
+        )
+      );
+  }, [opcionesSistema.papel, form.tipo]);
 
   const productoPapelBase = useMemo<ProductoSistemaPapelExpo | null>(
     () => opcionesSistema.papel.find(p => p.id === productoPapelBaseId) || null,
@@ -636,7 +657,36 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
             </div>
             <div>
               <label style={LS}>Tipo de papel</label>
-              <select style={IS} value={form.tipoPapel||""} onChange={e=>{ setF("tipoPapel",e.target.value); setF("material",e.target.value); limpiarPlantillaPapel(); }}>
+              <select
+                style={IS}
+                value={form.tipoPapel || ""}
+                onChange={(event) => {
+                  const tipoPapel = event.target.value;
+                  setF("tipoPapel", tipoPapel);
+                  setF("material", tipoPapel);
+
+                  // Cambiar el material ya no elimina el producto/medida
+                  // seleccionado, porque la lista se filtra únicamente por tipo.
+                  if (productoPapelBase) {
+                    const calibres = calibresPapelCompatibles(
+                      productoPapelBase,
+                      tipoPapel
+                    );
+                    const primerCalibre = calibres[0] || "";
+                    const grupo = grupoPapelPorCalibre(
+                      productoPapelBase,
+                      tipoPapel,
+                      primerCalibre
+                    );
+
+                    setF("calibre", primerCalibre);
+                    setF(
+                      "precioBase",
+                      precioFormulario(grupo?.precio_sugerido ?? null)
+                    );
+                  }
+                }}
+              >
                 <option value="">— Selecciona —</option>
                 {catalogs.tipo_papel.map(item=><option key={item.id} value={item.nombre}>{item.nombre}</option>)}
               </select>
@@ -646,7 +696,7 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
               <select
                 style={{...IS, marginBottom:0}}
                 value={productoPapelBaseId ?? ""}
-                disabled={!form.tipo || !form.tipoPapel || loadingOpcionesSistema}
+                disabled={!form.tipo || loadingOpcionesSistema}
                 onChange={e=>{
                   const id = Number(e.target.value);
                   if (!id) { limpiarPlantillaPapel(); return; }
@@ -657,11 +707,11 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
                 <option value="">
                   {loadingOpcionesSistema
                     ? "Cargando productos del sistema..."
-                    : !form.tipo || !form.tipoPapel
-                      ? "Primero selecciona tipo y papel"
+                    : !form.tipo
+                      ? "Primero selecciona un tipo"
                       : productosPapelFiltrados.length
-                        ? "— Selecciona para autocompletar —"
-                        : "Sin productos compatibles"}
+                        ? `— Selecciona entre ${productosPapelFiltrados.length} productos —`
+                        : "Sin productos registrados para ese tipo"}
                 </option>
                 {productosPapelFiltrados.map(producto=><option key={producto.id} value={producto.id}>
                   {producto.medida || "Sin medida"}{producto.descripcion ? ` · ${producto.descripcion}` : ""}
