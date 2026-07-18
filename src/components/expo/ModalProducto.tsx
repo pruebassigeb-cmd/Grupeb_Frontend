@@ -1001,11 +1001,23 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
             </>
           ) : (
             <>
-              <label style={LS}>Precios unitarios (expo)</label>
-              <div style={ROW3}>
-                <div><label style={{ ...LS,color:"#C9922A" }}>500 pzs</label><input style={IS} value={form.precio500||""} onChange={e=>setF("precio500",e.target.value)} placeholder="$0.00" /></div>
-                <div><label style={{ ...LS,color:"#C9922A" }}>1,000 pzs</label><input style={IS} value={form.precio1000||""} onChange={e=>setF("precio1000",e.target.value)} placeholder="$0.00" /></div>
-                <div><label style={{ ...LS,color:"#C9922A" }}>3,000 pzs</label><input style={IS} value={form.precio3000||""} onChange={e=>setF("precio3000",e.target.value)} placeholder="$0.00" /></div>
+              <label style={LS}>Precio unitario Expo</label>
+              <div style={{ maxWidth: 420 }}>
+                <label style={{ ...LS,color:"#C9922A" }}>
+                  Precio por pieza
+                </label>
+                <input
+                  style={IS}
+                  value={form.precio500 || ""}
+                  onChange={e => setF("precio500", e.target.value)}
+                  placeholder="$0.00"
+                  inputMode="decimal"
+                />
+              </div>
+              <div style={{ color:"#666",fontSize:10,marginTop:4 }}>
+                Este precio se guarda internamente en el campo de 500 piezas,
+                pero para plástico Expo se utilizará como precio unitario e
+                incluye tintas y pigmento.
               </div>
             </>
           )}

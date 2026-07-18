@@ -185,6 +185,10 @@ export interface FilaProducto {
   advertenciasPrecio3: AdvertenciaCalculoPrecioPapel[];
   calculandoPrecio: boolean;
   errorCalculoPrecio: string | null;
+  // Solo aplica a productos de plástico cuyo origen sea Expo. Cuando está
+  // activo, precio500 se interpreta como precio unitario comercial y el hook
+  // no consulta el calculador de tarifas por kilos/tintas.
+  usarPrecioUnitarioExpo?: boolean;
   // Cantidades PROPIAS de este producto — ya no son compartidas entre
   // productos de la misma cotización. Cada fila elige su propia cantidad
   // para cada una de sus hasta 3 columnas de precio.
@@ -391,6 +395,9 @@ export const filaDesdeProducto = (p: Producto): FilaProducto => {
     advertenciasPrecio3: [],
     calculandoPrecio: false,
     errorCalculoPrecio: null,
+    // El cálculo actual continúa siendo el modo predeterminado. El vendedor
+    // puede activar el precio unitario Expo desde la fila del cotizador.
+    usarPrecioUnitarioExpo: false,
     cant1:        "500",
     cant2:        "1,000",
     cant3:        "3,000",

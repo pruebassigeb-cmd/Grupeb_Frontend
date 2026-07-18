@@ -22,6 +22,20 @@ const formatearPrecio = (value: number): string =>
 const esPlastico = (fila: FilaProducto): boolean =>
   fila.producto.categoria === "plastico";
 
+const esPlasticoExpo = (fila: FilaProducto): boolean =>
+  esPlastico(fila) && fila.producto.fuente === "expo";
+
+const parsePrecioUnitario = (value: string | undefined): number => {
+  const numero = Number(
+    String(value ?? "")
+      .replace(/\$/g, "")
+      .replace(/,/g, "")
+      .trim(),
+  );
+
+  return Number.isFinite(numero) && numero >= 0 ? numero : 0;
+};
+
 function cantidadesActivas(
   fila: FilaProducto,
   columnasPrecio: 1 | 2 | 3,
@@ -45,6 +59,8 @@ function construirFirma(
     columnasPrecio,
     porKilo: Number(fila.producto.porKilo ?? 0),
     tintasCantidad: Number(fila.tintasFrente ?? 0),
+    usarPrecioUnitarioExpo: fila.usarPrecioUnitarioExpo === true,
+    precioUnitarioExpo: fila.producto.precio500 || "",
     cantidades: cantidadesActivas(fila, columnasPrecio),
   });
 }
@@ -74,22 +90,114 @@ export function useCalculoPrecioPlastico({
     const tintasCantidad = Number(fila.tintasFrente ?? 0);
     const activas = cantidadesActivas(fila, columnasPrecio);
 
+    // Solo para plástico Expo y únicamente cuando el vendedor activa el botón:
+    // precio500 se interpreta como precio unitario comercial. Ese valor ya
+    // contempla tintas y pigmento, por lo que no se consulta el calculador.
+    if (esPlasticoExpo(fila) && fila.usarPrecioUnitarioExpo === true) {
+      controllersRef.current.get(fila.uid)?.abort();
+      controllersRef.current.delete(fila.uid);
+
+      const precioUnitario = parsePrecioUnitario(fila.producto.precio500);
+
+      if (precioUnitario <= 0) {
+        actualizarFila(fila.uid, (actual) => ({
+          ...actual,
+          calculandoPrecio: false,
+          errorCalculoPrecio:
+            "El producto Expo no tiene un precio unitario válido registrado.",
+        }));
+        return;
+      }
+
+      if (activas.length === 0) {
+        actualizarFila(fila.uid, (actual) => ({
+          ...actual,
+          calculandoPrecio: false,
+          errorCalculoPrecio: null,
+        }));
+        return;
+      }
+
+      const referenciasActivas = new Set(
+        activas.map(({ referencia }) => referencia),
+      );
+      const precioExpo = formatearPrecio(precioUnitario);
+
+      actualizarFila(fila.uid, (actual) => {
+        const c1 = referenciasActivas.has(1) ? precioExpo : "";
+        const c2 = referenciasActivas.has(2) ? precioExpo : "";
+        const c3 = referenciasActivas.has(3) ? precioExpo : "";
+
+        return {
+          ...actual,
+          precioCalculado1: c1,
+          precioCalculado2: c2,
+          precioCalculado3: c3,
+          precio1: actual.precioManual1 || !c1 ? actual.precio1 : c1,
+          precio2: actual.precioManual2 || !c2 ? actual.precio2 : c2,
+          precio3: actual.precioManual3 || !c3 ? actual.precio3 : c3,
+          advertenciasPrecio1: [],
+          advertenciasPrecio2: [],
+          advertenciasPrecio3: [],
+          calculandoPrecio: false,
+          errorCalculoPrecio: null,
+        };
+      });
+      return;
+    }
+
+    if (!Number.isInteger(tintasCantidad) || tintasCantidad < 0) {
+      actualizarFila(fila.uid, (actual) => ({
+        ...actual,
+        calculandoPrecio: false,
+        errorCalculoPrecio:
+          "Selecciona una cantidad válida de tintas para calcular el precio.",
+      }));
+      return;
+    }
+
+    // Cero tintas significa “sin cargo de impresión”. No se consulta la matriz
+    // de tarifas por tintas y se restauran los precios base del producto en las
+    // columnas que el vendedor no haya modificado manualmente.
+    if (tintasCantidad === 0) {
+      controllersRef.current.get(fila.uid)?.abort();
+      controllersRef.current.delete(fila.uid);
+
+      actualizarFila(fila.uid, (actual) => {
+        const esExpo = esPlasticoExpo(actual);
+        const precioUnitarioExpo = actual.producto.precio500 || "";
+        const base1 = precioUnitarioExpo;
+        const base2 = esExpo
+          ? precioUnitarioExpo
+          : actual.producto.precio1000 || "";
+        const base3 = esExpo
+          ? precioUnitarioExpo
+          : actual.producto.precio3000 || "";
+
+        return {
+          ...actual,
+          precioCalculado1: "",
+          precioCalculado2: "",
+          precioCalculado3: "",
+          precio1: actual.precioManual1 ? actual.precio1 : base1,
+          precio2: actual.precioManual2 ? actual.precio2 : base2,
+          precio3: actual.precioManual3 ? actual.precio3 : base3,
+          advertenciasPrecio1: [],
+          advertenciasPrecio2: [],
+          advertenciasPrecio3: [],
+          calculandoPrecio: false,
+          errorCalculoPrecio: null,
+        };
+      });
+      return;
+    }
+
     if (!Number.isFinite(porKilo) || porKilo <= 0) {
       actualizarFila(fila.uid, (actual) => ({
         ...actual,
         calculandoPrecio: false,
         errorCalculoPrecio:
           "El producto plástico no tiene bolsas por kilo configuradas. Puedes capturar el precio manualmente.",
-      }));
-      return;
-    }
-
-    if (!Number.isInteger(tintasCantidad) || tintasCantidad <= 0) {
-      actualizarFila(fila.uid, (actual) => ({
-        ...actual,
-        calculandoPrecio: false,
-        errorCalculoPrecio:
-          "Selecciona una cantidad válida de tintas para calcular el precio.",
       }));
       return;
     }

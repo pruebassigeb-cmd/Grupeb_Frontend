@@ -56,7 +56,7 @@ const TIPOS_PLASTICO = ["Bolsa plana", "Bolsa troquelada", "Bolsa celofán", "Bo
 
 // Cantidades de tintas soportadas — número plano, el backend resuelve el
 // id real de la tabla `tintas` justo antes de guardar. Sin pantones.
-const OPCIONES_CANTIDAD_TINTAS = [1, 2, 3, 4, 5, 6];
+const OPCIONES_CANTIDAD_TINTAS = [0, 1, 2, 3, 4, 5, 6];
 
 // ─── Estado global: solo un dropdown abierto a la vez ─────────────────────────
 let _openId = "";
@@ -639,6 +639,9 @@ export const FilaTabla = memo(function FilaTabla({
   const { uid, producto: p } = fila;
   const pre = `r${rowIdx}`;
   const esPlastico = p.categoria === "plastico";
+  const esPlasticoExpo = esPlastico && p.fuente === "expo";
+  const usandoPrecioUnitarioExpo =
+    esPlasticoExpo && fila.usarPrecioUnitarioExpo === true;
 
   const esRegistrado = p.fuente === "sistema" || p.fuente === "expo";
 
@@ -1076,6 +1079,40 @@ export const FilaTabla = memo(function FilaTabla({
       {/* Precios */}
       <td style={TDP}>
         <div className="no-print-show" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+          {esPlasticoExpo && (
+            <button
+              type="button"
+              title={
+                usandoPrecioUnitarioExpo
+                  ? "Desactivar el precio unitario Expo y volver al cálculo del sistema"
+                  : "Usar el precio unitario registrado en el producto Expo"
+              }
+              onClick={() =>
+                propagar("usarPrecioUnitarioExpo", !usandoPrecioUnitarioExpo)
+              }
+              style={{
+                width: "100%",
+                maxWidth: 104,
+                borderRadius: 4,
+                border: `1px solid ${
+                  usandoPrecioUnitarioExpo ? "#C9922A" : "#A89A7E"
+                }`,
+                background: usandoPrecioUnitarioExpo
+                  ? "#C9922A22"
+                  : "transparent",
+                color: usandoPrecioUnitarioExpo ? "#9A6814" : "#786F60",
+                padding: "2px 4px",
+                fontSize: 7,
+                fontWeight: 700,
+                lineHeight: 1.15,
+                cursor: "pointer",
+              }}
+            >
+              {usandoPrecioUnitarioExpo
+                ? "Usar cálculo sistema"
+                : "Usar precio Expo"}
+            </button>
+          )}
           <CantidadSelect id={`${pre}-cant1`} value={cant1Fila} onChange={v => propagar("cant1", v)} />
           <input style={iP} value={precio1} placeholder="$0.00"
             onChange={e => {
