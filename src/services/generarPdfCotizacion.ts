@@ -48,6 +48,26 @@ const esPapelProd = (p: ProductoPdf): boolean =>
 
 const boolPdf = (value: unknown): string => boolLabel(value === true);
 
+
+const textoPdf = (value: unknown): string => String(value ?? "").trim();
+
+function obtenerAsaMostrar(prod: ProductoPdf): string {
+  const asaNombre = textoPdf((prod as any).asa_nombre);
+  if (asaNombre) return asaNombre;
+
+  const tipoAsa = textoPdf((prod as any).asa_suaje);
+  const colorAsa = textoPdf((prod as any).color_asa_nombre);
+  const partes = [tipoAsa, colorAsa]
+    .filter(Boolean)
+    .filter((valor, indice, arreglo) => arreglo.indexOf(valor) === indice);
+
+  return partes.length > 0 ? partes.join(" · ") : boolLabel((prod as any).asa_suaje);
+}
+
+function obtenerTipoPlastico(prod: ProductoPdf): string {
+  return textoPdf((prod as any).tipo_producto || (prod as any).tipoProducto) || "—";
+}
+
 // ── Helper: separar material y calibre desde grupo_descripcion ────────────────
 function parsearMaterialYCalibre(
   grupDesc: string,
@@ -89,28 +109,30 @@ function renderTablaPlastico(
   doc: jsPDF, productos: ProductoPdf[], startY: number,
   numCantCols: number, M: number, PW: number, footerH: number
 ): number {
-  const headFixed = ["Descripción", "Medida", "Tintas", "Caras", "Material", "Calibre", "Asa/Suaje", "Pantones", "Pigmento", "Perf."];
+  const headFixed = [
+    "Descripción", "Medida", "Tintas", "Caras", "Material", "Calibre",
+    "Tipo", "Asa/Suaje", "Pantones", "Pigmento", "Perf.",
+  ];
   const headAll = [...headFixed, ...Array.from({ length: numCantCols }, (_, i) => `Cant ${i + 1}`)];
 
-  const filasDiagonal: { rowIndex: number; exterior: string; interior: string }[] = [];
   const bodyRows: any[][] = [];
-  let rowIdx = 0;
 
   productos.forEach(prod => {
     const descripcion = (prod as any).descripcion?.trim() || null;
     const tintasExt = prod.tintas != null ? String(prod.tintas) : "—";
     const tintasInt = (prod as any).tintasDentro != null && (prod as any).tintasDentro > 0
       ? String((prod as any).tintasDentro) : "—";
-    const tieneDiagonal = tintasInt !== "—";
 
     const row: any[] = [
-      descripcion ? `${tipoProducto(prod.nombre)}\n${descripcion}` : tipoProducto(prod.nombre),
+      descripcion ? `${tipoProducto(prod.nombre)}
+${descripcion}` : tipoProducto(prod.nombre),
       getMedida(prod),
       `${tintasExt}x${tintasInt === "—" ? "0" : tintasInt}`,
       val(prod.caras),
       val(prod.material),
       val(prod.calibre),
-      (prod as any).asa_nombre ? String((prod as any).asa_nombre).trim() : boolLabel(prod.asa_suaje),
+      obtenerTipoPlastico(prod),
+      obtenerAsaMostrar(prod),
       parsePantones(prod.pantones),
       prod.pigmentos ? String(prod.pigmentos).trim() || "—" : "—",
       prod.perforacion ? "SI" : "—",
@@ -121,12 +143,8 @@ function renderTablaPlastico(
       row.push(det && det.cantidad > 0 ? formatCantidadCelda(det, prod.por_kilo) : "—");
     }
 
-    if (tieneDiagonal) filasDiagonal.push({ rowIndex: rowIdx, exterior: tintasExt, interior: tintasInt });
-
     bodyRows.push(row);
-    rowIdx++;
 
-    // Fila observaciones
     const hasHerr = prod.herramental_precio != null && prod.herramental_precio > 0;
     const hasObs = !!prod.observacion?.trim();
 
@@ -139,15 +157,17 @@ function renderTablaPlastico(
         comboRow[headAll.length - 1] = `$${Number(prod.herramental_precio).toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
       }
       bodyRows.push(comboRow);
-      rowIdx++;
     }
   });
 
   const availW = PW - M * 2;
-  const colW: Record<number, number> = { 0: 30, 1: 17, 2: 12, 3: 10, 4: 20, 5: 13, 6: 16, 7: 25, 8: 16, 9: 8 };
+  const colW: Record<number, number> = {
+    0: 26, 1: 16, 2: 11, 3: 9, 4: 18, 5: 12,
+    6: 20, 7: 18, 8: 18, 9: 14, 10: 7,
+  };
   const fixedTotal = Object.values(colW).reduce((a, b) => a + b, 0);
   const cantW = Math.max((availW - fixedTotal) / numCantCols, 16);
-  for (let i = 0; i < numCantCols; i++) colW[10 + i] = cantW;
+  for (let i = 0; i < numCantCols; i++) colW[11 + i] = cantW;
   const totalColW = Object.values(colW).reduce((a, b) => a + b, 0);
   if (totalColW > availW) {
     const scale = availW / totalColW;
@@ -173,15 +193,16 @@ function renderTablaPlastico(
       4: { cellWidth: colW[4], halign: "center", fontSize: 7, overflow: "linebreak" },
       5: { cellWidth: colW[5], halign: "center", fontSize: 7 },
       6: { cellWidth: colW[6], halign: "center", fontSize: 7, overflow: "linebreak" },
-      7: { cellWidth: colW[7], halign: "left", fontSize: 7, overflow: "linebreak" },
-      8: { cellWidth: colW[8], halign: "center", fontSize: 7, overflow: "linebreak" },
-      9: { cellWidth: colW[9], halign: "center", fontSize: 7 },
-      ...(numCantCols >= 1 ? { 10: { cellWidth: colW[10], halign: "center" as const, fontSize: 8, fontStyle: "bold" as const, textColor: BLACK } } : {}),
-      ...(numCantCols >= 2 ? { 11: { cellWidth: colW[11], halign: "center" as const, fontSize: 8, fontStyle: "bold" as const, textColor: BLACK } } : {}),
-      ...(numCantCols >= 3 ? { 12: { cellWidth: colW[12], halign: "center" as const, fontSize: 8, fontStyle: "bold" as const, textColor: BLACK } } : {}),
+      7: { cellWidth: colW[7], halign: "center", fontSize: 7, overflow: "linebreak" },
+      8: { cellWidth: colW[8], halign: "left", fontSize: 7, overflow: "linebreak" },
+      9: { cellWidth: colW[9], halign: "center", fontSize: 7, overflow: "linebreak" },
+      10: { cellWidth: colW[10], halign: "center", fontSize: 7 },
+      ...(numCantCols >= 1 ? { 11: { cellWidth: colW[11], halign: "center" as const, fontSize: 8, fontStyle: "bold" as const, textColor: BLACK } } : {}),
+      ...(numCantCols >= 2 ? { 12: { cellWidth: colW[12], halign: "center" as const, fontSize: 8, fontStyle: "bold" as const, textColor: BLACK } } : {}),
+      ...(numCantCols >= 3 ? { 13: { cellWidth: colW[13], halign: "center" as const, fontSize: 8, fontStyle: "bold" as const, textColor: BLACK } } : {}),
     },
     didParseCell(data) {
-      if (data.section === "head" && data.column.index >= 10) {
+      if (data.section === "head" && data.column.index >= 11) {
         data.cell.styles.fillColor = BLACK;
         data.cell.styles.textColor = WHITE;
       }
@@ -191,10 +212,6 @@ function renderTablaPlastico(
         const raw1 = String(raw?.[1] ?? "");
         const ci = data.column.index;
         const lastCol = headAll.length - 1;
-
-        if (ci === 2 && !raw0.startsWith("Obs:")) {
-          if (String(raw?.[2] ?? "").startsWith("DIAG:")) data.cell.text = [];
-        }
 
         if (raw0.startsWith("Obs:")) {
           const hasHerr = raw1.startsWith("Herramental:");
@@ -229,19 +246,6 @@ function renderTablaPlastico(
         }
       }
     },
-    didDrawCell(data) {
-      if (data.section !== "body" || data.column.index !== 2) return;
-      const raw = data.row.raw as any[];
-      const raw0 = String(raw?.[0] ?? "");
-      if (raw0.startsWith("Obs:")) return;
-      const cellVal = String(raw?.[2] ?? "");
-      if (!cellVal.startsWith("DIAG:")) return;
-      const partes = cellVal.replace("DIAG:", "").split("|");
-      const bg: [number, number, number] = data.row.index % 2 === 0
-        ? [255, 255, 255]
-        : [(GRAY_ROW as number[])[0] ?? 245, (GRAY_ROW as number[])[1] ?? 245, (GRAY_ROW as number[])[2] ?? 245];
-      dibujarCeldaTintasDiagonal(doc, data.cell.x, data.cell.y, data.cell.width, data.cell.height, partes[0] ?? "—", partes[1] ?? "—", bg);
-    },
   });
 
   return (doc as any).lastAutoTable?.finalY ?? startY;
@@ -274,7 +278,7 @@ function renderTablaPapel(
     const tieneDiagonal = tintasInt !== "—";
 
     const foilMostrar = (prod as any).foil_nombre ? String((prod as any).foil_nombre).trim() : boolLabel(prod.foil);
-    const asaMostrar = (prod as any).asa_nombre ? String((prod as any).asa_nombre).trim() : boolLabel(prod.asa_suaje);
+    const asaMostrar = obtenerAsaMostrar(prod);
     const laminadoMostrar = (prod as any).laminado_nombre ? String((prod as any).laminado_nombre).trim() : boolLabel(prod.laminado);
     const texturaMostrar = (prod as any).textura_nombre ? String((prod as any).textura_nombre).trim() : "—";
     const altoRelMostrar = (prod as any).alto_relieve === true ? "SI" : boolLabel((prod as any).alto_rel);
@@ -436,7 +440,7 @@ function renderTablaMixta(
   const headFixed = [
     "Descripción", "Medida", "Tintas", "Caras",
     "Material", "Calibre", "HS", "Asa/Suaje", "AR",
-    "Laminado", "UV", "Textura", "Pantones", "Pigmento", "Perf.",
+    "Lam./Tipo", "UV", "Textura", "Pantones", "Pigmento", "Perf.",
   ];
   const headAll = [...headFixed, ...Array.from({ length: numCantCols }, (_, i) => `Cant ${i + 1}`)];
   const MID_COL = Math.floor(headAll.length / 2);
@@ -457,8 +461,12 @@ function renderTablaMixta(
 
     const altoRelMostrar = (prod as any).alto_relieve === true ? "SI" : boolLabel((prod as any).alto_rel);
     const foilMostrar = (prod as any).foil_nombre ? String((prod as any).foil_nombre).trim() : (esPapel ? "—" : boolLabel(prod.foil));
-    const asaMostrar = (prod as any).asa_nombre ? String((prod as any).asa_nombre).trim() : boolLabel(prod.asa_suaje);
-    const laminadoMostrar = (prod as any).laminado_nombre ? String((prod as any).laminado_nombre).trim() : (esPapel ? "—" : boolLabel(prod.laminado));
+    const asaMostrar = obtenerAsaMostrar(prod);
+    const laminadoOTipoMostrar = esPapel
+      ? ((prod as any).laminado_nombre
+          ? String((prod as any).laminado_nombre).trim()
+          : boolLabel(prod.laminado))
+      : obtenerTipoPlastico(prod);
     const texturaMostrar = (prod as any).textura_nombre ? String((prod as any).textura_nombre).trim() : "—";
 
     const row: any[] = [
@@ -471,7 +479,7 @@ function renderTablaMixta(
       foilMostrar,
       asaMostrar,
       altoRelMostrar,
-      laminadoMostrar,
+      laminadoOTipoMostrar,
       boolPdf((prod as any).uv ?? (prod as any).uvBr),
       texturaMostrar,
       parsePantones(prod.pantones),

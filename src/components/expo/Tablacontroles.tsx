@@ -639,7 +639,9 @@ export const FilaTabla = memo(function FilaTabla({
   const { uid, producto: p } = fila;
   const pre = `r${rowIdx}`;
   const esPlastico = p.categoria === "plastico";
-  const esPlasticoExpo = esPlastico && p.fuente === "expo";
+  const esPlasticoExpo = esPlastico && (
+    p.fuente === "expo" || p.origen === "expo"
+  );
   const usandoPrecioUnitarioExpo =
     esPlasticoExpo && fila.usarPrecioUnitarioExpo === true;
 
@@ -670,8 +672,15 @@ export const FilaTabla = memo(function FilaTabla({
   const [asa,        setAsa]        = useState(fila.asa);
   const [tipoAsa,    setTipoAsa]    = useState(fila.tipoAsa);
   const [idSuaje,    setIdSuaje]    = useState<number | null>(fila.idSuaje ?? null);
-  const [modoExtra,  setModoExtra]  = useState<"precio" | "pigmento">(fila.modoExtra || "precio");
-  const [pigmento,   setPigmento]   = useState(fila.pigmento || "");
+  const [modoExtra,  setModoExtra]  = useState<"precio" | "pigmento">(
+    fila.modoExtra || (esPlastico && (fila.pigmento || p.pigmento) ? "pigmento" : "precio")
+  );
+  // El pigmento registrado pertenece al producto Expo. Se usa como respaldo
+  // directo al crear la fila para que no se pierda aunque la fila todavía no
+  // haya copiado ese valor a su estado editable.
+  const [pigmento,   setPigmento]   = useState(
+    fila.pigmento || p.pigmento || ""
+  );
 
   const [matPlastNom, setMatPlastNom] = useState(esPlastico ? (fila.material || p.material || "") : "");
   const [calPlastNom, setCalPlastNom] = useState(esPlastico ? (fila.calibre || p.calibre || "") : "");
@@ -689,6 +698,51 @@ export const FilaTabla = memo(function FilaTabla({
 
   const propagar = useCallback((k: keyof FilaProducto, v: string | boolean | number | null) => onEdit(uid, k, v), [uid, onEdit]);
   const extraNum = parsePrecio(extra);
+
+  // El cambio de modo es una decisión explícita del vendedor. Por eso limpia
+  // cualquier marca de edición manual anterior: al pulsar el botón, el modo
+  // elegido debe sustituir inmediatamente el precio que estuviera visible.
+  const cambiarModoPrecioPlastico = () => {
+    if (!esPlasticoExpo) return;
+
+    const activarPrecioExpo = !usandoPrecioUnitarioExpo;
+
+    propagar("precioManual1", false);
+    propagar("precioManual2", false);
+    propagar("precioManual3", false);
+    propagar("usarPrecioUnitarioExpo", activarPrecioExpo);
+
+    if (activarPrecioExpo) {
+      const precioExpo = p.precio500 || "";
+
+      if (precioExpo) {
+        setPrecio1(precioExpo);
+        propagar("precio1", precioExpo);
+        propagar("precioCalculado1", precioExpo);
+
+        if (columnasPrecio >= 2) {
+          setPrecio2(precioExpo);
+          propagar("precio2", precioExpo);
+          propagar("precioCalculado2", precioExpo);
+        }
+
+        if (columnasPrecio >= 3) {
+          setPrecio3(precioExpo);
+          propagar("precio3", precioExpo);
+          propagar("precioCalculado3", precioExpo);
+        }
+      }
+
+      return;
+    }
+
+    // Al volver al cálculo del sistema se limpian las referencias del modo Expo.
+    // El hook detecta el cambio de usarPrecioUnitarioExpo y recalcula las
+    // columnas activas con cantidad, bolsas por kilo y tintas.
+    propagar("precioCalculado1", "");
+    propagar("precioCalculado2", "");
+    propagar("precioCalculado3", "");
+  };
 
   const chkPill = (active: boolean, toggle: () => void) => (
     <span role="checkbox" aria-checked={active} tabIndex={0} style={pill(active)}
@@ -767,7 +821,9 @@ export const FilaTabla = memo(function FilaTabla({
       : numero === 2
         ? fila.advertenciasPrecio2
         : fila.advertenciasPrecio3) ?? [];
-    const tituloAdvertencias = advertencias.map(a => a.mensaje).join("\n");
+    const tituloAdvertencias = advertencias
+      .map((advertencia, indice) => `${indice + 1}. ${advertencia.mensaje}`)
+      .join("\n\n");
 
     return (
       <div className="no-print-show" style={{ minHeight: 10, display: "flex", alignItems: "center", justifyContent: "center", gap: 3, lineHeight: 1 }}>
@@ -800,9 +856,36 @@ export const FilaTabla = memo(function FilaTabla({
           </>
         )}
         {advertencias.length > 0 && (
-          <span title={tituloAdvertencias} style={{ fontSize: 10, color: "#B45309", cursor: "help" }}>
+          <button
+            type="button"
+            title="Ver advertencias"
+            aria-label={`Ver ${advertencias.length} advertencia${advertencias.length === 1 ? "" : "s"}`}
+            onClick={() =>
+              window.alert(
+                tituloAdvertencias || "No hay advertencias para esta cantidad."
+              )
+            }
+            style={{
+              minWidth: 24,
+              minHeight: 24,
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 2,
+              padding: "2px 5px",
+              borderRadius: 5,
+              border: "1px solid #D97706",
+              background: "#FEF3C7",
+              color: "#92400E",
+              fontSize: 9,
+              fontWeight: 800,
+              lineHeight: 1,
+              cursor: "pointer",
+              touchAction: "manipulation",
+            }}
+          >
             ⚠ {advertencias.length}
-          </span>
+          </button>
         )}
         {numero === 1 && fila.errorCalculoPrecio && (
   <button
@@ -1087,9 +1170,7 @@ export const FilaTabla = memo(function FilaTabla({
                   ? "Desactivar el precio unitario Expo y volver al cálculo del sistema"
                   : "Usar el precio unitario registrado en el producto Expo"
               }
-              onClick={() =>
-                propagar("usarPrecioUnitarioExpo", !usandoPrecioUnitarioExpo)
-              }
+              onClick={cambiarModoPrecioPlastico}
               style={{
                 width: "100%",
                 maxWidth: 104,

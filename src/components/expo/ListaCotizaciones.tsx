@@ -532,7 +532,15 @@ export default function ListaCotizaciones({
     const productos = (backData.productos || []).map((p: any) => {
       const esPapel = p.tipo_material === "papel";
       const foilNombre = p.foil_nombre || null;
-      const asaNombre = p.asa_nombre || null;
+      const asaPapel = p.asa_nombre || null;
+      const tipoAsaPlastico = p.suaje_tipo || null;
+      const colorAsaPlastico = p.color_asa_nombre || null;
+      const asaPlastico = [tipoAsaPlastico, colorAsaPlastico]
+        .map((valor) => String(valor || "").trim())
+        .filter(Boolean)
+        .filter((valor, indice, arreglo) => arreglo.indexOf(valor) === indice)
+        .join(" · ") || null;
+
       const base = esPapel
         ? {
             tipo_material: "papel",
@@ -551,8 +559,8 @@ export default function ListaCotizaciones({
             foil_nombre: foilNombre,
             laminado: p.laminado_nombre ? true : null,
             laminado_nombre: p.laminado_nombre || null,
-            asa_suaje: asaNombre || null,
-            asa_nombre: asaNombre || null,
+            asa_suaje: asaPapel,
+            asa_nombre: asaPapel,
             uvBr: p.uv ? true : null,
             alto_relieve: p.alto_relieve === true,
             metodo_hojeado: p.metodo_hojeado ?? null,
@@ -561,7 +569,7 @@ export default function ListaCotizaciones({
             textura_nombre: p.textura_nombre || null,
             pigmentos: null,
             pantones: p.pantones || null,
-            pantonesDentro: null,
+            pantonesDentro: p.pantones_dentro || null,
             observacion: p.observacion || null,
             descripcion: p.descripcion || null,
             perforacion: false,
@@ -571,17 +579,23 @@ export default function ListaCotizaciones({
             herramental_aprobado: null,
           }
         : {
+            tipo_material: "plastico",
+            tipoCotizacion: "plastico",
             nombre: p.nombre,
+            tipo_producto: p.tipo_producto || p.expo_tipo_producto || null,
             material: p.material || "",
             calibre: p.calibre || "",
             tintas: p.tintas ?? 0,
+            tintasDentro: 0,
             caras: p.caras ?? 0,
             medidasFormateadas: p.medida || "",
             medidas: {},
-            bk: null, foil: null, laminado: null, uvBr: null,
-            pigmentos: p.pigmentos || null,
+            bk: null,
+            pigmentos: p.pigmentos || p.pigmento || null,
             pantones: p.pantones || null,
-            asa_suaje: p.suaje_tipo || null,
+            asa_suaje: tipoAsaPlastico,
+            asa_nombre: asaPlastico,
+            color_asa_nombre: colorAsaPlastico,
             observacion: p.observacion || null,
             descripcion: p.descripcion || null,
             perforacion: false,
@@ -595,6 +609,10 @@ export default function ListaCotizaciones({
         ...base,
         detalles: (p.detalles || []).map((d: any) => ({
           cantidad: Number(d.cantidad),
+          precio_unitario:
+            d.precio_unitario !== null && d.precio_unitario !== undefined
+              ? Number(d.precio_unitario)
+              : null,
           precio_total: Number(d.precio_total),
           kilogramos: null,
           modo_cantidad: "unidad",

@@ -400,6 +400,14 @@ function limpiarTextoCatalogo(valor: unknown): string | null {
   return limpio || null;
 }
 
+function combinarTextosCatalogo(...valores: unknown[]): string | null {
+  const partes = valores
+    .map(limpiarTextoCatalogo)
+    .filter((valor): valor is string => Boolean(valor));
+
+  return partes.length > 0 ? Array.from(new Set(partes)).join(" · ") : null;
+}
+
 function numeroSeguro(valor: unknown): number {
   const numero = Number(valor);
   return Number.isFinite(numero) ? numero : 0;
@@ -666,21 +674,35 @@ export function cotizacionBackDataAPdfParams(
       ? parsearMaterialYCalibreExpo(producto.grupo_descripcion || "")
       : { materialStr: "", calibreStr: "" };
 
+    const tipoAsaPapel = limpiarTextoCatalogo(producto.asa_nombre);
+    const tipoAsaPlastico = limpiarTextoCatalogo(
+      producto.suaje_tipo || producto.asa_nombre
+    );
+    const colorAsaPlastico = limpiarTextoCatalogo(
+      producto.color_asa_nombre || producto.asa_color
+    );
+
     return {
       nombre: producto.nombre || producto.descripcion || "Producto",
       medida: producto.medida || null,
       material: producto.material || (esPapel ? materialStr : "") || null,
       calibre: producto.calibre || (esPapel ? calibreStr : "") || null,
       tintas: formatearTintasExpo(producto.tintas, producto.tintas_dentro),
-      laminado: limpiarTextoCatalogo(producto.laminado_nombre),
-      hs: limpiarTextoCatalogo(producto.foil_nombre),
-      ar: producto.alto_relieve ? "SI" : null,
-      textura: limpiarTextoCatalogo(producto.textura_nombre),
-      uv: producto.uv ? "SI" : null,
 
-      // En ASA se muestra únicamente el COLOR.
-      // No se imprime el tipo de asa, código, ID ni texto entre paréntesis.
-      asa: limpiarTextoCatalogo(producto.color_asa_nombre || producto.asa_color),
+      // La hoja física comparte esta columna: laminado para papel y tipo para plástico.
+      laminado: esPapel
+        ? limpiarTextoCatalogo(producto.laminado_nombre)
+        : limpiarTextoCatalogo(producto.tipo_producto || producto.expo_tipo_producto),
+
+      hs: esPapel ? limpiarTextoCatalogo(producto.foil_nombre) : null,
+      ar: esPapel && producto.alto_relieve ? "SI" : null,
+      textura: esPapel ? limpiarTextoCatalogo(producto.textura_nombre) : null,
+      uv: esPapel && producto.uv ? "SI" : null,
+
+      // Papel muestra el tipo de asa. Plástico muestra tipo de suaje/asa y color.
+      asa: esPapel
+        ? tipoAsaPapel
+        : combinarTextosCatalogo(tipoAsaPlastico, colorAsaPlastico),
 
       // En OTRO/PIGMENTO se muestra únicamente el pigmento limpio.
       pigmento: limpiarTextoCatalogo(producto.pigmento || producto.pigmentos),

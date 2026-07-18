@@ -23,7 +23,10 @@ const esPlastico = (fila: FilaProducto): boolean =>
   fila.producto.categoria === "plastico";
 
 const esPlasticoExpo = (fila: FilaProducto): boolean =>
-  esPlastico(fila) && fila.producto.fuente === "expo";
+  esPlastico(fila) && (
+    fila.producto.fuente === "expo" ||
+    fila.producto.origen === "expo"
+  );
 
 const parsePrecioUnitario = (value: string | undefined): number => {
   const numero = Number(
@@ -35,6 +38,11 @@ const parsePrecioUnitario = (value: string | undefined): number => {
 
   return Number.isFinite(numero) && numero >= 0 ? numero : 0;
 };
+
+const debeConservarPrecioManual = (
+  esManual: boolean,
+  precioActual: string,
+): boolean => esManual && parsePrecioUnitario(precioActual) > 0;
 
 function cantidadesActivas(
   fila: FilaProducto,
@@ -73,6 +81,7 @@ export function useCalculoPrecioPlastico({
   const firmasRef = useRef(new Map<string, string>());
   const timersRef = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const controllersRef = useRef(new Map<string, AbortController>());
+  const modoExpoAnteriorRef = useRef(new Map<string, boolean>());
 
   const actualizarFila = useCallback((
     uid: string,
@@ -97,6 +106,10 @@ export function useCalculoPrecioPlastico({
       controllersRef.current.get(fila.uid)?.abort();
       controllersRef.current.delete(fila.uid);
 
+      const acabaDeActivarPrecioExpo =
+        modoExpoAnteriorRef.current.get(fila.uid) !== true;
+      modoExpoAnteriorRef.current.set(fila.uid, true);
+
       const precioUnitario = parsePrecioUnitario(fila.producto.precio500);
 
       if (precioUnitario <= 0) {
@@ -109,33 +122,40 @@ export function useCalculoPrecioPlastico({
         return;
       }
 
-      if (activas.length === 0) {
-        actualizarFila(fila.uid, (actual) => ({
-          ...actual,
-          calculandoPrecio: false,
-          errorCalculoPrecio: null,
-        }));
-        return;
-      }
-
-      const referenciasActivas = new Set(
-        activas.map(({ referencia }) => referencia),
-      );
+      // El precio Expo es unitario y no depende de la cantidad escrita.
+      // Por eso se replica en todas las columnas visibles, incluso cuando una
+      // columna acaba de agregarse y todavía conserva su cantidad por defecto.
       const precioExpo = formatearPrecio(precioUnitario);
 
       actualizarFila(fila.uid, (actual) => {
-        const c1 = referenciasActivas.has(1) ? precioExpo : "";
-        const c2 = referenciasActivas.has(2) ? precioExpo : "";
-        const c3 = referenciasActivas.has(3) ? precioExpo : "";
+        const c1 = precioExpo;
+        const c2 = columnasPrecio >= 2 ? precioExpo : "";
+        const c3 = columnasPrecio >= 3 ? precioExpo : "";
 
         return {
           ...actual,
           precioCalculado1: c1,
           precioCalculado2: c2,
           precioCalculado3: c3,
-          precio1: actual.precioManual1 || !c1 ? actual.precio1 : c1,
-          precio2: actual.precioManual2 || !c2 ? actual.precio2 : c2,
-          precio3: actual.precioManual3 || !c3 ? actual.precio3 : c3,
+          precio1: !acabaDeActivarPrecioExpo &&
+            debeConservarPrecioManual(actual.precioManual1, actual.precio1)
+              ? actual.precio1
+              : c1,
+          precio2: c2
+            ? (!acabaDeActivarPrecioExpo &&
+              debeConservarPrecioManual(actual.precioManual2, actual.precio2)
+                ? actual.precio2
+                : c2)
+            : actual.precio2,
+          precio3: c3
+            ? (!acabaDeActivarPrecioExpo &&
+              debeConservarPrecioManual(actual.precioManual3, actual.precio3)
+                ? actual.precio3
+                : c3)
+            : actual.precio3,
+          precioManual1: acabaDeActivarPrecioExpo ? false : actual.precioManual1,
+          precioManual2: acabaDeActivarPrecioExpo ? false : actual.precioManual2,
+          precioManual3: acabaDeActivarPrecioExpo ? false : actual.precioManual3,
           advertenciasPrecio1: [],
           advertenciasPrecio2: [],
           advertenciasPrecio3: [],
@@ -145,6 +165,8 @@ export function useCalculoPrecioPlastico({
       });
       return;
     }
+
+    modoExpoAnteriorRef.current.set(fila.uid, false);
 
     if (!Number.isInteger(tintasCantidad) || tintasCantidad < 0) {
       actualizarFila(fila.uid, (actual) => ({
@@ -290,6 +312,68 @@ export function useCalculoPrecioPlastico({
     }
   }, [actualizarFila, columnasPrecio]);
 
+  // Cuando se agrega una segunda o tercera columna, replica de inmediato el
+  // precio unitario Expo. Esto evita que la nueva columna conserve el $0.00
+  // recibido de precio_1000/precio_3000 mientras espera el debounce general.
+  useEffect(() => {
+    setFilas((prev) => {
+      let huboCambios = false;
+
+      const siguientes = prev.map((fila) => {
+        if (!esPlasticoExpo(fila) || fila.usarPrecioUnitarioExpo !== true) {
+          return fila;
+        }
+
+        const valor = parsePrecioUnitario(fila.producto.precio500);
+        if (valor <= 0) return fila;
+
+        const precioExpo = formatearPrecio(valor);
+        const precio1 = debeConservarPrecioManual(fila.precioManual1, fila.precio1)
+          ? fila.precio1
+          : precioExpo;
+        const precio2 = columnasPrecio >= 2
+          ? (debeConservarPrecioManual(fila.precioManual2, fila.precio2)
+            ? fila.precio2
+            : precioExpo)
+          : fila.precio2;
+        const precio3 = columnasPrecio >= 3
+          ? (debeConservarPrecioManual(fila.precioManual3, fila.precio3)
+            ? fila.precio3
+            : precioExpo)
+          : fila.precio3;
+
+        const calculado2 = columnasPrecio >= 2 ? precioExpo : fila.precioCalculado2;
+        const calculado3 = columnasPrecio >= 3 ? precioExpo : fila.precioCalculado3;
+
+        if (
+          fila.precio1 === precio1 &&
+          fila.precio2 === precio2 &&
+          fila.precio3 === precio3 &&
+          fila.precioCalculado1 === precioExpo &&
+          fila.precioCalculado2 === calculado2 &&
+          fila.precioCalculado3 === calculado3
+        ) {
+          return fila;
+        }
+
+        huboCambios = true;
+        return {
+          ...fila,
+          precio1,
+          precio2,
+          precio3,
+          precioCalculado1: precioExpo,
+          precioCalculado2: calculado2,
+          precioCalculado3: calculado3,
+          calculandoPrecio: false,
+          errorCalculoPrecio: null,
+        };
+      });
+
+      return huboCambios ? siguientes : prev;
+    });
+  }, [columnasPrecio, setFilas]);
+
   useEffect(() => {
     const uidsActuales = new Set(filas.map((fila) => fila.uid));
 
@@ -301,6 +385,7 @@ export function useCalculoPrecioPlastico({
         timersRef.current.delete(uid);
         controllersRef.current.get(uid)?.abort();
         controllersRef.current.delete(uid);
+        modoExpoAnteriorRef.current.delete(uid);
       }
     }
 
@@ -331,5 +416,6 @@ export function useCalculoPrecioPlastico({
     timersRef.current.clear();
     controllersRef.current.clear();
     firmasRef.current.clear();
+    modoExpoAnteriorRef.current.clear();
   }, []);
 }

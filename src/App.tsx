@@ -37,6 +37,8 @@ const PERMISOS = {
   anticipo: "Editar Anticipo y Liquidacion",
   precios: "Modificar Catalogo de precios",
   estadoCuenta: "Editar Anticipo y Liquidacion",
+  papel: "Dar de alta productos (Papel)",
+  catalogos: "Gestionar Catálogos",
 } as const;
 
 const PERMISOS_SEGUIMIENTO = [
@@ -252,7 +254,7 @@ function App() {
           <Route
             path="/papel"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute permiso={PERMISOS.papel}>
                 <Papel />
               </ProtectedRoute>
             }
@@ -270,7 +272,7 @@ function App() {
           <Route
             path="/catalogos"
             element={
-              <ProtectedRoute permiso={PERMISOS.plastico}>
+              <ProtectedRoute permiso={PERMISOS.catalogos}>
                 <Catalogos />
               </ProtectedRoute>
             }

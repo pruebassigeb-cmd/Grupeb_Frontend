@@ -180,9 +180,42 @@ function TarjetaProducto({
   // que ya la tenía duplicada. abrirEditar/eliminarProd se dejan en las
   // Props por compatibilidad con quien llama a este componente.
   void abrirEditar; void eliminarProd;
-  const productoKey    = claveProducto(p);
-  const agregado       = addedId === productoKey;
-  const preciosMostrar = p.precio500 || p.precio1000 || p.precio3000;
+  // Para productos propios se separan por completo las referencias del
+  // objeto que entra al cotizador. precio1000/precio3000 conservan su uso
+  // histórico únicamente para productos del sistema; en Expo las referencias
+  // viajan por precioReferencia500/precioReferencia1000.
+  const productoParaCotizar: Producto = esPropio
+    ? {
+        ...p,
+        fuente: "expo",
+        origen: "expo",
+        precio1000: "",
+        precio3000: "",
+      }
+    : p;
+
+  const productoKey = claveProducto(productoParaCotizar);
+  const agregado = addedId === productoKey;
+
+  const preciosTarjeta = esPropio
+    ? [
+        ...(p.categoria === "plastico" && p.precio500
+          ? [{ key: "unitario", label: "Unit. Expo", value: p.precio500 }]
+          : []),
+        ...(p.precioReferencia500
+          ? [{ key: "ref500", label: "500 pzas", value: p.precioReferencia500 }]
+          : []),
+        ...(p.precioReferencia1000
+          ? [{ key: "ref1000", label: "1,000 pzas", value: p.precioReferencia1000 }]
+          : []),
+      ]
+    : [
+        ...(p.precio500 ? [{ key: "500", label: "500", value: p.precio500 }] : []),
+        ...(p.precio1000 ? [{ key: "1k", label: "1k", value: p.precio1000 }] : []),
+        ...(p.precio3000 ? [{ key: "3k", label: "3k", value: p.precio3000 }] : []),
+      ];
+
+  const preciosMostrar = preciosTarjeta.length > 0;
 
   // Algunos iPad/tablets pueden caer como "desk" por el ancho de pantalla.
   // Por eso el doble toque se activa por tamaño tablet y también por pointer touch/pen.
@@ -198,14 +231,14 @@ function TarjetaProducto({
 
   const tocarProducto = () => {
     if (mob) {
-      addProd(p);
+      addProd(productoParaCotizar);
       return;
     }
 
     // Tablet / pantalla touch en formato normal:
     // 1er toque selecciona, 2do toque sobre el mismo producto agrega.
     if (productoSeleccionadoRef.current === productoKey) {
-      addProd(p);
+      addProd(productoParaCotizar);
       seleccionarProducto(null);
     } else {
       seleccionarProducto(productoKey);
@@ -254,7 +287,9 @@ function TarjetaProducto({
   };
 
   // Drag HTML5 solo en desktop con mouse.
-  const handleDragStart = (e: React.DragEvent) => { if (desk) onDragStart(e, p); };
+  const handleDragStart = (e: React.DragEvent) => {
+    if (desk) onDragStart(e, productoParaCotizar);
+  };
 
   const cardStyle: React.CSSProperties = {
     background: compacto ? "#171717" : "#1E1E1E",
@@ -329,16 +364,36 @@ function TarjetaProducto({
           ? <div style={{ color:"#444", fontSize:10, margin:"1px 0 3px" }}>{[p.medida,p.material].filter(Boolean).join(" · ")}</div>
           : <div style={{ color:catColor, fontSize:10, margin:"2px 0 4px" }}>{p.medida}</div>
         }
-        {compacto && !preciosMostrar && <div style={{ color:"#444", fontSize:9, fontStyle:"italic" }}>Sin precios expo</div>}
+        {compacto && !preciosMostrar && (
+          <div style={{ color:"#444", fontSize:9, fontStyle:"italic" }}>
+            {esPropio ? "Sin precios de referencia" : "Sin precios"}
+          </div>
+        )}
         <div style={{ display:"flex", gap:compacto?8:8, flexWrap:"wrap" }}>
-          {([["500",p.precio500],["1k",p.precio1000],["3k",p.precio3000]] as const).map(([l,v]) =>
-            v ? (
-              <div key={l} style={{ display:"flex", flexDirection:compacto?"row":"column", alignItems:compacto?"baseline":"center", gap:compacto?3:0 }}>
-                <span style={{ color:compacto?"#444":"#555", fontSize:7.5, textTransform:"uppercase" }}>{l}</span>
-                <span style={{ color:"#C9922A", fontSize:compacto?10:10.5, fontWeight:700 }}>{v}</span>
-              </div>
-            ) : null
-          )}
+          {preciosTarjeta.map(precio => (
+            <div
+              key={precio.key}
+              style={{
+                display:"flex",
+                flexDirection:compacto?"row":"column",
+                alignItems:compacto?"baseline":"center",
+                gap:compacto?3:0,
+              }}
+            >
+              <span
+                style={{
+                  color:compacto?"#555":"#666",
+                  fontSize:7.5,
+                  textTransform:"uppercase",
+                }}
+              >
+                {precio.label}
+              </span>
+              <span style={{ color:"#C9922A", fontSize:compacto?10:10.5, fontWeight:700 }}>
+                {precio.value}
+              </span>
+            </div>
+          ))}
         </div>
       </div>
 

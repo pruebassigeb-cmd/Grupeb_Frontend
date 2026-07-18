@@ -137,15 +137,17 @@ export default function ModalCatalogoExpo({ onClose }: Props) {
   precio_base: esPapel
     ? (parseFloat((p.precioBase || "").replace(/[^0-9.]/g, "")) || null)
     : null,
+  // precio_500 conserva su uso actual como precio unitario Expo de
+  // plástico. precio_1000 y precio_3000 almacenan referencias totales
+  // de 500 y 1,000 piezas para cualquier producto Expo; son informativas
+  // y nunca se usan como precios de la cotización.
   precio_500: esPlastico
-    ? (parseFloat(p.precio500.replace(/[^0-9.]/g, "")) || null)
+    ? (parseFloat((p.precio500 || "").replace(/[^0-9.]/g, "")) || null)
     : null,
-  precio_1000: esPlastico
-    ? (parseFloat(p.precio1000.replace(/[^0-9.]/g, "")) || null)
-    : null,
-  precio_3000: esPlastico
-    ? (parseFloat(p.precio3000.replace(/[^0-9.]/g, "")) || null)
-    : null,
+  precio_1000:
+    parseFloat((p.precioReferencia500 || "").replace(/[^0-9.]/g, "")) || null,
+  precio_3000:
+    parseFloat((p.precioReferencia1000 || "").replace(/[^0-9.]/g, "")) || null,
 
   origen: "expo",
 
@@ -304,15 +306,39 @@ let idReal: number;
                       <span style={{ background: "#2A2A2A", color: "#888", fontSize: 8.5, padding: "2px 6px", borderRadius: 4, textTransform: "capitalize", flexShrink: 0 }}>{p.categoria}</span>
                     </div>
                     {p.medida && <div style={{ color: "#666", fontSize: 10.5 }}>{p.medida}</div>}
-                    <div style={{ display: "flex", gap: 10, fontSize: 10.5, color: "#C9922A", fontWeight: 700 }}>
-                      {p.categoria === "plastico" ? (
-                        <>
-                          {p.precio500 && <span>{p.precio500}</span>}
-                          {p.precio1000 && <span>{p.precio1000}</span>}
-                          {p.precio3000 && <span>{p.precio3000}</span>}
-                        </>
-                      ) : (
-                        p.precioBase && <span>Base: {p.precioBase}</span>
+                    <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+                      {p.categoria === "plastico" && p.precio500 && (
+                        <div style={{ background:"#111", border:"1px solid #2A2A2A", borderRadius:6, padding:"4px 7px" }}>
+                          <div style={{ color:"#666", fontSize:7.5, textTransform:"uppercase" }}>Unitario Expo</div>
+                          <div style={{ color:"#C9922A", fontSize:10.5, fontWeight:700 }}>{p.precio500}</div>
+                        </div>
+                      )}
+
+                      {p.categoria !== "plastico" && p.precioBase && (
+                        <div style={{ background:"#111", border:"1px solid #2A2A2A", borderRadius:6, padding:"4px 7px" }}>
+                          <div style={{ color:"#666", fontSize:7.5, textTransform:"uppercase" }}>Base unitario</div>
+                          <div style={{ color:"#C9922A", fontSize:10.5, fontWeight:700 }}>{p.precioBase}</div>
+                        </div>
+                      )}
+
+                      {p.precioReferencia500 && (
+                        <div style={{ background:"#111", border:"1px solid #2A2A2A", borderRadius:6, padding:"4px 7px" }}>
+                          <div style={{ color:"#666", fontSize:7.5, textTransform:"uppercase" }}>Ref. 500 pzas</div>
+                          <div style={{ color:"#C9922A", fontSize:10.5, fontWeight:700 }}>{p.precioReferencia500}</div>
+                        </div>
+                      )}
+
+                      {p.precioReferencia1000 && (
+                        <div style={{ background:"#111", border:"1px solid #2A2A2A", borderRadius:6, padding:"4px 7px" }}>
+                          <div style={{ color:"#666", fontSize:7.5, textTransform:"uppercase" }}>Ref. 1,000 pzas</div>
+                          <div style={{ color:"#C9922A", fontSize:10.5, fontWeight:700 }}>{p.precioReferencia1000}</div>
+                        </div>
+                      )}
+
+                      {!p.precioReferencia500 && !p.precioReferencia1000 && (
+                        <span style={{ color:"#555", fontSize:9.5, fontStyle:"italic" }}>
+                          Sin precios de referencia
+                        </span>
                       )}
                     </div>
                     <div style={{ display: "flex", gap: 8, marginTop: 4 }}>

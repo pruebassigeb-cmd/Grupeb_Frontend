@@ -109,7 +109,13 @@ export interface Producto {
   precio500:   string;
   precio1000:  string;
   precio3000:  string;
-  // Papel/cartón: precio base del grupo. Plástico conserva las tres tarifas.
+  // Referencias comerciales del Catálogo Expo. Se guardan en los campos
+  // históricos precio_1000 y precio_3000, pero NUNCA alimentan las columnas
+  // del cotizador ni los hooks de cálculo.
+  precioReferencia500?:  string;
+  precioReferencia1000?: string;
+  // Papel/cartón: precio base unitario del grupo. Plástico usa precio500 como
+  // precio unitario Expo. Ambos permanecen separados de las referencias.
   precioBase?: string;
   costoLaminado?: number;
   idTamanoProducto?: number;
@@ -473,6 +479,10 @@ export const mapearCatalogoExpoAProducto = (p: {
   grupo_descripcion?: string | null;
   laminados_permitidos?: LaminadoPermitido[] | null;
   asas_permitidas?: AsaPermitida[] | null;
+  idcat_laminado?: number | null;
+  idfoil?: number | null;
+  idcat_textura?: number | null;
+  idcat_tipo_asa?: number | null;
   imagen_url:        string | null;
   tipo_producto:     string | null;
   altura?:           number | null;
@@ -512,10 +522,34 @@ export const mapearCatalogoExpoAProducto = (p: {
     uv:           esPapelOCarton ? p.uv : false,
     asa:          p.asa,
     tipoAsa:      p.tipo_asa       || "",
+
+    idLaminadoDefault: esPapelOCarton
+      ? (p.idcat_laminado ?? undefined)
+      : undefined,
+
+    idFoilDefault: esPapelOCarton
+      ? (p.idfoil ?? undefined)
+      : undefined,
+
+    idTexturaDefault: esPapelOCarton
+      ? (p.idcat_textura ?? undefined)
+      : undefined,
+
+    idAsaDefault: esPapelOCarton
+      ? (p.idcat_tipo_asa ?? undefined)
+      : undefined,
+
     otro:         p.otro           || "",
+    // precio500 conserva su uso actual: para plástico Expo es el precio
+    // unitario comercial. Los otros dos campos históricos se exponen mediante
+    // propiedades separadas y quedan fuera del cotizador.
     precio500:    p.precio_500  != null ? `$${Number(p.precio_500).toFixed(2)}`  : "",
-    precio1000:   p.precio_1000 != null ? `$${Number(p.precio_1000).toFixed(2)}` : "",
-    precio3000:   p.precio_3000 != null ? `$${Number(p.precio_3000).toFixed(2)}` : "",
+    precio1000:   "",
+    precio3000:   "",
+    precioReferencia500:
+      p.precio_1000 != null ? `$${Number(p.precio_1000).toFixed(2)}` : "",
+    precioReferencia1000:
+      p.precio_3000 != null ? `$${Number(p.precio_3000).toFixed(2)}` : "",
     precioBase:   p.precio_base != null ? `$${Number(p.precio_base).toFixed(2)}` : "",
     costoLaminado: p.costo_laminado != null ? Number(p.costo_laminado) : 0,
     idTamanoProducto: p.id_tamano_producto ?? undefined,
@@ -563,6 +597,7 @@ export const mapearPlasticoSistemaAProducto = (p: {
   precio_500?: number | null;
   precio_1000?: number | null;
   precio_3000?: number | null;
+  origen?: "sistema" | "expo" | string | null;
   pigmento?: string | null;
   asa?: boolean;
   tipo_asa?: string | null;
@@ -573,12 +608,13 @@ export const mapearPlasticoSistemaAProducto = (p: {
 }): Producto => {
   const materialNorm = normalizarMaterialPlastico(p.material);
   const esBopp = materialNorm === "BOPP";
+  const esExpo = p.origen === "expo";
   const calibre = esBopp
     ? (p.calibre_bopp != null ? String(p.calibre_bopp) : "")
     : (p.calibre != null ? String(p.calibre) : "");
   return {
     id:           p.id,
-    fuente:       "sistema",
+    fuente:       esExpo ? "expo" : "sistema",
     nombre:       p.nombre,
     categoria:    "plastico",
     medida:       p.medida || "",
@@ -601,8 +637,16 @@ export const mapearPlasticoSistemaAProducto = (p: {
     idColorDefault: p.id_color ?? undefined,
     tintasFrenteDefault: p.tintas_frente_default ?? undefined,
     precio500:    p.precio_500  != null ? `$${Number(p.precio_500).toFixed(2)}`  : "",
-    precio1000:   p.precio_1000 != null ? `$${Number(p.precio_1000).toFixed(2)}` : "",
-    precio3000:   p.precio_3000 != null ? `$${Number(p.precio_3000).toFixed(2)}` : "",
+    precio1000:   esExpo
+      ? ""
+      : (p.precio_1000 != null ? `$${Number(p.precio_1000).toFixed(2)}` : ""),
+    precio3000:   esExpo
+      ? ""
+      : (p.precio_3000 != null ? `$${Number(p.precio_3000).toFixed(2)}` : ""),
+    precioReferencia500:
+      p.precio_1000 != null ? `$${Number(p.precio_1000).toFixed(2)}` : "",
+    precioReferencia1000:
+      p.precio_3000 != null ? `$${Number(p.precio_3000).toFixed(2)}` : "",
     imagen:       p.imagen_url || "",
     tipo:         "",
     tipoProducto: "",
@@ -615,7 +659,7 @@ export const mapearPlasticoSistemaAProducto = (p: {
     fuelle:      "",
     refuerzo:    p.refuerzo != null ? String(p.refuerzo) : "",
     porKilo:     p.por_kilo != null ? Number(p.por_kilo) : undefined,
-    origen:      "sistema",
+    origen:      esExpo ? "expo" : "sistema",
   };
 };
 
@@ -685,8 +729,16 @@ export const mapearPapelSistemaAProducto = (p: {
   tintasFrenteDefault: p.tintas_frente_default ?? undefined,
   tintasDentroDefault: p.tintas_dentro_default ?? undefined,
   precio500:    p.precio_500  != null ? `$${Number(p.precio_500).toFixed(2)}`  : "",
-  precio1000:   p.precio_1000 != null ? `$${Number(p.precio_1000).toFixed(2)}` : "",
-  precio3000:   p.precio_3000 != null ? `$${Number(p.precio_3000).toFixed(2)}` : "",
+  precio1000:   p.origen === "expo"
+    ? ""
+    : (p.precio_1000 != null ? `$${Number(p.precio_1000).toFixed(2)}` : ""),
+  precio3000:   p.origen === "expo"
+    ? ""
+    : (p.precio_3000 != null ? `$${Number(p.precio_3000).toFixed(2)}` : ""),
+  precioReferencia500:
+    p.precio_1000 != null ? `$${Number(p.precio_1000).toFixed(2)}` : "",
+  precioReferencia1000:
+    p.precio_3000 != null ? `$${Number(p.precio_3000).toFixed(2)}` : "",
   precioBase:   p.precio_base != null ? `$${Number(p.precio_base).toFixed(2)}` : "",
   costoLaminado: p.costo_laminado != null ? Number(p.costo_laminado) : 0,
   idTamanoProducto: p.id_tamano_producto ?? undefined,

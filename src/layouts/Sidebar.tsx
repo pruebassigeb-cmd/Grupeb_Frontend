@@ -81,10 +81,10 @@ export default function Dashboard({ children }: DashboardProps) {
     {
       name: "Dar alta productos",
       icon: "📦",
-      permiso: "Dar de alta productos",
+      permisoOr: ["Dar de alta productos", "Dar de alta productos (Papel)"],
       subItems: [
         { name: "Plástico", path: "/plastico", permiso: "Dar de alta productos" },
-        { name: "Papel",    path: "/papel",    permiso: "Dar de alta productos" },
+        { name: "Papel",    path: "/papel",    permiso: "Dar de alta productos (Papel)" },
       ],
     },
     {
@@ -156,9 +156,9 @@ export default function Dashboard({ children }: DashboardProps) {
     {
       name: "Catálogos",
       icon: "📚",
-      permiso: "Dar de alta productos",
+      permiso: "Gestionar Catálogos",
       subItems: [
-        { name: "Gestión de catálogos", path: "/catalogos", permiso: "Dar de alta productos" },
+        { name: "Gestión de catálogos", path: "/catalogos", permiso: "Gestionar Catálogos" },
       ],
     },
     {
@@ -182,7 +182,10 @@ export default function Dashboard({ children }: DashboardProps) {
       permiso: "Gestionar Proveedores",
       subItems: [],
     },
-    // ── Cotizador Expo — solo acceso total ──────────────────────────────────
+    // ── Cotizador Expo ───────────────────────────────────────────────────────
+    // Sin privilegio propio: solo lo ven los admins (acceso_total) en el menú
+    // normal. El rol "Expo" lo ve por la excepción esRolExclusivoExpo de abajo,
+    // sin necesitar que se le asigne ningún privilegio.
     {
       name: "Cotizador Expo",
       icon: "🎪",
@@ -192,14 +195,20 @@ export default function Dashboard({ children }: DashboardProps) {
     },
   ];
 
-  const menuFiltrado = menuItems.filter((item) => {
-    if (item.accesoTotal) return user?.acceso_total === true;
-    if (!item.permiso && !item.permisoOr) return true;
-    if (user?.acceso_total) return true;
-    if (item.permiso && tienePermiso(item.permiso)) return true;
-    if (item.permisoOr) return item.permisoOr.some((p) => tienePermiso(p));
-    return false;
-  });
+  // Rol exclusivo: mientras Expo siga en desarrollo, este rol solo debe
+  // ver la opción de Expo en el sidebar, sin importar qué otros permisos tenga.
+  const esRolExclusivoExpo = user?.rol === "Expo";
+
+  const menuFiltrado = esRolExclusivoExpo
+    ? menuItems.filter((item) => item.name === "Cotizador Expo")
+    : menuItems.filter((item) => {
+        if (item.accesoTotal) return user?.acceso_total === true;
+        if (!item.permiso && !item.permisoOr) return true;
+        if (user?.acceso_total) return true;
+        if (item.permiso && tienePermiso(item.permiso)) return true;
+        if (item.permisoOr) return item.permisoOr.some((p) => tienePermiso(p));
+        return false;
+      });
 
   useEffect(() => {
     menuItems.forEach((item) => {

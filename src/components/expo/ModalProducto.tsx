@@ -159,7 +159,9 @@ function DropdownDB({ label, value, opciones, loading, disabled, onSelect, place
 const formVacio = (): Partial<Producto> => ({
   nombre:"",categoria:"papel",medida:"",material:"",calibre:"",tintas:"1x0",
   laminacion:false,hs:false,ar:false,textura:false,uv:false,asa:false,otro:"",
-  precio500:"",precio1000:"",precio3000:"",precioBase:"",imagen:"",
+  precio500:"",precio1000:"",precio3000:"",
+  precioReferencia500:"",precioReferencia1000:"",
+  precioBase:"",imagen:"",
   tipo:"",ancho:"",fuelle:"",altura:"",tipoPapel:"",
   tipoProducto:"",fuelLateral:"",fuelFondo:"",troquel:false,perforado:false,
   tipoLaminado:"",tipoAsa:"",tipoTextura:"",tipoHs:"",
@@ -319,6 +321,9 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
   const [materialNom,  setMaterialNom]  = useState(editando?.material || "");
   const [calibreId,    setCalibreId]    = useState(0);
   const [calibreNom,   setCalibreNom]   = useState(editando?.calibre || "");
+  // El catálogo de calibres se carga de forma asíncrona. Se conserva siempre
+  // el calibre recibido al editar para que una recarga del catálogo no lo
+  // vuelva a dejar en blanco.
 
   const [medidas, setMedidas] = useState<Record<MedidaKey, string>>(
     editando?.medida && editando.categoria === "plastico"
@@ -341,19 +346,56 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
       .finally(() => setLoadingCats(false));
   }, [formCat]);
 
-  const cargarCalibres = async (tipoCal: "bopp" | "normal", calibreARestaurar?: string) => {
+  const cargarCalibres = async (
+    tipoCal: "bopp" | "normal",
+    calibreARestaurar?: string,
+  ) => {
+    const valorObjetivo = String(
+      calibreARestaurar || calibreNom || form.calibre || editando?.calibre || "",
+    ).trim();
+
     setLoadingCal(true);
     setCalibreId(0);
-    setCalibreNom("");
+
     try {
-      const r = await api.get(`/catalogos-productos/plastico/calibres?tipo=${tipoCal}`);
-      setCalibresDB(r.data || []);
-      if (calibreARestaurar) {
-        const cal = (r.data as Calibre[]).find(c => String(c.valor) === calibreARestaurar);
-        if (cal) { setCalibreId(cal.id); setCalibreNom(String(cal.valor)); }
-      }
+      const r = await api.get(
+        `/catalogos-productos/plastico/calibres?tipo=${tipoCal}`,
+      );
+      const calibres: Calibre[] = Array.isArray(r.data) ? r.data : [];
+      setCalibresDB(calibres);
+
+      if (!valorObjetivo) return;
+
+      const normalizarCalibre = (valor: unknown): string => {
+        const texto = String(valor ?? "").trim();
+        const numero = Number(texto.replace(/[^0-9.-]/g, ""));
+        return Number.isFinite(numero) ? String(numero) : texto.toLowerCase();
+      };
+
+      const objetivoNormalizado = normalizarCalibre(valorObjetivo);
+      const encontrado = calibres.find(
+        (item) => normalizarCalibre(item.valor) === objetivoNormalizado,
+      );
+      const valorFinal = encontrado ? String(encontrado.valor) : valorObjetivo;
+
+      setCalibreId(encontrado?.id || 0);
+      setCalibreNom(valorFinal);
+      setForm((prev) => (
+        prev.calibre === valorFinal
+          ? prev
+          : { ...prev, calibre: valorFinal }
+      ));
     } catch (e) {
       console.error(e);
+      // Aunque el catálogo falle, conserva el valor guardado del producto.
+      if (valorObjetivo) {
+        setCalibreNom(valorObjetivo);
+        setForm((prev) => (
+          prev.calibre === valorObjetivo
+            ? prev
+            : { ...prev, calibre: valorObjetivo }
+        ));
+      }
     } finally {
       setLoadingCal(false);
     }
@@ -365,17 +407,36 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
     const mat  = materiales.find(m => m.nombre === editando.material);
     if (tipo) { setTipoPlastId(tipo.id); setTipoPlastNom(tipo.nombre); }
     if (mat)  { setMaterialId(mat.id);   setMaterialNom(mat.nombre); }
-    if (tipo && mat) {
-      const tipoCal = (tipo.nombre === "Bolsa celofán" && mat.nombre.toUpperCase() === "BOPP") ? "bopp" : "normal";
-      cargarCalibres(tipoCal, editando.calibre || undefined);
-    }
-  }, [tiposProducto, materiales]);
+  }, [editando, tiposProducto, materiales]);
+
+  useEffect(() => {
+    if (formCat !== "plastico" || !editando?.calibre) return;
+
+    const calibreGuardado = String(editando.calibre).trim();
+    if (!calibreGuardado) return;
+
+    setCalibreNom(calibreGuardado);
+    setForm((prev) => (
+      prev.calibre === calibreGuardado
+        ? prev
+        : { ...prev, calibre: calibreGuardado }
+    ));
+  }, [editando?.id, editando?.calibre, formCat]);
 
   useEffect(() => {
     if (formCat !== "plastico" || !tipoPlastNom || !materialNom) return;
-    const tipoCal = (tipoPlastNom === "Bolsa celofán" && materialNom.toUpperCase() === "BOPP") ? "bopp" : "normal";
-    cargarCalibres(tipoCal);
-  }, [tipoPlastNom, materialNom, formCat]);
+
+    const tipoCal = materialNom.toUpperCase() === "BOPP"
+      ? "bopp"
+      : "normal";
+    const calibreARestaurar =
+      editando?.calibre || form.calibre || calibreNom || undefined;
+
+    void cargarCalibres(tipoCal, calibreARestaurar);
+    // La recarga depende del tipo/material; calibreNom y form.calibre se usan
+    // como respaldo, pero no forman parte de las dependencias para evitar un
+    // ciclo al restaurar el valor.
+  }, [tipoPlastNom, materialNom, formCat, editando?.id]);
 
   const setF = (k: keyof Producto, v: unknown) => setForm(prev => ({ ...prev, [k]: v }));
   const soloNums = (v: string) => v.replace(/[^0-9.]/g,"").replace(/^(\d*\.?\d*).*$/,"$1");
@@ -1021,6 +1082,47 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
               </div>
             </>
           )}
+
+          <div style={{ marginTop:16, paddingTop:14, borderTop:"1px dashed #333" }}>
+            <label style={LS}>Precios de referencia del producto</label>
+            <div style={ROW2}>
+              <div>
+                <label style={{ ...LS, color:"#C9922A" }}>
+                  Total de referencia · 500 piezas
+                </label>
+                <input
+                  style={IS}
+                  type="text"
+                  inputMode="decimal"
+                  value={form.precioReferencia500 || ""}
+                  onChange={e =>
+                    setF("precioReferencia500", soloNums(e.target.value))
+                  }
+                  placeholder="$0.00"
+                />
+              </div>
+              <div>
+                <label style={{ ...LS, color:"#C9922A" }}>
+                  Total de referencia · 1,000 piezas
+                </label>
+                <input
+                  style={IS}
+                  type="text"
+                  inputMode="decimal"
+                  value={form.precioReferencia1000 || ""}
+                  onChange={e =>
+                    setF("precioReferencia1000", soloNums(e.target.value))
+                  }
+                  placeholder="$0.00"
+                />
+              </div>
+            </div>
+            <div style={{ color:"#666",fontSize:10,marginTop:-8,lineHeight:1.45 }}>
+              Estos importes son únicamente informativos para el catálogo.
+              No se copian a la cotización, no sustituyen precios calculados y
+              no intervienen en los cálculos de papel, cartón o plástico.
+            </div>
+          </div>
         </div>
 
         {/* ── IMAGEN ── */}

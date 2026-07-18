@@ -1,4 +1,4 @@
-import { Navigate } from "react-router-dom";
+import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
 interface ProtectedRouteProps {
@@ -13,6 +13,7 @@ export default function ProtectedRoute({
   permisoOr,
 }: ProtectedRouteProps) {
   const { user, loading } = useAuth();
+  const location = useLocation();
 
   if (loading) {
     return (
@@ -25,6 +26,13 @@ export default function ProtectedRoute({
   // No autenticado → login
   if (!user) {
     return <Navigate to="/" replace />;
+  }
+
+  // Rol exclusivo: mientras Expo esté en desarrollo, este rol solo puede
+  // entrar a /expo (y subrutas), sin importar que tenga acceso_total.
+  // Va ANTES del bypass de acceso_total a propósito.
+  if (user.rol === "Expo" && !location.pathname.startsWith("/expo")) {
+    return <Navigate to="/expo" replace />;
   }
 
   // acceso_total → pasa siempre

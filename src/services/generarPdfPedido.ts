@@ -504,6 +504,27 @@ export async function generarPdfPedido(
   const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: formatoJsPdf });
   const PED_FOOTER_H = 55;
 
+  // ── Corrección de alineación de impresión ────────────────────────────────
+  // Al imprimir desde tablet el contenido cae ~8mm corrido a la izquierda.
+  // Se compensa desplazando TODO el contenido de la página (encabezado, tabla
+  // y pie) hacia la derecha mediante una transformación a nivel de PDF, sin
+  // necesidad de tocar cada función de dibujo por separado.
+  // Ajustar este valor si cambia el desfase real de la impresora.
+  const OFFSET_IMPRESION_MM = 9;
+  const PT_POR_MM = 72 / 25.4;
+  const abrirOffsetPaginaActual = () => {
+    (doc as any).internal.write(
+      `q 1 0 0 1 ${(OFFSET_IMPRESION_MM * PT_POR_MM).toFixed(3)} 0 cm`
+    );
+  };
+  const _addPage = doc.addPage.bind(doc);
+  (doc as any).addPage = (...args: any[]) => {
+    const resultado = _addPage(...args);
+    abrirOffsetPaginaActual(); // cada página nueva también queda desplazada
+    return resultado;
+  };
+  abrirOffsetPaginaActual(); // aplica el desfase a la primera página
+
   const y = await dibujarEncabezado({
     doc, logoBase64,
     mostrarLogo: !ocultarLogo,
@@ -545,6 +566,16 @@ export async function generarPdfPedido(
   }, { pageWidth: PW, pageHeight: PH, margin: M }, sinIva);
 
   dibujarPiePagina(doc, "PEDIDO", pedido.no_pedido, pedido.fecha, PW, PH);
+
+  // Cierra la transformación de offset (q ... cm) abierta en cada página,
+  // dejando el content-stream de todas las páginas correctamente balanceado.
+  const totalPaginas = (doc as any).internal.getNumberOfPages();
+  const paginaActual = (doc as any).internal.getCurrentPageInfo().pageNumber;
+  for (let i = 1; i <= totalPaginas; i++) {
+    doc.setPage(i);
+    (doc as any).internal.write("Q");
+  }
+  doc.setPage(paginaActual);
 
   const sufijoFormato = formato === "membretado" ? "_EB" : "";
   const nombre = `Pedido_${pedido.no_pedido}${sufijoFormato}.pdf`;
