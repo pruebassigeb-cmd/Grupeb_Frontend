@@ -201,9 +201,16 @@ Push y el outbox son independientes (ver §6.9) — esto solo trata de qué even
 ### 7.3 Resolución de conflictos de sincronización — RESUELTO
 Confirmado: por ahora basta con **avisar** al usuario si el backend rechaza una operación encolada (ej. el mismo pedido fue editado por alguien más, o una validación de unicidad falla). No hay merge automático.
 
-### 7.4 Límite de tamaño de caché — RESUELTO
-- Catálogos que cambian poco (clientes, productos, precios, insumos, foils/texturas): `maxEntries: 100`, `maxAgeSeconds: 7 días`
-- Listas transaccionales que cambian seguido (cotizaciones, pedidos): `maxEntries: 50`, `maxAgeSeconds: 1–2 días`
+### 7.4 Límite de tamaño de caché — RESUELTO (corregido, ver detalle por endpoint real)
+Importante: `maxEntries` de Workbox cuenta **respuestas HTTP cacheadas por URL completa** (incluye query params), no registros dentro del JSON. `GET /pedidos` con 500 pedidos adentro sigue siendo 1 sola entrada.
+
+Revisando los endpoints reales:
+- `GET /cotizaciones` y `GET /pedidos` (`cotizacionesService.ts`, `pedidosService.ts`) son listas **planas sin parámetros** — siempre la misma URL, siempre 1 sola entrada que se sobreescribe con `NetworkFirst`. Aquí `maxEntries` casi no importa (basta con 2–5), lo relevante es `maxAgeSeconds`.
+- Endpoints **parametrizados** son los que de verdad generan muchas entradas distintas — ahí sí importa `maxEntries`:
+  - `GET /pedidos/historial/:clienteId` — 1 entrada por cliente consultado → `maxEntries: 50` (últimos 50 clientes distintos revisados), `maxAgeSeconds: 1–2 días`
+  - `buscarInsumos` en `proveedoresService.ts` (`params: { q }`, usado desde `ModalProducto.tsx` en Expo) — 1 entrada por texto de búsqueda distinto → **hay que debouncear la búsqueda en el componente** para no generar una entrada por cada tecla, y poner `maxEntries: 100`, `maxAgeSeconds: 7 días` (los insumos cambian poco)
+  - Igual aplica a cualquier búsqueda parametrizada que se agregue en Usuarios/Proveedores/Catálogos administrativo al implementar la Fase 3
+- Catálogos sin parámetros que cambian poco (productos, precios, foils/texturas): `maxEntries: 10–20` es de sobra (no hay tantas URLs distintas posibles), `maxAgeSeconds: 7 días`
 - No es una preocupación de espacio en disco (solo JSON, muy liviano) — el límite es para evitar mostrar datos demasiado viejos como si fueran vigentes, no por storage.
 
 ---

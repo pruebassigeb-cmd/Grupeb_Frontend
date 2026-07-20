@@ -2,7 +2,14 @@ import { useRef, useState } from "react";
 import { CATS, claveProducto } from "../../types/expo/expo.types";
 import type { Producto } from "../../types/expo/expo.types";
 
-export const busquedaStore: Record<string, string> = { papel: "", plastico: "", carton: "" };
+export const busquedaStore: Record<string, string> = {
+  "papel-expo": "",
+  "papel-sistema": "",
+  "plastico-expo": "",
+  "plastico-sistema": "",
+  "carton-expo": "",
+  "carton-sistema": "",
+};
 
 interface Props {
   grid?: boolean;
@@ -36,11 +43,11 @@ export default function Catalogo({
   addProd, abrirEditar, eliminarProd,
 }: Props) {
   void busquedaTick;
-  // grid/sistemaOpen/setSistemaOpen ya no se usan tras fusionar "Catálogo
-  // Expo" y "Sistema" en una sola lista (ya no hay una tabla catalogo_expo
-  // separada) — se dejan en la interfaz de Props por compatibilidad con
-  // quien llama a este componente, sin tocar Expo.tsx en esta pasada.
+  // Cada categoría se divide visualmente en dos orígenes. Los productos Expo
+  // también pueden venir dentro de sistemaProductos porque comparten tablas;
+  // se excluyen del bloque Sistema para evitar duplicados.
   void grid; void sistemaOpen; void setSistemaOpen;
+
   const [productoSeleccionadoKey, setProductoSeleccionadoKey] = useState<string | null>(null);
   const productoSeleccionadoRef = useRef<string | null>(null);
 
@@ -49,9 +56,28 @@ export default function Catalogo({
     setProductoSeleccionadoKey(key);
   };
 
+  const filtrarProductos = (productos: Producto[], busquedaKey: string) => {
+    const busqueda = (busquedaStore[busquedaKey] || "").trim().toLowerCase();
+    if (!busqueda) return productos;
+
+    return productos.filter(p =>
+      [
+        p.nombre,
+        p.medida,
+        p.material,
+        p.calibre,
+        p.tipo,
+        p.tipoProducto,
+        p.tamanoProd,
+        p.grupo_descripcion,
+      ]
+        .filter(Boolean)
+        .some(valor => String(valor).toLowerCase().includes(busqueda))
+    );
+  };
+
   return (
     <div style={{ paddingBottom: mob ? 80 : 16 }}>
-
       {loadingCatalogo && (
         <div style={{ padding: "24px 16px", textAlign: "center" }}>
           <div style={{ color: "#444", fontSize: 12 }}>Cargando catálogo...</div>
@@ -59,91 +85,351 @@ export default function Catalogo({
       )}
 
       {!loadingCatalogo && CATS.map(cat => {
-        // ── Fusión: ya no hay una tabla catalogo_expo separada — "catalogo"
-        // (productos propios, origen_expo=true) y "sistemaProductos" (TODOS
-        // los productos del sistema) ahora comparten la misma tabla real.
-        // Un producto con origen_expo=true aparece en AMBOS arrays — se
-        // fusiona en una sola lista sin duplicar, usando el id real como
-        // clave de dedupe (no claveProducto, porque el `fuente` puede venir
-        // distinto entre los dos arrays para el mismo producto).
-        const propiosCat = catalogo.filter(p => p.categoria === cat.key);
-        const sistemaCat = sistemaProductos.filter(p => p.categoria === cat.key);
         const claveVariante = (p: Producto) =>
           `${p.categoria}:${p.id}:${p.idgrupo_papel ?? 0}`;
-        const variantesPropias = new Set(propiosCat.map(claveVariante));
-        const variantesEnSistema = new Set(sistemaCat.map(claveVariante));
-        // Los propios que por algún motivo no vinieron en sistemaProductos
-        // (ej. carrera de red) igual se muestran — no se pierden.
-        const soloEnPropios = propiosCat.filter(
-          p => !variantesEnSistema.has(claveVariante(p))
-        );
-        const todosCat = [...sistemaCat, ...soloEnPropios];
 
-        const busq = busquedaStore[cat.key]?.toLowerCase() || "";
-        const listaFiltrada = todosCat.filter(p =>
-          !busq ||
-          p.nombre.toLowerCase().includes(busq) ||
-          p.medida.toLowerCase().includes(busq) ||
-          p.material.toLowerCase().includes(busq)
+        const productosExpo = catalogo.filter(p => p.categoria === cat.key);
+        const variantesExpo = new Set(productosExpo.map(claveVariante));
+
+        const productosSistema = sistemaProductos.filter(
+          p =>
+            p.categoria === cat.key &&
+            !variantesExpo.has(claveVariante(p))
         );
+
+        const busquedaExpoKey = `${cat.key}-expo`;
+        const busquedaSistemaKey = `${cat.key}-sistema`;
+
+        const expoFiltrados = filtrarProductos(productosExpo, busquedaExpoKey);
+        const sistemaFiltrados = filtrarProductos(productosSistema, busquedaSistemaKey);
         const open = expanded[cat.key];
 
         return (
           <div key={cat.key} style={{ marginBottom: 2 }}>
-
             <button
               onClick={() => toggleExp(cat.key)}
-              style={{ width:"100%", background:"#171717", border:"none", borderBottom:`1px solid ${cat.color}33`, cursor:"pointer", padding:"10px 14px", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-              <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-                <span style={{ fontSize:14 }}>{cat.emoji}</span>
-                <span style={{ color:cat.color, fontSize:11, fontWeight:700, letterSpacing:1.5, textTransform:"uppercase" }}>{cat.label}</span>
-                <span style={{ background:`${cat.color}22`, color:cat.color, fontSize:9, fontWeight:700, padding:"1px 7px", borderRadius:10, border:`1px solid ${cat.color}44` }}>{todosCat.length}</span>
+              style={{
+                width: "100%",
+                background: "#171717",
+                border: "none",
+                borderBottom: `1px solid ${cat.color}33`,
+                cursor: "pointer",
+                padding: "10px 14px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ fontSize: 14 }}>{cat.emoji}</span>
+                <span
+                  style={{
+                    color: cat.color,
+                    fontSize: 11,
+                    fontWeight: 700,
+                    letterSpacing: 1.5,
+                    textTransform: "uppercase",
+                  }}
+                >
+                  {cat.label}
+                </span>
+                <span
+                  style={{
+                    background: `${cat.color}22`,
+                    color: cat.color,
+                    fontSize: 9,
+                    fontWeight: 700,
+                    padding: "1px 7px",
+                    borderRadius: 10,
+                    border: `1px solid ${cat.color}44`,
+                  }}
+                >
+                  {productosExpo.length + productosSistema.length}
+                </span>
               </div>
-              <span style={{ color:cat.color, fontSize:11 }}>{open ? "▲" : "▼"}</span>
+              <span style={{ color: cat.color, fontSize: 11 }}>{open ? "▲" : "▼"}</span>
             </button>
 
             {open && (
-              <div style={{ background:"#0D0D0D" }}>
-                <div style={{ padding:"8px 10px 4px" }}>
-                  <div style={{ position:"relative" }}>
-                    <span style={{ position:"absolute", left:8, top:"50%", transform:"translateY(-50%)", fontSize:11, color:"#444", pointerEvents:"none" }}>🔍</span>
-                    <input
-                      key={`busq-${cat.key}`}
-                      defaultValue={busquedaStore[cat.key] || ""}
-                      onChange={e => { busquedaStore[cat.key] = e.target.value; setBusquedaTick(t => t+1); }}
-                      placeholder="Buscar producto..."
-                      style={{ width:"100%", background:"#1A1A1A", border:"1px solid #2A2A2A", borderRadius:6, padding:"6px 28px 6px 26px", color:"#DDD", fontSize:11, outline:"none", fontFamily:"'Inter',sans-serif" }}
-                    />
-                    {busquedaStore[cat.key] && (
-                      <button
-                        onClick={() => { busquedaStore[cat.key] = ""; setBusquedaTick(t => t+1); }}
-                        style={{ position:"absolute", right:7, top:"50%", transform:"translateY(-50%)", background:"none", border:"none", color:"#555", cursor:"pointer", fontSize:13 }}>✕</button>
-                    )}
-                  </div>
-                </div>
-                <div style={{ maxHeight:420, overflowY:"auto", padding:"4px 8px 8px" }}>
-                  {listaFiltrada.length === 0
-                    ? <div style={{ color:"#444", fontSize:11, textAlign:"center", padding:"16px 0" }}>
-                        {busq ? "Sin resultados" : "Sin productos en esta categoría"}
-                      </div>
-                    : listaFiltrada.map(p => (
-                      <TarjetaProducto key={claveProducto(p)} p={p} catColor={cat.color}
-                        grid={false} mob={mob} tab={tab} desk={desk} addedId={addedId}
-                        onDragStart={onDragStart} onDragEnd={onDragEnd}
-                        productoSeleccionadoKey={productoSeleccionadoKey}
-                        productoSeleccionadoRef={productoSeleccionadoRef}
-                        seleccionarProducto={seleccionarProducto}
-                        addProd={addProd} abrirEditar={abrirEditar} eliminarProd={eliminarProd}
-                        esPropio={variantesPropias.has(claveVariante(p))} compacto />
-                    ))
+              <div style={{ background: "#0D0D0D", padding: "8px 8px 10px" }}>
+                <SeccionCatalogo
+                  titulo="Catálogo Expo"
+                  descripcion="Productos registrados especialmente para Expo"
+                  icono="⭐"
+                  color="#C9922A"
+                  busquedaKey={busquedaExpoKey}
+                  placeholder="Buscar en productos Expo..."
+                  productos={expoFiltrados}
+                  totalProductos={productosExpo.length}
+                  sinResultados={
+                    busquedaStore[busquedaExpoKey]
+                      ? "No hay productos Expo que coincidan"
+                      : "No hay productos Expo en esta categoría"
                   }
-                </div>
+                  esPropio
+                  mob={mob}
+                  tab={tab}
+                  desk={desk}
+                  addedId={addedId}
+                  setBusquedaTick={setBusquedaTick}
+                  onDragStart={onDragStart}
+                  onDragEnd={onDragEnd}
+                  productoSeleccionadoKey={productoSeleccionadoKey}
+                  productoSeleccionadoRef={productoSeleccionadoRef}
+                  seleccionarProducto={seleccionarProducto}
+                  addProd={addProd}
+                  abrirEditar={abrirEditar}
+                  eliminarProd={eliminarProd}
+                  catColor={cat.color}
+                />
+
+                <SeccionCatalogo
+                  titulo="Productos del sistema"
+                  descripcion="Catálogo general disponible para cotizar"
+                  icono="🏭"
+                  color={cat.color}
+                  busquedaKey={busquedaSistemaKey}
+                  placeholder="Buscar en productos del sistema..."
+                  productos={sistemaFiltrados}
+                  totalProductos={productosSistema.length}
+                  sinResultados={
+                    busquedaStore[busquedaSistemaKey]
+                      ? "No hay productos del sistema que coincidan"
+                      : "No hay productos del sistema en esta categoría"
+                  }
+                  esPropio={false}
+                  mob={mob}
+                  tab={tab}
+                  desk={desk}
+                  addedId={addedId}
+                  setBusquedaTick={setBusquedaTick}
+                  onDragStart={onDragStart}
+                  onDragEnd={onDragEnd}
+                  productoSeleccionadoKey={productoSeleccionadoKey}
+                  productoSeleccionadoRef={productoSeleccionadoRef}
+                  seleccionarProducto={seleccionarProducto}
+                  addProd={addProd}
+                  abrirEditar={abrirEditar}
+                  eliminarProd={eliminarProd}
+                  catColor={cat.color}
+                />
               </div>
             )}
           </div>
         );
       })}
     </div>
+  );
+}
+
+interface SeccionCatalogoProps {
+  titulo: string;
+  descripcion: string;
+  icono: string;
+  color: string;
+  busquedaKey: string;
+  placeholder: string;
+  productos: Producto[];
+  totalProductos: number;
+  sinResultados: string;
+  esPropio: boolean;
+  mob: boolean;
+  tab: boolean;
+  desk: boolean;
+  addedId: string | null;
+  setBusquedaTick: React.Dispatch<React.SetStateAction<number>>;
+  onDragStart: (e: React.DragEvent, p: Producto) => void;
+  onDragEnd: () => void;
+  productoSeleccionadoKey: string | null;
+  productoSeleccionadoRef: React.MutableRefObject<string | null>;
+  seleccionarProducto: (key: string | null) => void;
+  addProd: (p: Producto) => void;
+  abrirEditar: (p: Producto) => void;
+  eliminarProd: (id: number) => void;
+  catColor: string;
+}
+
+function SeccionCatalogo({
+  titulo,
+  descripcion,
+  icono,
+  color,
+  busquedaKey,
+  placeholder,
+  productos,
+  totalProductos,
+  sinResultados,
+  esPropio,
+  mob,
+  tab,
+  desk,
+  addedId,
+  setBusquedaTick,
+  onDragStart,
+  onDragEnd,
+  productoSeleccionadoKey,
+  productoSeleccionadoRef,
+  seleccionarProducto,
+  addProd,
+  abrirEditar,
+  eliminarProd,
+  catColor,
+}: SeccionCatalogoProps) {
+  const valorBusqueda = busquedaStore[busquedaKey] || "";
+
+  return (
+    <section
+      style={{
+        border: `1px solid ${color}2E`,
+        borderRadius: 9,
+        background: "#111",
+        overflow: "hidden",
+        marginBottom: 9,
+      }}
+    >
+      <div
+        style={{
+          padding: "8px 10px",
+          background: `${color}0D`,
+          borderBottom: `1px solid ${color}24`,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 8,
+        }}
+      >
+        <div style={{ minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ fontSize: 12 }}>{icono}</span>
+            <span
+              style={{
+                color,
+                fontSize: 10,
+                fontWeight: 800,
+                letterSpacing: 1,
+                textTransform: "uppercase",
+              }}
+            >
+              {titulo}
+            </span>
+            <span
+              style={{
+                color,
+                background: `${color}18`,
+                border: `1px solid ${color}35`,
+                borderRadius: 999,
+                fontSize: 8.5,
+                fontWeight: 700,
+                padding: "1px 6px",
+              }}
+            >
+              {totalProductos}
+            </span>
+          </div>
+          <div
+            style={{
+              color: "#555",
+              fontSize: 8.5,
+              marginTop: 2,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {descripcion}
+          </div>
+        </div>
+      </div>
+
+      <div style={{ padding: "7px 8px 4px" }}>
+        <div style={{ position: "relative" }}>
+          <span
+            style={{
+              position: "absolute",
+              left: 8,
+              top: "50%",
+              transform: "translateY(-50%)",
+              fontSize: 11,
+              color: "#444",
+              pointerEvents: "none",
+            }}
+          >
+            🔍
+          </span>
+          <input
+            value={valorBusqueda}
+            onChange={e => {
+              busquedaStore[busquedaKey] = e.target.value;
+              setBusquedaTick(t => t + 1);
+            }}
+            placeholder={placeholder}
+            style={{
+              width: "100%",
+              background: "#191919",
+              border: "1px solid #2A2A2A",
+              borderRadius: 6,
+              padding: "6px 28px 6px 26px",
+              color: "#DDD",
+              fontSize: 10.5,
+              outline: "none",
+              fontFamily: "'Inter',sans-serif",
+            }}
+          />
+          {valorBusqueda && (
+            <button
+              onClick={() => {
+                busquedaStore[busquedaKey] = "";
+                setBusquedaTick(t => t + 1);
+              }}
+              style={{
+                position: "absolute",
+                right: 7,
+                top: "50%",
+                transform: "translateY(-50%)",
+                background: "none",
+                border: "none",
+                color: "#555",
+                cursor: "pointer",
+                fontSize: 13,
+              }}
+            >
+              ✕
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div style={{ maxHeight: 255, overflowY: "auto", padding: "4px 7px 7px" }}>
+        {productos.length === 0 ? (
+          <div style={{ color: "#444", fontSize: 10, textAlign: "center", padding: "14px 6px" }}>
+            {sinResultados}
+          </div>
+        ) : (
+          productos.map(p => (
+            <TarjetaProducto
+              key={claveProducto(p)}
+              p={p}
+              catColor={catColor}
+              grid={false}
+              mob={mob}
+              tab={tab}
+              desk={desk}
+              addedId={addedId}
+              onDragStart={onDragStart}
+              onDragEnd={onDragEnd}
+              productoSeleccionadoKey={productoSeleccionadoKey}
+              productoSeleccionadoRef={productoSeleccionadoRef}
+              seleccionarProducto={seleccionarProducto}
+              addProd={addProd}
+              abrirEditar={abrirEditar}
+              eliminarProd={eliminarProd}
+              esPropio={esPropio}
+              compacto
+            />
+          ))
+        )}
+      </div>
+    </section>
   );
 }
 

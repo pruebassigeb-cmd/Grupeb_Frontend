@@ -42,12 +42,445 @@ const subirImagenProductoExpo = async (
   });
 };
 
+const textoValor = (valor: unknown): string => {
+  if (valor === true) return "Sí";
+  if (valor === false) return "No";
+  if (valor == null || valor === "") return "—";
+
+  if (Array.isArray(valor)) {
+    if (valor.length === 0) return "—";
+    return valor
+      .map(item => {
+        if (item && typeof item === "object") {
+          const obj = item as Record<string, unknown>;
+          return String(
+            obj.nombre ??
+            obj.label ??
+            obj.tipo ??
+            obj.idcat_tipo_asa ??
+            obj.idcat_laminado ??
+            obj.id ??
+            "—"
+          );
+        }
+        return String(item);
+      })
+      .join(", ");
+  }
+
+  return String(valor);
+};
+
+function SeccionDetalle({
+  titulo,
+  icono,
+  datos,
+}: {
+  titulo: string;
+  icono: string;
+  datos: Array<[string, unknown]>;
+}) {
+  return (
+    <section
+      style={{
+        background: "#151515",
+        border: "1px solid #252525",
+        borderRadius: 10,
+        overflow: "hidden",
+      }}
+    >
+      <div
+        style={{
+          padding: "9px 11px",
+          background: "#111",
+          borderBottom: "1px solid #252525",
+          color: "#C9922A",
+          fontSize: 10,
+          fontWeight: 800,
+          letterSpacing: 1,
+          textTransform: "uppercase",
+        }}
+      >
+        {icono} {titulo}
+      </div>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+          gap: 1,
+          background: "#252525",
+        }}
+      >
+        {datos.map(([etiqueta, valor]) => (
+          <div key={etiqueta} style={{ background: "#171717", padding: "9px 10px", minWidth: 0 }}>
+            <div
+              style={{
+                color: "#666",
+                fontSize: 8,
+                fontWeight: 700,
+                letterSpacing: .6,
+                textTransform: "uppercase",
+                marginBottom: 3,
+              }}
+            >
+              {etiqueta}
+            </div>
+            <div
+              style={{
+                color: textoValor(valor) === "—" ? "#444" : "#DDD",
+                fontSize: 10.5,
+                fontWeight: 600,
+                overflowWrap: "anywhere",
+              }}
+            >
+              {textoValor(valor)}
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ModalDetalleProducto({
+  producto,
+  onClose,
+  onEditar,
+}: {
+  producto: Producto;
+  onClose: () => void;
+  onEditar: (producto: Producto) => void;
+}) {
+  const esPlastico = producto.categoria === "plastico";
+  const categoriaLabel =
+    producto.categoria === "plastico"
+      ? "Plástico"
+      : producto.categoria === "carton"
+        ? "Cartón"
+        : "Papel";
+
+  const acabadosDisponibles = [
+    producto.laminacion && `Laminado${producto.tipoLaminado ? `: ${producto.tipoLaminado}` : ""}`,
+    producto.hs && `Hot stamping / foil${producto.tipoHs ? `: ${producto.tipoHs}` : ""}`,
+    producto.ar && "Alto relieve",
+    producto.textura && `Textura${producto.tipoTextura ? `: ${producto.tipoTextura}` : ""}`,
+    producto.uv && "UV",
+    producto.asa && `Asa / suaje${producto.tipoAsa ? `: ${producto.tipoAsa}` : ""}`,
+    producto.pigmento && `Pigmento: ${producto.pigmento}`,
+  ].filter(Boolean) as string[];
+
+  const laminadosPermitidos = (producto.laminadosPermitidos || [])
+    .map(item => item.nombre)
+    .filter(Boolean);
+
+  const asasPermitidas = (producto.asasPermitidas || [])
+    .map(item => item.nombre)
+    .filter(Boolean);
+
+  const chipsAcabados = [
+    ...acabadosDisponibles,
+    ...laminadosPermitidos.map(nombre => `Laminado disponible: ${nombre}`),
+    ...asasPermitidas.map(nombre => `Asa disponible: ${nombre}`),
+  ];
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 380,
+        background: "rgba(0,0,0,.9)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 14,
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          width: "min(1180px, 97vw)",
+          maxHeight: "94vh",
+          background: "#101010",
+          border: "1px solid #303030",
+          borderRadius: 14,
+          overflow: "hidden",
+          boxShadow: "0 30px 90px rgba(0,0,0,.9)",
+          display: "flex",
+          flexDirection: "column",
+        }}
+      >
+        <div
+          style={{
+            padding: "13px 16px",
+            background: "#0B0B0B",
+            borderBottom: "2px solid #C9922A",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            flexShrink: 0,
+          }}
+        >
+          <div style={{ minWidth: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <span style={{ color: "#FFF", fontSize: 16, fontWeight: 800 }}>
+                {producto.nombre}
+              </span>
+              <span
+                style={{
+                  background: "#262626",
+                  color: "#AAA",
+                  borderRadius: 5,
+                  padding: "2px 7px",
+                  fontSize: 9,
+                  fontWeight: 700,
+                }}
+              >
+                {categoriaLabel}
+              </span>
+              <span
+                style={{
+                  background: "#C9922A18",
+                  color: "#C9922A",
+                  border: "1px solid #C9922A44",
+                  borderRadius: 5,
+                  padding: "2px 7px",
+                  fontSize: 9,
+                  fontWeight: 700,
+                }}
+              >
+                ⭐ Expo
+              </span>
+            </div>
+            <div style={{ color: "#555", fontSize: 9.5, marginTop: 3 }}>
+              Vista rápida del producto
+            </div>
+          </div>
+
+          <button
+            onClick={onClose}
+            style={{
+              background: "transparent",
+              border: "1px solid #333",
+              color: "#AAA",
+              borderRadius: 7,
+              padding: "6px 10px",
+              cursor: "pointer",
+              fontSize: 11,
+            }}
+          >
+            ✕ Cerrar
+          </button>
+        </div>
+
+        <div style={{ flex: 1, overflowY: "auto", padding: 16 }}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "minmax(360px, 1.35fr) minmax(320px, .9fr)",
+              gap: 16,
+              alignItems: "start",
+            }}
+          >
+            <div
+              style={{
+                background: "#090909",
+                border: "1px solid #252525",
+                borderRadius: 12,
+                overflow: "hidden",
+                minHeight: 620,
+                display: "flex",
+                flexDirection: "column",
+              }}
+            >
+              <div
+                style={{
+                  flex: 1,
+                  minHeight: 500,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  background: "#080808",
+                  padding: 14,
+                }}
+              >
+                {producto.imagen ? (
+                  <img
+                    src={producto.imagen}
+                    alt={producto.nombre}
+                    style={{
+                      width: "100%",
+                      height: "100%",
+                      maxHeight: 610,
+                      objectFit: "contain",
+                      borderRadius: 8,
+                    }}
+                    onError={e => { (e.target as HTMLImageElement).style.display = "none"; }}
+                  />
+                ) : (
+                  <span style={{ fontSize: 82, opacity: .45 }}>
+                    {producto.categoria === "papel" ? "📄" : producto.categoria === "plastico" ? "🧴" : "📦"}
+                  </span>
+                )}
+              </div>
+
+              <div style={{ padding: 14, borderTop: "1px solid #222" }}>
+                <div style={{ color: "#FFF", fontSize: 16, fontWeight: 800 }}>
+                  {producto.nombre}
+                </div>
+                <div style={{ color: "#777", fontSize: 11, marginTop: 5 }}>
+                  {[producto.medida, producto.material, producto.calibre]
+                    .filter(Boolean)
+                    .join(" · ") || "Sin descripción corta"}
+                </div>
+                <button
+                  onClick={() => onEditar(producto)}
+                  style={{
+                    width: "100%",
+                    marginTop: 12,
+                    background: "#C9922A18",
+                    color: "#C9922A",
+                    border: "1px solid #C9922A66",
+                    borderRadius: 8,
+                    padding: "9px 10px",
+                    cursor: "pointer",
+                    fontSize: 11,
+                    fontWeight: 800,
+                  }}
+                >
+                  ✎ Editar producto
+                </button>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <SeccionDetalle
+                titulo="Precios de referencia"
+                icono="💰"
+                datos={[
+                  ["Base unitario", producto.precioBase],
+                  ["Unitario Expo", esPlastico ? producto.precio500 : "No aplica"],
+                  ["Referencia 500 piezas", producto.precioReferencia500],
+                  ["Referencia 1,000 piezas", producto.precioReferencia1000],
+                ]}
+              />
+
+              <SeccionDetalle
+                titulo="Medidas, material y tamaño"
+                icono="📐"
+                datos={[
+                  ["Medida", producto.medida],
+                  ["Tamaño", producto.tamanoProd],
+                  ["Material", producto.material],
+                  ["Tipo de papel", producto.tipoPapel],
+                  ["Calibre", producto.calibre],
+                  ["Ancho", producto.ancho],
+                  ["Altura", producto.altura],
+                  ["Fuelle", producto.fuelle],
+                  ["Fuelle fondo", producto.fuelFondo],
+                  ["Fuelle lateral", producto.fuelLateral],
+                  ["Refuerzo", producto.refuerzo],
+                ]}
+              />
+
+              <section
+                style={{
+                  background: "#151515",
+                  border: "1px solid #252525",
+                  borderRadius: 10,
+                  overflow: "hidden",
+                }}
+              >
+                <div
+                  style={{
+                    padding: "9px 11px",
+                    background: "#111",
+                    borderBottom: "1px solid #252525",
+                    color: "#C9922A",
+                    fontSize: 10,
+                    fontWeight: 800,
+                    letterSpacing: 1,
+                    textTransform: "uppercase",
+                  }}
+                >
+                  ✨ Acabados disponibles
+                </div>
+
+                <div style={{ padding: 11 }}>
+                  {chipsAcabados.length > 0 ? (
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
+                      {chipsAcabados.map((acabado, index) => (
+                        <span
+                          key={`${acabado}-${index}`}
+                          style={{
+                            background: "#C9922A12",
+                            color: "#D9B36B",
+                            border: "1px solid #C9922A44",
+                            borderRadius: 999,
+                            padding: "5px 9px",
+                            fontSize: 9.5,
+                            fontWeight: 700,
+                          }}
+                        >
+                          {acabado}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <div style={{ color: "#555", fontSize: 10.5, fontStyle: "italic" }}>
+                      Sin acabados disponibles registrados
+                    </div>
+                  )}
+
+                  <div
+                    style={{
+                      marginTop: 11,
+                      paddingTop: 10,
+                      borderTop: "1px solid #242424",
+                      display: "grid",
+                      gridTemplateColumns: "1fr 1fr",
+                      gap: 8,
+                    }}
+                  >
+                    <div>
+                      <div style={{ color: "#666", fontSize: 8, textTransform: "uppercase" }}>
+                        Tintas frente
+                      </div>
+                      <div style={{ color: "#DDD", fontSize: 11, fontWeight: 700, marginTop: 3 }}>
+                        {textoValor(producto.tintasFrenteDefault)}
+                      </div>
+                    </div>
+
+                    {producto.categoria !== "plastico" && (
+                      <div>
+                        <div style={{ color: "#666", fontSize: 8, textTransform: "uppercase" }}>
+                          Tintas interiores
+                        </div>
+                        <div style={{ color: "#DDD", fontSize: 11, fontWeight: 700, marginTop: 3 }}>
+                          {textoValor(producto.tintasDentroDefault)}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </section>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function ModalCatalogoExpo({ onClose }: Props) {
   const [productos, setProductos] = useState<Producto[]>([]);
   const [loading, setLoading] = useState(true);
   const [busq, setBusq] = useState("");
   const [filtroCategoria, setFiltroCategoria] = useState<"todas" | "papel" | "plastico" | "carton">("todas");
   const [eliminandoId, setEliminandoId] = useState<number | null>(null);
+  const [detalleProducto, setDetalleProducto] = useState<Producto | null>(null);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editando, setEditando] = useState<Producto | null>(null);
@@ -285,7 +718,28 @@ let idReal: number;
           {!loading && filtrados.length > 0 && (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 10 }}>
               {filtrados.map(p => (
-                <div key={`${p.categoria}:${p.id}:${p.idgrupo_papel ?? 0}`} style={{ background: "#1A1A1A", border: "1px solid #222", borderRadius: 10, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+                <div
+                  key={`${p.categoria}:${p.id}:${p.idgrupo_papel ?? 0}`}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setDetalleProducto(p)}
+                  onKeyDown={e => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setDetalleProducto(p);
+                    }
+                  }}
+                  style={{
+                    background: "#1A1A1A",
+                    border: "1px solid #222",
+                    borderRadius: 10,
+                    overflow: "hidden",
+                    display: "flex",
+                    flexDirection: "column",
+                    cursor: "pointer",
+                    transition: "border-color .18s, transform .18s",
+                  }}
+                >
 
                   <div style={{ width: "100%", height: 110, background: "#0D0D0D", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                     {p.imagen ? (
@@ -341,12 +795,15 @@ let idReal: number;
                         </span>
                       )}
                     </div>
+                    <div style={{ color:"#555", fontSize:9, marginTop:2 }}>
+                      Toca o haz clic para ver la ficha completa
+                    </div>
                     <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
-                      <button onClick={() => abrirEditar(p)}
+                      <button onClick={e => { e.stopPropagation(); abrirEditar(p); }}
                         style={{ flex: 1, background: "transparent", border: "1px solid #C9922A55", color: "#C9922A", fontSize: 10.5, fontWeight: 600, padding: "5px", borderRadius: 6, cursor: "pointer" }}>
                         ✎ Editar
                       </button>
-                      <button onClick={() => eliminarProd(p.id, p.nombre)} disabled={eliminandoId === p.id}
+                      <button onClick={e => { e.stopPropagation(); eliminarProd(p.id, p.nombre); }} disabled={eliminandoId === p.id}
                         style={{ flex: 1, background: "transparent", border: "1px solid #EF444433", color: "#EF4444", fontSize: 10.5, fontWeight: 600, padding: "5px", borderRadius: 6, cursor: "pointer", opacity: eliminandoId === p.id ? .5 : 1 }}>
                         {eliminandoId === p.id ? "..." : "🗑 Eliminar"}
                       </button>
@@ -358,6 +815,17 @@ let idReal: number;
           )}
         </div>
       </div>
+
+      {detalleProducto && (
+        <ModalDetalleProducto
+          producto={detalleProducto}
+          onClose={() => setDetalleProducto(null)}
+          onEditar={producto => {
+            setDetalleProducto(null);
+            abrirEditar(producto);
+          }}
+        />
+      )}
 
       {modalOpen && (
         <ModalProducto
