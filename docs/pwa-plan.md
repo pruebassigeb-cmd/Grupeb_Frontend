@@ -205,12 +205,12 @@ Confirmado: por ahora basta con **avisar** al usuario si el backend rechaza una 
 Importante: `maxEntries` de Workbox cuenta **respuestas HTTP cacheadas por URL completa** (incluye query params), no registros dentro del JSON. `GET /pedidos` con 500 pedidos adentro sigue siendo 1 sola entrada.
 
 Revisando los endpoints reales:
-- `GET /cotizaciones` y `GET /pedidos` (`cotizacionesService.ts`, `pedidosService.ts`) son listas **planas sin parámetros** — siempre la misma URL, siempre 1 sola entrada que se sobreescribe con `NetworkFirst`. Aquí `maxEntries` casi no importa (basta con 2–5), lo relevante es `maxAgeSeconds`.
-- Endpoints **parametrizados** son los que de verdad generan muchas entradas distintas — ahí sí importa `maxEntries`:
-  - `GET /pedidos/historial/:clienteId` — 1 entrada por cliente consultado → `maxEntries: 50` (últimos 50 clientes distintos revisados), `maxAgeSeconds: 1–2 días`
-  - `buscarInsumos` en `proveedoresService.ts` (`params: { q }`, usado desde `ModalProducto.tsx` en Expo) — 1 entrada por texto de búsqueda distinto → **hay que debouncear la búsqueda en el componente** para no generar una entrada por cada tecla, y poner `maxEntries: 100`, `maxAgeSeconds: 7 días` (los insumos cambian poco)
+- `GET /cotizaciones` y `GET /pedidos` (`cotizacionesService.ts`, `pedidosService.ts`) son listas **planas sin parámetros** — siempre la misma URL, siempre 1 sola entrada que se sobreescribe con `NetworkFirst`. Aquí `maxEntries` casi no importa (basta con 2–5), lo relevante es `maxAgeSeconds: 1 día` — se prioriza frescura porque es lo que más le importa a un vendedor (estado de pedido, precio vigente), y una empresa de este tamaño normalmente sí tiene conexión al menos una vez al día para refrescar.
+- Endpoints **parametrizados** son los que de verdad generan muchas entradas distintas — ahí sí importa `maxEntries`. Con `NetworkFirst` la entrada cacheada solo se usa cuando no hay red (si hay señal, siempre jala datos frescos), así que ser generoso aquí no tiene casi costo (JSON liviano) y sí ayuda a cubrir más escenarios de campo sin conexión — para una empresa de este tamaño conviene aflojar el límite en vez de apretarlo:
+  - `GET /pedidos/historial/:clienteId` — 1 entrada por cliente consultado → `maxEntries: 100` (cubre semanas de actividad de campo), `maxAgeSeconds: 1 día`
+  - `buscarInsumos` en `proveedoresService.ts` (`params: { q }`, usado desde `ModalProducto.tsx` en Expo) — 1 entrada por texto de búsqueda distinto → **hay que debouncear la búsqueda en el componente** para no generar una entrada por cada tecla, y poner `maxEntries: 150–200` (el catálogo de insumos de una empresa así probablemente ni llega a esa cantidad de términos distintos), `maxAgeSeconds: 7 días` (los insumos cambian poco)
   - Igual aplica a cualquier búsqueda parametrizada que se agregue en Usuarios/Proveedores/Catálogos administrativo al implementar la Fase 3
-- Catálogos sin parámetros que cambian poco (productos, precios, foils/texturas): `maxEntries: 10–20` es de sobra (no hay tantas URLs distintas posibles), `maxAgeSeconds: 7 días`
+- Catálogos sin parámetros que cambian poco (productos, precios, foils/texturas): `maxEntries: 10–20` sigue siendo de sobra (no hay tantas URLs distintas posibles), `maxAgeSeconds: 7 días`
 - No es una preocupación de espacio en disco (solo JSON, muy liviano) — el límite es para evitar mostrar datos demasiado viejos como si fueran vigentes, no por storage.
 
 ---

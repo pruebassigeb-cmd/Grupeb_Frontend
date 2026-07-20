@@ -87,8 +87,9 @@ export default function Expo() {
   const [cotizaciones, setCotizaciones] = useState<CotizacionGuardada[]>([]);
   const [listaAbierta, setListaAbierta] = useState(false);
   const [loadingCots,  setLoadingCots]  = useState(false);
-  const [folioActual,  setFolioActual]  = useState<string | null>(null);
-  const [folioPreview, setFolioPreview] = useState<string>("—");
+  const [folioActual, setFolioActual] = useState<string | null>(null);
+  const [ultimoFolioGuardado, setUltimoFolioGuardado] = useState<string | null>(null);
+  const folioPreview = "Se asigna al guardar";
 
   const [clienteData,     setClienteData]     = useState<ClienteExpo>(CLIENTE_VACIO);
   const [clienteGuardado, setClienteGuardado] = useState<ClienteExpo | null>(null);
@@ -200,12 +201,14 @@ useEffect(() => {
     if (listaAbierta) cargarCotizaciones();
   }, [listaAbierta]);
 
-  // ── Folio preview ─────────────────────────────────────────────────────────
+  // El folio definitivo se asigna al guardar y llega en la respuesta del POST.
+  // Así se evita una petición extra y no se muestra un folio provisional que
+  // otro vendedor podría consumir antes.
   useEffect(() => {
-    api.get("/expo/cotizaciones/siguiente-folio")
-      .then(r => setFolioPreview(r.data.folio))
-      .catch(console.error);
-  }, [cotizaciones]);
+    if (!ultimoFolioGuardado) return;
+    const timer = window.setTimeout(() => setUltimoFolioGuardado(null), 10000);
+    return () => window.clearTimeout(timer);
+  }, [ultimoFolioGuardado]);
 
   // ── Funciones de carga ────────────────────────────────────────────────────
   const cargarCatalogo = async () => {
@@ -638,6 +641,7 @@ useEffect(() => {
     if (!cliente.trim())    { alert("Falta el nombre del cliente."); return; }
     if (!clienteIdReal)     { alert("Regresa y registra el prospecto primero."); return; }
 
+    let folioRegistrado: string | null = null;
     setGuardando(true);
     try {
       // IMPORTANTE: las columnas ocultas pueden conservar valores internos
@@ -668,7 +672,9 @@ useEffect(() => {
         ),
       );
       const resultado = await crearCotizacionExpo({ clienteId: clienteIdReal, productos, comentarios: coment });
+      folioRegistrado = resultado.no_cotizacion;
       setFolioActual(resultado.no_cotizacion);
+      setUltimoFolioGuardado(resultado.no_cotizacion);
 
       const nueva: CotizacionGuardada = {
         id: String(resultado.idsolicitud), folio: resultado.no_cotizacion,
@@ -724,7 +730,13 @@ useEffect(() => {
       limpiar();
     } catch (err) {
       console.error("Error al guardar cotización:", err);
-      alert("No se pudo guardar la cotización.");
+      if (folioRegistrado) {
+        alert(
+          `La cotización ${folioRegistrado} sí quedó registrada, pero ocurrió un problema al generar, imprimir o enviar el documento.`,
+        );
+      } else {
+        alert("No se pudo guardar la cotización.");
+      }
     } finally {
       setGuardando(false);
     }
@@ -871,6 +883,55 @@ useEffect(() => {
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <>
+      {ultimoFolioGuardado && (
+        <div
+          className="no-print"
+          role="status"
+          style={{
+            position: "fixed",
+            top: 18,
+            right: 18,
+            zIndex: 1000,
+            minWidth: 290,
+            maxWidth: "calc(100vw - 36px)",
+            background: "#132017",
+            border: "1px solid #22C55E66",
+            borderLeft: "4px solid #22C55E",
+            borderRadius: 9,
+            boxShadow: "0 12px 34px rgba(0,0,0,.55)",
+            padding: "12px 42px 12px 14px",
+          }}
+        >
+          <div style={{ color: "#86EFAC", fontSize: 10, fontWeight: 800, letterSpacing: 1, textTransform: "uppercase" }}>
+            ✓ Cotización registrada
+          </div>
+          <div style={{ color: "#FFF", fontSize: 16, fontWeight: 800, marginTop: 3 }}>
+            Folio {ultimoFolioGuardado}
+          </div>
+          <div style={{ color: "#8A9A8E", fontSize: 9.5, marginTop: 2 }}>
+            Este es el folio definitivo asignado por el servidor.
+          </div>
+          <button
+            onClick={() => setUltimoFolioGuardado(null)}
+            aria-label="Cerrar confirmación"
+            style={{
+              position: "absolute",
+              top: 8,
+              right: 8,
+              width: 26,
+              height: 26,
+              borderRadius: "50%",
+              border: "1px solid #FFFFFF22",
+              background: "transparent",
+              color: "#AAA",
+              cursor: "pointer",
+            }}
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
         *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}

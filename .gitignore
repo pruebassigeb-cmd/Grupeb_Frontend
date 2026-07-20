@@ -24,3 +24,6 @@ actualizar_catalogos.xlsm
 *.njsproj
 *.sln
 *.sw?
+
+
+docs/
