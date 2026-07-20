@@ -361,7 +361,6 @@ function ModalDetalleProducto({
                 icono="💰"
                 datos={[
                   ["Base unitario", producto.precioBase],
-                  ["Unitario Expo", esPlastico ? producto.precio500 : "No aplica"],
                   ["Referencia 500 piezas", producto.precioReferencia500],
                   ["Referencia 1,000 piezas", producto.precioReferencia1000],
                 ]}
@@ -374,14 +373,7 @@ function ModalDetalleProducto({
                   ["Medida", producto.medida],
                   ["Tamaño", producto.tamanoProd],
                   ["Material", producto.material],
-                  ["Tipo de papel", producto.tipoPapel],
                   ["Calibre", producto.calibre],
-                  ["Ancho", producto.ancho],
-                  ["Altura", producto.altura],
-                  ["Fuelle", producto.fuelle],
-                  ["Fuelle fondo", producto.fuelFondo],
-                  ["Fuelle lateral", producto.fuelLateral],
-                  ["Refuerzo", producto.refuerzo],
                 ]}
               />
 
