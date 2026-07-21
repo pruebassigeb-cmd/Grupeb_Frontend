@@ -6,6 +6,7 @@ import {
   eliminarProductoCatalogo as eliminarProductoCatalogoAPI,
   getCatalogoSistema,
 } from "../../services/expo/expoService";
+import { OperacionEncoladaError } from "../../offline/outbox";
 import { mapearCatalogoExpoAProducto, CATS } from "../../types/expo/expo.types";
 import type { Producto } from "../../types/expo/expo.types";
 import { useCatalogosPapel } from "../../hooks/papel/useCatalogosPapel";
@@ -521,8 +522,25 @@ export default function ModalCatalogoExpo({ onClose }: Props) {
       const parseN = (v: string | undefined) => parseFloat(v || "0") || null;
       const esPapel = p.categoria === "papel" || p.categoria === "carton";
       const esPlastico = p.categoria === "plastico";
+     const copiarDesdeSistema =
+  esPapel &&
+  !editando &&
+  p.idProductoSistemaBase != null &&
+  p.idGrupoSistemaBase != null;
+
+if (
+  esPapel &&
+  !editando &&
+  ((p.idProductoSistemaBase != null) !== (p.idGrupoSistemaBase != null))
+) {
+  throw new Error(
+    "La plantilla del sistema está incompleta: vuelve a seleccionar el producto.",
+  );
+}
+
      const payload = {
   nombre: p.nombre,
+  copiar_desde_sistema: copiarDesdeSistema,
 
   descripcion:
     p.categoria === "plastico"
@@ -538,29 +556,42 @@ export default function ModalCatalogoExpo({ onClose }: Props) {
   id_tamano_producto: esPapel ? (p.idTamanoProducto ?? null) : null,
   tamano_prod: esPapel ? (p.tamanoProd || null) : null,
   idgrupo_papel: esPapel ? (p.idgrupo_papel ?? null) : null,
+  idproducto_sistema_base: esPapel && !editando
+    ? (p.idProductoSistemaBase ?? null)
+    : null,
+  idgrupo_sistema_base: esPapel && !editando
+    ? (p.idGrupoSistemaBase ?? null)
+    : null,
 
   tintas: p.tintas || null,
   tipo_producto: p.tipoProducto || p.tipo || null,
 
   laminacion: p.laminacion,
   tipo_laminado: p.tipoLaminado || null,
+  idcat_laminado_default: esPapel ? (p.idLaminadoDefault ?? null) : null,
 
   hs: p.hs,
   tipo_hs: p.tipoHs || null,
+  idfoil_default: esPapel ? (p.idFoilDefault ?? null) : null,
 
   ar: p.ar,
   textura: p.textura,
   tipo_textura: p.tipoTextura || null,
+  idcat_textura_default: esPapel ? (p.idTexturaDefault ?? null) : null,
 
   uv: p.uv,
   asa: p.asa,
   tipo_asa: p.tipoAsa || null,
+  idcat_tipo_asa_default: esPapel ? (p.idAsaDefault ?? null) : null,
   otro: p.otro || null,
 
   pigmento: esPlastico ? (p.pigmento || null) : null,
 
   precio_base: esPapel
     ? (parseFloat((p.precioBase || "").replace(/[^0-9.]/g, "")) || null)
+    : null,
+  costo_laminado: esPapel && p.costoLaminado != null
+    ? Number(p.costoLaminado)
     : null,
   // precio_500 conserva su uso actual como precio unitario Expo de
   // plástico. precio_1000 y precio_3000 almacenan referencias totales
@@ -624,6 +655,19 @@ let idReal: number;
       setModalOpen(false);
       setEditando(null);
     } catch (err: any) {
+      if (err instanceof OperacionEncoladaError) {
+        // Sin id real todavía no se puede vincular una imagen — se avisa
+        // en vez de intentar subirla (eso además es un POST con archivo,
+        // que esta fase del outbox todavía no maneja).
+        setModalOpen(false);
+        setEditando(null);
+        alert(
+          imagenPendiente
+            ? "Sin conexión: el producto se guardó y se sincronizará solo, pero la imagen NO se guardó — súbela editando el producto cuando vuelva la conexión."
+            : "Sin conexión: el producto se guardó y se sincronizará automáticamente."
+        );
+        return;
+      }
       alert("No se pudo guardar: " + (err?.response?.data?.error || err.message));
       throw err;
     } finally {
@@ -642,7 +686,12 @@ let idReal: number;
     try {
       await eliminarProductoCatalogoAPI(id, prod.categoria);
       setProductos(prev => prev.filter(p => p.id !== id));
-    } catch {
+    } catch (err) {
+      if (err instanceof OperacionEncoladaError) {
+        setProductos(prev => prev.filter(p => p.id !== id));
+        alert("Sin conexión: la eliminación se guardó y se aplicará sola cuando vuelva la señal.");
+        return;
+      }
       alert("No se pudo eliminar el producto");
     } finally {
       setEliminandoId(null);

@@ -9,10 +9,19 @@ import type { AdvertenciaCalculoPrecioPapel } from "../papel/calculador-precio-p
 export interface MaterialSistemaPapelExpo {
   idgrupo_papel: number;
   precio_sugerido: number | string | null;
+  iddetalle_material?: number;
+  orden?: number | null;
   idcat_tipo_papel: number | null;
   tipo_papel: string | null;
   idcat_calibre: number | null;
   calibre: string | null;
+}
+
+export interface GrupoSistemaPapelExpo {
+  idgrupo_papel: number;
+  precio_sugerido: number | string | null;
+  orden: number | null;
+  materiales: MaterialSistemaPapelExpo[];
 }
 
 export interface OpcionSimpleSistemaExpo {
@@ -37,8 +46,15 @@ export interface ProductoSistemaPapelExpo {
   precio_1000: number | string | null;
   precio_3000: number | string | null;
   materiales: MaterialSistemaPapelExpo[];
+  grupos: GrupoSistemaPapelExpo[];
   laminados: OpcionSimpleSistemaExpo[];
   asas: OpcionSimpleSistemaExpo[];
+  idcat_laminado_default: number | null;
+  tipo_laminado_default: string | null;
+  idcat_tipo_asa_default: number | null;
+  tipo_asa_default: string | null;
+  idfoil_default: number | null;
+  idcat_textura_default: number | null;
   tintas_frente_default: number | null;
   tintas_dentro_default: number | null;
   hs: boolean;
@@ -142,6 +158,10 @@ export interface Producto {
   configuracion_plastico_id?: number;
   idproducto_papel?:          number;
   idgrupo_papel?:     number;
+  // Solo durante el alta Expo: ids de la plantilla del sistema que el backend
+  // clonará completa. Después de guardar, el producto nuevo es independiente.
+  idProductoSistemaBase?: number;
+  idGrupoSistemaBase?: number;
   grupo_descripcion?: string;
   tintasId?:          number;
   carasId?:           number;

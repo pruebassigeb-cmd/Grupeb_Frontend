@@ -1,4 +1,5 @@
 import api from "./api";
+import { ejecutarOEncolar } from "../offline/outbox";
 
 export type TipoDocumentoCorreo = "cotizacion" | "pedido" | "agradecimiento";
 
@@ -10,6 +11,8 @@ interface EnviarCorreoDocumentoParams {
   destinatario: string;
   pdfBlob: Blob;
   nombreArchivo: string;
+  /** Módulo dueño de este envío (ej. "expo") — ver `OutboxEntry.modulo`. */
+  modulo?: string;
 }
 
 // Convierte un Blob a base64 puro (sin el prefijo "data:application/pdf;base64,")
@@ -29,7 +32,7 @@ function blobABase64(blob: Blob): Promise<string> {
 export async function enviarCorreoDocumento(params: EnviarCorreoDocumentoParams): Promise<void> {
   const pdfBase64 = await blobABase64(params.pdfBlob);
 
-  await api.post("/correos/documento", {
+  const payload = {
     tipo: params.tipo,
     folio: params.folio,
     cliente: params.cliente || "",
@@ -37,5 +40,16 @@ export async function enviarCorreoDocumento(params: EnviarCorreoDocumentoParams)
     destinatario: params.destinatario,
     pdfBase64,
     nombreArchivo: params.nombreArchivo,
-  });
+  };
+
+  return ejecutarOEncolar(
+    "post",
+    "/correos/documento",
+    payload,
+    `Correo (${params.tipo}) — folio ${params.folio}`,
+    async () => {
+      await api.post("/correos/documento", payload);
+    },
+    params.modulo
+  );
 }

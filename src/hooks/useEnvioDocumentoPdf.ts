@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { enviarCorreoDocumento, type TipoDocumentoCorreo } from "../services/correoService";
+import { OperacionEncoladaError } from "../offline/outbox";
 
 interface DatosDocumento {
   tipo: TipoDocumentoCorreo;
@@ -64,11 +65,18 @@ const confirmarEnvioCorreo = async (correoDestino: string) => {
       destinatario: correoDestino,
       pdfBlob: blob,
       nombreArchivo,
+      modulo: "expo",
     });
 
     setModalCorreoAbierto(false);
     setContextoPendiente(null);
   } catch (e: any) {
+    if (e instanceof OperacionEncoladaError) {
+      setModalCorreoAbierto(false);
+      setContextoPendiente(null);
+      alert("Sin conexión: el correo se guardó y se enviará automáticamente cuando vuelva la señal.");
+      return;
+    }
     console.error("❌ Error al enviar correo:", e);
     alert(e?.response?.data?.error || "No se pudo enviar el correo.");
   } finally {

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import Dashboard from "../layouts/Sidebar";
+import RequiereConexion from "../components/RequiereConexion";
 import Modal from "../components/Modal";
 import { getCarrito, getPaqueterias } from "../services/enviosService";
 import type { CarritoPedido, Paqueteria } from "../types/envios.types";
@@ -89,6 +90,7 @@ export default function Envios() {
 
   return (
     <Dashboard>
+      <RequiereConexion>
       <div className="mb-2">
         <h1 className="text-2xl font-bold">Envíos</h1>
       </div>
@@ -230,6 +232,7 @@ export default function Envios() {
           />
         </Modal>
       )}
+    </RequiereConexion>
     </Dashboard>
   );
 }

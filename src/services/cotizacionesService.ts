@@ -1,5 +1,6 @@
 // src/services/cotizacionesService.ts
 import api from "./api";
+import { ejecutarOEncolar } from "../offline/outbox";
 import type {
   Cotizacion,
   CrearCotizacionPayload,
@@ -118,15 +119,24 @@ export const crearCotizacion = async (
     };
   });
 
-  const response = await api.post("/cotizaciones", {
+  const payload = {
     clienteId: datos.clienteId,
     tipo: datos.tipo ?? "cotizacion",
     prioridad: datos.prioridad ?? false,
     sin_iva: datos.sin_iva ?? false,
     productos,
-  });
+  };
 
-  return response.data;
+  return ejecutarOEncolar(
+    "post",
+    "/cotizaciones",
+    payload,
+    `Cotización nueva — cliente ${datos.clienteId}`,
+    async () => {
+      const response = await api.post("/cotizaciones", payload);
+      return response.data;
+    }
+  );
 };
 
 export const aprobarDetalle = async (detalleId: number, aprobado: boolean) => {

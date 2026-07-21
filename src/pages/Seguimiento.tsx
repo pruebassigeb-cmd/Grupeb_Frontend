@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import Dashboard from "../layouts/Sidebar";
+import RequiereConexion from "../components/RequiereConexion";
 import { getSeguimiento } from "../services/seguimientoService";
 import { descargarPdfOrdenProduccionUniversal } from "../services/descargarPdfOrdenProduccion";
 import { generarPdfEstadoCuentaSimple } from "../services/generarPdfEstadoCuentaSimple";
@@ -904,23 +905,27 @@ export default function Seguimiento() {
 
   if (cargando) return (
     <Dashboard>
+      <RequiereConexion>
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
           <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
           <p className="text-gray-600 text-sm">Cargando seguimiento...</p>
         </div>
       </div>
+    </RequiereConexion>
     </Dashboard>
   );
 
   if (error) return (
     <Dashboard>
+      <RequiereConexion>
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
           <p className="text-red-600 font-medium mb-3">{error}</p>
           <button onClick={cargar} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm">Reintentar</button>
         </div>
       </div>
+    </RequiereConexion>
     </Dashboard>
   );
 
@@ -949,6 +954,7 @@ export default function Seguimiento() {
 
   return (
     <Dashboard>
+      <RequiereConexion>
       <div className="mb-6">
         <h1 className="text-3xl font-bold text-gray-900 mb-2">Seguimiento de Pedidos</h1>
         <p className="text-gray-600">Monitorea el estado de todos los pedidos en tiempo real</p>
@@ -1087,6 +1093,7 @@ export default function Seguimiento() {
       </div>
 
       {modales}
+    </RequiereConexion>
     </Dashboard>
   );
 }

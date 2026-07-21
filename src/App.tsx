@@ -26,6 +26,11 @@ import Expo from "./pages/expo/expo.tsx";
 import EditarPedidoPapel from "./pages/EditarPedidoPapel.tsx";
 import EditarCotizacionCompleta from "./pages/EditarCotizacionCompleta.tsx";
 import EditarCotizacionPapelCompleta from "./pages/EditarCotizacionPapelCompleta.tsx";
+import PWAUpdatePrompt from "./components/PWAUpdatePrompt";
+import OfflineBanner from "./components/OfflineBanner";
+import SyncStatusIndicator from "./components/SyncStatusIndicator";
+import ConnectivityToast from "./components/ConnectivityToast";
+import "./offline/expoOutboxHandlers";
 
 const PERMISOS = {
   usuarios: "Crear/Editar/Eliminar Usuarios",
@@ -54,6 +59,10 @@ function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
+        <PWAUpdatePrompt />
+        <OfflineBanner />
+        <SyncStatusIndicator />
+        <ConnectivityToast />
         <Routes>
           {/* Pública */}
           <Route path="/" element={<Login />} />

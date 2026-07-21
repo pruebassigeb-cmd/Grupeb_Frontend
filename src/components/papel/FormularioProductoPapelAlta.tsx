@@ -778,16 +778,39 @@ export default function FormularioProductoPapelAlta({ initial, onSave, onCancel,
     return Number.isFinite(medida) && medida > 0 ? medida : null;
   }, [rolloLaminadoSeleccionado?.medida_ancho]);
 
+  // El costo de laminado se guarda a nivel producto. Actualmente los
+  // productos manejan un solo grupo; por eso se toma el rendimiento del
+  // primer material del primer grupo, que es el mismo que aparece como
+  // "Rend." en la sección Tipo de papel.
+  const rendimientoGrupoLaminado =
+    form.grupos[0]?.materiales[0]?.rendimiento ?? null;
+
+  const tamanoProductoLaminado =
+    form.tamanoProdNombre ||
+    tamanosProducto.find(
+      t => t.id === form.idcat_tamano_producto
+    )?.nombre ||
+    "";
+
   const costoLaminadoCalculado = useMemo(
     () => calcularCostoLaminado({
       rolloCentimetros: anchoRolloLaminadoCm,
       desarrolloCentimetros: form.acabados.desarrolloLaminado,
       costoMetro: costoMetroLaminado,
+
+      // Regla exclusiva para bolsas Extra Grande:
+      // (costo normal × rendimiento del grupo) ÷ piezas del suaje.
+      tamanoProducto: tamanoProductoLaminado,
+      rendimientoGrupo: rendimientoGrupoLaminado,
+      piezasSuaje: form.suaje.pzs,
     }),
     [
       anchoRolloLaminadoCm,
       form.acabados.desarrolloLaminado,
       costoMetroLaminado,
+      tamanoProductoLaminado,
+      rendimientoGrupoLaminado,
+      form.suaje.pzs,
     ]
   );
 

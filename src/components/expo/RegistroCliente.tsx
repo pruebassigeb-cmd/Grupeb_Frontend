@@ -12,6 +12,8 @@ import { generarPdfAgradecimiento } from "../../utils/expo/generarPdfAgradecimie
 import { enviarCorreoDocumento } from "../../services/correoService";
 import ModalConfirmarCorreo from "../ModalConfirmarCorreo";
 import ModalCatalogoExpo from "./ModalCatalogoExpo";
+import { useAuth } from "../../context/AuthContext";
+import { OperacionEncoladaError } from "../../offline/outbox";
 
 interface Props {
   clienteData: ClienteExpo;
@@ -19,7 +21,7 @@ interface Props {
   clienteGuardado: ClienteExpo | null;
   mob: boolean;
   clienteIdReal: number | null;
-  onCotizar: (clienteId?: number, nombre?: string) => void;
+  onCotizar: (clienteId?: number, nombre?: string, datosCliente?: ClienteExpo) => void;
   onCerrar: () => void;
   cotizacionesCount: number;
   onAbrirLista: () => void;
@@ -278,7 +280,12 @@ function ModalProspectos({ onSeleccionar, onClose }: ModalProspectosProps) {
       await actualizarClienteExpo(id, data);
       await cargar();
       setEditandoId(null);
-    } catch {
+    } catch (e) {
+      if (e instanceof OperacionEncoladaError) {
+        alert("Sin conexión: los cambios del prospecto se guardaron y se sincronizarán automáticamente.");
+        setEditandoId(null);
+        return;
+      }
       alert("No se pudo actualizar el prospecto");
     } finally {
       setGuardandoId(null);
@@ -292,7 +299,13 @@ function ModalProspectos({ onSeleccionar, onClose }: ModalProspectosProps) {
       await eliminarClienteExpoAPI(id);
       setProspectos(prev => prev.filter(p => p.idclientes !== id));
       if (expandidoId === id) setExpandidoId(null);
-    } catch {
+    } catch (err) {
+      if (err instanceof OperacionEncoladaError) {
+        setProspectos(prev => prev.filter(p => p.idclientes !== id));
+        if (expandidoId === id) setExpandidoId(null);
+        alert("Sin conexión: la eliminación se guardó y se aplicará sola cuando vuelva la señal.");
+        return;
+      }
       alert("No se pudo eliminar el prospecto");
     } finally {
       setEliminandoId(null);
@@ -320,9 +333,15 @@ function ModalProspectos({ onSeleccionar, onClose }: ModalProspectosProps) {
         destinatario: correoDestino,
         pdfBlob: blob,
         nombreArchivo: "GrupoEB_Informacion.pdf",
+        modulo: "expo",
       });
       setProspectoAgradecer(null);
     } catch (e: any) {
+      if (e instanceof OperacionEncoladaError) {
+        setProspectoAgradecer(null);
+        alert("Sin conexión: el correo de agradecimiento se guardó y se enviará automáticamente cuando vuelva la señal.");
+        return;
+      }
       console.error("❌ Error al enviar agradecimiento:", e);
       alert(e?.response?.data?.error || "No se pudo enviar el correo de agradecimiento.");
     } finally {
@@ -512,6 +531,8 @@ export default function RegistroCliente({
   onAbrirLista,
 }: Props) {
   const navigate = useNavigate();
+  const { logout } = useAuth();
+  const [cerrandoSesion, setCerrandoSesion] = useState(false);
 
   const [modalProspectos, setModalProspectos] = useState(false);
   const [modalCatalogo, setModalCatalogo] = useState(false);
@@ -537,6 +558,8 @@ export default function RegistroCliente({
     setError(null);
     try {
       if (clienteIdReal) {
+        // Cliente que ya existe: aunque la edición se encole, ya tenemos un
+        // id real, así que sí se puede continuar a cotizar con él.
         await actualizarClienteExpo(clienteIdReal, clienteData);
         setModoEdicion(false);
         onCotizar(clienteIdReal, clienteData.nombre.trim());
@@ -545,6 +568,19 @@ export default function RegistroCliente({
         onCotizar(resultado.id, clienteData.nombre.trim());
       }
     } catch (err: any) {
+      if (err instanceof OperacionEncoladaError) {
+        if (clienteIdReal) {
+          setModoEdicion(false);
+          onCotizar(clienteIdReal, clienteData.nombre.trim());
+          return;
+        }
+        // Cliente nuevo: sin id real todavía no se puede armar una
+        // cotización (crearCotizacionExpo necesita un clienteId válido).
+        setError(
+          "Sin conexión: el registro del prospecto se guardó y se sincronizará solo. No se puede cotizar un prospecto nuevo hasta que vuelva la conexión y se sincronice."
+        );
+        return;
+      }
       setError(err?.response?.data?.error || "No se pudo registrar el prospecto.");
     } finally {
       setGuardando(false);
@@ -566,6 +602,14 @@ export default function RegistroCliente({
         alert(`✅ Prospecto "${clienteData.nombre}" registrado (#${resultado.id})`);
       }
     } catch (err: any) {
+      if (err instanceof OperacionEncoladaError) {
+        if (clienteIdReal) setModoEdicion(false);
+        else setClienteData(CLIENTE_VACIO);
+        alert(
+          `Sin conexión: "${clienteData.nombre}" se guardó en este dispositivo y se sincronizará automáticamente cuando vuelva la señal.`
+        );
+        return;
+      }
       setError(err?.response?.data?.error || "No se pudo registrar el prospecto.");
     } finally {
       setGuardando(false);
@@ -589,7 +633,7 @@ export default function RegistroCliente({
     };
     const { usuario, ext, extCustom } = parsearCorreo(p.correo);
 
-    setClienteData({
+    const datosProspecto: ClienteExpo = {
       nombre: p.nombre || "",
       celular: p.celular || "",
       correoUsuario: usuario,
@@ -601,9 +645,32 @@ export default function RegistroCliente({
       clase: (p.clase || "") as ClienteExpo["clase"],
       intereses: (p.intereses || []) as ClienteExpo["intereses"],
       observaciones: p.observaciones || "",
-    });
+    };
+
+    setClienteData(datosProspecto);
     setModalProspectos(false);
-    onCotizar(p.idclientes, p.nombre || "");
+    // Se manda también `datosProspecto` directo (no solo vía setClienteData)
+    // porque `onCotizar` (irACotizar en expo.tsx) lee `clienteData` del padre
+    // de forma síncrona, antes de que React aplique el setClienteData de
+    // arriba — sin esto, clienteGuardado se armaba con el prospecto anterior
+    // (o vacío), y el correo de la tarea encolada offline salía vacío sin
+    // ningún error visible.
+    onCotizar(p.idclientes, p.nombre || "", datosProspecto);
+  };
+
+  const cerrarSesion = async () => {
+    if (cerrandoSesion) return;
+    if (!window.confirm("¿Deseas cerrar sesión?")) return;
+
+    setCerrandoSesion(true);
+    try {
+      await logout();
+      navigate("/", { replace: true });
+    } catch (error) {
+      console.error("No se pudo cerrar la sesión:", error);
+      alert("No se pudo cerrar la sesión. Intenta nuevamente.");
+      setCerrandoSesion(false);
+    }
   };
 
   const puedeAvanzar = clienteData.nombre.trim().length > 0 && !guardando;
@@ -667,6 +734,29 @@ export default function RegistroCliente({
                     {cotizacionesCount}
                   </span>
                 )}
+              </button>
+              <button
+                type="button"
+                onClick={cerrarSesion}
+                disabled={cerrandoSesion}
+                title="Cerrar sesión"
+                style={{
+                  background: cerrandoSesion ? "#2A1717" : "transparent",
+                  border: "1px solid #EF444466",
+                  color: "#EF7777",
+                  fontSize: 11,
+                  fontWeight: 700,
+                  padding: "6px 12px",
+                  borderRadius: 6,
+                  cursor: cerrandoSesion ? "not-allowed" : "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 5,
+                  opacity: cerrandoSesion ? .6 : 1,
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {cerrandoSesion ? "Saliendo..." : "🚪 Cerrar sesión"}
               </button>
               {clienteGuardado && (
                 <button onClick={onCerrar} style={{ background: "transparent", border: "1px solid #333", color: "#888", fontSize: 11, fontWeight: 600, padding: "6px 12px", borderRadius: 6, cursor: "pointer" }}>

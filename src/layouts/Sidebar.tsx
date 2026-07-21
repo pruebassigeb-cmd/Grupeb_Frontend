@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, type ReactNode } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import logo from "../assets/grupeblanco.png";
+import InstallButton from "../components/InstallButton";
 
 interface DashboardProps {
   children: ReactNode;
@@ -357,6 +358,7 @@ export default function Dashboard({ children }: DashboardProps) {
               <p className="text-slate-400 text-xs truncate">{user?.rol}</p>
             </div>
           </div>
+          <InstallButton />
           <button
             onClick={handleLogout}
             className="w-full px-3 py-2 rounded bg-red-600/80 hover:bg-red-600 text-white text-sm font-medium transition"
@@ -369,6 +371,7 @@ export default function Dashboard({ children }: DashboardProps) {
           <div title={`${user?.nombre} ${user?.apellido}`}>
             <UserAvatar size="md" />
           </div>
+          <InstallButton collapsed />
           <button
             onClick={handleLogout}
             title="Cerrar sesión"

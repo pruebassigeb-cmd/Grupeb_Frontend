@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import Dashboard from "../layouts/Sidebar";
+import RequiereConexion from "./RequiereConexion";
 import Modal from "./Modal";
 import {
   getListaEstadoCuenta,
@@ -260,6 +261,7 @@ export default function EstadoCuenta() {
 
   return (
     <Dashboard>
+      <RequiereConexion>
       <h1 className="text-2xl font-bold mb-2">Estado de Cuenta</h1>
       <p className="text-slate-400 mb-6">
         Consulta el precio final real por pedido basado en la producción terminada.
@@ -343,6 +345,7 @@ export default function EstadoCuenta() {
           <DetalleEstadoCuenta noPedido={pedidoActivo} onClose={handleCerrar} />
         )}
       </Modal>
+    </RequiereConexion>
     </Dashboard>
   );
 }

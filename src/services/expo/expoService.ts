@@ -1,5 +1,6 @@
 // src/services/expo/expoService.ts
 import api from "../api";
+import { ejecutarOEncolar } from "../../offline/outbox";
 import type {
   ClienteExpo,
   FilaProducto,
@@ -31,8 +32,14 @@ export interface ProductoCatalogoExpo {
   costo_laminado?: number | null;
   id_tamano_producto?: number | null;
   tamano_producto?: string | null;
+  idcat_laminado_default?: number | null;
+  idcat_tipo_asa_default?: number | null;
+  idfoil_default?: number | null;
+  idcat_textura_default?: number | null;
   idproducto_papel?: number | null;
   idgrupo_papel?: number | null;
+  idproducto_sistema_base?: number | null;
+  idgrupo_sistema_base?: number | null;
   grupo_descripcion?: string | null;
   laminados_permitidos?: { idcat_laminado: number; nombre: string }[];
   asas_permitidas?: { idcat_tipo_asa: number; nombre: string }[];
@@ -147,28 +154,121 @@ export const getOpcionesRegistroExpo = async (): Promise<OpcionesRegistroExpoRes
   const { data } = await api.get<OpcionesRegistroExpoResponse>(
     "/expo/catalogo/opciones-registro"
   );
+
+  // PostgreSQL/JSON puede devolver algunos ids como texto según el driver o la
+  // consulta. Se normalizan aquí para que los selects encuentren siempre el
+  // producto y el grupo seleccionados.
+  const papel = Array.isArray(data?.papel)
+    ? data.papel.map(producto => ({
+        ...producto,
+        id: Number(producto.id),
+        id_tamano_producto:
+          producto.id_tamano_producto != null
+            ? Number(producto.id_tamano_producto)
+            : null,
+        materiales: Array.isArray(producto.materiales)
+          ? producto.materiales.map(material => ({
+              ...material,
+              idgrupo_papel: Number(material.idgrupo_papel),
+              idcat_tipo_papel:
+                material.idcat_tipo_papel != null
+                  ? Number(material.idcat_tipo_papel)
+                  : null,
+              idcat_calibre:
+                material.idcat_calibre != null
+                  ? Number(material.idcat_calibre)
+                  : null,
+            }))
+          : [],
+        grupos: Array.isArray(producto.grupos)
+          ? producto.grupos.map(grupo => ({
+              ...grupo,
+              idgrupo_papel: Number(grupo.idgrupo_papel),
+              orden: grupo.orden != null ? Number(grupo.orden) : null,
+              materiales: Array.isArray(grupo.materiales)
+                ? grupo.materiales.map(material => ({
+                    ...material,
+                    idgrupo_papel: Number(grupo.idgrupo_papel),
+                    idcat_tipo_papel:
+                      material.idcat_tipo_papel != null
+                        ? Number(material.idcat_tipo_papel)
+                        : null,
+                    idcat_calibre:
+                      material.idcat_calibre != null
+                        ? Number(material.idcat_calibre)
+                        : null,
+                  }))
+                : [],
+            }))
+          : [],
+        laminados: Array.isArray(producto.laminados)
+          ? producto.laminados.map(opcion => ({
+              ...opcion,
+              id: Number(opcion.id),
+            }))
+          : [],
+        asas: Array.isArray(producto.asas)
+          ? producto.asas.map(opcion => ({
+              ...opcion,
+              id: Number(opcion.id),
+            }))
+          : [],
+      }))
+    : [];
+
   return {
-    papel: Array.isArray(data?.papel) ? data.papel : [],
+    papel,
     plastico: Array.isArray(data?.plastico) ? data.plastico : [],
     tamanos: Array.isArray(data?.tamanos) ? data.tamanos : [],
   };
 };
 
 export const crearProductoCatalogo = async (payload: Omit<ProductoCatalogoExpo, "idcatalogo_expo">): Promise<ProductoCatalogoExpo> => {
-  const { data } = await api.post("/expo/catalogo", payload);
-  return data.producto;
+  return ejecutarOEncolar(
+    "post",
+    "/expo/catalogo",
+    payload,
+    `Producto de catálogo Expo nuevo — ${payload.nombre}`,
+    async () => {
+      const { data } = await api.post("/expo/catalogo", payload);
+      return data.producto;
+    },
+    "expo"
+  );
 };
 
 export const actualizarProductoCatalogo = async (id: number, payload: Omit<ProductoCatalogoExpo, "idcatalogo_expo">): Promise<ProductoCatalogoExpo> => {
-  const { data } = await api.put(`/expo/catalogo/${id}`, payload);
-  return data.producto;
+  return ejecutarOEncolar(
+    "put",
+    `/expo/catalogo/${id}`,
+    payload,
+    `Editar producto de catálogo Expo #${id}`,
+    async () => {
+      const { data } = await api.put(`/expo/catalogo/${id}`, payload);
+      return data.producto;
+    },
+    "expo"
+  );
 };
 
 export const eliminarProductoCatalogo = async (
   id: number,
   categoria: "papel" | "plastico" | "carton"
 ): Promise<void> => {
-  await api.delete(`/expo/catalogo/${id}`, { params: { categoria } });
+  // La categoría se manda como query string (en vez de `params` de axios)
+  // para que la misma URL sirva tal cual al reproducir la entrada genérica
+  // "http" del outbox (`sincronizarOutbox` solo reproduce método+url+data).
+  const url = `/expo/catalogo/${id}?categoria=${encodeURIComponent(categoria)}`;
+  return ejecutarOEncolar(
+    "delete",
+    url,
+    undefined,
+    `Eliminar producto de catálogo Expo #${id}`,
+    async () => {
+      await api.delete(url);
+    },
+    "expo"
+  );
 };
 
 // ═══════════════════════════════════════════════════════════
@@ -186,7 +286,7 @@ export const crearClienteExpo = async (clienteData: ClienteExpo): Promise<{ id: 
     const ext = clienteData.correoExt === "__otro__" ? clienteData.correoExtCustom || "" : clienteData.correoExt;
     correo = `${clienteData.correoUsuario}@${ext}`;
   }
-  const { data } = await api.post("/expo/clientes", {
+  const payload = {
     nombre:        clienteData.nombre,
     celular:       clienteData.celular       || null,
     correo,
@@ -196,8 +296,19 @@ export const crearClienteExpo = async (clienteData: ClienteExpo): Promise<{ id: 
     clase:         clienteData.clase         || null,
     intereses:     clienteData.intereses,
     observaciones: clienteData.observaciones || null,
-  });
-  return data.cliente;
+  };
+
+  return ejecutarOEncolar(
+    "post",
+    "/expo/clientes",
+    payload,
+    `Prospecto Expo nuevo — ${clienteData.nombre}`,
+    async () => {
+      const { data } = await api.post("/expo/clientes", payload);
+      return data.cliente;
+    },
+    "expo"
+  );
 };
 
 export const actualizarClienteExpo = async (id: number, clienteData: ClienteExpo): Promise<void> => {
@@ -206,7 +317,7 @@ export const actualizarClienteExpo = async (id: number, clienteData: ClienteExpo
     const ext = clienteData.correoExt === "__otro__" ? clienteData.correoExtCustom || "" : clienteData.correoExt;
     correo = `${clienteData.correoUsuario}@${ext}`;
   }
-  await api.put(`/expo/clientes/${id}`, {
+  const payload = {
     nombre:        clienteData.nombre,
     celular:       clienteData.celular       || null,
     correo,
@@ -216,11 +327,31 @@ export const actualizarClienteExpo = async (id: number, clienteData: ClienteExpo
     clase:         clienteData.clase         || null,
     intereses:     clienteData.intereses,
     observaciones: clienteData.observaciones || null,
-  });
+  };
+
+  return ejecutarOEncolar(
+    "put",
+    `/expo/clientes/${id}`,
+    payload,
+    `Editar prospecto Expo #${id}`,
+    async () => {
+      await api.put(`/expo/clientes/${id}`, payload);
+    },
+    "expo"
+  );
 };
 
 export const eliminarClienteExpo = async (id: number): Promise<void> => {
-  await api.delete(`/expo/clientes/${id}`);
+  return ejecutarOEncolar(
+    "delete",
+    `/expo/clientes/${id}`,
+    undefined,
+    `Eliminar prospecto Expo #${id}`,
+    async () => {
+      await api.delete(`/expo/clientes/${id}`);
+    },
+    "expo"
+  );
 };
 
 // ═══════════════════════════════════════════════════════════
@@ -236,12 +367,31 @@ export const aprobarCotizacionExpo = async (
   folio: string,
   itemsAprobados: ItemAprobadoPayload[]
 ): Promise<{ no_pedido: string; no_cotizacion: string }> => {
-  const { data } = await api.patch(`/expo/cotizaciones/${folio}/aprobar`, { itemsAprobados });
-  return data;
+  const payload = { itemsAprobados };
+  return ejecutarOEncolar(
+    "patch",
+    `/expo/cotizaciones/${folio}/aprobar`,
+    payload,
+    `Aprobar cotización Expo ${folio}`,
+    async () => {
+      const { data } = await api.patch(`/expo/cotizaciones/${folio}/aprobar`, payload);
+      return data;
+    },
+    "expo"
+  );
 };
 
 export const eliminarCotizacionExpo = async (folio: string): Promise<void> => {
-  await api.delete(`/expo/cotizaciones/${folio}`);
+  return ejecutarOEncolar(
+    "delete",
+    `/expo/cotizaciones/${folio}`,
+    undefined,
+    `Eliminar cotización Expo ${folio}`,
+    async () => {
+      await api.delete(`/expo/cotizaciones/${folio}`);
+    },
+    "expo"
+  );
 };
 
 export const crearCotizacionExpo = async (payload: {
@@ -249,8 +399,17 @@ export const crearCotizacionExpo = async (payload: {
   productos:    any[];
   comentarios?: string;
 }): Promise<{ no_cotizacion: string; idsolicitud: number }> => {
-  const { data } = await api.post("/expo/cotizaciones", payload);
-  return data;
+  return ejecutarOEncolar(
+    "post",
+    "/expo/cotizaciones",
+    payload,
+    `Cotización Expo nueva — cliente ${payload.clienteId}`,
+    async () => {
+      const { data } = await api.post("/expo/cotizaciones", payload);
+      return data;
+    },
+    "expo"
+  );
 };
 
 // ═══════════════════════════════════════════════════════════

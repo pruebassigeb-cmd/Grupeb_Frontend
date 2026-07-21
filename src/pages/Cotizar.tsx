@@ -15,6 +15,7 @@ import type { CatalogosPlastico } from "../types/productos-plastico.types";
 import type { Cotizacion } from "../types/cotizaciones.types";
 import { showAlert } from '../components/CustomAlert';
 import { showConfirm } from '../components/CustomConfirm';
+import { OperacionEncoladaError } from "../offline/outbox";
 import { useNavigate } from "react-router-dom";
 
 
@@ -332,6 +333,15 @@ export default function Cotizaciones() {
       } catch (pdfErr) { console.warn("⚠️ PDF:", pdfErr); }
 
     } catch (e: any) {
+      if (e instanceof OperacionEncoladaError) {
+        await cargarCotizaciones();
+        setModalOpen(false);
+        showAlert(
+          "Sin conexión: la cotización se guardó en este dispositivo y se subirá sola cuando vuelva la señal. El PDF no se genera hasta que el servidor le asigne folio.",
+          "info"
+        );
+        return;
+      }
       console.error("❌ Error al guardar:", e);
       setErrorGuardar(e.message || e.response?.data?.error || "Error al guardar");
     } finally { setGuardando(false); }

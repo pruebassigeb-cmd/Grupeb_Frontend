@@ -1,7 +1,8 @@
 import api from "./api";
-import type { 
-  Cliente, 
-  CreateClienteRequest, 
+import { ejecutarOEncolar } from "../offline/outbox";
+import type {
+  Cliente,
+  CreateClienteRequest,
   UpdateClienteRequest,
   ClienteBusqueda,
   CreateClienteLigeroRequest,
@@ -28,8 +29,16 @@ export const createCliente = async (datos: CreateClienteRequest) => {
 };
 
 export const updateCliente = async (id: number, datos: UpdateClienteRequest) => {
-  const response = await api.put(`/clientes/${id}`, datos);
-  return response.data;
+  return ejecutarOEncolar(
+    "put",
+    `/clientes/${id}`,
+    datos,
+    `Editar cliente #${id}`,
+    async () => {
+      const response = await api.put(`/clientes/${id}`, datos);
+      return response.data;
+    }
+  );
 };
 
 export const deleteCliente = async (id: number) => {

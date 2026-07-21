@@ -8,6 +8,7 @@ import {
 import { getOpcionesProductoPapel, getFoils, getTexturas } from "../../services/papel/papelCotizacionService";
 import type { Producto, FilaProducto, ClienteExpo, CotizacionGuardada, ItemPedidoAprobado } from "../../types/expo/expo.types";
 import api from "../../services/api";
+import { OperacionEncoladaError, eliminarDeOutbox, encolarPersonalizado } from "../../offline/outbox";
 
 import RegistroCliente   from "../../components/expo/RegistroCliente";
 import Catalogo          from "../../components/expo/Catalogo";
@@ -17,6 +18,7 @@ import HojaCotizacion    from "../../components/expo/HojaCotizacion";
 import ListaCotizaciones from "../../components/expo/ListaCotizaciones";
 import BotonGuardarConOpciones from "../../components/BotonGuardarConOpciones";
 import ModalConfirmarCorreo from "../../components/ModalConfirmarCorreo";
+import NotificationOptIn from "../../components/NotificationOptIn";
 
 import {
   getCatalogoPropio, getCatalogoSistema,
@@ -36,6 +38,7 @@ import { generarPdfCotizacionExpo, cotizacionBackDataAPdfParams } from "../../ut
 import { generarPdfCotizacion } from "../../services/generarPdfCotizacion";
 import { useEnvioDocumentoPdf } from "../../hooks/useEnvioDocumentoPdf";
 import { getClienteById } from "../../services/clientesService";
+import { construirPayloadPdfCotizacionDesdeBackData } from "../../utils/expo/construirPayloadPdfCotizacionExpo";
 import { useCalculoPrecioPapel } from "../../hooks/expo/useCalculoPrecioPapel";
 import { useCalculoPrecioPlastico } from "../../hooks/expo/useCalculoPrecioPlastico";
 
@@ -115,7 +118,8 @@ export default function Expo() {
   const [catalogoExpoAbierto, setCatalogoExpoAbierto] = useState(false);
 
   const { catalogs } = useCatalogosPapel();
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
+  const [cerrandoSesion, setCerrandoSesion] = useState(false);
   const [foils,         setFoils]         = useState<FoilOpcion[]>([]);
   const [texturas,      setTexturas]      = useState<TexturaOpcion[]>([]);
   const [pigmentosDB,   setPigmentosDB]   = useState<PigmentoDB[]>([]);
@@ -292,7 +296,13 @@ useEffect(() => {
       await eliminarProductoCatalogoAPI(id, prod.categoria);
       setCatalogo(prev => prev.filter(p => p.id !== id));
       setFilas(prev => prev.filter(f => f.producto.id !== id));
-    } catch {
+    } catch (err) {
+      if (err instanceof OperacionEncoladaError) {
+        setCatalogo(prev => prev.filter(p => p.id !== id));
+        setFilas(prev => prev.filter(f => f.producto.id !== id));
+        alert("Sin conexión: la eliminación se guardó y se aplicará sola cuando vuelva la señal.");
+        return;
+      }
       alert("No se pudo eliminar el producto");
     }
   };
@@ -305,8 +315,25 @@ useEffect(() => {
       const esPapel    = p.categoria === "papel" || p.categoria === "carton";
       const esPlastico = p.categoria === "plastico";
 
+      const copiarDesdeSistema =
+        esPapel &&
+        !editando &&
+        p.idProductoSistemaBase != null &&
+        p.idGrupoSistemaBase != null;
+
+      if (
+        esPapel &&
+        !editando &&
+        ((p.idProductoSistemaBase != null) !== (p.idGrupoSistemaBase != null))
+      ) {
+        throw new Error(
+          "La plantilla del sistema está incompleta: vuelve a seleccionar el producto.",
+        );
+      }
+
       const payload = {
   nombre: p.nombre,
+  copiar_desde_sistema: copiarDesdeSistema,
 
   // Plástico guarda este valor en configuracion_plastico.descripcion.
   // Papel sigue utilizando nombre para descripcion_papel.
@@ -324,23 +351,38 @@ useEffect(() => {
   id_tamano_producto: esPapel ? (p.idTamanoProducto ?? null) : null,
   tamano_prod: esPapel ? (p.tamanoProd || null) : null,
   idgrupo_papel: esPapel ? (p.idgrupo_papel ?? null) : null,
+  // Durante el alta, estos ids indican qué producto/grupo del sistema debe
+  // copiar el backend. En edición se omiten: el producto Expo ya es independiente.
+  idproducto_sistema_base: esPapel && !editando
+    ? (p.idProductoSistemaBase ?? null)
+    : null,
+  idgrupo_sistema_base: esPapel && !editando
+    ? (p.idGrupoSistemaBase ?? null)
+    : null,
 
   tintas:        p.tintas        || null,
   tipo_producto: p.tipoProducto  || p.tipo || null,
         laminacion:    p.laminacion,
         tipo_laminado: p.tipoLaminado  || null,
+        idcat_laminado_default: esPapel ? (p.idLaminadoDefault ?? null) : null,
         hs:            p.hs,
         tipo_hs:       p.tipoHs        || null,
+        idfoil_default: esPapel ? (p.idFoilDefault ?? null) : null,
         ar:            p.ar,
         textura:       p.textura,
         tipo_textura:  p.tipoTextura   || null,
+        idcat_textura_default: esPapel ? (p.idTexturaDefault ?? null) : null,
         uv:            p.uv,
         asa:           p.asa,
         tipo_asa:      p.tipoAsa       || null,
+        idcat_tipo_asa_default: esPapel ? (p.idAsaDefault ?? null) : null,
         otro:          p.otro          || null,
         pigmento:      esPlastico ? (p.pigmento || null) : null,
         precio_base: esPapel
           ? (parseFloat((p.precioBase || "").replace(/[^0-9.]/g, "")) || null)
+          : null,
+        costo_laminado: esPapel && p.costoLaminado != null
+          ? Number(p.costoLaminado)
           : null,
         // precio_500 conserva su uso actual como precio unitario Expo de
         // plástico. precio_1000 y precio_3000 almacenan referencias totales
@@ -505,136 +547,6 @@ useEffect(() => {
     return resultado;
   };
 
-  // ── Construye el payload para generarPdfCotizacion (el PDF "bueno" de
-  // correo) usando datos FRESCOS DEL BACKEND — ya no el estado local del
-  // formulario.
-  const construirPayloadPdfCotizacionDesdeBackData = async (backData: any, folio: string, fecha: string) => {
-    const clienteCompleto = backData.cliente_id
-      ? await getClienteById(backData.cliente_id).catch(() => null)
-      : null;
-
-    const productos = (backData.productos || []).map((p: any) => {
-      const esPapel = p.tipo_material === "papel";
-      const foilNombre = p.foil_nombre || null;
-      const asaPapel = p.asa_nombre || null;
-      const tipoAsaPlastico = p.suaje_tipo || null;
-      const colorAsaPlastico = p.color_asa_nombre || null;
-      const asaPlastico = [tipoAsaPlastico, colorAsaPlastico]
-        .map((valor) => String(valor || "").trim())
-        .filter(Boolean)
-        .filter((valor, indice, arreglo) => arreglo.indexOf(valor) === indice)
-        .join(" · ") || null;
-
-      const base = esPapel
-        ? {
-            tipo_material: "papel",
-            tipoCotizacion: "papel",
-            nombre: p.nombre,
-            grupo_descripcion: p.grupo_descripcion ?? "",
-            material: p.material || "",
-            calibre: p.calibre || "",
-            tintas: p.tintas ?? 0,
-            tintasDentro: p.tintas_dentro ?? 0,
-            caras: p.caras ?? 0,
-            medidasFormateadas: p.medida || "",
-            medidas: {},
-            bk: null,
-            foil: foilNombre ? true : null,
-            foil_nombre: foilNombre,
-            laminado: p.laminado_nombre ? true : null,
-            laminado_nombre: p.laminado_nombre || null,
-            asa_suaje: asaPapel,
-            asa_nombre: asaPapel,
-            uvBr: p.uv ? true : null,
-            alto_relieve: p.alto_relieve === true,
-            metodo_hojeado: p.metodo_hojeado ?? null,
-            lleva_armado: p.lleva_armado ?? true,
-            maquinaria_seleccionada: p.maquinaria_seleccionada ?? {},
-            textura_nombre: p.textura_nombre || null,
-            pigmentos: null,
-            pantones: p.pantones || null,
-            pantonesDentro: p.pantones_dentro || null,
-            observacion: p.observacion || null,
-            descripcion: p.descripcion || null,
-            perforacion: false,
-            por_kilo: null,
-            herramental_descripcion: null,
-            herramental_precio: null,
-            herramental_aprobado: null,
-          }
-        : {
-            tipo_material: "plastico",
-            tipoCotizacion: "plastico",
-            nombre: p.nombre,
-            tipo_producto: p.tipo_producto || p.expo_tipo_producto || null,
-            material: p.material || "",
-            calibre: p.calibre || "",
-            tintas: p.tintas ?? 0,
-            tintasDentro: 0,
-            caras: p.caras ?? 0,
-            medidasFormateadas: p.medida || "",
-            medidas: {},
-            bk: null,
-            pigmentos: p.pigmentos || p.pigmento || null,
-            pantones: p.pantones || null,
-            asa_suaje: tipoAsaPlastico,
-            asa_nombre: asaPlastico,
-            color_asa_nombre: colorAsaPlastico,
-            observacion: p.observacion || null,
-            descripcion: p.descripcion || null,
-            perforacion: false,
-            por_kilo: null,
-            herramental_descripcion: null,
-            herramental_precio: null,
-            herramental_aprobado: null,
-          };
-
-      return {
-        ...base,
-        detalles: (p.detalles || []).map((d: any) => ({
-          cantidad: Number(d.cantidad),
-          precio_unitario:
-            d.precio_unitario !== null && d.precio_unitario !== undefined
-              ? Number(d.precio_unitario)
-              : null,
-          precio_total: Number(d.precio_total),
-          kilogramos: null,
-          modo_cantidad: "unidad",
-        })),
-      };
-    });
-
-    const total = productos.reduce(
-      (sum: number, p: any) => sum + p.detalles.reduce((s: number, d: any) => s + d.precio_total, 0),
-      0
-    );
-
-    return {
-      no_cotizacion: folio,
-      fecha,
-      cliente: backData.cliente || "",
-      empresa: backData.impresion || "",
-      telefono: backData.celular || "",
-      correo: clienteCompleto?.correo || backData.correo || "",
-      estado: "Pendiente",
-      impresion: backData.impresion ?? null,
-      celular: backData.celular ?? null,
-      razon_social: clienteCompleto?.razon_social ?? null,
-      rfc: clienteCompleto?.rfc ?? null,
-      domicilio: clienteCompleto?.domicilio ?? null,
-      numero: clienteCompleto?.numero ?? null,
-      colonia: clienteCompleto?.colonia ?? null,
-      codigo_postal: clienteCompleto?.codigo_postal ?? null,
-      poblacion: clienteCompleto?.poblacion ?? backData.ciudad ?? null,
-      estado_cliente: clienteCompleto?.estado ?? backData.estado_cliente ?? null,
-      cliente_id: backData.cliente_id ?? null,
-      identificar: backData.identificar ?? null,
-      total,
-      productos,
-      _correoCliente: clienteCompleto?.correo || backData.correo || "",
-    };
-  };
-
   // ── Cotizaciones ──────────────────────────────────────────────────────────
   const guardarConOpciones = async (opciones: { imprimir: boolean; correo: boolean }) => {
     if (filas.length === 0) { alert("Agrega al menos un producto."); return; }
@@ -642,6 +554,10 @@ useEffect(() => {
     if (!clienteIdReal)     { alert("Regresa y registra el prospecto primero."); return; }
 
     let folioRegistrado: string | null = null;
+    // Hoisted fuera del try: si crearCotizacionExpo se encola offline, el
+    // catch necesita este mismo payload para armar la tarea compuesta de
+    // "cotización + correo" sin recalcularlo.
+    let productos: ReturnType<typeof mapearProductoAPayload>[] = [];
     setGuardando(true);
     try {
       // IMPORTANTE: las columnas ocultas pueden conservar valores internos
@@ -659,7 +575,7 @@ useEffect(() => {
       // columnas visibles, para evitar que se reutilicen precios ocultos.
       const filasListas = await prepararFilas(filasVisibles);
 
-      const productos = filasListas.map((fila) =>
+      productos = filasListas.map((fila) =>
         mapearProductoAPayload(
           fila,
           fila.precio1,
@@ -729,6 +645,43 @@ useEffect(() => {
 
       limpiar();
     } catch (err) {
+      if (err instanceof OperacionEncoladaError) {
+        if (opciones.correo) {
+          // La entrada genérica que ya encoló crearCotizacionExpo no
+          // alcanza para mandar el correo (necesita el folio real, que
+          // todavía no existe) — se reemplaza por una tarea compuesta que
+          // sí lo hace sola en cuanto la cotización sincronice.
+          await eliminarDeOutbox(err.entry.id);
+
+          const destinatario = clienteGuardado?.correoUsuario
+            ? `${clienteGuardado.correoUsuario}@${
+                clienteGuardado.correoExt === "__otro__"
+                  ? clienteGuardado.correoExtCustom || ""
+                  : clienteGuardado.correoExt
+              }`
+            : "";
+
+          await encolarPersonalizado(
+            "cotizacion-expo-con-correo",
+            {
+              payloadCotizacion: { clienteId: clienteIdReal, productos, comentarios: coment },
+              correo: destinatario
+                ? { destinatario, cliente: cliente.trim(), empresa: clienteGuardado?.impresion }
+                : null,
+            },
+            `Cotización Expo + correo — cliente ${cliente.trim()}`,
+            "expo"
+          );
+        }
+
+        limpiar();
+        alert(
+          opciones.correo
+            ? "Sin conexión: la cotización se guardó en este dispositivo. Se sincronizará y el correo se enviará solo, automáticamente, cuando vuelva la señal."
+            : "Sin conexión: la cotización se guardó en este dispositivo y se subirá sola cuando vuelva la señal. El PDF no se genera hasta que el servidor le asigne folio real.",
+        );
+        return;
+      }
       console.error("Error al guardar cotización:", err);
       if (folioRegistrado) {
         alert(
@@ -756,7 +709,13 @@ useEffect(() => {
         ? { ...c, estado: "pedido", folioPedido: resultado.no_pedido, itemsAprobados: items }
         : c));
       return resultado.no_pedido;
-    } catch {
+    } catch (err) {
+      if (err instanceof OperacionEncoladaError) {
+        alert(
+          "Sin conexión: la aprobación se guardó y se aplicará sola cuando vuelva la señal. El folio de pedido no está disponible todavía."
+        );
+        return null;
+      }
       alert("No se pudo aprobar la cotización.");
       return null;
     } finally {
@@ -768,13 +727,25 @@ useEffect(() => {
     try {
       await eliminarCotizacionExpo(folio);
       setCotizaciones(prev => prev.filter(c => c.folio !== folio));
-    } catch {
+    } catch (err) {
+      if (err instanceof OperacionEncoladaError) {
+        setCotizaciones(prev => prev.filter(c => c.folio !== folio));
+        alert("Sin conexión: la eliminación se guardó y se aplicará sola cuando vuelva la señal.");
+        return;
+      }
       alert("No se pudo eliminar la cotización.");
     }
   };
 
-  const irACotizar = (idReal?: number, nombreCliente?: string) => {
-    setClienteGuardado({ ...clienteData });
+  const irACotizar = (idReal?: number, nombreCliente?: string, datosCliente?: ClienteExpo) => {
+    // `datosCliente` (cuando viene) es el estado recién construido por el
+    // caller (ej. seleccionarProspecto en RegistroCliente.tsx) — se prefiere
+    // sobre `clienteData` porque este último puede seguir reflejando el
+    // valor de ANTES de un setClienteData que el propio caller acaba de
+    // disparar (React no lo aplica sincrónicamente). Sin esto, clienteGuardado
+    // quedaba con datos viejos y el correo de la cotización encolada offline
+    // salía vacío sin ningún error visible.
+    setClienteGuardado({ ...(datosCliente ?? clienteData) });
     setCliente(nombreCliente || clienteData.nombre);
     if (idReal) setClienteIdReal(idReal);
     setVista("cotizacion");
@@ -800,6 +771,44 @@ useEffect(() => {
     catalogosPlast,
     asesor: user ? `${user.nombre} ${user.apellido}`.trim() : "Asesor de Ventas",
   };
+
+  const cerrarSesion = async () => {
+    if (cerrandoSesion) return;
+    if (!window.confirm("¿Deseas cerrar sesión?")) return;
+
+    setCerrandoSesion(true);
+    try {
+      await logout();
+      navigate("/", { replace: true });
+    } catch (error) {
+      console.error("No se pudo cerrar la sesión:", error);
+      alert("No se pudo cerrar la sesión. Intenta nuevamente.");
+      setCerrandoSesion(false);
+    }
+  };
+
+  const BotonCerrarSesion = ({ compacto = false }: { compacto?: boolean }) => (
+    <button
+      type="button"
+      onClick={cerrarSesion}
+      disabled={cerrandoSesion}
+      title="Cerrar sesión"
+      style={{
+        background: cerrandoSesion ? "#2A1717" : "transparent",
+        border: "1px solid #EF444466",
+        color: "#EF7777",
+        fontSize: 11,
+        fontWeight: 700,
+        padding: compacto ? "7px 9px" : "8px 12px",
+        borderRadius: 6,
+        cursor: cerrandoSesion ? "not-allowed" : "pointer",
+        opacity: cerrandoSesion ? .6 : 1,
+        whiteSpace: "nowrap",
+      }}
+    >
+      {cerrandoSesion ? "Saliendo..." : compacto ? "🚪" : "🚪 Cerrar sesión"}
+    </button>
+  );
 
   // ── Botones rápidos ────────────────────────────────────────────────────
   const BotonesRapidos = () => (
@@ -849,6 +858,7 @@ useEffect(() => {
       <button onClick={limpiar} style={{ background: "transparent", border: "1px solid #555", color: "#AAA", fontSize: 12, fontWeight: 600, padding: "8px 18px", borderRadius: 6, cursor: "pointer", fontFamily: "'Inter',sans-serif" }}>Limpiar</button>
       <BotonesRapidos />
       <BotonGuardarConOpciones guardando={guardando} onEjecutar={guardarConOpciones} variant="dark" />
+      <BotonCerrarSesion />
     </div>
   );
 
@@ -883,6 +893,10 @@ useEffect(() => {
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <>
+      <div className="no-print" style={{ position: "fixed", top: 18, left: 18, zIndex: 999 }}>
+        <NotificationOptIn />
+      </div>
+
       {ultimoFolioGuardado && (
         <div
           className="no-print"
@@ -995,6 +1009,8 @@ useEffect(() => {
                 <button onClick={limpiar} style={{ background: "transparent", border: "1px solid #444", color: "#AAA", fontSize: 11, fontWeight: 600, padding: "7px 9px", borderRadius: 6, cursor: "pointer" }}>Limpiar</button>
                 <BotonesRapidos />
                 <BotonGuardarConOpciones guardando={guardando} onEjecutar={guardarConOpciones} variant="dark" />
+                <BotonCerrarSesion />
+                <BotonCerrarSesion compacto />
               </div>
             </div>
             <div style={{ flex: 1, overflowY: "auto", padding: "12px 0" }}>

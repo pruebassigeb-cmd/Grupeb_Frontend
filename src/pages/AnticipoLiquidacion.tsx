@@ -1,4 +1,5 @@
 import Dashboard from "../layouts/Sidebar";
+import RequiereConexion from "../components/RequiereConexion";
 import Modal from "../components/Modal";
 import { useState, useEffect } from "react";
 import { descargarPdfOrdenProduccionUniversal } from "../services/descargarPdfOrdenProduccion";
@@ -1086,6 +1087,7 @@ export default function AnticipoLiquidacion() {
 
   return (
     <Dashboard>
+      <RequiereConexion>
       <h1 className="text-2xl font-bold mb-2">Anticipo y Liquidación</h1>
       <p className="text-slate-400 mb-6">Gestiona los anticipos y liquidaciones de los pedidos activos.</p>
 
@@ -1164,6 +1166,7 @@ export default function AnticipoLiquidacion() {
           />
         )}
       </Modal>
+    </RequiereConexion>
     </Dashboard>
   );
 }

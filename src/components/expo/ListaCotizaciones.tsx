@@ -13,6 +13,7 @@ import { useEnvioDocumentoPdf } from "../../hooks/useEnvioDocumentoPdf";
 
 import FormularioCliente from "../FormularioCliente";
 import { getClienteById, updateCliente } from "../../services/clientesService";
+import { OperacionEncoladaError } from "../../offline/outbox";
 import type { Cliente, UpdateClienteRequest } from "../../types/clientes.types";
 
 interface Props {
@@ -705,6 +706,16 @@ export default function ListaCotizaciones({
       setCorreoAprobarDefault((datos as any).correo || clienteParaEditar?.correo || "");
       setModalCorreoAprobarAbierto(true);
     } catch (e: any) {
+      if (e instanceof OperacionEncoladaError) {
+        // Los datos del cliente ya quedaron en la cola y se sincronizan
+        // solos, pero aprobar la cotización (el siguiente paso) sí necesita
+        // conexión — no tiene caso continuar hacia ahí todavía.
+        alert(
+          "Sin conexión: los datos del cliente se guardaron y se sincronizarán automáticamente. Para aprobar la cotización necesitas conexión — intenta de nuevo cuando vuelva la señal.",
+        );
+        setClienteParaEditar(null);
+        return;
+      }
       console.error("No se pudo guardar el cliente:", e);
       alert(e?.response?.data?.error || "No se pudieron guardar los datos del cliente.");
     } finally {
@@ -737,10 +748,11 @@ export default function ListaCotizaciones({
       onRefresh();
       setExpandidoId(null);
 
-      if (!noPedido) {
-        alert("No se pudo aprobar el pedido.");
-        return;
-      }
+      // `onAprobar` (aprobarCotizacion en expo.tsx) ya muestra su propio
+      // aviso cuando regresa null — tanto si se encoló offline (mensaje
+      // amigable) como si fue un rechazo real del servidor. No se repite
+      // aquí un alert genérico encima, porque pisaba/contradecía ese aviso.
+      if (!noPedido) return;
 
       // Refrescar datos frescos (con los detalles ya marcados aprobado=true)
       const data = await getCotizacionesExpo();
@@ -761,6 +773,7 @@ export default function ListaCotizaciones({
         destinatario: correoConfirmado,
         pdfBlob: blob,
         nombreArchivo: `Pedido_${payload.no_pedido}.pdf`,
+        modulo: "expo",
       });
 
       cancelarTodoElFlujo();

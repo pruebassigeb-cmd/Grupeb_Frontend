@@ -6,6 +6,7 @@ import type {
   OpcionesRegistroExpoResponse,
   ProductoSistemaPapelExpo,
   ProductoSistemaPlasticoExpo,
+  GrupoSistemaPapelExpo,
 } from "../../types/expo/expo.types";
 import type { Catalogs } from "../../types/papel/papel.types";
 import type { FoilOpcion, TexturaOpcion } from "../../types/papel/cotizacion-papel.types";
@@ -17,8 +18,6 @@ import {
   construirMedidaPlastico,
 } from "../../utils/expo/formatoMedidas";
 import {
-  calibresPapelCompatibles,
-  grupoPapelPorCalibre,
   precioFormulario,
   productosPlasticoCompatibles,
   valorFormulario,
@@ -168,6 +167,8 @@ const formVacio = (): Partial<Producto> => ({
   pigmento:"",
   tamanoProd:"",
   idTamanoProducto: undefined,
+  idProductoSistemaBase: undefined,
+  idGrupoSistemaBase: undefined,
   tintasFrenteDefault: 0,
   fuente:"expo",
 });
@@ -219,6 +220,7 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
   const [loadingOpcionesSistema, setLoadingOpcionesSistema] = useState(true);
   const [errorOpcionesSistema, setErrorOpcionesSistema] = useState("");
   const [productoPapelBaseId, setProductoPapelBaseId] = useState<number | null>(null);
+  const [grupoPapelBaseId, setGrupoPapelBaseId] = useState<number | null>(null);
   const [productoPlasticoBaseId, setProductoPlasticoBaseId] = useState<number | null>(null);
 
   // Pigmentos: reutiliza el mismo catálogo de insumos que usa el cotizador.
@@ -449,7 +451,8 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
 
     return opcionesSistema.papel
       .filter((producto) =>
-        normalizarTexto(producto.tipo_producto) === tipoSeleccionado
+        producto.categoria === formCat
+        && normalizarTexto(producto.tipo_producto) === tipoSeleccionado
       )
       .sort((a, b) =>
         String(a.medida ?? "").localeCompare(
@@ -458,63 +461,268 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
           { numeric: true, sensitivity: "base" }
         )
       );
-  }, [opcionesSistema.papel, form.tipo]);
+  }, [opcionesSistema.papel, form.tipo, formCat]);
 
   const productoPapelBase = useMemo<ProductoSistemaPapelExpo | null>(
-    () => opcionesSistema.papel.find(p => p.id === productoPapelBaseId) || null,
+    () =>
+      opcionesSistema.papel.find(
+        producto => Number(producto.id) === Number(productoPapelBaseId),
+      ) || null,
     [opcionesSistema.papel, productoPapelBaseId],
   );
 
-  const calibresPapelBase = useMemo(
-    () => calibresPapelCompatibles(productoPapelBase, form.tipoPapel || ""),
-    [productoPapelBase, form.tipoPapel],
+  const gruposPapelBase = useMemo(() => {
+    if (!productoPapelBase) return [];
+
+    if (Array.isArray(productoPapelBase.grupos) && productoPapelBase.grupos.length) {
+      return [...productoPapelBase.grupos].sort(
+        (a, b) => Number(a.orden ?? 0) - Number(b.orden ?? 0),
+      );
+    }
+
+    // Compatibilidad con una respuesta anterior del endpoint, que solo enviaba
+    // materiales aplanados.
+    const mapa = new Map<number, GrupoSistemaPapelExpo>();
+
+    for (const material of productoPapelBase.materiales || []) {
+      const existente = mapa.get(material.idgrupo_papel);
+      if (existente) {
+        existente.materiales.push(material);
+      } else {
+        mapa.set(material.idgrupo_papel, {
+          idgrupo_papel: material.idgrupo_papel,
+          precio_sugerido: material.precio_sugerido,
+          orden: null,
+          materiales: [material],
+        });
+      }
+    }
+
+    return Array.from(mapa.values());
+  }, [productoPapelBase]);
+
+  const grupoPapelBase = useMemo(
+    () =>
+      gruposPapelBase.find(
+        grupo => Number(grupo.idgrupo_papel) === Number(grupoPapelBaseId),
+      ) || null,
+    [gruposPapelBase, grupoPapelBaseId],
   );
+
+  const calibresPapelBase = useMemo(() => {
+    const unicos = new Set<string>();
+    for (const material of grupoPapelBase?.materiales || []) {
+      if (material.calibre) unicos.add(material.calibre);
+    }
+    return Array.from(unicos);
+  }, [grupoPapelBase]);
+
+  const opcionesLaminadoPapel = useMemo(() => {
+    if (productoPapelBase) return productoPapelBase.laminados || [];
+    if (editando?.laminadosPermitidos?.length) {
+      return editando.laminadosPermitidos.map(item => ({
+        id: item.idcat_laminado,
+        nombre: item.nombre,
+      }));
+    }
+    return catalogs.laminado;
+  }, [productoPapelBase, editando, catalogs.laminado]);
+
+  const opcionesAsaPapel = useMemo(() => {
+    if (productoPapelBase) return productoPapelBase.asas || [];
+    if (editando?.asasPermitidas?.length) {
+      return editando.asasPermitidas.map(item => ({
+        id: item.idcat_tipo_asa,
+        nombre: item.nombre,
+      }));
+    }
+    return catalogs.tipo_asa;
+  }, [productoPapelBase, editando, catalogs.tipo_asa]);
+
+  const etiquetaGrupoPapel = (
+    grupo: (typeof gruposPapelBase)[number],
+    indice: number,
+  ): string => {
+    const materiales = (grupo.materiales || [])
+      .map(material =>
+        [material.tipo_papel, material.calibre].filter(Boolean).join(" "),
+      )
+      .filter(Boolean);
+
+    return materiales.length
+      ? materiales.join(" + ")
+      : `Grupo ${indice + 1}`;
+  };
 
   const productosPlasticoFiltrados = useMemo(
     () => productosPlasticoCompatibles(opcionesSistema.plastico, tipoPlastNom, materialNom),
     [opcionesSistema.plastico, tipoPlastNom, materialNom],
   );
 
-  const limpiarPlantillaPapel = () => {
+  const limpiarPlantillaPapel = (limpiarCampos = false) => {
     setProductoPapelBaseId(null);
+    setGrupoPapelBaseId(null);
+    if (limpiarCampos) setUsaTintasDentroModal(false);
+    setForm(prev => ({
+      ...prev,
+      idProductoSistemaBase: undefined,
+      idGrupoSistemaBase: undefined,
+      ...(limpiarCampos ? {
+        medida: "",
+        ancho: "",
+        fuelle: "",
+        altura: "",
+        tipoPapel: "",
+        material: "",
+        calibre: "",
+        tamanoProd: "",
+        idTamanoProducto: undefined,
+        precioBase: "",
+        costoLaminado: 0,
+        precioReferencia500: "",
+        precioReferencia1000: "",
+        laminacion: false,
+        tipoLaminado: "",
+        idLaminadoDefault: undefined,
+        asa: false,
+        tipoAsa: "",
+        idAsaDefault: undefined,
+        hs: false,
+        tipoHs: "",
+        idFoilDefault: undefined,
+        textura: false,
+        tipoTextura: "",
+        idTexturaDefault: undefined,
+        ar: false,
+        uv: false,
+      } : {}),
+    }));
+  };
+
+  const aplicarGrupoPapelBase = (
+    producto: ProductoSistemaPapelExpo,
+    idgrupo: number,
+  ) => {
+    const grupos = Array.isArray(producto.grupos) && producto.grupos.length
+      ? producto.grupos
+      : Array.from(
+          (producto.materiales || []).reduce((mapa, material) => {
+            const actual = mapa.get(material.idgrupo_papel) || {
+              idgrupo_papel: material.idgrupo_papel,
+              precio_sugerido: material.precio_sugerido,
+              orden: null,
+              materiales: [],
+            };
+            actual.materiales.push(material);
+            mapa.set(material.idgrupo_papel, actual);
+            return mapa;
+          }, new Map<number, GrupoSistemaPapelExpo>()).values(),
+        );
+
+    const grupo = grupos.find(item => Number(item.idgrupo_papel) === Number(idgrupo));
+    if (!grupo) return;
+
+    const primerMaterial = grupo.materiales?.[0] || null;
+    setGrupoPapelBaseId(Number(grupo.idgrupo_papel));
+    setForm(prev => ({
+      ...prev,
+      idProductoSistemaBase: producto.id,
+      idGrupoSistemaBase: Number(grupo.idgrupo_papel),
+      idgrupo_papel: undefined,
+      tipoPapel: primerMaterial?.tipo_papel || "",
+      material: primerMaterial?.tipo_papel || "",
+      calibre: primerMaterial?.calibre || "",
+      precioBase: precioFormulario(grupo.precio_sugerido ?? null),
+    }));
   };
 
   const aplicarProductoPapelBase = (producto: ProductoSistemaPapelExpo) => {
-    setProductoPapelBaseId(producto.id);
-    const calibres = calibresPapelCompatibles(producto, form.tipoPapel || "");
-    const primerCalibre = calibres[0] || "";
-    const grupoInicial = grupoPapelPorCalibre(
-      producto,
-      form.tipoPapel || "",
-      primerCalibre,
+    setProductoPapelBaseId(Number(producto.id));
+
+    const grupos = Array.isArray(producto.grupos) && producto.grupos.length
+      ? [...producto.grupos].sort(
+          (a, b) => Number(a.orden ?? 0) - Number(b.orden ?? 0),
+        )
+      : Array.from(
+          (producto.materiales || []).reduce((mapa, material) => {
+            const actual = mapa.get(material.idgrupo_papel) || {
+              idgrupo_papel: material.idgrupo_papel,
+              precio_sugerido: material.precio_sugerido,
+              orden: null,
+              materiales: [],
+            };
+            actual.materiales.push(material);
+            mapa.set(material.idgrupo_papel, actual);
+            return mapa;
+          }, new Map<number, GrupoSistemaPapelExpo>()).values(),
+        );
+
+    const grupoInicial = grupos[0] || null;
+    const primerMaterial = grupoInicial?.materiales?.[0] || null;
+    const laminadoDefault = producto.tipo_laminado_default
+      || producto.laminados?.[0]?.nombre
+      || "";
+    const asaDefault = producto.tipo_asa_default
+      || producto.asas?.[0]?.nombre
+      || "";
+
+    setGrupoPapelBaseId(
+      grupoInicial?.idgrupo_papel != null
+        ? Number(grupoInicial.idgrupo_papel)
+        : null,
     );
+
+    // Al cambiar de plantilla se descarta cualquier foto pendiente o vista
+    // previa anterior. La imagen del producto padre nunca se reutiliza.
+    setImagenPendiente(null);
 
     setForm(prev => ({
       ...prev,
+      nombre: prev.nombre || "",
       medida: producto.medida || "",
       ancho: valorFormulario(producto.ancho),
       fuelle: valorFormulario(producto.fuelle),
       altura: valorFormulario(producto.altura),
       tamanoProd: producto.tamano_producto || producto.tamano_prod || "",
       idTamanoProducto: producto.id_tamano_producto ?? undefined,
-      calibre: primerCalibre,
+      idProductoSistemaBase: Number(producto.id),
+      idGrupoSistemaBase:
+        grupoInicial?.idgrupo_papel != null
+          ? Number(grupoInicial.idgrupo_papel)
+          : undefined,
+      idgrupo_papel: undefined,
+      tipoPapel: primerMaterial?.tipo_papel || "",
+      material: primerMaterial?.tipo_papel || "",
+      calibre: primerMaterial?.calibre || "",
       precioBase: precioFormulario(grupoInicial?.precio_sugerido ?? null),
       costoLaminado: producto.costo_laminado != null
         ? Number(producto.costo_laminado)
         : 0,
+      precioReferencia500: precioFormulario(producto.precio_1000 ?? null),
+      precioReferencia1000: precioFormulario(producto.precio_3000 ?? null),
       tintasFrenteDefault: producto.tintas_frente_default ?? 0,
       tintasDentroDefault: producto.tintas_dentro_default ?? undefined,
-      laminacion: (producto.laminados || []).length > 0,
-      tipoLaminado: producto.laminados?.[0]?.nombre || "",
-      asa: (producto.asas || []).length > 0,
-      tipoAsa: producto.asas?.[0]?.nombre || "",
+      laminacion: laminadoDefault !== "",
+      tipoLaminado: laminadoDefault,
+      idLaminadoDefault: producto.idcat_laminado_default
+        ?? producto.laminados?.[0]?.id
+        ?? undefined,
+      asa: asaDefault !== "",
+      tipoAsa: asaDefault,
+      idAsaDefault: producto.idcat_tipo_asa_default
+        ?? producto.asas?.[0]?.id
+        ?? undefined,
       hs: producto.hs === true,
       tipoHs: producto.tipo_hs || "",
+      idFoilDefault: producto.idfoil_default ?? undefined,
       textura: producto.textura === true,
       tipoTextura: producto.tipo_textura || "",
+      idTexturaDefault: producto.idcat_textura_default ?? undefined,
       ar: producto.ar === true,
       uv: producto.uv === true,
-      imagen: prev.imagen || producto.imagen_url || "",
+      // La imagen del producto padre NO se copia. También se limpia cualquier
+      // foto que hubiera quedado de una selección anterior en este mismo modal.
+      imagen: "",
     }));
     setUsaTintasDentroModal(producto.tintas_dentro_default != null);
   };
@@ -580,6 +788,11 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
 
     try {
       if (esPapelCarton) {
+        if (!editando && productoPapelBaseId && !grupoPapelBaseId) {
+          alert("Selecciona el grupo del producto del sistema que se copiará.");
+          return;
+        }
+
         const medida = construirMedidaPapel(
           form.ancho,
           form.fuelle,
@@ -592,6 +805,14 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
             id: editando?.id ?? 0,
             fuente: "expo",
             medida,
+            // Se escriben explícitamente desde los estados del selector para que
+            // nunca se pierdan por una actualización asíncrona de setForm.
+            idProductoSistemaBase: !editando && productoPapelBaseId
+              ? Number(productoPapelBaseId)
+              : undefined,
+            idGrupoSistemaBase: !editando && grupoPapelBaseId
+              ? Number(grupoPapelBaseId)
+              : undefined,
           },
           imagenPendiente
         );
@@ -677,10 +898,15 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
                     tamanoProd: categoria === "plastico" ? "" : prev.tamanoProd,
                     idTamanoProducto: categoria === "plastico" ? undefined : prev.idTamanoProducto,
                     precioBase: categoria === "plastico" ? "" : prev.precioBase,
+                    idProductoSistemaBase: undefined,
+                    idGrupoSistemaBase: undefined,
                     tintasFrenteDefault: categoria === "plastico"
                       ? (prev.tintasFrenteDefault ?? 1)
                       : (prev.tintasFrenteDefault ?? 0),
                   }));
+                  setProductoPapelBaseId(null);
+                  setGrupoPapelBaseId(null);
+                  setProductoPlasticoBaseId(null);
                   setTipoPlastNom("");
                   setMaterialNom("");
                   setCalibreNom("");
@@ -711,57 +937,36 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
           <div style={ROW3}>
             <div>
               <label style={LS}>Tipo</label>
-              <select style={IS} value={form.tipo||""} onChange={e=>{ setF("tipo",e.target.value); limpiarPlantillaPapel(); }}>
-                <option value="">— Selecciona —</option>
-                {catalogs.tipo_producto.map(item=><option key={item.id} value={item.nombre}>{item.nombre}</option>)}
-              </select>
-            </div>
-            <div>
-              <label style={LS}>Tipo de papel</label>
               <select
                 style={IS}
-                value={form.tipoPapel || ""}
-                onChange={(event) => {
-                  const tipoPapel = event.target.value;
-                  setF("tipoPapel", tipoPapel);
-                  setF("material", tipoPapel);
-
-                  // Cambiar el material ya no elimina el producto/medida
-                  // seleccionado, porque la lista se filtra únicamente por tipo.
-                  if (productoPapelBase) {
-                    const calibres = calibresPapelCompatibles(
-                      productoPapelBase,
-                      tipoPapel
-                    );
-                    const primerCalibre = calibres[0] || "";
-                    const grupo = grupoPapelPorCalibre(
-                      productoPapelBase,
-                      tipoPapel,
-                      primerCalibre
-                    );
-
-                    setF("calibre", primerCalibre);
-                    setF(
-                      "precioBase",
-                      precioFormulario(grupo?.precio_sugerido ?? null)
-                    );
-                  }
+                value={form.tipo || ""}
+                onChange={event => {
+                  setF("tipo", event.target.value);
+                  limpiarPlantillaPapel(true);
                 }}
               >
                 <option value="">— Selecciona —</option>
-                {catalogs.tipo_papel.map(item=><option key={item.id} value={item.nombre}>{item.nombre}</option>)}
+                {catalogs.tipo_producto.map(item => (
+                  <option key={item.id} value={item.nombre}>{item.nombre}</option>
+                ))}
               </select>
             </div>
+
             <div>
               <label style={LS}>Producto / medida del sistema</label>
               <select
-                style={{...IS, marginBottom:0}}
+                style={{ ...IS, marginBottom: 0 }}
                 value={productoPapelBaseId ?? ""}
                 disabled={!form.tipo || loadingOpcionesSistema}
-                onChange={e=>{
-                  const id = Number(e.target.value);
-                  if (!id) { limpiarPlantillaPapel(); return; }
-                  const producto = opcionesSistema.papel.find(p=>p.id===id);
+                onChange={event => {
+                  const id = Number(event.target.value);
+                  if (!id) {
+                    limpiarPlantillaPapel(true);
+                    return;
+                  }
+                  const producto = opcionesSistema.papel.find(
+                    item => Number(item.id) === id,
+                  );
                   if (producto) aplicarProductoPapelBase(producto);
                 }}
               >
@@ -771,15 +976,70 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
                     : !form.tipo
                       ? "Primero selecciona un tipo"
                       : productosPapelFiltrados.length
-                        ? `— Selecciona entre ${productosPapelFiltrados.length} productos —`
-                        : "Sin productos registrados para ese tipo"}
+                        ? "— Capturar desde cero o seleccionar producto —"
+                        : "Sin productos · capturar desde cero"}
                 </option>
-                {productosPapelFiltrados.map(producto=><option key={producto.id} value={producto.id}>
-                  {producto.medida || "Sin medida"}{producto.descripcion ? ` · ${producto.descripcion}` : ""}
-                </option>)}
+                {productosPapelFiltrados.map(producto => (
+                  <option key={producto.id} value={producto.id}>
+                    {producto.medida || "Sin medida"}
+                    {producto.descripcion ? ` · ${producto.descripcion}` : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label style={LS}>
+                {productoPapelBase ? "Grupo / tipo de papel" : "Tipo de papel"}
+              </label>
+              <select
+                style={IS}
+                value={productoPapelBase ? (grupoPapelBaseId ?? "") : (form.tipoPapel || "")}
+                disabled={productoPapelBase ? gruposPapelBase.length <= 1 : false}
+                onChange={event => {
+                  if (productoPapelBase) {
+                    const idgrupo = Number(event.target.value);
+                    if (idgrupo) aplicarGrupoPapelBase(productoPapelBase, idgrupo);
+                    return;
+                  }
+
+                  const tipoPapel = event.target.value;
+                  setF("tipoPapel", tipoPapel);
+                  setF("material", tipoPapel);
+                  setF("calibre", "");
+                }}
+              >
+                <option value="">— Selecciona —</option>
+                {productoPapelBase
+                  ? gruposPapelBase.map((grupo, indice) => (
+                      <option key={grupo.idgrupo_papel} value={grupo.idgrupo_papel}>
+                        {etiquetaGrupoPapel(grupo, indice)}
+                      </option>
+                    ))
+                  : catalogs.tipo_papel.map(item => (
+                      <option key={item.id} value={item.nombre}>{item.nombre}</option>
+                    ))}
               </select>
             </div>
           </div>
+
+          {productoPapelBase && (
+            <div style={{
+              marginTop: -8,
+              marginBottom: 14,
+              padding: "8px 10px",
+              borderRadius: 6,
+              border: "1px solid #C9922A44",
+              background: "#C9922A0D",
+              color: "#B9914B",
+              fontSize: 10.5,
+              lineHeight: 1.45,
+            }}>
+             Se copiarán los datos del producto, excepto la descripción, además del grupo seleccionado,
+materiales, suaje, pegado, acabados permitidos y maquinaria. Las imágenes no se copiarán.
+            </div>
+          )}
+
           <div style={ROW3}>
             <div><label style={LS}>Ancho (cm)</label><input style={IS} type="text" inputMode="decimal" value={form.ancho||""} onChange={e=>{setF("ancho",soloNums(e.target.value));setF("medida","");}} placeholder="20" /></div>
             <div><label style={LS}>Fuelle (cm)</label><input style={IS} type="text" inputMode="decimal" value={form.fuelle||""} onChange={e=>{setF("fuelle",soloNums(e.target.value));setF("medida","");}} placeholder="10" /></div>
@@ -811,18 +1071,19 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
             </div>
             <div>
               <label style={LS}>Calibre</label>
-              <select style={IS} value={form.calibre||""} onChange={e=>{
-                const calibre=e.target.value;
-                setF("calibre",calibre);
-                const material=grupoPapelPorCalibre(productoPapelBase, form.tipoPapel||"", calibre);
-                if (material?.precio_sugerido != null) {
-                  setF("precioBase", precioFormulario(material.precio_sugerido));
-                }
-              }}>
+              <select
+                style={IS}
+                value={form.calibre || ""}
+                onChange={event => setF("calibre", event.target.value)}
+              >
                 <option value="">— Selecciona —</option>
                 {productoPapelBase
-                  ? calibresPapelBase.map(calibre=><option key={calibre} value={calibre}>{calibre}</option>)
-                  : catalogs.calibre.map(item=><option key={item.id} value={item.nombre}>{item.nombre}</option>)}
+                  ? calibresPapelBase.map(calibre => (
+                      <option key={calibre} value={calibre}>{calibre}</option>
+                    ))
+                  : catalogs.calibre.map(item => (
+                      <option key={item.id} value={item.nombre}>{item.nombre}</option>
+                    ))}
               </select>
             </div>
             <div>
@@ -836,12 +1097,21 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
 
           <div style={{ marginBottom:14, maxWidth:"calc((100% - 24px) / 3)" }}>
             <label style={LS}>Asa</label>
-            <select style={IS} value={form.tipoAsa||""} onChange={e=>{ setF("tipoAsa",e.target.value); setF("asa",e.target.value!==""); }}>
+            <select
+              style={IS}
+              value={form.tipoAsa || ""}
+              onChange={event => {
+                const opciones = opcionesAsaPapel;
+                const opcion = opciones.find(item => item.nombre === event.target.value);
+                setF("tipoAsa", event.target.value);
+                setF("asa", event.target.value !== "");
+                setF("idAsaDefault", opcion?.id);
+              }}
+            >
               <option value="">Sin asa</option>
-              {(productoPapelBase
-                ? productoPapelBase.asas
-                : catalogs.tipo_asa
-              ).map(item=><option key={item.id} value={item.nombre}>{item.nombre}</option>)}
+              {opcionesAsaPapel.map(item => (
+                <option key={item.id} value={item.nombre}>{item.nombre}</option>
+              ))}
             </select>
           </div>
 
@@ -868,26 +1138,59 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
           <div style={ROW3}>
             <div>
               <label style={LS}>Laminado</label>
-              <select style={IS} value={form.laminacion?(form.tipoLaminado||""):""} onChange={e=>{ setF("laminacion",e.target.value!==""); setF("tipoLaminado",e.target.value); }}>
+              <select
+                style={IS}
+                value={form.laminacion ? (form.tipoLaminado || "") : ""}
+                onChange={event => {
+                  const opciones = opcionesLaminadoPapel;
+                  const opcion = opciones.find(item => item.nombre === event.target.value);
+                  setF("laminacion", event.target.value !== "");
+                  setF("tipoLaminado", event.target.value);
+                  setF("idLaminadoDefault", opcion?.id);
+                }}
+              >
                 <option value="">Sin laminado</option>
-                {(productoPapelBase
-                  ? productoPapelBase.laminados
-                  : catalogs.laminado
-                ).map(item=><option key={item.id} value={item.nombre}>{item.nombre}</option>)}
+                {opcionesLaminadoPapel.map(item => (
+                  <option key={item.id} value={item.nombre}>{item.nombre}</option>
+                ))}
               </select>
             </div>
             <div>
               <label style={LS}>Textura</label>
-              <select style={IS} value={form.textura?(form.tipoTextura||""):""} onChange={e=>{ setF("textura",e.target.value!==""); setF("tipoTextura",e.target.value); }}>
+              <select
+                style={IS}
+                value={form.textura ? (form.tipoTextura || "") : ""}
+                onChange={event => {
+                  const opcion = texturas.find(item => item.nombre === event.target.value);
+                  setF("textura", event.target.value !== "");
+                  setF("tipoTextura", event.target.value);
+                  setF("idTexturaDefault", opcion?.idcat_textura);
+                }}
+              >
                 <option value="">Sin textura</option>
-                {texturas.map(o=><option key={o.idcat_textura} value={o.nombre}>{o.nombre}</option>)}
+                {texturas.map(o => <option key={o.idcat_textura} value={o.nombre}>{o.nombre}</option>)}
               </select>
             </div>
             <div>
               <label style={LS}>Hot Stamping (Foil)</label>
-              <select style={IS} value={form.hs?(form.tipoHs||""):""} onChange={e=>{ setF("hs",e.target.value!==""); setF("tipoHs",e.target.value); }}>
+              <select
+                style={IS}
+                value={form.hs ? (form.tipoHs || "") : ""}
+                onChange={event => {
+                  const opcion = foils.find(item => {
+                    const label = `${item.colorfoil}${item.codigofoil ? ` ${item.codigofoil}` : ""}`;
+                    return label === event.target.value;
+                  });
+                  setF("hs", event.target.value !== "");
+                  setF("tipoHs", event.target.value);
+                  setF("idFoilDefault", opcion?.idfoil);
+                }}
+              >
                 <option value="">Sin foil</option>
-                {foils.map(o=>{ const label=`${o.colorfoil}${o.codigofoil?" "+o.codigofoil:""}`; return <option key={o.idfoil} value={label}>{label}</option>; })}
+                {foils.map(o => {
+                  const label = `${o.colorfoil}${o.codigofoil ? ` ${o.codigofoil}` : ""}`;
+                  return <option key={o.idfoil} value={label}>{label}</option>;
+                })}
               </select>
             </div>
           </div>

@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from "react";
 import { loginService, logoutService } from "../services/authService";
+import { warmApiCache } from "../pwa/warmApiCache";
 
 // ==========================
 // TIPOS
@@ -55,6 +56,21 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setUser(savedUser);
     setLoading(false);
   }, []);
+
+  // Precalienta el runtime cache (Fase 2 del PWA) al iniciar sesión / al
+  // restaurar la sesión guardada, y de nuevo cada vez que vuelve la
+  // conexión mientras hay sesión activa.
+  useEffect(() => {
+    if (!user?.id) return;
+
+    if (navigator.onLine) {
+      warmApiCache();
+    }
+
+    const handleOnline = () => warmApiCache();
+    window.addEventListener("online", handleOnline);
+    return () => window.removeEventListener("online", handleOnline);
+  }, [user?.id]);
 
   const login = async (correo: string, codigo: string) => {
     const data = await loginService(correo, codigo);

@@ -1,4 +1,5 @@
 import Dashboard from "../layouts/Sidebar";
+import RequiereConexion from "../components/RequiereConexion";
 import Modal from "../components/Modal";
 import { useState, useEffect } from "react";
 import { descargarPdfOrdenProduccionUniversal } from "../services/descargarPdfOrdenProduccion";
@@ -642,6 +643,7 @@ export default function Diseno() {
 
   return (
     <Dashboard>
+      <RequiereConexion>
       <h1 className="text-2xl font-bold mb-4">Gestión de Diseños</h1>
       <p className="text-slate-400 mb-6">
         {puedeEditarDiseno
@@ -737,6 +739,7 @@ export default function Diseno() {
           />
         )}
       </Modal>
+    </RequiereConexion>
     </Dashboard>
   );
 }
