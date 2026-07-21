@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { sincronizarOutbox, contarPendientes } from "./outbox";
-import { notificarSincronizacionExpo } from "../pwa/notificacionesLocales";
+import {
+  notificarSincronizacionExpo,
+  notificarMensajeExito,
+  notificarResumenSincronizacion,
+} from "../pwa/notificacionesLocales";
+
+/** Por arriba de esto, se agrupan en un resumen en vez de una notificación por cada cambio. */
+const MAX_NOTIFICACIONES_INDIVIDUALES = 3;
 
 interface UseSyncOutboxResult {
   pendientes: number;
@@ -34,7 +41,19 @@ export function useSyncOutbox(activo: boolean): UseSyncOutboxResult {
     setSincronizando(true);
     try {
       const resultado = await sincronizarOutbox();
-      if (resultado.modulosSincronizados.has("expo")) {
+      if (resultado.notificacionesExito.length > MAX_NOTIFICACIONES_INDIVIDUALES) {
+        // Muchas cosas sincronizaron a la vez (ej. tras estar offline un
+        // buen rato) — un resumen es más útil que saturar con una
+        // notificación por cada una.
+        void notificarResumenSincronizacion(resultado.notificacionesExito.length);
+      } else if (resultado.notificacionesExito.length > 0) {
+        for (const mensaje of resultado.notificacionesExito) {
+          void notificarMensajeExito(mensaje);
+        }
+      } else if (resultado.modulosSincronizados.has("expo")) {
+        // Entrada(s) de Expo sincronizaron pero sin un mensaje específico
+        // (ej. una entrada vieja de antes de este cambio) — aviso genérico
+        // para no quedarse callado.
         void notificarSincronizacionExpo();
       }
     } finally {

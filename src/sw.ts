@@ -1,6 +1,6 @@
 /// <reference lib="webworker" />
 import { precacheAndRoute, createHandlerBoundToURL } from "workbox-precaching";
-import { NavigationRoute, registerRoute } from "workbox-routing";
+import { NavigationRoute, registerRoute, setCatchHandler } from "workbox-routing";
 import { NetworkFirst } from "workbox-strategies";
 import { ExpirationPlugin } from "workbox-expiration";
 import { clientsClaim } from "workbox-core";
@@ -95,6 +95,24 @@ registerRoute(
     plugins: [new ExpirationPlugin({ maxEntries: 50, maxAgeSeconds: 7 * DIA })],
   })
 );
+
+// Cuando una ruta de arriba falla (sin red Y sin entrada en caché — ej. una
+// búsqueda con parámetros que nunca se visitó estando en línea), Workbox
+// deja que la promesa de `NetworkFirst` truene. Eso hace que Chrome marque
+// el FetchEvent como "resultó en error de red" y registre además un
+// "Uncaught (in promise) no-response" — puro ruido de consola, no afecta
+// nada visible para el usuario. `setCatchHandler` evita ambos devolviendo
+// una respuesta real en vez de dejar que la promesa rechace.
+// Solo aplica a las rutas GET registradas arriba — las escrituras
+// (POST/PUT/PATCH/DELETE) del outbox nunca pasan por aquí, así que esto no
+// afecta en nada la detección de "error de red" que usa `outbox.ts`.
+setCatchHandler(async ({ url }) => {
+  console.warn(`[sw] Sin conexión y sin datos guardados para: ${url.pathname}${url.search}`);
+  return new Response(
+    JSON.stringify({ error: "Sin conexión y sin datos guardados para esta consulta.", offline: true }),
+    { status: 503, statusText: "Offline", headers: { "Content-Type": "application/json" } }
+  );
+});
 
 self.addEventListener("message", (event) => {
   if (event.data?.type === "SKIP_WAITING") {

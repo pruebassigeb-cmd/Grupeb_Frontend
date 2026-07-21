@@ -296,7 +296,7 @@ function ModalProspectos({ onSeleccionar, onClose }: ModalProspectosProps) {
     if (!confirm(`¿Eliminar a "${nombre}" del directorio expo?`)) return;
     setEliminandoId(id);
     try {
-      await eliminarClienteExpoAPI(id);
+      await eliminarClienteExpoAPI(id, nombre);
       setProspectos(prev => prev.filter(p => p.idclientes !== id));
       if (expandidoId === id) setExpandidoId(null);
     } catch (err) {
@@ -576,8 +576,13 @@ export default function RegistroCliente({
         }
         // Cliente nuevo: sin id real todavía no se puede armar una
         // cotización (crearCotizacionExpo necesita un clienteId válido).
-        setError(
-          "Sin conexión: el registro del prospecto se guardó y se sincronizará solo. No se puede cotizar un prospecto nuevo hasta que vuelva la conexión y se sincronice."
+        // Usa alert() (no setError) a propósito: setError se renderiza como
+        // una caja roja de "⚠ error" — indistinguible de un fallo real. El
+        // usuario reportó que este aviso "no daba pistas de si funcionó
+        // correctamente" porque se veía igual que un error de verdad, pese
+        // a ser una confirmación de que sí se guardó.
+        alert(
+          `✅ "${clienteData.nombre}" se guardó en este dispositivo sin conexión y se sincronizará solo cuando vuelva la señal.\n\nNo se puede cotizar un prospecto nuevo hasta que se sincronice — inténtalo de nuevo cuando vuelva la conexión.`
         );
         return;
       }

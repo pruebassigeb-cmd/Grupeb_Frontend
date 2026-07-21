@@ -29,6 +29,12 @@ function blobABase64(blob: Blob): Promise<string> {
   });
 }
 
+const ETIQUETA_TIPO_CORREO: Record<TipoDocumentoCorreo, string> = {
+  cotizacion: "de la cotización",
+  pedido: "del pedido",
+  agradecimiento: "de agradecimiento",
+};
+
 export async function enviarCorreoDocumento(params: EnviarCorreoDocumentoParams): Promise<void> {
   const pdfBase64 = await blobABase64(params.pdfBlob);
 
@@ -42,6 +48,10 @@ export async function enviarCorreoDocumento(params: EnviarCorreoDocumentoParams)
     nombreArchivo: params.nombreArchivo,
   };
 
+  const destinoCorreo = params.cliente ? ` para "${params.cliente}"` : "";
+  const notificacionExito =
+    `El correo ${ETIQUETA_TIPO_CORREO[params.tipo]}${destinoCorreo} (folio ${params.folio}) se envió correctamente.`;
+
   return ejecutarOEncolar(
     "post",
     "/correos/documento",
@@ -50,6 +60,7 @@ export async function enviarCorreoDocumento(params: EnviarCorreoDocumentoParams)
     async () => {
       await api.post("/correos/documento", payload);
     },
-    params.modulo
+    params.modulo,
+    notificacionExito
   );
 }

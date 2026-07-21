@@ -684,7 +684,7 @@ let idReal: number;
     if (!prod) return;
     setEliminandoId(id);
     try {
-      await eliminarProductoCatalogoAPI(id, prod.categoria);
+      await eliminarProductoCatalogoAPI(id, prod.categoria, nombre);
       setProductos(prev => prev.filter(p => p.id !== id));
     } catch (err) {
       if (err instanceof OperacionEncoladaError) {

@@ -34,6 +34,15 @@ export interface OutboxEntry {
    * que compartan el mismo outbox. Ver `sincronizarOutbox`/`useSyncOutbox`.
    */
   modulo?: string;
+  /**
+   * Mensaje concreto a mostrar en una notificación cuando esta entrada
+   * sincroniza con éxito (ej. `El correo para "Juan Pérez" se envió
+   * correctamente`) — se arma con el contexto ya disponible al encolar
+   * (nombre de cliente/producto), no requiere esperar la respuesta del
+   * servidor. Si no se define, esta entrada no dispara ninguna notificación
+   * individual. Ver `sincronizarOutbox`/`useSyncOutbox`.
+   */
+  notificacionExito?: string;
 }
 
 interface SigebOutboxDB extends DBSchema {

@@ -293,7 +293,7 @@ useEffect(() => {
     const prod = catalogo.find(p => p.id === id);
     if (!prod || prod.fuente !== "expo") return;
     try {
-      await eliminarProductoCatalogoAPI(id, prod.categoria);
+      await eliminarProductoCatalogoAPI(id, prod.categoria, prod.nombre);
       setCatalogo(prev => prev.filter(p => p.id !== id));
       setFilas(prev => prev.filter(f => f.producto.id !== id));
     } catch (err) {
@@ -587,7 +587,7 @@ useEffect(() => {
           columnasPrecio,
         ),
       );
-      const resultado = await crearCotizacionExpo({ clienteId: clienteIdReal, productos, comentarios: coment });
+      const resultado = await crearCotizacionExpo({ clienteId: clienteIdReal, productos, comentarios: coment }, cliente.trim());
       folioRegistrado = resultado.no_cotizacion;
       setFolioActual(resultado.no_cotizacion);
       setUltimoFolioGuardado(resultado.no_cotizacion);
@@ -947,7 +947,6 @@ useEffect(() => {
       )}
 
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
         *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
         body{background:#1A1A1A;font-family:'Inter',sans-serif;}
         input::placeholder,textarea::placeholder{color:#444;}

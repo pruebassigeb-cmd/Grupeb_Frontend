@@ -4,6 +4,7 @@ import { getCotizacionesExpo } from "../services/expo/expoService";
 import { enviarCorreoDocumento } from "../services/correoService";
 import { generarPdfCotizacion } from "../services/generarPdfCotizacion";
 import { construirPayloadPdfCotizacionDesdeBackData } from "../utils/expo/construirPayloadPdfCotizacionExpo";
+import { notificarMensajeExito } from "../pwa/notificacionesLocales";
 
 export interface DatosCotizacionExpoConCorreo {
   payloadCotizacion: { clienteId: number; productos: unknown[]; comentarios?: string };
@@ -27,6 +28,15 @@ registrarManejadorOutbox("cotizacion-expo-con-correo", async (data) => {
 
   const { data: resultado } = await api.post("/expo/cotizaciones", payloadCotizacion);
   const noCotizacion: string = resultado.no_cotizacion;
+
+  // Notificación propia (no vía `OutboxEntry.notificacionExito` genérico):
+  // este manejador ya conoce el folio real y si el correo se pidió/logró,
+  // algo que el mecanismo genérico no puede saber de antemano al encolar.
+  void notificarMensajeExito(
+    correo?.cliente
+      ? `Se generó la cotización ${noCotizacion} para "${correo.cliente}".`
+      : `Se generó la cotización ${noCotizacion}.`
+  );
 
   if (!correo) return;
 
@@ -58,10 +68,16 @@ registrarManejadorOutbox("cotizacion-expo-con-correo", async (data) => {
       nombreArchivo: `Cotizacion_${noCotizacion}.pdf`,
       modulo: "expo",
     });
+    // Si `enviarCorreoDocumento` tuvo que encolarse de nuevo por red, ya
+    // avisó por su cuenta (OperacionEncoladaError no se lanza aquí porque
+    // no se captura como tal, pero su propio ejecutarOEncolar solo encola;
+    // si llegó hasta aquí sin lanzar, es que sí se mandó ahora mismo).
+    void notificarMensajeExito(`El correo de la cotización ${noCotizacion} para "${correo.cliente}" se envió correctamente.`);
   } catch (e) {
     // La cotización YA se creó — no tiene caso reintentar todo el combo por
     // esto. Si `enviarCorreoDocumento` volvió a fallar por red, ya se
-    // re-encoló sola como una entrada "http" normal (se reintentará aparte).
+    // re-encoló sola como una entrada "http" normal (se reintentará aparte,
+    // y esa sí trae su propio notificacionExito para cuando le toque).
     // Si fue otro error, se deja constancia; el usuario puede reenviar el
     // documento manualmente desde la lista de cotizaciones.
     console.error("La cotización se sincronizó pero el correo de seguimiento falló:", e);

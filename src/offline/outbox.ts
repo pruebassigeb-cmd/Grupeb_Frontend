@@ -41,7 +41,8 @@ export async function encolar(
   url: string,
   data: unknown,
   descripcion: string,
-  modulo?: string
+  modulo?: string,
+  notificacionExito?: string
 ): Promise<OutboxEntry> {
   const entry: OutboxEntry = {
     id: generarId(),
@@ -53,6 +54,7 @@ export async function encolar(
     descripcion,
     intentos: 0,
     modulo,
+    notificacionExito,
   };
   const db = await getOutboxDB();
   await db.put("outbox", entry);
@@ -67,7 +69,8 @@ export async function encolarPersonalizado(
   kind: string,
   data: unknown,
   descripcion: string,
-  modulo?: string
+  modulo?: string,
+  notificacionExito?: string
 ): Promise<OutboxEntry> {
   const entry: OutboxEntry = {
     id: generarId(),
@@ -77,6 +80,7 @@ export async function encolarPersonalizado(
     descripcion,
     intentos: 0,
     modulo,
+    notificacionExito,
   };
   const db = await getOutboxDB();
   await db.put("outbox", entry);
@@ -147,13 +151,14 @@ export async function ejecutarOEncolar<T>(
   data: unknown,
   descripcion: string,
   ejecutar: () => Promise<T>,
-  modulo?: string
+  modulo?: string,
+  notificacionExito?: string
 ): Promise<T> {
   try {
     return await ejecutar();
   } catch (error) {
     if (!esErrorDeRed(error)) throw error;
-    const entry = await encolar(method, url, data, descripcion, modulo);
+    const entry = await encolar(method, url, data, descripcion, modulo, notificacionExito);
     throw new OperacionEncoladaError(entry);
   }
 }
@@ -184,6 +189,8 @@ export interface ResultadoSincronizacion {
   detenidoPor401: boolean;
   /** Módulos (`OutboxEntry.modulo`) que tuvieron al menos un éxito en esta corrida. */
   modulosSincronizados: Set<string>;
+  /** Mensajes (`OutboxEntry.notificacionExito`) de las entradas que sincronizaron con éxito en esta corrida. */
+  notificacionesExito: string[];
 }
 
 /**
@@ -203,6 +210,7 @@ export async function sincronizarOutbox(): Promise<ResultadoSincronizacion> {
   let exitosos = 0;
   let fallidos = 0;
   const modulosSincronizados = new Set<string>();
+  const notificacionesExito: string[] = [];
 
   for (const entry of pendientes) {
     if (entry.intentos >= MAX_INTENTOS) {
@@ -234,12 +242,13 @@ export async function sincronizarOutbox(): Promise<ResultadoSincronizacion> {
       await eliminarDeOutbox(entry.id);
       exitosos++;
       if (entry.modulo) modulosSincronizados.add(entry.modulo);
+      if (entry.notificacionExito) notificacionesExito.push(entry.notificacionExito);
     } catch (error) {
       const err = error as { response?: { status?: number; headers?: unknown } } | undefined;
       const status = err?.response?.status;
 
       if (status === 401) {
-        return { exitosos, fallidos, detenidoPor401: true, modulosSincronizados };
+        return { exitosos, fallidos, detenidoPor401: true, modulosSincronizados, notificacionesExito };
       }
 
       // 429 (Too Many Requests) es transitorio por definición — el servidor
@@ -285,5 +294,5 @@ export async function sincronizarOutbox(): Promise<ResultadoSincronizacion> {
     }
   }
 
-  return { exitosos, fallidos, detenidoPor401: false, modulosSincronizados };
+  return { exitosos, fallidos, detenidoPor401: false, modulosSincronizados, notificacionesExito };
 }

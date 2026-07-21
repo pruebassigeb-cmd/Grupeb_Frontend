@@ -35,6 +35,25 @@ interface ProductoPapelListItemEx extends ProductoPapelListItem {
   primer_calibre?: string;
   primer_pliego?: string;
   archivos_preview?: ArchivoPreview[];
+  costo_base_grupo1?: number | string | null;
+}
+
+// Formatea un valor numérico (o string numérico) como moneda MXN.
+// decimales=4 se usa para costo de laminado (valores muy chicos, ej.
+// $5.3131) y decimales=2 para costo base (precio_sugerido normal).
+function formatoMXN(
+  val: number | string | null | undefined,
+  decimales: 2 | 4 = 2
+): string {
+  if (val === null || val === undefined || val === "") return "—";
+  const num = typeof val === "string" ? parseFloat(val) : val;
+  if (Number.isNaN(num)) return "—";
+  return num.toLocaleString("es-MX", {
+    style: "currency",
+    currency: "MXN",
+    minimumFractionDigits: decimales,
+    maximumFractionDigits: decimales,
+  });
 }
 
 const ICON_PDF = "\uD83D\uDCC4";
@@ -369,7 +388,7 @@ function TablaCatalogo({ productos, loading, onNuevo, onEditar, onEliminar }: {
   // La última columna debe tener ancho fijo. Con "auto", el encabezado la
   // calculaba en 0 px (está vacío), mientras cada fila la hacía crecer por
   // los botones; eso cambiaba el ancho de todas las columnas anteriores.
-  const COLS = "1.2fr 1fr 0.8fr 1fr 0.7fr 0.75fr 0.9fr 140px 140px";
+  const COLS = "1.1fr 0.85fr 0.65fr 0.65fr 0.85fr 0.55fr 0.6fr 0.8fr 0.8fr 0.75fr 130px 130px";
 
   // El formato de "medida" trae varios números seguidos (p. ej. "A+BxC",
   // "AxB", etc). Para ordenar hay que compararlos como se compara texto
@@ -407,7 +426,8 @@ function TablaCatalogo({ productos, loading, onNuevo, onEditar, onEliminar }: {
       p.tipo_producto.toLowerCase().includes(search.toLowerCase()) ||
       (p.medida ?? "").toLowerCase().includes(search.toLowerCase()) ||
       ((p as any).descripcion_papel ?? "").toLowerCase().includes(search.toLowerCase()) ||
-      (p.primer_tipo_papel ?? "").toLowerCase().includes(search.toLowerCase())
+      (p.primer_tipo_papel ?? "").toLowerCase().includes(search.toLowerCase()) ||
+      (p.tamano_prod_nombre ?? "").toLowerCase().includes(search.toLowerCase())
     )
     .sort((a, b) => {
       if (!ordenMedida) return 0;
@@ -458,7 +478,7 @@ function TablaCatalogo({ productos, loading, onNuevo, onEditar, onEliminar }: {
           <div style={{ position: "relative", flex: 1 }}>
             <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", fontSize: 13, color: "#9CA3AF" }}>&#128269;</span>
             <input type="text" value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="Buscar por tipo, descripción o material..."
+              placeholder="Buscar por tipo, descripción, material o tamaño..."
               style={{ width: "100%", height: 36, paddingLeft: 32, paddingRight: 12, border: "1px solid #D1D5DB", borderRadius: 7, fontSize: 12, color: "#111827", background: "#fff", outline: "none", boxSizing: "border-box" }} />
           </div>
 
@@ -488,8 +508,8 @@ function TablaCatalogo({ productos, loading, onNuevo, onEditar, onEliminar }: {
 
       <div style={{ border: "1px solid #E5E7EB", borderRadius: 9, overflow: "hidden" }}>
         <div style={{ display: "grid", gridTemplateColumns: COLS, background: "#F9FAFB", borderBottom: "1px solid #E5E7EB", padding: "0 16px" }}>
-          {["Tipo de producto", "Descripción", "Medida", "Tipo de papel", "Gramaje", "Pliego", "Creado por", "Archivos", ""].map((h, i) => {
-            const centrada = [2, 4, 5, 6, 7].includes(i);
+          {["Tipo de producto", "Descripción", "Medida", "Tamaño", "Tipo de papel", "Gramaje", "Pliego", "Costo base", "Costo laminado", "Creado por", "Archivos", ""].map((h, i) => {
+            const centrada = [2, 3, 5, 6, 7, 8, 9, 10].includes(i);
             return (
               <div
                 key={`${h}-${i}`}
@@ -500,7 +520,7 @@ function TablaCatalogo({ productos, loading, onNuevo, onEditar, onEliminar }: {
                   letterSpacing: "0.08em",
                   textTransform: "uppercase",
                   color: "#6B7280",
-                  textAlign: centrada ? "center" : i === 8 ? "right" : "left",
+                  textAlign: centrada ? "center" : i === 11 ? "right" : "left",
                 }}
               >
                 {h}
@@ -538,6 +558,7 @@ function TablaCatalogo({ productos, loading, onNuevo, onEditar, onEliminar }: {
                 </div>
                 <span style={{ fontSize: 12, color: "#374151", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", paddingRight: 6 }}>{(p as any).descripcion_papel || "—"}</span>
                 <span style={{ fontSize: 12, color: "#374151", textAlign: "center" }}>{p.medida || "—"}</span>
+                <span style={{ fontSize: 12, color: "#374151", textAlign: "center", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{px.tamano_prod_nombre || "—"}</span>
                 <span style={{ fontSize: 12, color: "#374151", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", paddingRight: 6 }}>{px.primer_tipo_papel || "—"}</span>
                 <span style={{ textAlign: "center" }}>
                   {px.primer_calibre
@@ -546,6 +567,8 @@ function TablaCatalogo({ productos, loading, onNuevo, onEditar, onEliminar }: {
                   }
                 </span>
                 <span style={{ fontSize: 12, color: "#374151", textAlign: "center" }}>{px.primer_pliego || "—"}</span>
+                <span style={{ fontSize: 12, color: "#374151", textAlign: "center", whiteSpace: "nowrap" }}>{formatoMXN(px.costo_base_grupo1, 2)}</span>
+                <span style={{ fontSize: 12, color: "#374151", textAlign: "center", whiteSpace: "nowrap" }}>{formatoMXN(px.costo_laminado, 4)}</span>
                 <span style={{ fontSize: 12, color: "#374151", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textAlign: "center" }}>{p.creado_por || "—"}</span>
                 <ArchivosMini archivos={px.archivos_preview} />
                 <div style={{ display: "flex", width: "100%", gap: 5, alignItems: "center", justifyContent: "flex-end" }} onClick={e => e.stopPropagation()}>

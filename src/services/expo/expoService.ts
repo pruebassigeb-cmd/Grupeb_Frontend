@@ -233,7 +233,8 @@ export const crearProductoCatalogo = async (payload: Omit<ProductoCatalogoExpo, 
       const { data } = await api.post("/expo/catalogo", payload);
       return data.producto;
     },
-    "expo"
+    "expo",
+    `Se creó el producto "${payload.nombre}" en el catálogo Expo.`
   );
 };
 
@@ -247,13 +248,15 @@ export const actualizarProductoCatalogo = async (id: number, payload: Omit<Produ
       const { data } = await api.put(`/expo/catalogo/${id}`, payload);
       return data.producto;
     },
-    "expo"
+    "expo",
+    `Se actualizó el producto "${payload.nombre}" del catálogo Expo.`
   );
 };
 
 export const eliminarProductoCatalogo = async (
   id: number,
-  categoria: "papel" | "plastico" | "carton"
+  categoria: "papel" | "plastico" | "carton",
+  nombre?: string
 ): Promise<void> => {
   // La categoría se manda como query string (en vez de `params` de axios)
   // para que la misma URL sirva tal cual al reproducir la entrada genérica
@@ -267,7 +270,8 @@ export const eliminarProductoCatalogo = async (
     async () => {
       await api.delete(url);
     },
-    "expo"
+    "expo",
+    nombre ? `Se eliminó el producto "${nombre}" del catálogo Expo.` : "Se eliminó un producto del catálogo Expo."
   );
 };
 
@@ -307,7 +311,8 @@ export const crearClienteExpo = async (clienteData: ClienteExpo): Promise<{ id: 
       const { data } = await api.post("/expo/clientes", payload);
       return data.cliente;
     },
-    "expo"
+    "expo",
+    `Se registró el prospecto "${clienteData.nombre}".`
   );
 };
 
@@ -337,11 +342,12 @@ export const actualizarClienteExpo = async (id: number, clienteData: ClienteExpo
     async () => {
       await api.put(`/expo/clientes/${id}`, payload);
     },
-    "expo"
+    "expo",
+    `Se actualizaron los datos de "${clienteData.nombre}".`
   );
 };
 
-export const eliminarClienteExpo = async (id: number): Promise<void> => {
+export const eliminarClienteExpo = async (id: number, nombre?: string): Promise<void> => {
   return ejecutarOEncolar(
     "delete",
     `/expo/clientes/${id}`,
@@ -350,7 +356,8 @@ export const eliminarClienteExpo = async (id: number): Promise<void> => {
     async () => {
       await api.delete(`/expo/clientes/${id}`);
     },
-    "expo"
+    "expo",
+    nombre ? `Se eliminó al prospecto "${nombre}".` : "Se eliminó un prospecto."
   );
 };
 
@@ -377,7 +384,8 @@ export const aprobarCotizacionExpo = async (
       const { data } = await api.patch(`/expo/cotizaciones/${folio}/aprobar`, payload);
       return data;
     },
-    "expo"
+    "expo",
+    `Se aprobó la cotización ${folio} y se generó el pedido.`
   );
 };
 
@@ -390,7 +398,8 @@ export const eliminarCotizacionExpo = async (folio: string): Promise<void> => {
     async () => {
       await api.delete(`/expo/cotizaciones/${folio}`);
     },
-    "expo"
+    "expo",
+    `Se eliminó la cotización ${folio}.`
   );
 };
 
@@ -398,7 +407,7 @@ export const crearCotizacionExpo = async (payload: {
   clienteId:    number;
   productos:    any[];
   comentarios?: string;
-}): Promise<{ no_cotizacion: string; idsolicitud: number }> => {
+}, nombreCliente?: string): Promise<{ no_cotizacion: string; idsolicitud: number }> => {
   return ejecutarOEncolar(
     "post",
     "/expo/cotizaciones",
@@ -408,7 +417,8 @@ export const crearCotizacionExpo = async (payload: {
       const { data } = await api.post("/expo/cotizaciones", payload);
       return data;
     },
-    "expo"
+    "expo",
+    nombreCliente ? `Se generó la cotización para "${nombreCliente}".` : "Se generó la cotización."
   );
 };
 
