@@ -418,12 +418,12 @@ const COLUMNAS_PAPEL = PROCESOS_PAPEL.map(({ encabezado }) => encabezado);
 
 const COLUMNAS = [
   "Fecha", "N° Pedido", "Impresion + Info", "Tipo",
-  "Anticipo", "OD", "Diseno", "Orden",
+  "Anticipo", "OD", "Diseno", "Orden", "Días",
   "Ext", "Imp", "Bol", "Asa", ...COLUMNAS_PAPEL,
   "E. Cta", "Pago", "Envio",
 ];
 const COLS_CENTRADAS = new Set([
-  "Impresion + Info", "Tipo", "Anticipo", "OD", "Diseno", "Orden",
+  "Impresion + Info", "Tipo", "Anticipo", "OD", "Diseno", "Orden", "Días",
   "Ext", "Imp", "Bol", "Asa", ...COLUMNAS_PAPEL,
   "E. Cta", "Pago", "Envio",
 ]);
@@ -446,6 +446,52 @@ const fechaProcesoPapel = (proceso?: ProcesoRegistroPapel): string | null => {
     avances[avances.length - 1]?.fecha_registro ??
     null;
 };
+
+// ─────────────────────────────────────────────
+// Contador de días hábiles desde que se habilita la orden
+// (anticipo cubierto + diseño aprobado ⇒ se crea la orden_produccion)
+// ─────────────────────────────────────────────
+const contarDiasHabiles = (desde: Date, hasta: Date): number => {
+  // Normaliza a medianoche para no arrastrar horas/minutos
+  const inicio = new Date(desde.getFullYear(), desde.getMonth(), desde.getDate());
+  const fin = new Date(hasta.getFullYear(), hasta.getMonth(), hasta.getDate());
+  if (fin <= inicio) return 0;
+
+  let dias = 0;
+  const cursor = new Date(inicio);
+  while (cursor < fin) {
+    cursor.setDate(cursor.getDate() + 1);
+    const diaSemana = cursor.getDay(); // 0 = domingo, 6 = sábado
+    if (diaSemana !== 0 && diaSemana !== 6) dias++;
+  }
+  return dias;
+};
+
+function ContadorDiasHabiles({ pedido }: { pedido: PedidoSeguimiento }) {
+  const fechaInicio = pedido.fecha_habilitacion_orden;
+
+  // Solo cuenta si la orden ya está habilitada (anticipo + diseño aprobados)
+  if (!pedido.no_produccion || !fechaInicio) {
+    return <span className="text-xs text-gray-300">—</span>;
+  }
+
+  const dias = contarDiasHabiles(new Date(fechaInicio), new Date());
+
+  const estilos = dias <= 15
+    ? "bg-green-100 text-green-700 border border-green-300"
+    : dias <= 25
+      ? "bg-yellow-100 text-yellow-700 border border-yellow-300"
+      : "bg-red-100 text-red-700 border border-red-300";
+
+  return (
+    <span
+      title={`Días hábiles desde que se habilitó la orden (${new Date(fechaInicio).toLocaleDateString("es-MX")})`}
+      className={`inline-flex items-center justify-center min-w-[2rem] px-1.5 py-0.5 rounded text-xs font-semibold ${estilos}`}
+    >
+      {dias}
+    </span>
+  );
+}
 
 const renderThead = (oscuro = false) => (
   <thead className={oscuro ? "bg-gray-900 text-white" : "bg-gray-100 border-b border-gray-200"}>
@@ -717,6 +763,8 @@ export default function Seguimiento() {
         </td>
 
         <td className={`${px} text-center`}><RenderOrdenProduccion pedido={pedido} /></td>
+
+        <td className={`${px} text-center`}><ContadorDiasHabiles pedido={pedido} /></td>
 
         <td className={`${px} text-center`}>
           <Badge estado={extEstado} fechaEstado={pedido.extrusion_fecha_estado}

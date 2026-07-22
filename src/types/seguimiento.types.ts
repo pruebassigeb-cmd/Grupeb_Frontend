@@ -28,6 +28,7 @@ export interface PedidoSeguimientoBase {
   diseno_aprobado: boolean;
   no_produccion: string | null;
   idproduccion: number | null;
+  fecha_habilitacion_orden: string | null;
   puede_pdf: boolean;
 
   extrusion_estado: EstadoSeguimiento;

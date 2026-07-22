@@ -8,8 +8,6 @@
  * navegador dejó pasar la notificación — el sistema operativo puede seguir
  * silenciándola (Windows: Configuración > Sistema > Notificaciones, o Enfoque
  * asistido/Do Not Disturb) sin que `showNotification()` lance ningún error.
- * Si `probarNotificacion()` tampoco se ve, el problema está ahí, no en el
- * código — usar `notificarPrueba()` desde `NotificationOptIn` para aislarlo.
  */
 async function mostrarNotificacionLocal(
   titulo: string,
@@ -35,14 +33,6 @@ export async function notificarSincronizacionExpo(): Promise<void> {
   } catch (e) {
     console.error("No se pudo mostrar la notificación de sincronización de Expo:", e);
   }
-}
-
-/** Notificación de prueba — para confirmar que el navegador/SO sí las deja mostrar, sin depender de sincronizar nada. */
-export async function notificarPrueba(): Promise<void> {
-  await mostrarNotificacionLocal("Notificaciones activadas ✅", {
-    body: "Así se van a ver los avisos de Expo cuando algo se sincronice sin conexión.",
-    tag: "expo-notificacion-prueba",
-  });
 }
 
 /**
