@@ -40,6 +40,7 @@ import api from "../services/api";
 interface DetalleEdit {
   iddetalle: number | null;
   cantidad: string;
+  precio_unitario: string;
   precio_total: string;
   modo_cantidad: "unidad";
 }
@@ -335,6 +336,14 @@ function ProductoPapelEditable({
   const subtotal =
     prod.detalles.reduce((s, d) => s + parseSafe(d.precio_total), 0)
     + parseSafe(prod.herramental_precio);
+
+  const recalcularTotal = (di: number, cantidad: string, precioUnit: string) => {
+    const c = parseSafe(cantidad);
+    const pu = parseSafe(precioUnit);
+    if (c > 0 && pu > 0) {
+      onDetalleChange(pi, di, "precio_total", (Math.round(c * pu * 100) / 100).toFixed(2));
+    }
+  };
 
   const pantonesArr = prod.pantones ? prod.pantones.split(",").map((s: string) => s.trim()) : [];
   const pantonesDentroArr = prod.pantonesDentro ? prod.pantonesDentro.split(",").map((s: string) => s.trim()) : [];
@@ -697,19 +706,38 @@ function ProductoPapelEditable({
                   <div className="flex-1">
                     <label className="block text-xs text-gray-400 mb-1">Cantidad (pzas)</label>
                     <input type="text" inputMode="numeric" value={det.cantidad}
-                      onChange={e => { if (esEntero(e.target.value)) onDetalleChange(pi, di, "cantidad", e.target.value); }}
+                      onChange={e => {
+                        if (!esEntero(e.target.value)) return;
+                        onDetalleChange(pi, di, "cantidad", e.target.value);
+                        recalcularTotal(di, e.target.value, det.precio_unitario);
+                      }}
                       placeholder="0"
                       className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-amber-400" />
                   </div>
                   <div className="flex-1">
-                    <label className="block text-xs text-gray-400 mb-1">Precio total</label>
+                    <label className="block text-xs text-gray-400 mb-1">Precio/pieza</label>
                     <div className="relative">
                       <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs">$</span>
-                      <input type="text" inputMode="decimal" value={det.precio_total}
-                        onChange={e => { if (esDecimal(e.target.value)) onDetalleChange(pi, di, "precio_total", e.target.value); }}
-                        placeholder="0.00"
+                      <input type="text" inputMode="decimal" value={det.precio_unitario}
+                        onChange={e => {
+                          if (!esDecimal(e.target.value)) return;
+                          onDetalleChange(pi, di, "precio_unitario", e.target.value);
+                          recalcularTotal(di, det.cantidad, e.target.value);
+                        }}
+                        placeholder="0.0000"
                         className="w-full pl-6 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-amber-400" />
                     </div>
+                  </div>
+                  <div className="flex-1">
+                    <label className="block text-xs text-gray-400 mb-1">Total</label>
+                    <div className="relative">
+                      <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs">$</span>
+                      <input type="text" readOnly
+                        value={parseSafe(det.precio_total) > 0 ? parseSafe(det.precio_total).toFixed(2) : ""}
+                        placeholder="—"
+                        className="w-full pl-6 py-2 border border-gray-100 rounded-lg text-sm text-gray-500 bg-gray-50 cursor-not-allowed" />
+                    </div>
+                    <p className="mt-0.5 text-xs text-gray-400">Calculado</p>
                   </div>
                   <div className="flex-shrink-0 flex items-start mt-5">
                     {prod.detalles.length > 1 && (
@@ -862,12 +890,23 @@ export default function EditarCotizacionPapelCompleta() {
               herramental_descripcion: p.herramental_descripcion ?? "",
               herramental_precio: p.herramental_precio != null ? String(p.herramental_precio) : "",
 
-              detalles: (p.detalles || []).map((d: any) => ({
-                iddetalle: d.iddetalle ?? null,
-                cantidad: String(d.cantidad ?? ""),
-                precio_total: String(d.precio_total ?? ""),
-                modo_cantidad: "unidad" as const,
-              })),
+              detalles: (p.detalles || []).map((d: any) => {
+                // Si la fila es de antes de que se guardara precio_unitario por
+                // separado, se deriva de precio_total/cantidad para no dejar
+                // el campo en blanco (mejor una aproximación que nada).
+                const precioUnit = d.precio_unitario != null
+                  ? String(d.precio_unitario)
+                  : (Number(d.cantidad) > 0 && Number(d.precio_total) > 0
+                    ? String(Math.round((Number(d.precio_total) / Number(d.cantidad)) * 10000) / 10000)
+                    : "");
+                return {
+                  iddetalle: d.iddetalle ?? null,
+                  cantidad: String(d.cantidad ?? ""),
+                  precio_unitario: precioUnit,
+                  precio_total: String(d.precio_total ?? ""),
+                  modo_cantidad: "unidad" as const,
+                };
+              }),
             };
           })
         );
@@ -893,7 +932,7 @@ export default function EditarCotizacionPapelCompleta() {
 
   const onAgregarDetalle = (pi: number) =>
     setProductos(prev => prev.map((p, i) => i !== pi ? p : {
-      ...p, detalles: [...p.detalles, { iddetalle: null, cantidad: "", precio_total: "", modo_cantidad: "unidad" as const }],
+      ...p, detalles: [...p.detalles, { iddetalle: null, cantidad: "", precio_unitario: "", precio_total: "", modo_cantidad: "unidad" as const }],
     }));
 
   const onEliminarDetalle = (pi: number, di: number) =>
@@ -954,7 +993,7 @@ export default function EditarCotizacionPapelCompleta() {
           id_asa: null, idcat_laminado: null, idfoil: null, idcat_textura: null,
           uv: false, alto_relieve: false,
           pantones: "", pantonesDentro: "",
-          detalles: p.detalles.map(d => ({ ...d, precio_total: "" })),
+          detalles: p.detalles.map(d => ({ ...d, precio_unitario: "", precio_total: "" })),
         };
       }));
     } catch { /* mantener producto anterior */ }
@@ -1015,7 +1054,7 @@ export default function EditarCotizacionPapelCompleta() {
       herramental_descripcion: "",
       herramental_precio: "",
 
-      detalles: [{ iddetalle: null, cantidad: "", precio_total: "", modo_cantidad: "unidad" as const }],
+      detalles: [{ iddetalle: null, cantidad: "", precio_unitario: "", precio_total: "", modo_cantidad: "unidad" as const }],
     };
   };
 
@@ -1170,6 +1209,7 @@ export default function EditarCotizacionPapelCompleta() {
             iddetalle: d.iddetalle,
             cantidad: parseSafe(d.cantidad),
             precio_total: parseSafe(d.precio_total),
+            precio_unitario: parseSafe(d.precio_unitario) || null,
             kilogramos: null,
             modo_cantidad: "unidad" as const,
           })),
@@ -1202,6 +1242,7 @@ export default function EditarCotizacionPapelCompleta() {
           detalles: p.detalles.map(d => ({
             cantidad: parseSafe(d.cantidad),
             precio_total: parseSafe(d.precio_total),
+            precio_unitario: parseSafe(d.precio_unitario) || null,
             kilogramos: null,
             modo_cantidad: "unidad" as const,
           })),

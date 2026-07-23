@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import Dashboard from "../layouts/Sidebar";
-import SelectorProducto from "../components/ConfigurarProducto";
+import SelectorProducto, { esTipoSinCalculoPrecio } from "../components/ConfigurarProducto";
 import ArchivosProductoPlastico from "../components/plastico/ArchivosProductoPlastico";
 import { useCatalogosPlastico } from "../hooks/plastico/useCatalogosPlastico";
 import { useProductosPlastico } from "../hooks/plastico/useProductosPlastico";
@@ -291,14 +291,20 @@ function FormularioProductoPlastico({
     datosProducto.tipoProducto === "Bolsa celofán" &&
     datosProducto.material.toUpperCase() === "BOPP";
 
+  // Bobina / Rollo perforado: se venden por pieza, no calculan "bolsas por
+  // kilo" ni exigen ambas medidas (altura y ancho) — basta con una.
+  const esVentaPorPieza = esTipoSinCalculoPrecio(datosProducto.tipoProducto);
+
   const resultadoCelofan =
     esCelofanBopp && datosProducto.gramos
       ? calcularCelofanBopp(datosProducto, datosProducto.gramos)
       : null;
 
-  const bolsasPorKilo = esCelofanBopp
-    ? resultadoCelofan?.bolsasPorKilo.toFixed(3) ?? ""
-    : calcularPorKiloStr(datosProducto, catalogos.materiales);
+  const bolsasPorKilo = esVentaPorPieza
+    ? ""
+    : esCelofanBopp
+      ? resultadoCelofan?.bolsasPorKilo.toFixed(3) ?? ""
+      : calcularPorKiloStr(datosProducto, catalogos.materiales);
 
   const pesoPorBolsa = resultadoCelofan?.pesoPorBolsa ?? null;
 
@@ -312,11 +318,16 @@ function FormularioProductoPlastico({
       showAlert("Por favor completa todos los campos requeridos");
       return;
     }
-    if (!bolsasPorKilo) {
+    if (!esVentaPorPieza && !bolsasPorKilo) {
       showAlert("No se pudo calcular las bolsas por kilo");
       return;
     }
-    if (!datosProducto.medidas.altura || !datosProducto.medidas.ancho) {
+    if (esVentaPorPieza) {
+      if (!datosProducto.medidas.altura && !datosProducto.medidas.ancho) {
+        showAlert("Ingresa al menos una medida (Altura o Ancho)");
+        return;
+      }
+    } else if (!datosProducto.medidas.altura || !datosProducto.medidas.ancho) {
       showAlert("Altura y Ancho son obligatorios");
       return;
     }
@@ -327,14 +338,14 @@ function FormularioProductoPlastico({
       tipo_producto_plastico_id: datosProducto.tipoProductoId,
       material_plastico_id: datosProducto.materialId,
       calibre_id: datosProducto.calibreId,
-      altura: parseFloat(datosProducto.medidas.altura),
-      ancho: parseFloat(datosProducto.medidas.ancho),
+      altura: datosProducto.medidas.altura ? parseFloat(datosProducto.medidas.altura) : 0,
+      ancho: datosProducto.medidas.ancho ? parseFloat(datosProducto.medidas.ancho) : 0,
       fuelle_fondo: datosProducto.medidas.fuelleFondo ? parseFloat(datosProducto.medidas.fuelleFondo) : 0,
       fuelle_latIz: datosProducto.medidas.fuelleLateral1 ? parseFloat(datosProducto.medidas.fuelleLateral1) : 0,
       fuelle_latDe: datosProducto.medidas.fuelleLateral2 ? parseFloat(datosProducto.medidas.fuelleLateral2) : 0,
       refuerzo: datosProducto.medidas.refuerzo ? parseFloat(datosProducto.medidas.refuerzo) : 0,
       medida: datosProducto.medidasFormateadas,
-      por_kilo: parseFloat(bolsasPorKilo),
+      por_kilo: esVentaPorPieza ? 1 : parseFloat(bolsasPorKilo),
       descripcion: datosProducto.descripcion?.trim() || undefined,
     };
 
@@ -403,7 +414,11 @@ function FormularioProductoPlastico({
           <div className="grid grid-cols-2 gap-4 mt-6">
             <div>
               <label className="block text-sm font-semibold mb-2 text-gray-700">Bolsas por kilo</label>
-              <input value={bolsasPorKilo ? formatNumero(bolsasPorKilo) : "--"} readOnly disabled className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-700 font-medium bg-gray-50 cursor-default" />
+              <input
+                value={esVentaPorPieza ? "No aplica — se vende por pieza" : bolsasPorKilo ? formatNumero(bolsasPorKilo) : "--"}
+                readOnly disabled
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-700 font-medium bg-gray-50 cursor-default"
+              />
             </div>
             {esCelofanBopp && pesoPorBolsa && (
               <div>
@@ -427,9 +442,9 @@ function FormularioProductoPlastico({
           <div className="mt-6 flex justify-end">
             <button
               onClick={handleGuardar}
-              disabled={saving || !bolsasPorKilo}
+              disabled={saving || (!esVentaPorPieza && !bolsasPorKilo)}
               className={`px-6 py-3 rounded-lg font-semibold text-white transition-colors ${
-                saving || !bolsasPorKilo ? "bg-gray-400 cursor-not-allowed" : "bg-green-600 hover:bg-green-700"
+                saving || (!esVentaPorPieza && !bolsasPorKilo) ? "bg-gray-400 cursor-not-allowed" : "bg-green-600 hover:bg-green-700"
               }`}
             >
               {saving ? "Guardando..." : isEdit ? "Guardar cambios" : "Guardar Producto"}
@@ -443,6 +458,7 @@ function FormularioProductoPlastico({
           onPendientesChange={setPendientes}
         />
 
+        {!esVentaPorPieza && (
         <div className="bg-white p-6 rounded-xl shadow">
           <h2 className="text-lg font-bold mb-1">Tabla de producción por kilogramos</h2>
           <p className="text-xs text-gray-400 mb-4">
@@ -500,6 +516,7 @@ function FormularioProductoPlastico({
             </div>
           </div>
         </div>
+        )}
       </div>
     </div>
   );

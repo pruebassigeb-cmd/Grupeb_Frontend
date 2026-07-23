@@ -11,6 +11,7 @@ import type {
   BultoPedido,
   Envio,
   CreateEnvioRequest,
+  MarcarEnvioCompletadoRequest,
   BitacoraRegistro,
   UpdateBitacoraRequest,
   EnvioPaqueteria,
@@ -113,6 +114,15 @@ export const getEnviosPedido = async (
 };
 export const createEnvio = async (data: CreateEnvioRequest): Promise<void> => {
   await api.post("/envios", data);
+};
+export const marcarEnvioCompletado = async (
+  data: MarcarEnvioCompletadoRequest,
+): Promise<{ idenvio: number }> => {
+  const res = await api.post<{ envio: { idenvio: number } }>(
+    "/envios/marcar-completado",
+    data,
+  );
+  return { idenvio: res.data.envio.idenvio };
 };
 export const updateEstadoEnvio = async (
   id: number,

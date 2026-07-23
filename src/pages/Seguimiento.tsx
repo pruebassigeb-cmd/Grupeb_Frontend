@@ -664,7 +664,7 @@ export default function Seguimiento() {
     const impEstado = tieneOrden && !esPapel ? pedido.impresion_estado : "no-aplica";
     const bolEstado = tieneOrden && !esPapel ? pedido.bolseo_estado : "no-aplica";
     const asaEstado = tieneOrden && !esPapel ? pedido.asa_flexible_estado : "no-aplica";
-    const estadoEnvio = tieneOrden ? "pendiente" : "no-aplica";
+    const estadoEnvio = tieneOrden ? ((pedido as any).estado_envio ?? "pendiente") : "no-aplica";
 
     const odEstadoRaw = (pedido as any).od_estado as string | null;
     const odId = (pedido as any).idorden_diseno as number | null;

@@ -6,13 +6,25 @@ import {
   deleteEnvio,
   agregarAlCarrito,
   getOrCreateNotaRemision,
+  marcarEnvioCompletado,
+  getConductores,
+  getUnidades,
+  getPaqueterias,
 } from "../../services/enviosService";
-import type { BultoPedido, Envio } from "../../types/envios.types";
+import { getFotosEnvio, type Archivo } from "../../services/archivos.service";
+import type {
+  BultoPedido,
+  Envio,
+  Conductor,
+  Unidad,
+  Paqueteria,
+} from "../../types/envios.types";
 import type { PedidoSeguimiento } from "../../types/seguimiento.types";
 import FormularioEnvioIndividual from "./FormularioEnvioIndividual";
 import { generarNotaRemision } from "../../utils/generarNotaRemision";
 import { showAlert } from "../CustomAlert";
 import { showConfirm } from "../CustomConfirm";
+import { inputClass, labelClass } from "./../enviosConstants";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TIPOS LOCALES
@@ -58,6 +70,136 @@ const ESTADO_BULTO_LABEL: Record<string, string> = {
   entregado:  "Entregado",
 };
 
+const fmtFechaHora = (v?: string | null) =>
+  v ? new Date(v).toLocaleString("es-MX", { dateStyle: "medium", timeStyle: "short" }) : "—";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SUBCOMPONENTE — DETALLE COMPLETO (desglosable)
+// ─────────────────────────────────────────────────────────────────────────────
+function DetalleCompletoEnvio({ envio }: { envio: EnvioDetallado }) {
+  const [expandido, setExpandido] = useState(false);
+  const [fotos, setFotos] = useState<Archivo[] | null>(null);
+  const [cargandoFotos, setCargandoFotos] = useState(false);
+
+  const toggle = async () => {
+    const next = !expandido;
+    setExpandido(next);
+    if (next && fotos === null) {
+      setCargandoFotos(true);
+      try {
+        const f = await getFotosEnvio(envio.idenvio);
+        setFotos(f);
+      } catch {
+        setFotos([]);
+      } finally {
+        setCargandoFotos(false);
+      }
+    }
+  };
+
+  return (
+    <div className="border-t border-gray-100">
+      <button
+        type="button"
+        onClick={toggle}
+        className="w-full flex items-center justify-between px-4 py-2 text-xs font-medium text-gray-500 hover:text-gray-700 hover:bg-gray-50 transition-colors">
+        <span>{expandido ? "▲" : "▼"} Ver detalle completo del envío</span>
+      </button>
+
+      {expandido && (
+        <div className="px-4 pb-4 space-y-3 text-xs">
+          {envio.es_atajo ? (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-amber-700">
+              ⚡ Marcado como envío completado directamente el <strong>{fmtFechaHora(envio.fecha_envio)}</strong>.
+              No se registró el proceso completo (salida / entrega / firma).
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <p className="text-gray-400 uppercase tracking-wide font-semibold">Salida</p>
+                  <p className="text-gray-700">{fmtFechaHora(envio.hora_salida)}</p>
+                </div>
+                <div>
+                  <p className="text-gray-400 uppercase tracking-wide font-semibold">Llegada / Entrega</p>
+                  <p className="text-gray-700">{fmtFechaHora(envio.hora_llegada)}</p>
+                </div>
+              </div>
+
+              {envio.tipo === "local" && (
+                <div>
+                  <p className="text-gray-400 uppercase tracking-wide font-semibold">Recibió / Firma</p>
+                  <p className="text-gray-700">{envio.firma || "—"}</p>
+                </div>
+              )}
+
+              {envio.tipo === "recoleccion" && envio.recoleccion_datos && (
+                <div>
+                  <p className="text-gray-400 uppercase tracking-wide font-semibold">Quién recogió</p>
+                  <p className="text-gray-700">
+                    {envio.recoleccion_datos.nombre_quien_recogio}
+                    {envio.recoleccion_datos.empresa && ` · ${envio.recoleccion_datos.empresa}`}
+                  </p>
+                  {(envio.recoleccion_datos.unidad_marca || envio.recoleccion_datos.unidad_placas) && (
+                    <p className="text-gray-500">
+                      {[envio.recoleccion_datos.unidad_marca, envio.recoleccion_datos.unidad_modelo, envio.recoleccion_datos.unidad_placas]
+                        .filter(Boolean).join(" ")}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {envio.observacion && (
+                <div>
+                  <p className="text-gray-400 uppercase tracking-wide font-semibold">Observación de entrega</p>
+                  <p className="text-gray-700">{envio.observacion}</p>
+                </div>
+              )}
+
+              {envio.observacion_extra && (
+                <div>
+                  <p className="text-gray-400 uppercase tracking-wide font-semibold">Notas</p>
+                  <p className="text-gray-700">{envio.observacion_extra}</p>
+                </div>
+              )}
+            </>
+          )}
+
+          {envio.observaciones && (
+            <div>
+              <p className="text-gray-400 uppercase tracking-wide font-semibold">Observaciones del envío</p>
+              <p className="text-gray-700">{envio.observaciones}</p>
+            </div>
+          )}
+
+          {envio.nota_remision && (
+            <div>
+              <p className="text-gray-400 uppercase tracking-wide font-semibold">Nota de remisión</p>
+              <p className="text-blue-600 font-medium">{envio.nota_remision.no_nota}</p>
+            </div>
+          )}
+
+          <div>
+            <p className="text-gray-400 uppercase tracking-wide font-semibold mb-1">Fotos</p>
+            {cargandoFotos ? (
+              <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+            ) : fotos && fotos.length > 0 ? (
+              <div className="flex gap-2 flex-wrap">
+                {fotos.map(f => (
+                  <img key={f.id_archivo} src={f.url} alt="Foto de entrega"
+                    className="w-16 h-16 object-cover rounded-lg border border-gray-200" />
+                ))}
+              </div>
+            ) : (
+              <p className="text-gray-400 italic">Sin fotos registradas.</p>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // SUBCOMPONENTE — TARJETA DE ENVÍO
 // ─────────────────────────────────────────────────────────────────────────────
@@ -96,10 +238,18 @@ function TarjetaEnvio({
             {envio.es_parcialidad ? "Parcialidad" : "Completo"}
           </span>
 
+          {envio.es_atajo && (
+            <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
+              ⚡ Atajo
+            </span>
+          )}
+
           <span className="text-xs text-gray-500">
             {envio.tipo === "local"
               ? `${envio.chofer?.nombre ?? "—"}  ·  ${envio.unidad?.nombre ?? "—"}`
-              : `${envio.paqueteria?.nombre ?? "—"}${envio.numero_guia ? `  ·  Guía: ${envio.numero_guia}` : ""}`
+              : envio.tipo === "paqueteria"
+                ? `${envio.paqueteria?.nombre ?? "—"}${envio.numero_guia ? `  ·  Guía: ${envio.numero_guia}` : ""}`
+                : `${envio.recoleccion_datos?.nombre_quien_recogio ?? "Recolección en planta"}`
             }
           </span>
 
@@ -177,6 +327,9 @@ function TarjetaEnvio({
           No se encontraron bultos asociados a este envío para esta orden.
         </p>
       )}
+
+      {/* ── Desglosable de detalle completo ── */}
+      <DetalleCompletoEnvio envio={envio} />
     </div>
   );
 }
@@ -324,6 +477,179 @@ function TablaBultosPendientes({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// SUBCOMPONENTE — MODAL "MARCAR ENVÍO COMPLETADO" (atajo)
+// ─────────────────────────────────────────────────────────────────────────────
+function FormularioMarcarCompletado({
+  idsolicitud,
+  idproduccion,
+  onSuccess,
+  onCancel,
+}: {
+  idsolicitud: number;
+  idproduccion: number;
+  onSuccess: () => Promise<void> | void;
+  onCancel: () => void;
+}) {
+  const [tipo, setTipo] = useState<"local" | "paqueteria" | "recoleccion">("local");
+  const [conductores, setConductores] = useState<Conductor[]>([]);
+  const [unidades, setUnidades] = useState<Unidad[]>([]);
+  const [paqueterias, setPaqueterias] = useState<Paqueteria[]>([]);
+  const [cargandoCatalogos, setCargandoCatalogos] = useState(true);
+  const [guardando, setGuardando] = useState(false);
+
+  const [form, setForm] = useState({
+    usuarios_idusuario:      0,
+    unidades_idunidad:       0,
+    paqueteria_idpaqueteria: 0,
+    numero_guia:             "",
+    costo_flete:             "",
+    observaciones:           "",
+    nombre_quien_recogio:    "",
+  });
+
+  useEffect(() => {
+    const cargar = async () => {
+      try {
+        const [c, u, p] = await Promise.all([getConductores(), getUnidades(), getPaqueterias()]);
+        setConductores(c);
+        setUnidades(u.filter(x => x.activo));
+        setPaqueterias(p.filter(x => x.activo));
+      } catch { /* silencioso — todo es opcional en este flujo */ }
+      finally { setCargandoCatalogos(false); }
+    };
+    cargar();
+  }, []);
+
+  const handleConfirmar = async () => {
+    setGuardando(true);
+    try {
+      await marcarEnvioCompletado({
+        idsolicitud,
+        idproduccion,
+        tipo,
+        usuarios_idusuario:      form.usuarios_idusuario      || undefined,
+        unidades_idunidad:       form.unidades_idunidad       || undefined,
+        paqueteria_idpaqueteria: form.paqueteria_idpaqueteria || undefined,
+        numero_guia:             form.numero_guia             || undefined,
+        costo_flete:             form.costo_flete ? Number(form.costo_flete) : undefined,
+        observaciones:           form.observaciones           || undefined,
+        nombre_quien_recogio:    form.nombre_quien_recogio    || undefined,
+      });
+      await onSuccess();
+    } catch (error: any) {
+      showAlert(error.response?.data?.error || "Error al marcar el envío como completado.");
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-sm text-emerald-700">
+        ⚡ Esto marca <strong>todos los bultos pendientes</strong> de esta orden como entregados de una vez,
+        sin pasar por los pasos de preparando / en camino. Solo se guardará la fecha y hora — lo demás es opcional.
+      </div>
+
+      <div>
+        <label className={labelClass}>Tipo de envío *</label>
+        <div className="flex gap-3">
+          {([
+            { value: "local",       label: "Local" },
+            { value: "paqueteria",  label: "Paquetería" },
+            { value: "recoleccion", label: "Recolección" },
+          ] as { value: "local" | "paqueteria" | "recoleccion"; label: string }[]).map(t => (
+            <button key={t.value} type="button" onClick={() => setTipo(t.value)}
+              className={`flex-1 py-2.5 rounded-lg border-2 text-sm font-medium transition-colors ${
+                tipo === t.value
+                  ? "border-emerald-600 bg-emerald-50 text-emerald-700"
+                  : "border-gray-200 text-gray-600 hover:border-gray-300"
+              }`}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {!cargandoCatalogos && tipo === "local" && (
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className={labelClass}>Chofer (opcional)</label>
+            <select value={form.usuarios_idusuario}
+              onChange={e => setForm({ ...form, usuarios_idusuario: Number(e.target.value) })}
+              className={inputClass}>
+              <option value={0}>Sin especificar</option>
+              {conductores.map(c => (
+                <option key={c.idusuario} value={c.idusuario}>{c.nombre} {c.apellido}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className={labelClass}>Unidad (opcional)</label>
+            <select value={form.unidades_idunidad}
+              onChange={e => setForm({ ...form, unidades_idunidad: Number(e.target.value) })}
+              className={inputClass}>
+              <option value={0}>Sin especificar</option>
+              {unidades.map(u => (
+                <option key={u.idunidad} value={u.idunidad}>{u.marca} {u.modelo} - {u.placa}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+      )}
+
+      {!cargandoCatalogos && tipo === "paqueteria" && (
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className={labelClass}>Paquetería (opcional)</label>
+            <select value={form.paqueteria_idpaqueteria}
+              onChange={e => setForm({ ...form, paqueteria_idpaqueteria: Number(e.target.value) })}
+              className={inputClass}>
+              <option value={0}>Sin especificar</option>
+              {paqueterias.map(p => (
+                <option key={p.idpaqueteria} value={p.idpaqueteria}>{p.nombre}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className={labelClass}>Número de guía (opcional)</label>
+            <input type="text" value={form.numero_guia}
+              onChange={e => setForm({ ...form, numero_guia: e.target.value })}
+              className={inputClass} placeholder="Guía..." />
+          </div>
+        </div>
+      )}
+
+      {tipo === "recoleccion" && (
+        <div>
+          <label className={labelClass}>Quién recogió (opcional)</label>
+          <input type="text" value={form.nombre_quien_recogio}
+            onChange={e => setForm({ ...form, nombre_quien_recogio: e.target.value })}
+            className={inputClass} placeholder="Nombre de quien recogió..." />
+        </div>
+      )}
+
+      <div>
+        <label className={labelClass}>Observaciones (opcional)</label>
+        <input type="text" value={form.observaciones}
+          onChange={e => setForm({ ...form, observaciones: e.target.value })}
+          className={inputClass} placeholder="Notas adicionales..." />
+      </div>
+
+      <div className="flex justify-end gap-3 pt-2">
+        <button type="button" onClick={onCancel} disabled={guardando}
+          className="px-5 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50">
+          Cancelar
+        </button>
+        <button type="button" onClick={handleConfirmar} disabled={guardando}
+          className="px-5 py-2 bg-emerald-600 text-white rounded-lg font-semibold hover:bg-emerald-700 disabled:opacity-50">
+          {guardando ? "Marcando..." : "⚡ Confirmar envío completado"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // COMPONENTE PRINCIPAL
 // ─────────────────────────────────────────────────────────────────────────────
 interface Props {
@@ -341,6 +667,7 @@ export default function ModalEnvioSeguimiento({ pedido, onClose, onActualizar }:
   const [agregando,    setAgregando]    = useState(false);
   const [bultosEnCarrito, setBultosEnCarrito] = useState<Set<number>>(new Set());
   const [modalCrearEnvio, setModalCrearEnvio] = useState(false);
+  const [modalMarcarCompletado, setModalMarcarCompletado] = useState(false);
 
   // ── Construir objeto PedidoDisponible-like para pasar a FormularioEnvioIndividual ──
   // Necesitamos idsolicitud y datos de dirección; los tenemos en PedidoSeguimiento
@@ -566,6 +893,19 @@ export default function ModalEnvioSeguimiento({ pedido, onClose, onActualizar }:
 
           <>
             {/* ────────────────────────────────────────────
+                ATAJO — Marcar envío completado
+            ──────────────────────────────────────────── */}
+            {bultosSinEnviar > 0 && (
+              <div className="flex justify-end">
+                <button
+                  onClick={() => setModalMarcarCompletado(true)}
+                  className="text-xs px-3 py-1.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-medium transition-colors flex items-center gap-1.5">
+                  ⚡ Marcar como envío completado
+                </button>
+              </div>
+            )}
+
+            {/* ────────────────────────────────────────────
                 SECCIÓN 1 — Envíos registrados para esta orden
             ──────────────────────────────────────────── */}
             {datos.envios.length > 0 && (
@@ -691,6 +1031,22 @@ export default function ModalEnvioSeguimiento({ pedido, onClose, onActualizar }:
               }
             }}
             onCancel={() => setModalCrearEnvio(false)}
+          />
+        </Modal>
+      )}
+
+      {/* ── Modal de marcar envío completado (atajo) ── */}
+      {modalMarcarCompletado && pedido.idproduccion && (
+        <Modal isOpen onClose={() => setModalMarcarCompletado(false)} title="Marcar envío completado">
+          <FormularioMarcarCompletado
+            idsolicitud={pedido.idsolicitud}
+            idproduccion={pedido.idproduccion}
+            onSuccess={async () => {
+              setModalMarcarCompletado(false);
+              await cargar();
+              onActualizar();
+            }}
+            onCancel={() => setModalMarcarCompletado(false)}
           />
         </Modal>
       )}

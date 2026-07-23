@@ -140,6 +140,24 @@ export interface Envio {
   unidad: { idunidad: number; nombre: string } | null;
   paqueteria: { idpaqueteria: number; nombre: string } | null;
   total_bultos: number;
+  // ── Detalle completo (bitácora / recolección / nota de remisión) ──
+  // Presentes cuando el envío viene de getBultosPorProduccion.
+  idbitacora?: number | null;
+  hora_salida?: string | null;
+  hora_llegada?: string | null;
+  observacion?: "E" | "RA" | "RD" | "PD" | null;
+  observacion_extra?: string | null;
+  firma?: string | null;
+  es_atajo?: boolean;
+  recoleccion_datos?: {
+    nombre_quien_recogio: string;
+    empresa: string | null;
+    unidad_marca: string | null;
+    unidad_modelo: string | null;
+    unidad_placas: string | null;
+    tiene_foto: boolean;
+  } | null;
+  nota_remision?: { idnota: number; no_nota: string; created_at: string } | null;
 }
 
 export interface CreateEnvioRequest {
@@ -153,6 +171,22 @@ export interface CreateEnvioRequest {
   fecha_entrega_estimada?: string;
   observaciones?: string;
   bultos_ids: number[];
+}
+
+// ==========================
+// MARCAR ENVÍO COMPLETADO (ATAJO)
+// ==========================
+export interface MarcarEnvioCompletadoRequest {
+  idsolicitud: number;
+  idproduccion: number;
+  tipo: "local" | "paqueteria" | "recoleccion";
+  usuarios_idusuario?: number;
+  unidades_idunidad?: number;
+  paqueteria_idpaqueteria?: number;
+  numero_guia?: string;
+  costo_flete?: number;
+  observaciones?: string;
+  nombre_quien_recogio?: string;
 }
 
 // ==========================

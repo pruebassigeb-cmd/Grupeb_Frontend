@@ -177,6 +177,7 @@ export interface DetalleCotizacionActualizar {
   iddetalle: number | null;
   cantidad: number;
   precio_total: number;
+  precio_unitario?: number | null;
   kilogramos?: number | null;
   modo_cantidad: "unidad" | "kilo";
 }

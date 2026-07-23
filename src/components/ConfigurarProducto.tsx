@@ -110,6 +110,19 @@ export const CONFIG_PRODUCTOS: Record<string, ConfigProducto> = {
   },
 };
 
+// ═══════════════════════════════════════════════════════════════════════
+// Tipos de producto que NO calculan precio/por-kilo automático a partir de
+// medidas + calibre + material: se venden por pieza (de 1 a N, sin mínimo),
+// no por bolsa ni por kilo. Su precio se define manualmente en
+// FormularioSolicitud (no aplica ninguna fórmula de gramaje aquí).
+// ═══════════════════════════════════════════════════════════════════════
+const TIPOS_SIN_CALCULO_PRECIO = ["bobina", "rollo perforado"];
+
+export const esTipoSinCalculoPrecio = (tipoProducto?: string | null): boolean => {
+  const t = (tipoProducto || "").trim().toLowerCase();
+  return TIPOS_SIN_CALCULO_PRECIO.some(tp => t.includes(tp));
+};
+
 interface SelectorProductoProps {
   catalogos: {
     tiposProducto: CatalogoTipoProducto[];
@@ -175,6 +188,7 @@ export default function SelectorProducto({
   const inicializadoRef = useRef(false);
 
   const materialDeshabilitado = tipoProducto === "Bolsa celofán";
+  const esProductoManual = esTipoSinCalculoPrecio(tipoProducto);
 
   const configProducto = useMemo(() => {
     return tipoProducto ? CONFIG_PRODUCTOS[tipoProducto] ?? null : null;
@@ -495,6 +509,12 @@ export default function SelectorProducto({
               el material se limpiará automáticamente.
             </p>
           )}
+          {esProductoManual && (
+            <p className="mt-1 text-xs text-amber-600">
+              🖊️ Este tipo de producto se vende por pieza (de 1 a N, sin mínimo) y no calcula precio
+              automático: el precio se asigna manualmente en el formulario de solicitud.
+            </p>
+          )}
           {mostrarDropdownTipo && (
             <ul className="absolute w-full bg-white border border-gray-300 mt-1 max-h-72 overflow-auto rounded-lg shadow-lg z-20">
               {getTiposProductoFiltrados().map(tipo => (
@@ -700,6 +720,12 @@ export default function SelectorProducto({
       {/* ── Figura — siempre debajo del formulario ── */}
       {mostrarFigura && (
         <div className="bg-white p-4 rounded-lg border border-gray-200">
+          {esProductoManual && (
+            <p className="mb-3 text-xs text-amber-600">
+              🖊️ Puedes dejar en 0 (o vacía) la medida que no aplique a este producto — no es obligatorio
+              llenar ambas.
+            </p>
+          )}
           <div
             className="relative w-full flex items-center justify-center"
             style={{ height: "420px", padding: "40px 60px" }}

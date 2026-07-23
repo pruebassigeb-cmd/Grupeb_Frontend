@@ -10,6 +10,9 @@ import type {
   CatalogoCalibre,
   CategoriaArchivoPlastico,
   ArchivoProductoPlastico,
+  TipoProductoAdminItem,
+  MaterialAdminItem,
+  CalibreAdminItem,
 } from "../types/productos-plastico.types";
 
 // ========================
@@ -201,6 +204,66 @@ export const checkProductoDuplicado = async (
   ).toString();
   const response = await api.get(`/productos-plastico/check-duplicado?${queryString}`);
   return response.data;
+};
+
+// ====================================
+// ✅ NUEVO — ALTA INLINE DE CATÁLOGOS (tipo de producto / material / calibre)
+// Usadas por SelectorProducto (ConfigurarProducto.tsx) vía los props
+// onAgregarTipoProducto / onAgregarMaterial / onAgregarCalibre, tanto desde
+// la página de Configurar Producto como desde FormularioSolicitud.
+//
+// ⚠️ Verifica que estas 3 rutas coincidan con las que ya expone tu backend
+// para el alta de catálogos de plástico. Si tus rutas reales tienen otro
+// path (por ejemplo /catalogos-productos/plastico/tipo-producto en singular,
+// o un router aparte), solo hay que ajustar el string de cada api.post.
+// ====================================
+
+export const createTipoProductoPlastico = async (
+  nombre: string
+): Promise<TipoProductoAdminItem> => {
+  try {
+    const response = await api.post<TipoProductoAdminItem>(
+      "/catalogos-productos/plastico/tipos-producto",
+      { nombre }
+    );
+    return response.data;
+  } catch (error: any) {
+    console.error("❌ Error al crear tipo de producto:", error);
+    throw error;
+  }
+};
+
+export const createMaterialPlastico = async (
+  nombre: string,
+  valor: number
+): Promise<MaterialAdminItem> => {
+  try {
+    const response = await api.post<MaterialAdminItem>(
+      "/catalogos-productos/plastico/materiales",
+      { nombre, valor }
+    );
+    return response.data;
+  } catch (error: any) {
+    console.error("❌ Error al crear material:", error);
+    throw error;
+  }
+};
+
+export const createCalibrePlastico = async (
+  calibre: number,
+  calibre_bopp?: number | null,
+  gramos?: number | null
+): Promise<CalibreAdminItem> => {
+  try {
+    const response = await api.post<CalibreAdminItem>(
+      "/catalogos-productos/plastico/calibres",
+      { calibre, calibre_bopp: calibre_bopp ?? null, gramos: gramos ?? null }
+    );
+    return response.data;
+  } catch (error: any) {
+    console.error("❌ Error al crear calibre:", error);
+    throw error;
+  }
 };
 
 // ====================================

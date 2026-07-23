@@ -1,9 +1,12 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import SelectorProducto, { CONFIG_PRODUCTOS } from "./ConfigurarProducto";
+import SelectorProducto, { CONFIG_PRODUCTOS, esTipoSinCalculoPrecio } from "./ConfigurarProducto";
 import type { DatosProducto, MedidaKey } from "../types/productos-plastico.types";
 import { FORMATO_MEDIDAS } from "../types/productos-plastico.types";
 import { searchClientes, createCliente, getClienteById } from "../services/clientesService";
-import { searchProductosPlastico, crearOObtenerProducto, checkProductoDuplicado } from "../services/productosPlasticoService";
+import {
+  searchProductosPlastico, crearOObtenerProducto, checkProductoDuplicado,
+  createTipoProductoPlastico, createMaterialPlastico, createCalibrePlastico,
+} from "../services/productosPlasticoService";
 import { getCatalogosProduccion } from "../services/catalogosProduccionService";
 import { usePreciosBatch } from "../hooks/usePrecioCalculado";
 import { calcularPorKilo } from "../utils/calcularPorKilo";
@@ -108,6 +111,10 @@ export default function FormularioSolicitud({
   const [herramentalDescripcion, setHerramentalDescripcion] = useState("");
   const [herramentalPrecioTexto, setHerramentalPrecioTexto] = useState("");
 
+  // (antes había aquí un estado para "precio por kilo manual" — se quitó:
+  // porKilo es el factor bolsas/kg, no un precio; para Bobina/Rollo
+  // perforado ese factor simplemente se fija en "1", ver esTipoSinCalculoPrecio)
+
   const [editandoProductoIndex, setEditandoProductoIndex] = useState<number | null>(null);
 
   const estadoInicialProducto: Producto = {
@@ -122,6 +129,12 @@ export default function FormularioSolicitud({
     pantones: null, pigmentos: null,
     modoCantidad: "unidad", herramental_descripcion: null, herramental_precio: null,
   };
+
+  // Copia local de catalogos: permite reflejar de inmediato un tipo de
+  // producto / material / calibre recién creado desde el propio formulario,
+  // sin depender de que el padre vuelva a pedir los catálogos completos.
+  const [catalogosLocal, setCatalogosLocal] = useState(catalogos);
+  useEffect(() => { setCatalogosLocal(catalogos); }, [catalogos]);
 
   const [productoActual, setProductoActual] = useState<Producto>(estadoInicialProducto);
   const [datosProductoNuevo, setDatosProductoNuevo] = useState<DatosProducto>({
@@ -260,6 +273,15 @@ export default function FormularioSolicitud({
   }, [busquedaProducto]);
 
   useEffect(() => {
+    const tipoActual = modoProducto === "nuevo" ? datosProductoNuevo.tipoProducto : productoActual.nombre;
+    // Bobina / Rollo perforado se venden por pieza (unidad), no por kilo.
+    if (esTipoSinCalculoPrecio(tipoActual) && modoCantidad !== "unidad") {
+      setModoCantidad("unidad");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modoProducto, datosProductoNuevo.tipoProducto, productoActual.nombre]);
+
+  useEffect(() => {
     setCantidadesTexto(["", "", ""]);
     setProductoActual(prev => ({ ...prev, cantidades: [0, 0, 0], kilogramos: [0, 0, 0], precios: [0, 0, 0] }));
     setPreciosEditadosManualmente([false, false, false]);
@@ -391,7 +413,10 @@ export default function FormularioSolicitud({
   const crearYAgregarProductoNuevo = async (): Promise<Producto | null> => {
     setGuardandoProducto(true);
     try {
-      const porKiloCalculado = calcularPorKilo(datosProductoNuevo, catalogos.materiales);
+      const esManual = esTipoSinCalculoPrecio(datosProductoNuevo.tipoProducto);
+      const porKiloCalculado = esManual
+        ? 1 // Bobina / Rollo perforado: no existe "bolsas/kg", se fija el factor en 1.
+        : (calcularPorKilo(datosProductoNuevo, catalogosLocal.materiales) ?? 0);
       const productoData: ProductoPlasticoCreate = {
         tipo_producto_plastico_id: datosProductoNuevo.tipoProductoId,
         material_plastico_id: datosProductoNuevo.materialId,
@@ -416,7 +441,12 @@ export default function FormularioSolicitud({
 
   const verificarDuplicadoAntesDeConfirmar = async () => {
     const m = datosProductoNuevo.medidas;
-    if (!datosProductoNuevo.tipoProductoId || !datosProductoNuevo.materialId || !datosProductoNuevo.calibreId || !m.altura || !m.ancho) {
+    // Bobina / Rollo perforado: basta con tener al menos una de las dos
+    // medidas (altura o ancho); la otra puede quedar en 0/vacía.
+    const faltaMedida = esTipoSinCalculoPrecio(datosProductoNuevo.tipoProducto)
+      ? (!m.altura && !m.ancho)
+      : (!m.altura || !m.ancho);
+    if (!datosProductoNuevo.tipoProductoId || !datosProductoNuevo.materialId || !datosProductoNuevo.calibreId || faltaMedida) {
       setProductoNuevoListo(true); setAdvertenciaDuplicado(null); return;
     }
     setVerificandoDuplicado(true); setAdvertenciaDuplicado(null);
@@ -438,8 +468,16 @@ export default function FormularioSolicitud({
 
   const handleProductoNuevoChange = (nuevosDatos: DatosProducto) => {
     setDatosProductoNuevo(nuevosDatos); setAdvertenciaDuplicado(null);
-    const porKiloCalculado = calcularPorKilo(nuevosDatos, catalogos.materiales);
-    const porKiloStr = porKiloCalculado !== null ? parseFloat(porKiloCalculado.toFixed(3)).toString() : undefined;
+    let porKiloStr: string | undefined;
+    if (esTipoSinCalculoPrecio(nuevosDatos.tipoProducto)) {
+      // Bobina / Rollo perforado: no existe factor bolsas/kg — se fija en 1
+      // (1 "unidad" = 1 kg) para que el modo "Por kilos" quede disponible
+      // sin pedir un dato que no aplica a este producto.
+      porKiloStr = "1";
+    } else {
+      const porKiloCalculado = calcularPorKilo(nuevosDatos, catalogosLocal.materiales);
+      porKiloStr = porKiloCalculado !== null ? parseFloat(porKiloCalculado.toFixed(3)).toString() : undefined;
+    }
     setProductoActual(prev => ({
       ...prev, nombre: nuevosDatos.nombreCompleto, material: nuevosDatos.material,
       calibre: nuevosDatos.calibre, medidas: { ...nuevosDatos.medidas },
@@ -574,10 +612,39 @@ export default function FormularioSolicitud({
     if (datosProductoNuevo.tipoProducto && datosProductoNuevo.material && medidasFormateadas)
       datosActualizados.nombreCompleto = `${datosProductoNuevo.tipoProducto} ${medidasFormateadas} ${datosProductoNuevo.material.toLowerCase()}`;
     setDatosProductoNuevo(datosActualizados);
-    const porKiloCalculado = calcularPorKilo(datosActualizados, catalogos.materiales);
-    const porKiloStr = porKiloCalculado !== null ? parseFloat(porKiloCalculado.toFixed(3)).toString() : undefined;
+    let porKiloStr: string | undefined;
+    if (esTipoSinCalculoPrecio(datosActualizados.tipoProducto)) {
+      porKiloStr = "1";
+    } else {
+      const porKiloCalculado = calcularPorKilo(datosActualizados, catalogosLocal.materiales);
+      porKiloStr = porKiloCalculado !== null ? parseFloat(porKiloCalculado.toFixed(3)).toString() : undefined;
+    }
     setProductoActual(prev => ({ ...prev, nombre: datosActualizados.nombreCompleto, medidas: { ...nuevas }, medidasFormateadas, porKilo: porKiloStr }));
     setAdvertenciaDuplicado(null);
+  };
+
+  // NOTA: si TipoProductoAdminItem/MaterialAdminItem/CalibreAdminItem no coinciden
+  // 1:1 con CatalogoTipoProducto/CatalogoMaterial/CatalogoCalibre, ajusta el cast.
+  const handleAgregarTipoProductoInline = async (nombre: string) => {
+    const nuevo = await createTipoProductoPlastico(nombre);
+    setCatalogosLocal(prev => ({ ...prev, tiposProducto: [...prev.tiposProducto, nuevo as any] }));
+    return nuevo;
+  };
+
+  const handleAgregarMaterialInline = async (nombre: string, valor: number) => {
+    const nuevo = await createMaterialPlastico(nombre, valor);
+    setCatalogosLocal(prev => ({ ...prev, materiales: [...prev.materiales, nuevo as any] }));
+    return nuevo;
+  };
+
+  const handleAgregarCalibreInline = async (
+    calibre: number,
+    calibre_bopp?: number | null,
+    gramos?: number | null
+  ) => {
+    const nuevo = await createCalibrePlastico(calibre, calibre_bopp, gramos);
+    setCatalogosLocal(prev => ({ ...prev, calibres: [...prev.calibres, nuevo as any] }));
+    return nuevo;
   };
 
   const getEsAsaFlexible = (): boolean => {
@@ -590,9 +657,20 @@ export default function FormularioSolicitud({
     return (tipo || "").toLowerCase().includes("troquelada");
   };
 
-  const MIN_KG = 30;
+  const MIN_KG_GENERAL = 30;
+  const MIN_KG_BOBINA_ROLLO = 1;
+
+  const getMinKgActual = (): number => {
+    const tipo = modoProducto === "nuevo"
+      ? datosProductoNuevo.tipoProducto
+      : productoActual.nombre;
+
+    return esTipoSinCalculoPrecio(tipo) ? MIN_KG_BOBINA_ROLLO : MIN_KG_GENERAL;
+  };
 
   const getEquivalente = (index: number): string | null => {
+    const tipo = modoProducto === "nuevo" ? datosProductoNuevo.tipoProducto : productoActual.nombre;
+    if (esTipoSinCalculoPrecio(tipo)) return null; // se vende por unidad, no aplica equivalencia en kg
     const n = cantidadesTexto[index] === "" ? 0 : Number(cantidadesTexto[index]);
     const pk = productoActual.porKilo ? Number(productoActual.porKilo) : 0;
     if (!pk || n <= 0) return null;
@@ -601,6 +679,9 @@ export default function FormularioSolicitud({
   };
 
   const getErrorKg = (index: number): string | null => {
+    const tipo = modoProducto === "nuevo" ? datosProductoNuevo.tipoProducto : productoActual.nombre;
+    // Bobina / Rollo perforado: se venden por unidad (pieza), de 1 a N, sin mínimo.
+    if (esTipoSinCalculoPrecio(tipo)) return null;
     const n = cantidadesTexto[index] === "" ? 0 : Number(cantidadesTexto[index]);
     if (n <= 0) return null;
     const pk = productoActual.porKilo ? Number(productoActual.porKilo) : 0;
@@ -609,10 +690,11 @@ export default function FormularioSolicitud({
     else if (pk > 0) kgs = n / pk;
     else return null;
     const kgsR = Math.round(kgs * 10000) / 10000;
-    if (kgsR < MIN_KG) {
-      const faltan = (MIN_KG - kgsR).toFixed(2);
-      if (modoCantidad === "kilo") return `Mínimo ${MIN_KG} kg (faltan ${faltan} kg)`;
-      return `Mínimo ${MIN_KG} kg ≈ ${Math.ceil(MIN_KG * pk).toLocaleString()} bolsas`;
+    const minKgActual = getMinKgActual();
+    if (kgsR < minKgActual) {
+      const faltan = (minKgActual - kgsR).toFixed(2);
+      if (modoCantidad === "kilo") return `Mínimo ${minKgActual} kg (faltan ${faltan} kg)`;
+      return `Mínimo ${minKgActual} kg ≈ ${Math.ceil(minKgActual * pk).toLocaleString()} bolsas`;
     }
     return null;
   };
@@ -624,13 +706,17 @@ export default function FormularioSolicitud({
     return getErrorKg(i) !== null;
   });
 
-  const labelCantidad = modoCantidad === "kilo" ? "kg" : "bolsas";
+  const labelCantidad = modoCantidad === "kilo"
+    ? "kg"
+    : esTipoSinCalculoPrecio(modoProducto === "nuevo" ? datosProductoNuevo.tipoProducto : productoActual.nombre)
+      ? "piezas"
+      : "bolsas";
 
   const handleAgregarProducto = async () => {
     const { bolsas: cantsBolsas, kgs: catsKgs } = calcularDesdeInput(cantidadesTexto, modoCantidad, productoActual.porKilo);
     const tieneValoresValidos = cantsBolsas.some((cant, i) => cant > 0 && productoActual.precios[i] > 0);
     if (!productoActual.nombre || !tieneValoresValidos) { showAlert("Por favor completa los datos del producto"); return; }
-    if (hayErrorKg) { showAlert("Una o más cantidades no cumplen el mínimo de 30 kg."); return; }
+    if (hayErrorKg) { showAlert(`Una o más cantidades no cumplen el mínimo de ${getMinKgActual()} kg.`); return; }
 
     const herramentalPrecioFinal = herramentalPrecioTexto !== "" ? parseFloat(herramentalPrecioTexto) || null : null;
     const herramentalDescFinal = herramentalDescripcion.trim() || null;
@@ -760,6 +846,9 @@ export default function FormularioSolicitud({
   const hayProductoSeleccionado =
     (modoProducto === "registrado" && productoActual.nombre) ||
     (modoProducto === "nuevo" && productoNuevoListo);
+
+  const tipoActualCantidad = modoProducto === "nuevo" ? datosProductoNuevo.tipoProducto : productoActual.nombre;
+  const esVentaPorUnidadSinMinimo = esTipoSinCalculoPrecio(tipoActualCantidad);
 
   const esBopp = productoActual.material?.toUpperCase().includes("BOPP") ||
     productoActual.material?.toUpperCase().includes("CELOFAN") ||
@@ -1040,7 +1129,14 @@ export default function FormularioSolicitud({
             {modoProducto === "nuevo" && (
               <div className="space-y-4">
                 {!productoNuevoListo && (
-                  <SelectorProducto catalogos={catalogos} onProductoChange={handleProductoNuevoChange} mostrarFigura={false} />
+                  <SelectorProducto
+                    catalogos={catalogosLocal}
+                    onProductoChange={handleProductoNuevoChange}
+                    mostrarFigura={false}
+                    onAgregarTipoProducto={handleAgregarTipoProductoInline}
+                    onAgregarMaterial={handleAgregarMaterialInline}
+                    onAgregarCalibre={handleAgregarCalibreInline}
+                  />
                 )}
                 {!productoNuevoListo && datosProductoNuevo.tipoProducto && CONFIG_PRODUCTOS[datosProductoNuevo.tipoProducto] && (
                   <div className="bg-white p-4 rounded-lg border border-gray-200">
@@ -1075,6 +1171,21 @@ export default function FormularioSolicitud({
                         );
                       })}
                     </div>
+                  </div>
+                )}
+                {!productoNuevoListo && esTipoSinCalculoPrecio(datosProductoNuevo.tipoProducto) && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                    <p className="text-sm font-medium text-gray-700">
+                      🖊️ Este producto se vende por pieza
+                      <span className="ml-2 text-xs text-amber-600 font-normal">
+                        — sin cálculo automático de precio, de 1 a N piezas, sin mínimo
+                      </span>
+                    </p>
+                    <p className="mt-1 text-xs text-gray-500">
+                      Más abajo, en "Modo de cotización", quedará seleccionado "Por pieza" automáticamente.
+                      El precio se escribe ahí directamente por pieza. Puedes dejar en 0 la altura o el ancho,
+                      según aplique — no es obligatorio llenar ambas medidas.
+                    </p>
                   </div>
                 )}
                 {productoNuevoListo && advertenciaDuplicado && (
@@ -1390,16 +1501,22 @@ export default function FormularioSolicitud({
                     <button type="button" onClick={() => setModoCantidad("unidad")}
                       className={`flex items-center gap-2 px-4 py-2 rounded-md font-medium text-sm transition-all ${modoCantidad === "unidad" ? "bg-white text-blue-600 shadow" : "text-gray-600 hover:text-gray-900"}`}>
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>
-                      Por bolsas
+                      {esVentaPorUnidadSinMinimo ? "Por pieza" : "Por bolsas"}
                     </button>
-                    <button type="button" onClick={() => setModoCantidad("kilo")} disabled={!productoActual.porKilo || Number(productoActual.porKilo) <= 0}
-                      className={`flex items-center gap-2 px-4 py-2 rounded-md font-medium text-sm transition-all ${!productoActual.porKilo || Number(productoActual.porKilo) <= 0 ? "text-gray-300 cursor-not-allowed" : modoCantidad === "kilo" ? "bg-white text-emerald-600 shadow" : "text-gray-600 hover:text-gray-900"}`}>
+                    <button type="button"
+                      onClick={() => !esVentaPorUnidadSinMinimo && setModoCantidad("kilo")}
+                      disabled={esVentaPorUnidadSinMinimo || !productoActual.porKilo || Number(productoActual.porKilo) <= 0}
+                      title={esVentaPorUnidadSinMinimo ? "Este producto se vende por pieza, no por kilo" : undefined}
+                      className={`flex items-center gap-2 px-4 py-2 rounded-md font-medium text-sm transition-all ${esVentaPorUnidadSinMinimo || !productoActual.porKilo || Number(productoActual.porKilo) <= 0 ? "text-gray-300 cursor-not-allowed" : modoCantidad === "kilo" ? "bg-white text-emerald-600 shadow" : "text-gray-600 hover:text-gray-900"}`}>
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" /></svg>
                       Por kilos
                     </button>
                   </div>
-                  {modoCantidad === "kilo" && productoActual.porKilo && (
+                  {modoCantidad === "kilo" && productoActual.porKilo && !esVentaPorUnidadSinMinimo && (
                     <p className="mt-1 text-xs text-emerald-600 font-medium">✓ Factor: {productoActual.porKilo} bolsas/kg</p>
+                  )}
+                  {esVentaPorUnidadSinMinimo && (
+                    <p className="mt-1 text-xs text-emerald-600 font-medium">✓ Se vende por pieza — de 1 a N, sin mínimo</p>
                   )}
                 </div>
 
