@@ -1,6 +1,6 @@
 // src/pages/EditarCotizacionPapelCompleta.tsx
 import { useState, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useLocation, useParams, useNavigate } from "react-router-dom";
 import Dashboard from "../layouts/Sidebar";
 import { getCotizaciones, actualizarCotizacionProductos } from "../services/cotizacionesService";
 import type {
@@ -767,6 +767,27 @@ export default function EditarCotizacionPapelCompleta() {
   const [coloresAsa, setColoresAsa] = useState<{ id_color: number; color: string }[]>([]);
   const { noCotizacion } = useParams<{ noCotizacion: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  const estadoNavegacion = location.state as {
+    volverA?: string;
+    abrirListaCotizaciones?: boolean;
+  } | null;
+
+  const volverAlOrigen = () => {
+    const destino = estadoNavegacion?.volverA || "/cotizar";
+
+    navigate(destino, {
+      state: estadoNavegacion?.abrirListaCotizaciones
+        ? { abrirListaCotizaciones: true }
+        : undefined,
+    });
+  };
+
+  const stateEntreEditores = estadoNavegacion?.volverA
+    ? estadoNavegacion
+    : undefined;
+
 
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
@@ -1258,7 +1279,7 @@ export default function EditarCotizacionPapelCompleta() {
       if (cotFresca) await regenerarPdfCotizacion(cotFresca);
 
       setExito(true);
-      setTimeout(() => navigate("/cotizar"), 1500);
+      setTimeout(() => volverAlOrigen(), 1500);
     } catch (e: any) {
       setErrorGuardar(e.response?.data?.error || e.message || "Error al guardar");
     } finally {
@@ -1282,7 +1303,7 @@ export default function EditarCotizacionPapelCompleta() {
     <Dashboard>
       <div className="max-w-md mx-auto mt-12 p-6 bg-red-50 border border-red-200 rounded-xl text-center">
         <p className="text-red-700 font-semibold mb-4">{error}</p>
-        <button onClick={() => navigate("/cotizar")} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm">
+        <button onClick={volverAlOrigen} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm">
           ← Volver a Cotizaciones
         </button>
       </div>
@@ -1309,7 +1330,7 @@ export default function EditarCotizacionPapelCompleta() {
     <Dashboard>
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
-          <button onClick={() => navigate("/cotizar")}
+          <button onClick={volverAlOrigen}
             className="p-2 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -1340,7 +1361,7 @@ export default function EditarCotizacionPapelCompleta() {
             <p className="text-xs text-gray-400">Edita cada material de la misma cotización desde este selector.</p>
           </div>
           <div className="inline-flex rounded-lg bg-gray-100 p-1">
-            <button type="button" onClick={() => navigate(`/cotizar/${noCotizacion}/editar`)}
+            <button type="button" onClick={() => navigate(`/cotizar/${noCotizacion}/editar`, { state: stateEntreEditores })}
               className="px-4 py-1.5 rounded-md text-gray-600 hover:text-blue-700 hover:bg-white text-sm font-semibold transition">
               Plástico
             </button>
@@ -1439,7 +1460,7 @@ export default function EditarCotizacionPapelCompleta() {
         </div>
 
         <div className="flex items-center justify-between gap-3 pb-4">
-          <button onClick={() => navigate("/cotizar")}
+          <button onClick={volverAlOrigen}
             className="px-5 py-2.5 border border-gray-300 text-gray-600 rounded-xl text-sm font-medium hover:bg-gray-50 transition">
             Cancelar
           </button>

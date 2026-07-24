@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
 import { generarPdfCotizacionExpo, cotizacionBackDataAPdfParams } from "../../utils/expo/generarPdfCotizacionExpo";
+import { construirPayloadPdfPedidoDesdeBackData } from "../../utils/expo/construirPayloadPdfPedidoExpo";
 import { generarPdfPedido } from "../../services/generarPdfPedido";
 import { generarPdfCotizacion } from "../../services/generarPdfCotizacion";
-import { getVentaByPedido } from "../../services/ventasservice";
 import { getCotizacionesExpo } from "../../services/expo/expoService";
 import { enviarCorreoDocumento } from "../../services/correoService";
 import type { CotizacionGuardada, ItemPedidoAprobado } from "../../types/expo/expo.types";
@@ -13,7 +13,7 @@ import { useEnvioDocumentoPdf } from "../../hooks/useEnvioDocumentoPdf";
 
 import FormularioCliente from "../FormularioCliente";
 import { getClienteById, updateCliente } from "../../services/clientesService";
-import { OperacionEncoladaError } from "../../offline/outbox";
+import { OperacionEncoladaError, eliminarDeOutbox, encolarPersonalizado } from "../../offline/outbox";
 import type { Cliente, UpdateClienteRequest } from "../../types/clientes.types";
 
 interface Props {
@@ -22,6 +22,7 @@ interface Props {
   aprobando: boolean;
   onAprobar: (id: string, items: ItemPedidoAprobado[]) => Promise<string | null>;
   onEliminar: (folio: string) => Promise<void>;
+  onEditar: (cotizacion: CotizacionGuardada) => void;
   onClose: () => void;
   onRefresh: () => void;
   asesor: string;
@@ -349,7 +350,7 @@ function ModalCompletarCliente({
 
 export default function ListaCotizaciones({
   cotizaciones, loading, aprobando,
-  onAprobar, onEliminar, onClose, onRefresh, asesor,
+  onAprobar, onEliminar, onEditar, onClose, onRefresh, asesor,
 }: Props) {
   const [expandidoId, setExpandidoId] = useState<string | null>(null);
   const [filtro, setFiltro] = useState<"todas" | "cotizacion" | "pedido">("todas");
@@ -396,129 +397,6 @@ export default function ListaCotizaciones({
       ...prev,
       [cotId]: { ...(prev[cotId] || {}), [prodId]: detalleId },
     }));
-  };
-
-  // ── Arma los productos y datos del PEDIDO para generarPdfPedido (el bueno) ──
-  const construirPayloadPdfPedidoDesdeBackData = async (
-    backData: any,
-    folioCotizacion: string,
-    fechaCotizacion: string
-  ) => {
-    const folioPedido = backData.no_pedido || folioAPedido(folioCotizacion);
-
-    const [venta, clienteCompleto] = await Promise.all([
-      getVentaByPedido(folioPedido),
-      backData.cliente_id ? getClienteById(backData.cliente_id).catch(() => null) : Promise.resolve(null),
-    ]);
-
-    const productos = (backData.productos || []).map((p: any) => {
-      const esPapel = p.tipo_material === "papel";
-      const foilNombre = p.foil_nombre || null;
-      const asaNombre = p.asa_nombre || null;
-      if (esPapel) {
-        return {
-          tipo_material: "papel",
-          tipoCotizacion: "papel",
-          nombre: p.nombre,
-          grupo_descripcion: p.grupo_descripcion ?? "",
-          material: p.material || "",
-          calibre: p.calibre || "",
-          tintas: p.tintas ?? 0,
-          tintasDentro: p.tintas_dentro ?? 0,
-          caras: p.caras ?? 0,
-          medidasFormateadas: p.medida || "",
-          medidas: {},
-          bk: null,
-          foil: foilNombre ? true : null,
-          foil_nombre: foilNombre,
-          laminado: p.laminado_nombre ? true : null,
-          laminado_nombre: p.laminado_nombre || null,
-          asa_suaje: asaNombre || null,
-          asa_nombre: asaNombre || null,
-          uvBr: p.uv ? true : null,
-          alto_relieve: p.alto_relieve === true,
-          metodo_hojeado: p.metodo_hojeado ?? null,
-          lleva_armado: p.lleva_armado ?? true,
-          maquinaria_seleccionada: p.maquinaria_seleccionada ?? {},
-          textura_nombre: p.textura_nombre || null,
-          pigmentos: null,
-          pantones: p.pantones || null,
-          pantonesDentro: null,
-          observacion: p.observacion || null,
-          descripcion: p.descripcion || null,
-          perforacion: false,
-          por_kilo: null,
-          herramental_descripcion: null,
-          herramental_precio: null,
-          herramental_aprobado: null,
-          detalles: (p.detalles || [])
-            .filter((d: any) => d.aprobado === true)
-            .map((d: any) => ({
-              cantidad: Number(d.cantidad),
-              precio_total: Number(d.precio_total),
-              kilogramos: null,
-              modo_cantidad: "unidad",
-            })),
-        };
-      }
-      return {
-        nombre: p.nombre,
-        material: p.material || "",
-        calibre: p.calibre || "",
-        tintas: p.tintas ?? 0,
-        caras: p.caras ?? 0,
-        medidasFormateadas: p.medida || "",
-        medidas: {},
-        bk: null, foil: null, laminado: null, uvBr: null,
-        pigmentos: p.pigmentos || null,
-        pantones: p.pantones || null,
-        asa_suaje: p.suaje_tipo || null,
-        observacion: p.observacion || null,
-        descripcion: p.descripcion || null,
-        perforacion: false,
-        por_kilo: null,
-        herramental_descripcion: null,
-        herramental_precio: null,
-        herramental_aprobado: null,
-        detalles: (p.detalles || [])
-          .filter((d: any) => d.aprobado === true)
-          .map((d: any) => ({
-            cantidad: Number(d.cantidad),
-            precio_total: Number(d.precio_total),
-            kilogramos: null,
-            modo_cantidad: "unidad",
-          })),
-      };
-    });
-
-    return {
-      no_pedido: folioPedido,
-      no_cotizacion: folioCotizacion,
-      fecha: fechaCotizacion,
-      cliente: backData.cliente || "",
-      empresa: backData.impresion || "",
-      telefono: backData.celular || "",
-      correo: backData.correo || "",
-      impresion: backData.impresion ?? null,
-      celular: backData.celular ?? null,
-      razon_social: clienteCompleto?.razon_social ?? null,
-      rfc: clienteCompleto?.rfc ?? null,
-      domicilio: clienteCompleto?.domicilio ?? null,
-      numero: clienteCompleto?.numero ?? null,
-      colonia: clienteCompleto?.colonia ?? null,
-      codigo_postal: clienteCompleto?.codigo_postal ?? null,
-      poblacion: clienteCompleto?.poblacion ?? backData.ciudad ?? null,
-      estado_cliente: clienteCompleto?.estado ?? backData.estado_cliente ?? null,
-      cliente_id: backData.cliente_id ?? null,
-      identificar: backData.identificar ?? null,
-      subtotal: Number(venta.subtotal),
-      iva: Number(venta.iva),
-      total: Number(venta.total),
-      anticipo: Number(venta.anticipo),
-      saldo: Number(venta.saldo),
-      productos,
-      _correoCliente: clienteCompleto?.correo || backData.correo || "",
-    };
   };
 
   // ── Arma los productos y datos de la COTIZACIÓN (aún sin aprobar) para
@@ -778,6 +656,46 @@ export default function ListaCotizaciones({
 
       cancelarTodoElFlujo();
     } catch (e: any) {
+      if (e instanceof OperacionEncoladaError) {
+        // La entrada genérica "http" que ya encoló aprobarCotizacionExpo no
+        // alcanza para mandar el correo del pedido (necesita el folio real
+        // de pedido, que todavía no existe) — se reemplaza por una tarea
+        // compuesta que aprueba y sí manda el correo sola en cuanto
+        // sincronice. Mismo patrón que "cotizacion-expo-con-correo".
+        await eliminarDeOutbox(e.entry.id);
+
+        const itemsAprobados = Object.entries(selecciones[cot.id] || {})
+          .filter(([, detalleId]) => detalleId !== null)
+          .map(([prodId, detalleId]) => ({
+            idsolicitud_producto: Number(prodId),
+            idsolicitud_detalle: detalleId as number,
+          }))
+          .filter(item => item.idsolicitud_detalle > 0);
+
+        await encolarPersonalizado(
+          "aprobar-cotizacion-expo-con-correo",
+          {
+            folio: cot.folio,
+            itemsAprobados,
+            fecha: cot.fecha,
+            correo: {
+              destinatario: correoConfirmado,
+              cliente: cot.cliente,
+              empresa: cot.clienteData?.impresion ?? null,
+            },
+          },
+          `Aprobar cotización Expo ${cot.folio} + correo de pedido`,
+          "expo"
+        );
+
+        onRefresh();
+        setExpandidoId(null);
+        cancelarTodoElFlujo();
+        alert(
+          "Sin conexión: la aprobación se guardó y se aplicará sola cuando vuelva la señal. El correo del pedido se enviará automáticamente en cuanto se sincronice."
+        );
+        return;
+      }
       console.error("❌ Error en aprobación/envío:", e);
       alert(e?.response?.data?.error || "Ocurrió un error al aprobar o enviar el correo.");
     } finally {
@@ -1031,7 +949,7 @@ export default function ListaCotizaciones({
                         ))}
 
                         {!esPedido ? (
-                          <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 8 }}>
                             <button
                               onClick={() => handleEliminar(cot)}
                               disabled={eliminando === cot.id}
@@ -1039,10 +957,27 @@ export default function ListaCotizaciones({
                               {eliminando === cot.id ? "Eliminando..." : "🗑 Eliminar"}
                             </button>
                             <button
+                              type="button"
+                              onClick={() => onEditar(cot)}
+                              style={{
+                                flex: "0 0 auto",
+                                border: "1px solid #6366F166",
+                                background: "#6366F114",
+                                borderRadius: 8,
+                                padding: "10px 16px",
+                                fontSize: 12,
+                                fontWeight: 700,
+                                color: "#A5B4FC",
+                                cursor: "pointer",
+                              }}
+                            >
+                              ✎ Editar cotización
+                            </button>
+                            <button
                               onClick={() => iniciarFlujoAprobar(cot)}
                               disabled={!haySeleccion || (enEsteFlujoAprobacion && (cargandoCliente || guardandoCliente || enviandoAprobacion))}
                               style={{
-                                flex: 1, border: "none", borderRadius: 8, padding: "10px",
+                                flex: "1 1 260px", border: "none", borderRadius: 8, padding: "10px",
                                 fontSize: 12.5, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
                                 background: haySeleccion ? "#C9922A" : "#C9922A33",
                                 color: haySeleccion ? "#0D0D0D" : "#0D0D0D88",

@@ -1,6 +1,6 @@
 // src/pages/Expo.tsx
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   CATS, CLIENTE_VACIO, filaDesdeProducto, sumarTotales, claveProducto,
   mapearCatalogoExpoAProducto, mapearPlasticoSistemaAProducto, mapearPapelSistemaAProducto,
@@ -76,6 +76,7 @@ const subirImagenProductoExpo = async (
 
 export default function Expo() {
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [filas,    setFilas]    = useState<FilaProducto[]>([]);
   // NUEVO: subido desde HojaCotizacion.tsx — se necesita aquí para poder
@@ -272,6 +273,31 @@ useEffect(() => {
       setLoadingCots(false);
     }
   }, []);
+
+  // Cuando el editor fue abierto desde Expo, al guardar o cancelar regresa
+  // a esta misma página, vuelve a abrir la lista y obtiene los datos frescos.
+  useEffect(() => {
+    const estado = location.state as {
+      abrirListaCotizaciones?: boolean;
+    } | null;
+
+    if (!estado?.abrirListaCotizaciones) return;
+
+    setListaAbierta(true);
+    void cargarCotizaciones();
+
+    // Limpiar el state evita que la lista se vuelva a abrir en navegaciones
+    // posteriores que no provengan del editor.
+    navigate(location.pathname, {
+      replace: true,
+      state: null,
+    });
+  }, [
+    cargarCotizaciones,
+    location.pathname,
+    location.state,
+    navigate,
+  ]);
 
   // ── Catálogo ──────────────────────────────────────────────────────────────
   const toggleExp = (k: string) => setExpanded(p => ({ ...p, [k]: !p[k] }));
@@ -711,10 +737,12 @@ useEffect(() => {
       return resultado.no_pedido;
     } catch (err) {
       if (err instanceof OperacionEncoladaError) {
-        alert(
-          "Sin conexión: la aprobación se guardó y se aplicará sola cuando vuelva la señal. El folio de pedido no está disponible todavía."
-        );
-        return null;
+        // Se relanza (no se traga aquí) para que el único caller
+        // (confirmarCorreoYAprobar en ListaCotizaciones.tsx) pueda encolar
+        // también el envío del correo del pedido como parte del mismo
+        // combo — este componente no tiene el destinatario ni sabe si se
+        // pidió correo.
+        throw err;
       }
       alert("No se pudo aprobar la cotización.");
       return null;
@@ -735,6 +763,40 @@ useEffect(() => {
       }
       alert("No se pudo eliminar la cotización.");
     }
+  };
+
+  const editarCotizacionSistema = (cotizacion: CotizacionGuardada) => {
+    if (!cotizacion.folio) {
+      alert("No se encontró el folio de la cotización.");
+      return;
+    }
+
+    const productos = ((cotizacion as any)._backData?.productos || []) as any[];
+
+    // Es la misma decisión que utiliza la lista de cotizaciones del sistema:
+    // papel puro abre el editor de papel; plástico o una cotización mixta abre
+    // el editor completo.
+    const esSoloPapel =
+      productos.length > 0 &&
+      productos.every(
+        producto =>
+          producto.tipo_material === "papel" ||
+          producto.tipoCotizacion === "papel"
+      );
+
+    setListaAbierta(false);
+
+    navigate(
+      esSoloPapel
+        ? `/cotizar/${cotizacion.folio}/editar-papel`
+        : `/cotizar/${cotizacion.folio}/editar`,
+      {
+        state: {
+          volverA: `${location.pathname}${location.search}`,
+          abrirListaCotizaciones: true,
+        },
+      }
+    );
   };
 
   const irACotizar = (idReal?: number, nombreCliente?: string, datosCliente?: ClienteExpo) => {
@@ -1129,6 +1191,7 @@ useEffect(() => {
         <ListaCotizaciones
           cotizaciones={cotizaciones} loading={loadingCots} aprobando={aprobando}
           onAprobar={aprobarCotizacion} onEliminar={eliminarCotizacion}
+          onEditar={editarCotizacionSistema}
           onClose={() => setListaAbierta(false)} onRefresh={cargarCotizaciones}
           asesor={user ? `${user.nombre} ${user.apellido}`.trim() : "Asesor de Ventas"}
         />

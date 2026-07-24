@@ -79,6 +79,7 @@ const fmtFechaHora = (v?: string | null) =>
 function DetalleCompletoEnvio({ envio }: { envio: EnvioDetallado }) {
   const [expandido, setExpandido] = useState(false);
   const [fotos, setFotos] = useState<Archivo[] | null>(null);
+  const [fotoAmpliada, setFotoAmpliada] = useState<string | null>(null);
   const [cargandoFotos, setCargandoFotos] = useState(false);
 
   const toggle = async () => {
@@ -186,8 +187,14 @@ function DetalleCompletoEnvio({ envio }: { envio: EnvioDetallado }) {
             ) : fotos && fotos.length > 0 ? (
               <div className="flex gap-2 flex-wrap">
                 {fotos.map(f => (
-                  <img key={f.id_archivo} src={f.url} alt="Foto de entrega"
-                    className="w-16 h-16 object-cover rounded-lg border border-gray-200" />
+                  <button
+                    key={f.id_archivo}
+                    type="button"
+                    onClick={() => setFotoAmpliada(f.url)}
+                    className="cursor-zoom-in transition-transform hover:scale-105">
+                    <img src={f.url} alt="Foto de entrega"
+                      className="w-16 h-16 object-cover rounded-lg border border-gray-200" />
+                  </button>
                 ))}
               </div>
             ) : (
@@ -196,7 +203,28 @@ function DetalleCompletoEnvio({ envio }: { envio: EnvioDetallado }) {
           </div>
         </div>
       )}
+
+      {/* ── Lightbox de foto ampliada ── */}
+      {fotoAmpliada && (
+        <div
+          onClick={() => setFotoAmpliada(null)}
+          className="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center p-6 cursor-zoom-out">
+          <button
+            type="button"
+            onClick={() => setFotoAmpliada(null)}
+            className="absolute top-4 right-4 text-white bg-white/10 hover:bg-white/20 rounded-full w-9 h-9 flex items-center justify-center text-lg transition-colors">
+            ✕
+          </button>
+          <img
+            src={fotoAmpliada}
+            alt="Foto de entrega ampliada"
+            onClick={(e) => e.stopPropagation()}
+            className="max-w-full max-h-full object-contain rounded-lg shadow-2xl cursor-default"
+          />
+        </div>
+      )}
     </div>
+
   );
 }
 
