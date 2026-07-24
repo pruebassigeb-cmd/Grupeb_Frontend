@@ -72,6 +72,13 @@ export default function Dashboard({ children }: DashboardProps) {
       permiso: "Crear/Editar/Eliminar Usuarios",
       subItems: [],
     },
+    // {
+    //   name: "Reportes de Correo",
+    //   icon: "📧",
+    //   path: "/reportes-correo",
+    //   permiso: "Crear/Editar/Eliminar Usuarios",
+    //   subItems: [],
+    // },
     {
       name: "Clientes",
       icon: "🏢",
@@ -394,7 +401,7 @@ export default function Dashboard({ children }: DashboardProps) {
   const sidebarWidthPx = collapsed ? "56px" : "256px";
 
   return (
-    <div className="min-h-screen flex">
+    <div className="h-screen flex overflow-hidden">
 
       {isMobile && (
         <div

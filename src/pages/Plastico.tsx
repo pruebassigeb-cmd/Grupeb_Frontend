@@ -121,28 +121,30 @@ function TablaProductosPlastico({
         </div>
       )}
 
-      <div className="flex items-center justify-between gap-3 mb-4">
-        <div>
-          <p className="text-[10px] tracking-widest uppercase text-gray-400 font-semibold mb-0.5">Alta de productos</p>
-          <h1 className="text-xl font-bold text-gray-900">Productos de plástico</h1>
+      <div className="sticky top-0 z-10 bg-white pt-1 pb-3 mb-3 border-b border-gray-100">
+        <div className="flex items-center justify-between gap-3 mb-4">
+          <div>
+            <p className="text-[10px] tracking-widest uppercase text-gray-400 font-semibold mb-0.5">Alta de productos</p>
+            <h1 className="text-xl font-bold text-gray-900">Productos de plástico</h1>
+          </div>
+          <button
+            onClick={onNuevo}
+            className="h-10 px-5 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 whitespace-nowrap"
+          >
+            + Registrar nuevo producto
+          </button>
         </div>
-        <button
-          onClick={onNuevo}
-          className="h-10 px-5 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 whitespace-nowrap"
-        >
-          + Registrar nuevo producto
-        </button>
-      </div>
 
-      <div className="relative mb-4">
-        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">🔍</span>
-        <input
-          type="text"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Buscar por tipo, material, medida, calibre o descripción..."
-          className="w-full h-10 pl-9 pr-3 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white outline-none focus:ring-2 focus:ring-blue-400"
-        />
+        <div className="relative">
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">🔍</span>
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Buscar por tipo, material, medida, calibre o descripción..."
+            className="w-full h-10 pl-9 pr-3 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white outline-none focus:ring-2 focus:ring-blue-400"
+          />
+        </div>
       </div>
 
       <div className="border border-gray-200 rounded-xl overflow-hidden">

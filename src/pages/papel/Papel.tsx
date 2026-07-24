@@ -1,6 +1,6 @@
 // src/pages/papel/Papel.tsx
 // FormularioProducto ahora vive en components/papel/FormularioProductoPapelAlta.tsx
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useAuth } from "../../context/AuthContext";
 import Dashboard from "../../layouts/Sidebar";
 import { newProductoForm, newMaterial, newGrupo } from "../../types/papel/papel.types";
@@ -18,6 +18,7 @@ import type {
   ProductoPapelFormConId,
 } from "../../components/papel/FormularioProductoPapelAlta";
 import CargaMasivaPapel from "../../components/papel/CargaMasivaPapel";
+import ModalCostosLaminado from "../../components/papel/ModalCostoLaminado";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TIPOS EXTENDIDOS PARA LA TABLA
@@ -36,6 +37,13 @@ interface ProductoPapelListItemEx extends ProductoPapelListItem {
   primer_pliego?: string;
   archivos_preview?: ArchivoPreview[];
   costo_base_grupo1?: number | string | null;
+  idgrupo_papel_grupo1?: number | null;
+  total_grupos?: number;
+  idrollo_lam?: number | null;
+  rollo_lam_nombre?: string | null;
+  rollo_lam_medida_ancho?: number | string | null;
+  desarrollo_laminado?: number | string | null;
+  piezas_suaje?: number | string | null;
 }
 
 // Formatea un valor numérico (o string numérico) como moneda MXN.
@@ -59,6 +67,114 @@ function formatoMXN(
 const ICON_PDF = "\uD83D\uDCC4";
 const ICON_IMG = "\uD83D\uDDBC\uFE0F";
 const ICON_CHART = "\uD83D\uDCCA";
+
+// ═══════════════════════════════════════════════════════════════════════════
+// GUARDAR COSTO BASE (edición inline)
+// ═══════════════════════════════════════════════════════════════════════════
+// Llama al endpoint ligero PATCH /productos-papel/:id/costo-base, que solo
+// actualiza precio_sugerido del grupo indicado — no toca materiales, suaje,
+// acabados ni maquinaria. Se usa tanto desde la celda de la tabla (grupo 1)
+// como desde el detalle expandido (cualquier grupo, si el producto tiene N).
+async function actualizarCostoBaseGrupo(
+  idProducto: number,
+  idGrupo: number,
+  precio: number | null
+): Promise<boolean> {
+  try {
+    const BASE = (import.meta as any).env.VITE_API_URL;
+    const res = await fetch(`${BASE}/productos-papel/${idProducto}/costo-base`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${localStorage.getItem("token") ?? ""}`,
+      },
+      body: JSON.stringify({ grupos: [{ idgrupo_papel: idGrupo, precio_sugerido: precio }] }),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CELDA DE COSTO BASE EDITABLE
+// ═══════════════════════════════════════════════════════════════════════════
+// Campo chico que reemplaza el texto estático cuando el modo "Editar costos
+// base" está activo. Guarda solo, al perder el foco (blur) o con Enter, si
+// el valor realmente cambió — así no hace falta un botón "Guardar" aparte.
+function CeldaCostoBase({
+  idProducto,
+  idGrupo,
+  valor,
+  onGuardado,
+}: {
+  idProducto: number;
+  idGrupo: number | null | undefined;
+  valor: number | string | null | undefined;
+  onGuardado: (nuevoValor: number | null) => void;
+}) {
+  const valorTexto = valor !== null && valor !== undefined && valor !== "" ? String(valor) : "";
+  const [texto, setTexto] = useState(valorTexto);
+  const [guardando, setGuardando] = useState(false);
+  const [estado, setEstado] = useState<"idle" | "ok" | "error">("idle");
+  const originalRef = useRef(valorTexto);
+
+  useEffect(() => {
+    setTexto(valorTexto);
+    originalRef.current = valorTexto;
+  }, [valorTexto]);
+
+  if (!idGrupo) {
+    // Producto sin ningún grupo capturado todavía (caso raro) — no hay a
+    // qué idgrupo_papel asociar el costo, así que no se muestra el input.
+    return <span style={{ fontSize: 11, color: "#D1D5DB" }}>—</span>;
+  }
+
+  const guardar = async () => {
+    if (texto === originalRef.current) return;
+    const limpio = texto.trim();
+    const numero = limpio === "" ? null : Number(limpio);
+    if (numero !== null && (!Number.isFinite(numero) || numero < 0)) {
+      setEstado("error");
+      return;
+    }
+    setGuardando(true);
+    const ok = await actualizarCostoBaseGrupo(idProducto, idGrupo, numero);
+    setGuardando(false);
+    if (ok) {
+      originalRef.current = limpio;
+      setEstado("ok");
+      onGuardado(numero);
+      setTimeout(() => setEstado("idle"), 1200);
+    } else {
+      setEstado("error");
+    }
+  };
+
+  return (
+    <div style={{ position: "relative", display: "inline-flex", alignItems: "center", gap: 4 }}>
+      <span style={{ fontSize: 11, color: "#9CA3AF" }}>$</span>
+      <input
+        type="text"
+        inputMode="decimal"
+        value={texto}
+        onChange={(e) => { setTexto(e.target.value.replace(/[^0-9.]/g, "")); setEstado("idle"); }}
+        onBlur={guardar}
+        onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+        disabled={guardando}
+        placeholder="0.00"
+        style={{
+          width: 74, height: 26, padding: "0 6px", fontSize: 12,
+          border: `1px solid ${estado === "error" ? "#FCA5A5" : estado === "ok" ? "#86EFAC" : "#D1D5DB"}`,
+          borderRadius: 5, outline: "none", textAlign: "right", color: "#111827", boxSizing: "border-box",
+        }}
+      />
+      {guardando && <span style={{ fontSize: 10, color: "#9CA3AF" }}>...</span>}
+      {estado === "ok" && !guardando && <span style={{ fontSize: 10, color: "#16A34A", fontWeight: 600 }}>Guardado</span>}
+      {estado === "error" && !guardando && <span style={{ fontSize: 10, color: "#DC2626" }}>Error</span>}
+    </div>
+  );
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // BADGE "CREADO DESDE EXPO"
@@ -158,7 +274,15 @@ function ArchivosMini({ archivos }: { archivos?: ArchivoPreview[] }) {
 // ═══════════════════════════════════════════════════════════════════════════
 // DETALLE EXPANDIBLE
 // ═══════════════════════════════════════════════════════════════════════════
-function DetalleProducto({ id }: { id: number }) {
+function DetalleProducto({
+  id,
+  editando,
+  onCostoGuardado,
+}: {
+  id: number;
+  editando?: boolean;
+  onCostoGuardado?: (nuevoValor: number | null) => void;
+}) {
   const [detalle, setDetalle] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
@@ -306,10 +430,34 @@ function DetalleProducto({ id }: { id: number }) {
                     <span style={{ fontSize: 10, fontWeight: 700, color: c, letterSpacing: "0.05em", textTransform: "uppercase" }}>
                       Grupo {gi + 1} — {g.materiales.length} mat.
                     </span>
-                    {g.precio_sugerido && (
-                      <span style={{ fontSize: 11, fontWeight: 700, color: c }}>
-                        ${parseFloat(g.precio_sugerido).toLocaleString("es-MX", { minimumFractionDigits: 2 })} MXN
-                      </span>
+                    {editando ? (
+                      <CeldaCostoBase
+                        idProducto={id}
+                        idGrupo={g.idgrupo_papel}
+                        valor={g.precio_sugerido}
+                        onGuardado={(nuevo) => {
+                          setDetalle((prev: any) =>
+                            prev
+                              ? {
+                                  ...prev,
+                                  grupos: prev.grupos.map((gr: any) =>
+                                    gr.idgrupo_papel === g.idgrupo_papel ? { ...gr, precio_sugerido: nuevo } : gr
+                                  ),
+                                }
+                              : prev
+                          );
+                          // El grupo con menor "orden" (el primero en el arreglo) es
+                          // el mismo que se muestra como "Costo base" en la tabla —
+                          // se avisa al padre para que esa celda quede sincronizada.
+                          if (gi === 0) onCostoGuardado?.(nuevo);
+                        }}
+                      />
+                    ) : (
+                      g.precio_sugerido && (
+                        <span style={{ fontSize: 11, fontWeight: 700, color: c }}>
+                          ${parseFloat(g.precio_sugerido).toLocaleString("es-MX", { minimumFractionDigits: 2 })} MXN
+                        </span>
+                      )
                     )}
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 0, padding: "6px 8px" }}>
@@ -384,6 +532,10 @@ function TablaCatalogo({ productos, loading, onNuevo, onEditar, onEliminar }: {
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [ordenMedida, setOrdenMedida] = useState<"asc" | "desc" | null>(null);
+  const [editandoCostos, setEditandoCostos] = useState(false);
+  const [overrides, setOverrides] = useState<Record<number, number | null>>({});
+  const [laminadoAbierto, setLaminadoAbierto] = useState(false);
+  const [overridesLaminado, setOverridesLaminado] = useState<Record<number, number | null>>({});
 
   // La última columna debe tener ancho fijo. Con "auto", el encabezado la
   // calculaba en 0 px (está vacío), mientras cada fila la hacía crecer por
@@ -469,10 +621,36 @@ function TablaCatalogo({ productos, loading, onNuevo, onEditar, onEliminar }: {
           </div>
 
           <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 12, marginLeft: "auto", flexShrink: 0 }}>
+            <button
+              onClick={() => setLaminadoAbierto(true)}
+              title="Abre una lista con todos los productos para capturar rollo, desarrollo y piezas de suaje, y calcular el costo de laminado de cada uno"
+              style={{ height: 38, padding: "0 16px", borderRadius: 7, cursor: "pointer", fontSize: 12, fontWeight: 600, whiteSpace: "nowrap", border: "1px solid #D1D5DB", background: "#fff", color: "#374151" }}
+            >
+              Editar costos de laminado
+            </button>
+            <button
+              onClick={() => setEditandoCostos(v => !v)}
+              title="Activa campos editables en la columna Costo base (y en las opciones de material del detalle) para capturar o corregir precios sin abrir el formulario completo"
+              style={{
+                height: 38, padding: "0 16px", borderRadius: 7, cursor: "pointer",
+                fontSize: 12, fontWeight: 600, whiteSpace: "nowrap",
+                border: editandoCostos ? "1px solid #047857" : "1px solid #D1D5DB",
+                background: editandoCostos ? "#047857" : "#fff",
+                color: editandoCostos ? "#fff" : "#374151",
+              }}
+            >
+              {editandoCostos ? "Listo — terminar edición" : "Editar costos base"}
+            </button>
             <button onClick={onNuevo} style={{ height: 38, padding: "0 18px", border: "none", borderRadius: 7, background: "#1D4ED8", color: "#fff", fontSize: 12, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>+ Registrar nuevo producto</button>
             <CargaMasivaPapel />
           </div>
         </div>
+
+        {editandoCostos && (
+          <div style={{ margin: "-2px 0 10px", fontSize: 11, color: "#047857", background: "#ECFDF5", border: "1px solid #A7F3D0", borderRadius: 6, padding: "6px 10px" }}>
+            Modo edición de costo base activo: escribe el precio en la columna "Costo base" y presiona Enter o haz clic fuera para guardarlo. Si un producto tiene más de una opción de material, ábrelo con el botón "+N" para editar los demás.
+          </div>
+        )}
 
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
           <div style={{ position: "relative", flex: 1 }}>
@@ -567,8 +745,33 @@ function TablaCatalogo({ productos, loading, onNuevo, onEditar, onEliminar }: {
                   }
                 </span>
                 <span style={{ fontSize: 12, color: "#374151", textAlign: "center" }}>{px.primer_pliego || "—"}</span>
-                <span style={{ fontSize: 12, color: "#374151", textAlign: "center", whiteSpace: "nowrap" }}>{formatoMXN(px.costo_base_grupo1, 2)}</span>
-                <span style={{ fontSize: 12, color: "#374151", textAlign: "center", whiteSpace: "nowrap" }}>{formatoMXN(px.costo_laminado, 4)}</span>
+                <span
+                  style={{ fontSize: 12, color: "#374151", textAlign: "center", whiteSpace: "nowrap", display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }}
+                  onClick={e => e.stopPropagation()}
+                >
+                  {editandoCostos ? (
+                    <CeldaCostoBase
+                      idProducto={p.idproducto_papel}
+                      idGrupo={px.idgrupo_papel_grupo1 ?? null}
+                      valor={overrides[p.idproducto_papel] !== undefined ? overrides[p.idproducto_papel] : px.costo_base_grupo1}
+                      onGuardado={(nuevo) => setOverrides(prev => ({ ...prev, [p.idproducto_papel]: nuevo }))}
+                    />
+                  ) : (
+                    formatoMXN(overrides[p.idproducto_papel] !== undefined ? overrides[p.idproducto_papel] : px.costo_base_grupo1, 2)
+                  )}
+                  {editandoCostos && (px.total_grupos ?? 1) > 1 && (
+                    <button
+                      onClick={() => toggleExpanded(p.idproducto_papel)}
+                      title="Este producto tiene más de una opción de material — ábrelo para editar los demás costos"
+                      style={{ fontSize: 10, color: "#1D4ED8", background: "none", border: "none", cursor: "pointer", textDecoration: "underline", padding: 0 }}
+                    >
+                      +{(px.total_grupos ?? 1) - 1}
+                    </button>
+                  )}
+                </span>
+                <span style={{ fontSize: 12, color: "#374151", textAlign: "center", whiteSpace: "nowrap" }}>
+                  {formatoMXN(overridesLaminado[p.idproducto_papel] !== undefined ? overridesLaminado[p.idproducto_papel] : px.costo_laminado, 4)}
+                </span>
                 <span style={{ fontSize: 12, color: "#374151", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textAlign: "center" }}>{p.creado_por || "—"}</span>
                 <ArchivosMini archivos={px.archivos_preview} />
                 <div style={{ display: "flex", width: "100%", gap: 5, alignItems: "center", justifyContent: "flex-end" }} onClick={e => e.stopPropagation()}>
@@ -577,7 +780,13 @@ function TablaCatalogo({ productos, loading, onNuevo, onEditar, onEliminar }: {
                   <button onClick={() => setDeleteId(p.idproducto_papel)} style={{ height: 28, padding: "0 8px", background: "#FEE2E2", border: "none", borderRadius: 5, cursor: "pointer", fontSize: 11, fontWeight: 600, color: "#DC2626" }}>x</button>
                 </div>
               </div>
-              {isExpanded && <DetalleProducto id={p.idproducto_papel} />}
+              {isExpanded && (
+                <DetalleProducto
+                  id={p.idproducto_papel}
+                  editando={editandoCostos}
+                  onCostoGuardado={(nuevo) => setOverrides(prev => ({ ...prev, [p.idproducto_papel]: nuevo }))}
+                />
+              )}
             </div>
           );
         })}
@@ -586,6 +795,14 @@ function TablaCatalogo({ productos, loading, onNuevo, onEditar, onEliminar }: {
       <div style={{ marginTop: 8, textAlign: "right", fontSize: 11, color: "#9CA3AF" }}>
         {filtered.length} de {productos.length} producto{productos.length !== 1 ? "s" : ""}
       </div>
+
+      {laminadoAbierto && (
+        <ModalCostosLaminado
+          productos={filtered}
+          onClose={() => setLaminadoAbierto(false)}
+          onGuardado={(idProducto, nuevoCosto) => setOverridesLaminado(prev => ({ ...prev, [idProducto]: nuevoCosto }))}
+        />
+      )}
     </div>
   );
 }

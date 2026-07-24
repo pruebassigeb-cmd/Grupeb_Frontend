@@ -3,16 +3,26 @@ import { useState } from "react";
 interface Props {
   correoInicial: string;
   nombreDocumento: string;
-  onConfirmar: (correo: string) => void;
   onCancelar: () => void;
   enviando: boolean;
+  // Modo simple (botones sueltos de PDF): un solo botón "Enviar correo".
+  onConfirmar?: (correo: string) => void;
+  // Modo de 3 acciones (flujo de aprobar cotización → pedido): si se provee,
+  // reemplaza el botón único por Imprimir / Enviar / Ambos.
+  onEjecutar?: (opciones: { imprimir: boolean; correo: boolean }, correoDestino: string) => void;
 }
 
+const BOTON_ACCION: React.CSSProperties = {
+  background: "transparent", border: "1px solid #C9922A55", color: "#C9922A",
+  fontSize: 11, fontWeight: 700, padding: "8px 10px", borderRadius: 6, whiteSpace: "nowrap",
+};
+
 export default function ModalConfirmarCorreo({
-  correoInicial, nombreDocumento, onConfirmar, onCancelar, enviando,
+  correoInicial, nombreDocumento, onCancelar, enviando, onConfirmar, onEjecutar,
 }: Props) {
   const [correo, setCorreo] = useState(correoInicial || "");
   const correoValido = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo.trim());
+  const modoAcciones = Boolean(onEjecutar);
 
   return (
     <div
@@ -43,7 +53,9 @@ export default function ModalConfirmarCorreo({
             📧
           </div>
           <div>
-            <div style={{ color: "#FFF", fontSize: 14, fontWeight: 700 }}>Enviar por correo</div>
+            <div style={{ color: "#FFF", fontSize: 14, fontWeight: 700 }}>
+              {modoAcciones ? "Generar pedido" : "Enviar por correo"}
+            </div>
             <div style={{ color: "#666", fontSize: 10.5, marginTop: 2 }}>
               Documento: <span style={{ color: "#C9922A", fontWeight: 600 }}>{nombreDocumento}</span>
             </div>
@@ -83,53 +95,106 @@ export default function ModalConfirmarCorreo({
           )}
 
           <p style={{ marginTop: 14, color: "#555", fontSize: 11, lineHeight: 1.5 }}>
-            Se enviará el PDF adjunto a este correo. Puedes editarlo antes de confirmar.
+            {modoAcciones
+              ? "Solo hace falta un correo válido si vas a enviarlo por correo. \"Imprimir\" no lo requiere."
+              : "Se enviará el PDF adjunto a este correo. Puedes editarlo antes de confirmar."}
           </p>
         </div>
 
         {/* Footer */}
-        <div style={{
-          display: "flex", justifyContent: "flex-end", gap: 10,
-          padding: "16px 22px", borderTop: "1px solid #222", background: "#111",
-        }}>
-          <button
-            type="button"
-            onClick={onCancelar}
-            disabled={enviando}
-            style={{
-              padding: "9px 18px", borderRadius: 8, border: "1px solid #333",
-              background: "transparent", color: "#999", fontSize: 12.5, fontWeight: 600,
-              cursor: enviando ? "not-allowed" : "pointer", opacity: enviando ? .5 : 1,
-            }}
-          >
-            Cancelar
-          </button>
-          <button
-            type="button"
-            disabled={!correoValido || enviando}
-            onClick={() => onConfirmar(correo.trim())}
-            style={{
-              padding: "9px 20px", borderRadius: 8, border: "none",
-              background: correoValido && !enviando ? "#C9922A" : "#C9922A33",
-              color: correoValido && !enviando ? "#0D0D0D" : "#0D0D0D88",
-              fontSize: 12.5, fontWeight: 700,
-              cursor: correoValido && !enviando ? "pointer" : "not-allowed",
-              display: "flex", alignItems: "center", gap: 6,
-              transition: "background .15s",
-            }}
-          >
-            {enviando ? (
-              <>
-                <span style={{
-                  width: 12, height: 12, borderRadius: "50%",
-                  border: "2px solid #0D0D0D55", borderTopColor: "#0D0D0D",
-                  animation: "spin-correo .7s linear infinite",
-                }} />
-                Enviando...
-              </>
-            ) : "📧 Enviar correo"}
-          </button>
-        </div>
+        {modoAcciones ? (
+          <div style={{
+            display: "flex", justifyContent: "space-between", alignItems: "center",
+            gap: 10, flexWrap: "wrap",
+            padding: "16px 22px", borderTop: "1px solid #222", background: "#111",
+          }}>
+            <button
+              type="button"
+              onClick={onCancelar}
+              disabled={enviando}
+              style={{
+                padding: "9px 14px", borderRadius: 8, border: "1px solid #333",
+                background: "transparent", color: "#999", fontSize: 12.5, fontWeight: 600,
+                cursor: enviando ? "not-allowed" : "pointer", opacity: enviando ? .5 : 1,
+              }}
+            >
+              Cancelar
+            </button>
+
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button
+                type="button"
+                disabled={enviando}
+                onClick={() => onEjecutar!({ imprimir: true, correo: false }, correo.trim())}
+                title="Aprobar y generar/descargar el PDF, sin enviar correo"
+                style={{ ...BOTON_ACCION, cursor: enviando ? "not-allowed" : "pointer", opacity: enviando ? .5 : 1 }}
+              >
+                {enviando ? "⏳" : "🖨 Imprimir"}
+              </button>
+              <button
+                type="button"
+                disabled={enviando || !correoValido}
+                onClick={() => onEjecutar!({ imprimir: false, correo: true }, correo.trim())}
+                title="Aprobar y enviar el PDF por correo"
+                style={{ ...BOTON_ACCION, cursor: enviando || !correoValido ? "not-allowed" : "pointer", opacity: enviando || !correoValido ? .5 : 1 }}
+              >
+                {enviando ? "⏳" : "📧 Enviar"}
+              </button>
+              <button
+                type="button"
+                disabled={enviando || !correoValido}
+                onClick={() => onEjecutar!({ imprimir: true, correo: true }, correo.trim())}
+                title="Aprobar, generar el PDF y enviarlo por correo"
+                style={{ ...BOTON_ACCION, cursor: enviando || !correoValido ? "not-allowed" : "pointer", opacity: enviando || !correoValido ? .5 : 1 }}
+              >
+                {enviando ? "⏳" : "🖨📧 Ambos"}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div style={{
+            display: "flex", justifyContent: "flex-end", gap: 10,
+            padding: "16px 22px", borderTop: "1px solid #222", background: "#111",
+          }}>
+            <button
+              type="button"
+              onClick={onCancelar}
+              disabled={enviando}
+              style={{
+                padding: "9px 18px", borderRadius: 8, border: "1px solid #333",
+                background: "transparent", color: "#999", fontSize: 12.5, fontWeight: 600,
+                cursor: enviando ? "not-allowed" : "pointer", opacity: enviando ? .5 : 1,
+              }}
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              disabled={!correoValido || enviando}
+              onClick={() => onConfirmar!(correo.trim())}
+              style={{
+                padding: "9px 20px", borderRadius: 8, border: "none",
+                background: correoValido && !enviando ? "#C9922A" : "#C9922A33",
+                color: correoValido && !enviando ? "#0D0D0D" : "#0D0D0D88",
+                fontSize: 12.5, fontWeight: 700,
+                cursor: correoValido && !enviando ? "pointer" : "not-allowed",
+                display: "flex", alignItems: "center", gap: 6,
+                transition: "background .15s",
+              }}
+            >
+              {enviando ? (
+                <>
+                  <span style={{
+                    width: 12, height: 12, borderRadius: "50%",
+                    border: "2px solid #0D0D0D55", borderTopColor: "#0D0D0D",
+                    animation: "spin-correo .7s linear infinite",
+                  }} />
+                  Enviando...
+                </>
+              ) : "📧 Enviar correo"}
+            </button>
+          </div>
+        )}
       </div>
 
       <style>{`

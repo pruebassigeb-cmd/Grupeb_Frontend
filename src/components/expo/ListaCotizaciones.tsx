@@ -601,12 +601,17 @@ export default function ListaCotizaciones({
     }
   };
 
-  // ── Paso 3: el usuario confirmó el correo → AHORA sí se aprueba, se
-  // refresca, se genera el PDF y se envía el correo — todo como un solo
-  // paso final. Si algo de esto falla, ya se aprobó (eso no se puede
-  // revertir desde el front), pero el usuario ya dio su visto bueno a todo
-  // de antemano, así que no hay sorpresas a mitad del camino.
-  const confirmarCorreoYAprobar = async (correoConfirmado: string) => {
+  // ── Paso 3: el usuario eligió qué hacer (Imprimir / Enviar / Ambos) →
+  // AHORA sí se aprueba, se refresca, se genera el PDF (guardándolo siempre
+  // en el gestor de archivos) y opcionalmente se descarga y/o se envía por
+  // correo — todo como un solo paso final. Si algo de esto falla, ya se
+  // aprobó (eso no se puede revertir desde el front), pero el usuario ya
+  // dio su visto bueno a todo de antemano, así que no hay sorpresas a
+  // mitad del camino.
+  const confirmarAprobacion = async (
+    opciones: { imprimir: boolean; correo: boolean },
+    correoConfirmado: string
+  ) => {
     if (!cotEnProceso) return;
     const cot = cotEnProceso;
 
@@ -636,68 +641,89 @@ export default function ListaCotizaciones({
       const data = await getCotizacionesExpo();
       const backDataFresco = data.find(c => c.no_cotizacion === cot.folio);
       if (!backDataFresco) {
-        alert("El pedido se aprobó, pero no se pudo recuperar para enviar el correo. Puedes enviarlo manualmente desde la fila del pedido.");
+        alert("El pedido se aprobó, pero no se pudo recuperar para generar su PDF. Puedes generarlo manualmente desde la fila del pedido.");
         return;
       }
 
       const payload = await construirPayloadPdfPedidoDesdeBackData(backDataFresco, cot.folio, cot.fecha);
-      const blob = await generarPdfPedido(payload as any, false, false);
 
-      await enviarCorreoDocumento({
-        tipo: "pedido",
-        folio: payload.no_pedido,
-        cliente: payload.cliente,
-        empresa: payload.empresa,
-        destinatario: correoConfirmado,
-        pdfBlob: blob,
-        nombreArchivo: `Pedido_${payload.no_pedido}.pdf`,
-        modulo: "expo",
-      });
+      // Todas las combinaciones guardan siempre en el gestor de archivos,
+      // pero si imprimir y correo se piden juntos, solo la primera llamada
+      // sube el PDF (para no duplicarlo en S3).
+      let yaGuardado = false;
+      const debeGuardarAhora = () => {
+        if (yaGuardado) return false;
+        yaGuardado = true;
+        return true;
+      };
+
+      if (opciones.imprimir) {
+        await generarPdfPedido(payload as any, debeGuardarAhora(), true);
+      }
+      if (opciones.correo) {
+        const blob = await generarPdfPedido(payload as any, debeGuardarAhora(), false);
+        await enviarCorreoDocumento({
+          tipo: "pedido",
+          folio: payload.no_pedido,
+          cliente: payload.cliente,
+          empresa: payload.empresa,
+          destinatario: correoConfirmado,
+          pdfBlob: blob,
+          nombreArchivo: `Pedido_${payload.no_pedido}.pdf`,
+          modulo: "expo",
+        });
+      }
 
       cancelarTodoElFlujo();
     } catch (e: any) {
       if (e instanceof OperacionEncoladaError) {
-        // La entrada genérica "http" que ya encoló aprobarCotizacionExpo no
-        // alcanza para mandar el correo del pedido (necesita el folio real
-        // de pedido, que todavía no existe) — se reemplaza por una tarea
-        // compuesta que aprueba y sí manda el correo sola en cuanto
-        // sincronice. Mismo patrón que "cotizacion-expo-con-correo".
-        await eliminarDeOutbox(e.entry.id);
+        if (opciones.correo) {
+          // La entrada genérica "http" que ya encoló aprobarCotizacionExpo
+          // no alcanza para mandar el correo del pedido (necesita el folio
+          // real de pedido, que todavía no existe) — se reemplaza por una
+          // tarea compuesta que aprueba y sí manda el correo sola en cuanto
+          // sincronice. Mismo patrón que "cotizacion-expo-con-correo".
+          await eliminarDeOutbox(e.entry.id);
 
-        const itemsAprobados = Object.entries(selecciones[cot.id] || {})
-          .filter(([, detalleId]) => detalleId !== null)
-          .map(([prodId, detalleId]) => ({
-            idsolicitud_producto: Number(prodId),
-            idsolicitud_detalle: detalleId as number,
-          }))
-          .filter(item => item.idsolicitud_detalle > 0);
+          const itemsAprobados = Object.entries(selecciones[cot.id] || {})
+            .filter(([, detalleId]) => detalleId !== null)
+            .map(([prodId, detalleId]) => ({
+              idsolicitud_producto: Number(prodId),
+              idsolicitud_detalle: detalleId as number,
+            }))
+            .filter(item => item.idsolicitud_detalle > 0);
 
-        await encolarPersonalizado(
-          "aprobar-cotizacion-expo-con-correo",
-          {
-            folio: cot.folio,
-            itemsAprobados,
-            fecha: cot.fecha,
-            correo: {
-              destinatario: correoConfirmado,
-              cliente: cot.cliente,
-              empresa: cot.clienteData?.impresion ?? null,
+          await encolarPersonalizado(
+            "aprobar-cotizacion-expo-con-correo",
+            {
+              folio: cot.folio,
+              itemsAprobados,
+              fecha: cot.fecha,
+              correo: {
+                destinatario: correoConfirmado,
+                cliente: cot.cliente,
+                empresa: cot.clienteData?.impresion ?? null,
+              },
             },
-          },
-          `Aprobar cotización Expo ${cot.folio} + correo de pedido`,
-          "expo"
-        );
+            `Aprobar cotización Expo ${cot.folio} + correo de pedido`,
+            "expo"
+          );
+        }
+        // Si no se pidió correo, la entrada genérica que ya encoló
+        // aprobarCotizacionExpo es suficiente — se sincroniza sola.
 
         onRefresh();
         setExpandidoId(null);
         cancelarTodoElFlujo();
         alert(
-          "Sin conexión: la aprobación se guardó y se aplicará sola cuando vuelva la señal. El correo del pedido se enviará automáticamente en cuanto se sincronice."
+          opciones.correo
+            ? "Sin conexión: la aprobación se guardó y se aplicará sola cuando vuelva la señal. El correo del pedido se enviará automáticamente en cuanto se sincronice."
+            : "Sin conexión: la aprobación se guardó y se aplicará sola cuando vuelva la señal."
         );
         return;
       }
-      console.error("❌ Error en aprobación/envío:", e);
-      alert(e?.response?.data?.error || "Ocurrió un error al aprobar o enviar el correo.");
+      console.error("❌ Error en aprobación/PDF/correo:", e);
+      alert(e?.response?.data?.error || "Ocurrió un error al aprobar, generar el PDF o enviar el correo.");
     } finally {
       setEnviandoAprobacion(false);
     }
@@ -715,22 +741,35 @@ export default function ListaCotizaciones({
     }
   };
 
-  // ── PDF/correo de COTIZACIÓN (aún no pedido) — botón suelto en la fila ──
+  // ── PDF/correo de COTIZACIÓN (aún no pedido) — botones sueltos en la fila ──
+  // Las 3 acciones (correo / PDF / PDF + correo) comparten una misma base:
+  // siempre guardan el PDF completo en el gestor de archivos (S3). Se cachea
+  // la promesa para que, si en un mismo clic se dispara imprimir Y correo,
+  // no se genere ni se suba el PDF dos veces.
   const handleAccionesPdfCotizacion = async (cot: CotizacionGuardada, opciones: { imprimir: boolean; correo: boolean }) => {
     const backData = (cot as any)._backData;
     if (!backData) return;
     setGenerandoPdf(cot.id);
     try {
+      let pdfArchivadoPromise: Promise<Blob> | null = null;
+      const obtenerPdfArchivado = () => {
+        if (!pdfArchivadoPromise) {
+          pdfArchivadoPromise = (async () => {
+            const payload = await construirPayloadPdfCotizacion(cot);
+            return await generarPdfCotizacion(payload as any, true, false);
+          })();
+        }
+        return pdfArchivadoPromise;
+      };
+
       await ejecutarEnvio(
         {
-          paraImprimir: () => {
+          paraImprimir: async () => {
             const params = cotizacionBackDataAPdfParams(backData, cot.folio, cot.fecha, asesor);
             generarPdfCotizacionExpo(params);
+            await obtenerPdfArchivado(); // guarda la copia completa en el gestor de archivos
           },
-          paraCorreo: async () => {
-            const payload = await construirPayloadPdfCotizacion(cot);
-            return await generarPdfCotizacion(payload as any, false, false);
-          },
+          paraCorreo: () => obtenerPdfArchivado(),
         },
         {
           tipo: "cotizacion",
@@ -749,18 +788,26 @@ export default function ListaCotizaciones({
     }
   };
 
-  // ── PDF/correo de PEDIDO ya existente — botón suelto en la fila ─────────
+  // ── PDF/correo de PEDIDO ya existente — botones sueltos en la fila ─────────
+  // Mismo principio: las 3 acciones siempre guardan en S3, pero si imprimir y
+  // correo se disparan juntos, solo la primera llamada sube el archivo.
   const handleAccionesPdfPedido = async (cot: CotizacionGuardada, opciones: { imprimir: boolean; correo: boolean }) => {
     const backData = (cot as any)._backData;
     if (!backData) return;
     setGenerandoPdf(cot.id);
     try {
       const payload = await construirPayloadPdfPedidoDesdeBackData(backData, cot.folio, cot.fecha);
+      let yaGuardado = false;
+      const debeGuardarAhora = () => {
+        if (yaGuardado) return false;
+        yaGuardado = true;
+        return true;
+      };
 
       await ejecutarEnvio(
         {
-          paraImprimir: async () => { await generarPdfPedido(payload as any, false, true); },
-          paraCorreo: async () => { return await generarPdfPedido(payload as any, false, false); },
+          paraImprimir: async () => { await generarPdfPedido(payload as any, debeGuardarAhora(), true); },
+          paraCorreo: async () => { return await generarPdfPedido(payload as any, debeGuardarAhora(), false); },
         },
         {
           tipo: "pedido",
@@ -897,7 +944,6 @@ export default function ListaCotizaciones({
                               ? handleAccionesPdfPedido(cot, opciones)
                               : handleAccionesPdfCotizacion(cot, opciones)
                           }
-                          label={esPedido ? "PDF Pedido" : "PDF"}
                         />
                       </div>
                       <span style={{ color: "#555", fontSize: 11, flexShrink: 0 }}>{abierto ? "▲" : "▼"}</span>
@@ -996,7 +1042,6 @@ export default function ListaCotizaciones({
                             <BotonAccionesPdf
                               procesando={procesandoEstePdf}
                               onEjecutar={(opciones) => handleAccionesPdfPedido(cot, opciones)}
-                              label="PDF Pedido"
                             />
                           </div>
                         )}
@@ -1021,14 +1066,15 @@ export default function ListaCotizaciones({
         />
       )}
 
-      {/* Paso 2: confirmar correo — SOLO tras confirmar aquí se aprueba de verdad */}
+      {/* Paso 2: elegir Imprimir / Enviar / Ambos — SOLO tras elegir aquí se
+          aprueba de verdad. */}
       {modalCorreoAprobarAbierto && (
         <ModalConfirmarCorreo
           correoInicial={correoAprobarDefault}
           nombreDocumento={cotEnProceso ? folioAPedido(cotEnProceso.folio) : ""}
           enviando={enviandoAprobacion}
-          onConfirmar={confirmarCorreoYAprobar}
           onCancelar={cancelarTodoElFlujo}
+          onEjecutar={confirmarAprobacion}
         />
       )}
 

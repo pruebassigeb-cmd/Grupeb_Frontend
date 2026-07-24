@@ -31,6 +31,7 @@ import OfflineBanner from "./components/OfflineBanner";
 import SyncStatusIndicator from "./components/SyncStatusIndicator";
 import ConnectivityToast from "./components/ConnectivityToast";
 import "./offline/expoOutboxHandlers";
+import ReportesCorreo from "./pages/ReportesCorreo";
 
 const PERMISOS = {
   usuarios: "Crear/Editar/Eliminar Usuarios",
@@ -99,6 +100,16 @@ function App() {
               </ProtectedRoute>
             }
           />
+
+           {/* dentro de <Routes>, junto a la ruta de /usuarios: */}
+<Route
+  path="/reportes-correo"
+  element={
+    <ProtectedRoute permiso={PERMISOS.usuarios}>
+      <ReportesCorreo />
+    </ProtectedRoute>
+  }
+/>
 
           {/* Clientes */}
           <Route
@@ -249,6 +260,7 @@ function App() {
               </ProtectedRoute>
             }
           />
+          
 
           {/* Backups BD — solo admins (accesoTotal), protección extra por código dentro del componente */}
           <Route
