@@ -72,13 +72,13 @@ export default function Dashboard({ children }: DashboardProps) {
       permiso: "Crear/Editar/Eliminar Usuarios",
       subItems: [],
     },
-    // {
-    //   name: "Reportes de Correo",
-    //   icon: "📧",
-    //   path: "/reportes-correo",
-    //   permiso: "Crear/Editar/Eliminar Usuarios",
-    //   subItems: [],
-    // },
+    {
+      name: "Reportes de Correo",
+      icon: "📧",
+      path: "/reportes-correo",
+      permiso: "Crear/Editar/Eliminar Usuarios",
+      subItems: [],
+    },
     {
       name: "Clientes",
       icon: "🏢",

@@ -417,13 +417,13 @@ const PROCESOS_PAPEL: { key: NombreProcesoPapel; encabezado: string; titulo: str
 const COLUMNAS_PAPEL = PROCESOS_PAPEL.map(({ encabezado }) => encabezado);
 
 const COLUMNAS = [
-  "Fecha", "N° Pedido", "Impresion + Info", "Tipo",
+  "Fecha", "N° Pedido", "Impresion + Info", "Tipo", "Cantidad",
   "Anticipo", "OD", "Diseno", "Orden", "Días",
   "Ext", "Imp", "Bol", "Asa", ...COLUMNAS_PAPEL,
   "E. Cta", "Pago", "Envio",
 ];
 const COLS_CENTRADAS = new Set([
-  "Impresion + Info", "Tipo", "Anticipo", "OD", "Diseno", "Orden", "Días",
+  "Impresion + Info", "Tipo", "Cantidad", "Anticipo", "OD", "Diseno", "Orden", "Días",
   "Ext", "Imp", "Bol", "Asa", ...COLUMNAS_PAPEL,
   "E. Cta", "Pago", "Envio",
 ]);
@@ -490,6 +490,33 @@ function ContadorDiasHabiles({ pedido }: { pedido: PedidoSeguimiento }) {
     >
       {dias}
     </span>
+  );
+}
+
+// ─────────────────────────────────────────────
+// Cantidad del pedido: muestra unidades y, cuando aplica, kilogramos
+// ─────────────────────────────────────────────
+function CantidadPedido({ pedido }: { pedido: PedidoSeguimiento }) {
+  const unidades = pedido.cantidad_orden;
+  const kilos = pedido.kilogramos_orden;
+
+  if ((unidades == null || unidades === 0) && (kilos == null || kilos === 0)) {
+    return <span className="text-xs text-gray-300">—</span>;
+  }
+
+  return (
+    <div className="leading-tight text-[11px]">
+      {unidades != null && unidades > 0 && (
+        <div className="text-gray-700 font-medium whitespace-nowrap">
+          {unidades.toLocaleString("es-MX")} pzas
+        </div>
+      )}
+      {kilos != null && kilos > 0 && (
+        <div className="text-emerald-600 whitespace-nowrap">
+          {kilos.toLocaleString("es-MX", { maximumFractionDigits: 2 })} kg
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -725,6 +752,12 @@ export default function Seguimiento() {
             {pedido.tipo_producto || "—"}
           </span>
         </td>
+
+        {/* CANTIDAD (unidades + kilogramos) */}
+        <td className={`${px} text-center`}>
+          <CantidadPedido pedido={pedido} />
+        </td>
+
         {/* ANTICIPO */}
         <td className={`${px} text-center`}>
           {esAccesoTotal

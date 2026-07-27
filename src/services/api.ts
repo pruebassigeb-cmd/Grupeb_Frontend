@@ -1,4 +1,4 @@
-import axios from "axios";
+import axios, { type AxiosRequestConfig, type AxiosResponse } from "axios";
 
 // Detectar entorno automáticamente
 const API_URL = import.meta.env.VITE_API_URL || (
@@ -56,5 +56,49 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
+// ============================================================
+// Deduplicación de GET concurrentes ("singleflight"): si dos llamadas piden
+// la misma URL+params mientras la primera sigue en vuelo (ej. warmApiCache
+// precalentando /pedidos justo cuando Cotizar.tsx pide lo mismo al montarse),
+// la segunda reutiliza la promesa de la primera en vez de disparar otra
+// petición — evita ráfagas de peticiones idénticas que agotan el rate limit
+// del backend. Se limpia del mapa en cuanto se resuelve (éxito o error), así
+// que no sirve datos viejos: solo evita pedir dos veces lo mismo a la vez.
+// ============================================================
+const solicitudesEnVuelo = new Map<string, Promise<AxiosResponse>>();
+
+function serializarParamsOrdenado(params: unknown): string {
+  if (!params || typeof params !== "object") return JSON.stringify(params ?? null);
+  const ordenado: Record<string, unknown> = {};
+  for (const clave of Object.keys(params as Record<string, unknown>).sort()) {
+    ordenado[clave] = (params as Record<string, unknown>)[clave];
+  }
+  return JSON.stringify(ordenado);
+}
+
+const getOriginal = api.get.bind(api);
+
+api.get = (<T = any, R = AxiosResponse<T>>(
+  url: string,
+  config?: AxiosRequestConfig
+): Promise<R> => {
+  // Las peticiones cancelables (signal/cancelToken, ej. cálculo de precio en
+  // vivo con debounce) no se comparten: si dos llamadas usaran la misma
+  // promesa y una se aborta, la otra se quedaría sin respuesta también.
+  if (config?.signal || config?.cancelToken) {
+    return getOriginal<T, R>(url, config);
+  }
+
+  const clave = `GET ${url}?${serializarParamsOrdenado(config?.params)}`;
+  const existente = solicitudesEnVuelo.get(clave) as Promise<R> | undefined;
+  if (existente) return existente;
+
+  const promesa = getOriginal<T, R>(url, config).finally(() => {
+    solicitudesEnVuelo.delete(clave);
+  });
+  solicitudesEnVuelo.set(clave, promesa as unknown as Promise<AxiosResponse>);
+  return promesa;
+}) as typeof api.get;
 
 export default api;

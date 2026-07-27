@@ -23,9 +23,11 @@ export default function ProtectedRoute({
     );
   }
 
-  // No autenticado → login
+  // No autenticado → login, pero recordando a dónde iba (ej. un deep-link
+  // de un correo) para regresarlo ahí después de iniciar sesión.
   if (!user) {
-    return <Navigate to="/" replace />;
+    const destino = `${location.pathname}${location.search}`;
+    return <Navigate to="/" replace state={{ from: destino }} />;
   }
 
   // Rol exclusivo: mientras Expo esté en desarrollo, este rol solo puede

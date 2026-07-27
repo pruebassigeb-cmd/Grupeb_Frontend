@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import logo from "../assets/grupeblanco.png";
 import bolsas from "../assets/bolsas.png";
@@ -10,7 +10,22 @@ export default function Login() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const location = useLocation();
+  const { user, login } = useAuth();
+
+  // Ruta a la que hay que regresar tras autenticar — la puso ProtectedRoute
+  // en el state al mandarte para acá (ej. un link de un correo a /diseno).
+  const destino = (location.state as { from?: string } | null)?.from || "/home";
+
+  // Si abres el link del correo en una pestaña nueva pero ya tienes sesión
+  // activa (localStorage con el user guardado), no tiene caso mostrarte el
+  // formulario — te manda directo a donde ibas.
+  useEffect(() => {
+    if (user) {
+      navigate(destino, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,8 +49,8 @@ export default function Login() {
     try {
       console.log("🔵 Llamando a login()...");
       await login(correo, codigo);
-      console.log("✅ Login exitoso, navegando a /home");
-      navigate("/home");
+      console.log("✅ Login exitoso, navegando a", destino);
+      navigate(destino, { replace: true });
     } catch (err: any) {
       console.error("❌ Error en login:", err);
       setError(err.response?.data?.error || "Credenciales incorrectas");
@@ -59,7 +74,7 @@ export default function Login() {
         <div className="flex justify-center">
           <div className="w-full max-w-md bg-slate-900/80 backdrop-blur rounded-2xl shadow-2xl p-8 border border-slate-700">
             <img src={logo} alt="Grupo EB" className="w-28 mx-auto mb-4" />
-            
+
             <h2 className="text-2xl font-semibold text-white text-center mb-6">
               Inicio de sesión
             </h2>
