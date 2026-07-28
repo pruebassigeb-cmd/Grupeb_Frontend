@@ -488,7 +488,14 @@ export async function generarPdfPedido(
   pedido: PedidoPdf,
   guardarEnS3 = false,
   descargar = true,
-  formato: FormatoPedidoPdf = "carta"
+  formato: FormatoPedidoPdf = "carta",
+  // Antes este offset se aplicaba SIEMPRE, sin importar el origen de la
+  // llamada, lo cual desalineaba (recorría ~9mm a la derecha) cualquier PDF
+  // "carta" generado para verse en pantalla o imprimirse desde una PC normal.
+  // Ahora queda apagado por defecto: solo se debe activar explícitamente
+  // desde el flujo de impresión de la tablet, una vez que se conecte ese
+  // origen distinto (por ahora ningún llamador lo activa).
+  aplicarOffsetImpresion = false
 ): Promise<Blob> {
   const { PW, PH, formatoJsPdf, ocultarLogo } = resolverDimensiones(formato);
   const M = 10;
@@ -504,7 +511,7 @@ export async function generarPdfPedido(
   const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: formatoJsPdf });
   const PED_FOOTER_H = 55;
 
-  // ── Corrección de alineación de impresión ────────────────────────────────
+  // ── Corrección de alineación de impresión (SOLO si se solicita) ──────────
   // Al imprimir desde tablet el contenido cae ~8mm corrido a la izquierda.
   // Se compensa desplazando TODO el contenido de la página (encabezado, tabla
   // y pie) hacia la derecha mediante una transformación a nivel de PDF, sin
@@ -517,13 +524,15 @@ export async function generarPdfPedido(
       `q 1 0 0 1 ${(OFFSET_IMPRESION_MM * PT_POR_MM).toFixed(3)} 0 cm`
     );
   };
-  const _addPage = doc.addPage.bind(doc);
-  (doc as any).addPage = (...args: any[]) => {
-    const resultado = _addPage(...args);
-    abrirOffsetPaginaActual(); // cada página nueva también queda desplazada
-    return resultado;
-  };
-  abrirOffsetPaginaActual(); // aplica el desfase a la primera página
+  if (aplicarOffsetImpresion) {
+    const _addPage = doc.addPage.bind(doc);
+    (doc as any).addPage = (...args: any[]) => {
+      const resultado = _addPage(...args);
+      abrirOffsetPaginaActual(); // cada página nueva también queda desplazada
+      return resultado;
+    };
+    abrirOffsetPaginaActual(); // aplica el desfase a la primera página
+  }
 
   const y = await dibujarEncabezado({
     doc, logoBase64,
@@ -569,13 +578,16 @@ export async function generarPdfPedido(
 
   // Cierra la transformación de offset (q ... cm) abierta en cada página,
   // dejando el content-stream de todas las páginas correctamente balanceado.
-  const totalPaginas = (doc as any).internal.getNumberOfPages();
-  const paginaActual = (doc as any).internal.getCurrentPageInfo().pageNumber;
-  for (let i = 1; i <= totalPaginas; i++) {
-    doc.setPage(i);
-    (doc as any).internal.write("Q");
+  // Solo se hace si el offset se abrió arriba (aplicarOffsetImpresion === true).
+  if (aplicarOffsetImpresion) {
+    const totalPaginas = (doc as any).internal.getNumberOfPages();
+    const paginaActual = (doc as any).internal.getCurrentPageInfo().pageNumber;
+    for (let i = 1; i <= totalPaginas; i++) {
+      doc.setPage(i);
+      (doc as any).internal.write("Q");
+    }
+    doc.setPage(paginaActual);
   }
-  doc.setPage(paginaActual);
 
   const sufijoFormato = formato === "membretado" ? "_EB" : "";
   const nombre = `Pedido_${pedido.no_pedido}${sufijoFormato}.pdf`;

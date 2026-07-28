@@ -263,8 +263,15 @@ function construirDataPlastico(
     pzas_merma: producto.pzas_merma ?? null,
     kilos_extruir: producto.kilos_extruir ?? null,
     metros_extruir: producto.metros_extruir ?? null,
-    url_render: imagenes.url_render ?? producto.url_render ?? null,
-    url_master: imagenes.url_master ?? producto.url_master ?? null,
+    // Prioridad invertida a propósito: `producto.url_render/url_master`
+    // (desde getOrdenProduccion) ya vienen resueltos en el backend a partir
+    // de la revisión marcada como versión final (es_version_final) y en
+    // base64 listo para jsPDF. `imagenes` (resolverImagenesDiseno) usa la
+    // revisión de mayor número de versión — no necesariamente la marcada
+    // como final — y regresa URLs que el navegador debe convertir por su
+    // cuenta, lo que puede fallar por CORS. Se deja solo como respaldo.
+    url_render: producto.url_render ?? imagenes.url_render ?? null,
+    url_master: producto.url_master ?? imagenes.url_master ?? null,
   };
 }
 
@@ -402,8 +409,16 @@ function construirDataPapel(
     procesos_registros: normalizarMapaProcesos(p.procesos_registros),
 
     observacion: p.observacion ?? null,
-    url_render: imagenes.url_render ?? p.url_render ?? null,
-    url_master: imagenes.url_master ?? p.url_master ?? null,
+    // El dato de `p` (productoOrden, desde getOrdenProduccion) ya viene
+    // resuelto en el backend a partir de la revisión marcada como versión
+    // final (es_version_final) y en base64 listo para jsPDF — es la fuente
+    // confiable. `imagenes` (resolverImagenesDiseno/getImagenesDiseno) usa
+    // la revisión de MAYOR número de versión (no necesariamente la
+    // marcada como final) y regresa URLs firmadas que el navegador debe
+    // convertir por su cuenta, lo que puede fallar por CORS. Se deja solo
+    // como respaldo si el backend no trajo nada.
+    url_render: p.url_render ?? imagenes.url_render ?? null,
+    url_master: p.url_master ?? imagenes.url_master ?? null,
   };
 }
 

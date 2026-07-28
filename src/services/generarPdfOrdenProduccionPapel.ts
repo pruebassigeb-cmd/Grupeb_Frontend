@@ -60,6 +60,103 @@ const WHITE: [number, number, number] = [255, 255, 255];
 const GRAY_DARK: [number, number, number] = [60, 60, 60];
 const GRAY_LIGHT: [number, number, number] = [245, 245, 245];
 
+// ── Render / Master Graphic — mismos helpers que generarPdfOrdenProduccion.ts ──
+// (duplicados aquí a propósito: ese archivo no los exporta, y este generador
+// de papel es independiente).
+type ImgDataPapel = { base64: string; format: "PNG" | "JPEG"; dataUrl: string };
+
+async function urlToDataUrlPapel(url: string): Promise<string | null> {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) return null;
+    const blob = await response.blob();
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return null;
+  }
+}
+
+function dataUrlToImgDataPapel(dataUrl: string): ImgDataPapel | null {
+  try {
+    if (!dataUrl.startsWith("data:")) return null;
+    const mime = dataUrl.split(";")[0].split(":")[1] || "image/png";
+    const base64 = dataUrl.split(",")[1];
+    if (!base64) return null;
+    const format: "PNG" | "JPEG" =
+      mime.includes("jpeg") || mime.includes("jpg") ? "JPEG" : "PNG";
+    return { base64, format, dataUrl };
+  } catch {
+    return null;
+  }
+}
+
+function getImageSizePapel(imgData: ImgDataPapel): Promise<{ width: number; height: number }> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve({ width: img.naturalWidth || img.width, height: img.naturalHeight || img.height });
+    img.onerror = reject;
+    img.src = imgData.dataUrl;
+  });
+}
+
+async function addImageContainPapel(
+  doc: jsPDF, img: ImgDataPapel, x: number, y: number, maxW: number, maxH: number
+): Promise<void> {
+  const size = await getImageSizePapel(img);
+  if (!size.width || !size.height) throw new Error("No se pudo obtener el tamaño de la imagen");
+  const ratio = Math.min(maxW / size.width, maxH / size.height);
+  const finalW = size.width * ratio;
+  const finalH = size.height * ratio;
+  const finalX = x + (maxW - finalW) / 2;
+  const finalY = y + (maxH - finalH) / 2;
+  doc.addImage(img.base64, img.format, finalX, finalY, finalW, finalH, undefined, "FAST");
+}
+
+// Dibuja una hoja completa dedicada a una imagen (Render Cliente o Master
+// Graphic), con el mismo encabezado gris que usa la versión plástico.
+async function dibujarPaginaImagenPapel(
+  doc: jsPDF, titulo: string, subtitulo: string, dataUrlImg: string, PW: number, PH: number
+): Promise<void> {
+  doc.addPage();
+  const M = 10;
+  const cw = PW - M * 2;
+  const ch = PH - M * 2;
+
+  const hdrH = 14;
+  doc.setFillColor(GRAY_DARK[0], GRAY_DARK[1], GRAY_DARK[2]);
+  doc.rect(M, M, cw, hdrH, "FD");
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(13);
+  doc.setTextColor(WHITE[0], WHITE[1], WHITE[2]);
+  doc.text(titulo, M + cw / 2, M + hdrH / 2 + 2.5, { align: "center" });
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8);
+  doc.text(subtitulo, M + cw / 2, M + hdrH - 2.5, { align: "center" });
+  doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);
+
+  const pad = 4;
+  const imgX = M + pad;
+  const imgY = M + hdrH + pad;
+  const imgW = cw - pad * 2;
+  const imgH = ch - hdrH - pad * 2;
+
+  doc.setDrawColor(BLACK[0], BLACK[1], BLACK[2]);
+  doc.setLineWidth(0.3);
+  doc.rect(imgX, imgY, imgW, imgH);
+
+  try {
+    const img = dataUrlToImgDataPapel(dataUrlImg);
+    if (img) await addImageContainPapel(doc, img, imgX, imgY, imgW, imgH);
+  } catch (e) {
+    console.error(`❌ addImage ${titulo} error:`, e);
+  }
+}
+
 const LABEL = 6;
 const TEXT = 8;
 
@@ -1660,6 +1757,35 @@ export async function generarPdfOrdenProduccionPapel(
   almacenBlockIzquierdo(doc, data, M, y, leftColW, almacenH);
   almacenBlockDerecho(doc, data, rightX, y, rightColW, almacenH);
   y += almacenH;
+
+  // ══════════════════════════════════════════════════════════
+  // RENDER CLIENTE / MASTER GRAPHIC — páginas extra al final.
+  // Antes este generador no dibujaba estas imágenes en absoluto (a
+  // diferencia de generarPdfOrdenProduccion.ts, la versión plástico). Se
+  // agregan como hojas nuevas en vez de intentar encajarlas en el layout
+  // existente, para no arriesgar los cálculos de alto/ancho ya afinados
+  // de las tablas de proceso.
+  const urlRenderPapel = (data as any).url_render as string | null | undefined;
+  const urlMasterPapel = (data as any).url_master as string | null | undefined;
+  const subTituloImg = `${f(data.no_produccion ?? `PED-${data.no_pedido}`)}  ·  Pedido ${data.no_pedido}`;
+
+  if (urlRenderPapel) {
+    const dataUrlRender = urlRenderPapel.startsWith("data:")
+      ? urlRenderPapel
+      : await urlToDataUrlPapel(urlRenderPapel);
+    if (dataUrlRender) {
+      await dibujarPaginaImagenPapel(doc, "RENDER CLIENTE", subTituloImg, dataUrlRender, PW, PH);
+    }
+  }
+
+  if (urlMasterPapel) {
+    const dataUrlMaster = urlMasterPapel.startsWith("data:")
+      ? urlMasterPapel
+      : await urlToDataUrlPapel(urlMasterPapel);
+    if (dataUrlMaster) {
+      await dibujarPaginaImagenPapel(doc, "MASTER GRAPHIC", subTituloImg, dataUrlMaster, PW, PH);
+    }
+  }
 
   const nombre = `OrdenProduccionPapel_${data.no_produccion ?? data.no_pedido}.pdf`;
   doc.save(nombre);
