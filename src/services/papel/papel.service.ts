@@ -223,10 +223,16 @@ const mapFormToApi = (form: ProductoPapelForm) => ({
   tamano_prod: form.idcat_tamano_producto ?? null,
   costo_laminado: form.costoLaminado ?? null,
   grupos: form.grupos.map(grupo => ({
+    // Se reenvía el id existente (si lo hay) para que el backend actualice
+    // el grupo/material en lugar de borrarlo y crear uno nuevo — así los
+    // pedidos ya hechos, que guardan una referencia fija a este id, no se
+    // quedan huérfanos cada vez que se edita el producto.
+    idgrupo_papel: grupo.idgrupo_papel ?? null,
     precio_sugerido: grupo.precioSugerido
       ? parseFloat(grupo.precioSugerido)
       : null,
     materiales: grupo.materiales.map(material => ({
+      iddetalle_material: material.iddetalle_material ?? null,
       idcat_tipo_papel: material.idcat_tipo_papel,
       idcat_calibre: material.idcat_calibre,
       pliego: material.pliego || null,

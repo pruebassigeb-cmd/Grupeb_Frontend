@@ -49,10 +49,17 @@ const esPapel = (producto: ProductoEntrada) => {
   );
 };
 
-const procesosProducto = (producto: any) => [
+export const procesosProducto = (producto: any) => [
   { key: "hojeadora", label: "Hojeadora", aplica: true },
   { key: "guillotina", label: "Guillotina", aplica: true },
-  { key: "impresora", label: "Impresión", aplica: true },
+  {
+    key: "impresora",
+    label: "Impresión",
+    // Un producto puede cotizarse "Sin tintas" (frente) y sin tintas por
+    // dentro — en ese caso no hay nada que imprimir, así que el proceso
+    // (y su máquina) no aplica.
+    aplica: Number(producto.tintas ?? 0) > 0 || Number(producto.tintasDentro ?? 0) > 0,
+  },
   {
     key: "laminado_maquina",
     label: "Laminación",
@@ -102,7 +109,7 @@ const nombreMaquina = (maquina: MaquinaPapelOpcion) => {
 // clave "hojeado_guillotina" (getMaquinaria en producto_papel.controller.ts
 // no cambió). Aquí se separan las opciones por tipo_maquina para mostrar
 // dos selects independientes.
-const opcionesParaProceso = (
+export const opcionesParaProceso = (
   detalle: ProductoPapelDetalleCotizacion | undefined,
   procesoKey: string,
 ): MaquinaPapelOpcion[] => {
@@ -111,6 +118,58 @@ const opcionesParaProceso = (
     return combinadas.filter((m) => m.tipo_maquina === procesoKey);
   }
   return detalle?.maquinaria?.[procesoKey] ?? [];
+};
+
+// Un producto "ya cuenta con maquinaria" cuando, para cada proceso que le
+// aplica, el catálogo tiene a lo más UNA máquina posible (hoy no se puede
+// elegir entre varias — ver MaquinariaSelectUnica). En ese caso no hay nada
+// que el usuario deba decidir y el modal de confirmación sobra. Si algún
+// proceso tiene más de una máquina registrada, sí hace falta que elija.
+export const resolverMaquinariaAutomatica = (
+  producto: any,
+  detalle: ProductoPapelDetalleCotizacion | undefined,
+): { selecciones: MaquinariaSeleccionadaPedidoPapel; requiereSeleccionManual: boolean } => {
+  const selecciones: MaquinariaSeleccionadaPedidoPapel = {};
+  let requiereSeleccionManual = false;
+
+  for (const proceso of procesosProducto(producto).filter((p) => p.aplica)) {
+    const opciones = opcionesParaProceso(detalle, proceso.key);
+    if (opciones.length > 1) {
+      requiereSeleccionManual = true;
+    } else if (opciones.length === 1) {
+      selecciones[proceso.key] = opciones[0];
+    }
+  }
+
+  return { selecciones, requiereSeleccionManual };
+};
+
+// Variante para un producto que YA tiene maquinaria asignada (se está
+// editando, no creando): a diferencia de resolverMaquinariaAutomatica, esta
+// NO empieza de cero — conserva cualquier máquina ya elegida y solo rellena
+// la de procesos que se volvieron aplicables recién (p. ej. al agregar un
+// acabado nuevo) y que todavía no tienen máquina asignada. Así nunca se
+// pierde una selección manual previa de un proceso con varias máquinas
+// posibles.
+export const completarMaquinariaFaltante = (
+  producto: any,
+  detalle: ProductoPapelDetalleCotizacion | undefined,
+): { selecciones: MaquinariaSeleccionadaPedidoPapel; requiereSeleccionManual: boolean } => {
+  const selecciones: MaquinariaSeleccionadaPedidoPapel = { ...(producto.maquinaria_seleccionada ?? {}) };
+  let requiereSeleccionManual = false;
+
+  for (const proceso of procesosProducto(producto).filter((p) => p.aplica)) {
+    if (selecciones[proceso.key]) continue;
+
+    const opciones = opcionesParaProceso(detalle, proceso.key);
+    if (opciones.length > 1) {
+      requiereSeleccionManual = true;
+    } else if (opciones.length === 1) {
+      selecciones[proceso.key] = opciones[0];
+    }
+  }
+
+  return { selecciones, requiereSeleccionManual };
 };
 
 const detallesAprobados = (producto: any) => {

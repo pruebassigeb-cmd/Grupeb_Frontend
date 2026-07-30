@@ -153,6 +153,10 @@ export type ProductoNuevo = ProductoNuevoPlastico | ProductoNuevoPapel;
 export interface ActualizarPedidoPayload {
   productos: ProductoActualizar[];
   productos_nuevos?: ProductoNuevo[];
+  // Banderas de cabecera del pedido. Opcionales: si no se envían, el
+  // backend conserva el valor actual.
+  prioridad?: boolean; // pedido urgente
+  sin_iva?: boolean;
 }
 
 export const actualizarPedido = async (

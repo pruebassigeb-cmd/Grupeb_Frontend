@@ -81,7 +81,20 @@ export default function Cotizaciones() {
   const normalizar = (t: string) =>
     t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
 
+  // ── Cotizaciones ya aprobadas ─────────────────────────────────────────
+  // Aprobar una cotización la convierte en pedido (backend: estado='pedido'
+  // + no_pedido asignado, ver cotizaciones.controller.ts). Ese es el
+  // indicador — no hace falta ningún campo nuevo. Se ocultan de la vista
+  // por default, pero el backend ya las sigue trayendo siempre (se quitó
+  // el corte de 5 días de visible_hasta), así que el buscador las
+  // encuentra sin límite de tiempo.
+  const hayBusquedaActiva = busqueda.trim().length > 0;
+  const esCotizacionAprobada = (c: Cotizacion) =>
+    (c as any).tipo_documento === "pedido" || c.no_pedido != null;
+
   const cotizacionesFiltradas = cotizaciones.filter(c => {
+    if (!hayBusquedaActiva && esCotizacionAprobada(c)) return false;
+
     if (busqueda) {
       const t = normalizar(busqueda);
       const coincideBusqueda =

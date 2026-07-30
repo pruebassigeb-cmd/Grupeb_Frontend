@@ -627,6 +627,7 @@ export default function EditarCotizacionCompleta() {
   const [cotOrig, setCotOrig] = useState<Cotizacion | null>(null);
   const [productos, setProductos] = useState<ProductoRow[]>([]);
   const [cotizacionMixta, setCotizacionMixta] = useState(false);
+  const [sinIva, setSinIva] = useState(false);
 
   const [suajes, setSuajes] = useState<any[]>([]);
   const [coloresAsa, setColoresAsa] = useState<any[]>([]);
@@ -690,6 +691,7 @@ export default function EditarCotizacionCompleta() {
         }
 
         setCotizacionMixta(tienePapel && tienePlastico);
+        setSinIva((cot as any).sin_iva ?? false);
         setCotOrig(cot);
         setProductos((cot.productos as any[])
           .filter(p => p.tipo_material !== "papel" && p.tipoCotizacion !== "papel")
@@ -1010,6 +1012,7 @@ export default function EditarCotizacionCompleta() {
       await actualizarCotizacionProductos(cotOrig.no_cotizacion, {
         productos: productosExistentes,
         productos_nuevos: productosNuevos,
+        sin_iva: sinIva,
       });
 
       // Recargar la cotización ya actualizada para regenerar el PDF con datos frescos
@@ -1226,6 +1229,16 @@ export default function EditarCotizacionCompleta() {
               <span className="font-semibold text-gray-600">${fmt(totalGeneral * 1.16)}</span>
             </p>
           </div>
+        </div>
+
+        {/* Bandera de cabecera: sin IVA */}
+        <div className="flex flex-wrap items-center gap-4 pb-4">
+          <label htmlFor="chk-sin-iva-cotizacion" className="flex items-center gap-2 cursor-pointer select-none">
+            <input type="checkbox" id="chk-sin-iva-cotizacion" checked={sinIva}
+              onChange={e => setSinIva(e.target.checked)}
+              className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+            <span className="text-sm font-medium text-gray-700">Sin IVA</span>
+          </label>
         </div>
 
         <div className="flex items-center justify-between gap-3 pb-4">

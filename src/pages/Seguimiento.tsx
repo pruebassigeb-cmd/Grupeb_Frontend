@@ -644,7 +644,62 @@ export default function Seguimiento() {
     } as any);
   };
 
+  // ── Pedidos terminados por completo ──────────────────────────────────
+  // Un producto se considera terminado del todo cuando:
+  //  - ya tiene orden de producción (idproduccion), si no, ni siquiera ha
+  //    arrancado y de ninguna manera puede contar como terminado;
+  //  - no es una parcialidad (es_parcialidad === true bloquea, porque el
+  //    usuario pidió expresamente "ni parcialidades tiene que haber");
+  //  - todos sus procesos aplicables (los que no son "no-aplica") están
+  //    en "finalizado" — en papel se usa el único estado_resumen_papel
+  //    que ya calcula el backend, porque ahí no hay columnas por proceso;
+  //  - el envío está "finalizado" (o "no-aplica", que es el valor que hoy
+  //    siempre trae papel porque los bultos aún no se ligan a sus
+  //    procesos — ver nota en seguimiento.controller.ts).
+  // Un pedido completo (no_pedido) se oculta solo si TODOS sus productos
+  // cumplen lo anterior — basta con que uno quede pendiente para que el
+  // pedido entero se siga mostrando.
+  const esProductoFinalizadoPorCompleto = (p: PedidoSeguimiento): boolean => {
+    if (!p.idproduccion) return false;
+    if ((p as any).es_parcialidad) return false;
+
+    const okOProcesoNoAplica = (estado: unknown) => estado === "finalizado" || estado === "no-aplica";
+    const esPapel = (p.tipo_producto ?? "").toLowerCase() === "papel";
+
+    if (esPapel) {
+      if ((p as any).estado_resumen_papel !== "finalizado") return false;
+    } else {
+      if (!okOProcesoNoAplica(p.extrusion_estado)) return false;
+      if (!okOProcesoNoAplica(p.impresion_estado)) return false;
+      if (!okOProcesoNoAplica(p.bolseo_estado)) return false;
+      if (!okOProcesoNoAplica(p.asa_flexible_estado)) return false;
+    }
+
+    if (!okOProcesoNoAplica((p as any).estado_envio)) return false;
+
+    return true;
+  };
+
+  const pedidosTerminadosPorCompleto = (() => {
+    const porPedido = new Map<string, PedidoSeguimiento[]>();
+    pedidos.forEach(p => {
+      const arr = porPedido.get(p.no_pedido) ?? [];
+      arr.push(p);
+      porPedido.set(p.no_pedido, arr);
+    });
+    const terminados = new Set<string>();
+    porPedido.forEach((productos, no_pedido) => {
+      if (productos.length > 0 && productos.every(esProductoFinalizadoPorCompleto)) {
+        terminados.add(no_pedido);
+      }
+    });
+    return terminados;
+  })();
+
+  const hayBusquedaActiva = busqueda.trim().length > 0;
+
   const pedidosFiltrados = pedidos
+    .filter(p => hayBusquedaActiva || !pedidosTerminadosPorCompleto.has(p.no_pedido))
     .filter(p => {
       const pasaTipo = filtroTipo === "todos"
         || norm(p.tipo_producto ?? "").includes(norm(filtroTipo));

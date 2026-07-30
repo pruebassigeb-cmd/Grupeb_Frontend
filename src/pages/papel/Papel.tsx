@@ -854,6 +854,7 @@ export default function Papel() {
         draft: newMaterial(),
         materiales: (g.materiales ?? []).map((m: any, mi: number) => ({
           id: Date.now() + gi * 100 + mi,
+          iddetalle_material: m.iddetalle_material,
           idcat_tipo_papel: m.idcat_tipo_papel,
           idcat_calibre: m.idcat_calibre,
           tipo: m.tipo_papel ?? "",

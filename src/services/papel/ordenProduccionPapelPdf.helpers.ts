@@ -283,6 +283,17 @@ export function calcularRollosLaminacion(
   return redondear(metrosNum / metrosPorRollo, 2);
 }
 
+// Un producto puede cotizarse "Sin tintas" (frente) y sin tintas por dentro
+// — en ese caso no hay nada que imprimir, así que Impresión no debe listarse
+// como proceso aplicable. Se revisan las variantes de nombre porque los
+// datos pueden llegar en camelCase (armados en el frontend) o snake_case
+// (leídos del backend).
+export function tieneTintasProducto(producto: OrdenProduccionPapelData): boolean {
+  const frente = n(producto.tintas) ?? n(producto.tintas_frente) ?? 0;
+  const vuelta = n(producto.tintasDentro) ?? n(producto.tintas_dentro) ?? n(producto.tintas_reverso) ?? 0;
+  return frente > 0 || vuelta > 0;
+}
+
 export function normalizarProcesoPapel(value: unknown): NombreProcesoOrdenPapel | null {
   const text = f(value) as NombreProcesoOrdenPapel;
   return ORDEN_PROCESOS_PAPEL.includes(text) ? text : null;
@@ -313,7 +324,7 @@ export function procesosAplicanDesdeProducto(
 
   const procesos: NombreProcesoOrdenPapel[] = ["hojeado_papel", "guillotina_papel"];
 
-  procesos.push("impresion_papel");
+  if (tieneTintasProducto(producto)) procesos.push("impresion_papel");
 
   if (primeraLinea(producto.laminado_nombre, producto.laminado_acabado, producto.laminado)) {
     procesos.push("laminacion_papel");
@@ -428,13 +439,20 @@ export function refuerzoTexto(data: OrdenProduccionPapelData): string {
 }
 
 export function getValoresCalculadosPapel(data: OrdenProduccionPapelData): Partial<OrdenProduccionPapelData> {
-  const pliegosCalculado = calcularCantidadHojeada(data.cantidad, data.rendimiento);
+  // Pliegos/bolsas se calculan con el rendimiento de HOJEADO (cómo se tiene
+  // que cortar el material), no con el rendimiento general del material.
+  const pliegosCalculado = calcularCantidadHojeada(data.cantidad, data.hoj_rendimiento);
   const pliegos = pliegosCalculado ?? n(data.pliegos_impresion_estimados);
 
+  // El backend ya resuelve desarrollo_laminacion_mm priorizando el valor
+  // registrado al dar de alta el producto (acabados_papel.desarrollo_laminado)
+  // sobre el cálculo automático desde las medidas del pliego — por eso aquí
+  // se confía primero en lo que mande, igual que ya hace bobina_laminacion_cm
+  // más abajo, y solo se recalcula si no llegó nada.
   const desarrollo =
-    calcularDesarrolloMmPorBase(data) ??
     n(data.desarrollo_laminacion_mm) ??
-    n(data.desarrollo_mm);
+    n(data.desarrollo_mm) ??
+    calcularDesarrolloMmPorBase(data);
 
   const metros =
     calcularMetrosLaminacion(pliegos, desarrollo) ??
@@ -453,7 +471,7 @@ export function getValoresCalculadosPapel(data: OrdenProduccionPapelData): Parti
     rollos_laminacion_estimados:
       calcularRollosLaminacion(metros) ?? n(data.rollos_laminacion_estimados),
     bolsas_armadas_calculadas:
-      n(data.bolsas_armadas_calculadas) ?? calcularBolsasArmadas(pliegos, data.rendimiento),
+      n(data.bolsas_armadas_calculadas) ?? calcularBolsasArmadas(pliegos, data.hoj_rendimiento),
     bobina_laminacion_cm:
       data.bobina_laminacion_cm ??
       data.bobina_cm ??

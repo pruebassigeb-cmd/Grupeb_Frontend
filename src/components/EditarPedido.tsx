@@ -707,6 +707,8 @@ export default function EditarPedido() {
   const [pedidoOrig, setPedidoOrig] = useState<Pedido | null>(null);
   const [productos, setProductos] = useState<ProductoRow[]>([]);
   const [pedidoMixto, setPedidoMixto] = useState(false);
+  const [prioridad, setPrioridad] = useState(false);
+  const [sinIva, setSinIva] = useState(false);
 
   const [suajes, setSuajes] = useState<any[]>([]);
   const [coloresAsa, setColoresAsa] = useState<any[]>([]);
@@ -773,6 +775,9 @@ export default function EditarPedido() {
         }
 
         setPedidoMixto(tienePapel && tienePlastico);
+
+        setPrioridad((ped as any).prioridad ?? false);
+        setSinIva((ped as any).sin_iva ?? false);
 
         setPedidoOrig(ped);
         setProductos((ped.productos as any[])
@@ -1084,6 +1089,8 @@ export default function EditarPedido() {
       const payload = {
         productos: productosExistentes,
         productos_nuevos: productosNuevos,
+        prioridad,
+        sin_iva: sinIva,
       };
 
       await actualizarPedido(pedidoOrig.no_pedido, payload);
@@ -1320,6 +1327,22 @@ export default function EditarPedido() {
               <span className="font-semibold text-gray-600">${fmt(totalGeneral * 1.16)}</span>
             </p>
           </div>
+        </div>
+
+        {/* Banderas de cabecera: sin IVA y urgente */}
+        <div className="flex flex-wrap items-center gap-4 pb-4">
+          <label htmlFor="chk-sin-iva-pedido" className="flex items-center gap-2 cursor-pointer select-none">
+            <input type="checkbox" id="chk-sin-iva-pedido" checked={sinIva}
+              onChange={e => setSinIva(e.target.checked)}
+              className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+            <span className="text-sm font-medium text-gray-700">Sin IVA</span>
+          </label>
+          <label htmlFor="chk-prioridad-pedido" className="flex items-center gap-2 cursor-pointer select-none">
+            <input type="checkbox" id="chk-prioridad-pedido" checked={prioridad}
+              onChange={e => setPrioridad(e.target.checked)}
+              className="w-4 h-4 rounded border-gray-300 text-amber-600 focus:ring-amber-500" />
+            <span className="text-sm font-medium text-amber-700">Pedido urgente</span>
+          </label>
         </div>
 
         {/* Botones */}

@@ -283,6 +283,9 @@ export type ProductoCotizacionNuevo =
 export interface ActualizarCotizacionPayload {
   productos: ProductoCotizacionActualizar[];
   productos_nuevos?: ProductoCotizacionNuevo[];
+  // Bandera de cabecera: si la cotización va sin IVA o no.
+  // Opcional: si no se envía, el backend conserva el valor actual.
+  sin_iva?: boolean;
 }
 
 export const actualizarCotizacionProductos = async (

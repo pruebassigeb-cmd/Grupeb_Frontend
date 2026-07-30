@@ -11,6 +11,7 @@ import type { Pedido } from "../types/cotizaciones.types";
 import {
   getProductosPapel,
   getOpcionesProductoPapel,
+  getProductoPapelDetalle,
   getFoils,
   getTexturas,
   getColoresAsa,
@@ -33,7 +34,10 @@ import FormularioProductoPapelAlta, {
 import type { ArchivoPendiente } from "../components/papel/FormularioProductoPapelAlta";
 import type { ProductoPapelForm } from "../types/papel/papel.types";
 import { crearProductoPapel } from "../services/papel/papel.service";
-import ModalMaquinariaPedidoPapel from "../components/papel/ModalMaquinariaPedidoPapel";
+import ModalMaquinariaPedidoPapel, {
+  resolverMaquinariaAutomatica,
+  completarMaquinariaFaltante,
+} from "../components/papel/ModalMaquinariaPedidoPapel";
 import type { MaquinariaProductoPedidoPapel } from "../types/papel/maquinaria-pedido.types";
 import api from "../services/api";
 import { coincideBusquedaProductoPapel } from "../utils/papel/buscarProductoPapel";
@@ -902,6 +906,8 @@ export default function EditarPedidoPapel() {
   const [exito, setExito] = useState(false);
   const [pedidoOrig, setPedidoOrig] = useState<Pedido | null>(null);
   const [productos, setProductos] = useState<ProductoPapelEdit[]>([]);
+  const [prioridad, setPrioridad] = useState(false);
+  const [sinIva, setSinIva] = useState(false);
 
   // Refs por producto (indexadas por posición en `productos`) para poder
   // hacer scroll automático al producto que falla una validación al guardar.
@@ -976,6 +982,8 @@ export default function EditarPedidoPapel() {
 
         const ped = (todos as Pedido[]).find(p => p.no_pedido === noPedido);
         if (!ped) { setError("Pedido no encontrado"); return; }
+        setPrioridad((ped as any).prioridad ?? false);
+        setSinIva((ped as any).sin_iva ?? false);
         setPedidoOrig(ped);
 
         const prodsPapel = (ped.productos as any[]).filter(
@@ -1090,6 +1098,44 @@ export default function EditarPedidoPapel() {
   // ─── Helpers de estado ───────────────────────────────────────────────────────
   const onChange = (pi: number, k: keyof ProductoPapelEdit, v: any) =>
     setProductos(prev => prev.map((p, i) => i === pi ? { ...p, [k]: v } : p));
+
+  // Campos que pueden volver aplicable (o inaplicable) un proceso de papel:
+  // laminado/foil/textura/UV/alto relieve activan sus máquinas, y tintas
+  // activa/desactiva Impresión.
+  const CAMPOS_QUE_AFECTAN_PROCESOS_PAPEL = new Set<keyof ProductoPapelEdit>([
+    "idcat_laminado", "idfoil", "idcat_textura", "uv", "alto_relieve", "tintas", "tintasDentro",
+  ]);
+
+  // Si el producto ya está agregado al pedido y el usuario cambia un acabado
+  // (p. ej. agrega laminado), el proceso correspondiente se vuelve aplicable
+  // pero su máquina no se asigna sola — antes había que acordarse de abrir
+  // "Configurar maquinaria" a mano, y si no, el PDF salía sin esa máquina
+  // hasta la siguiente edición. Esto lo resuelve solo: si el catálogo tiene
+  // una sola máquina para el proceso nuevo, se asigna directo; si hay varias,
+  // abre el modal para que el usuario elija. Nunca toca máquinas ya asignadas.
+  const sincronizarMaquinariaProducto = async (pi: number, productoActualizado: ProductoPapelEdit) => {
+    try {
+      const detalle = await getProductoPapelDetalle(productoActualizado.idproducto_papel);
+      const { selecciones, requiereSeleccionManual } = completarMaquinariaFaltante(
+        productoParaModalMaquinaria(productoActualizado),
+        detalle
+      );
+      setProductos(prev => prev.map((p, i) =>
+        i === pi ? { ...p, maquinaria_seleccionada: selecciones } : p
+      ));
+      if (requiereSeleccionManual) abrirMaquinariaProducto(pi);
+    } catch {
+      // Si falla la consulta, se deja como estaba — el usuario puede abrir
+      // "Configurar maquinaria" manualmente para revisar/completar.
+    }
+  };
+
+  const onChangeProducto = (pi: number, k: keyof ProductoPapelEdit, v: any) => {
+    onChange(pi, k, v);
+    if (CAMPOS_QUE_AFECTAN_PROCESOS_PAPEL.has(k)) {
+      sincronizarMaquinariaProducto(pi, { ...productos[pi], [k]: v });
+    }
+  };
 
   const onDetalleChange = (pi: number, di: number, k: keyof DetalleEdit, v: string) =>
     setProductos(prev => prev.map((p, i) => {
@@ -1258,13 +1304,16 @@ export default function EditarPedidoPapel() {
     setModalBuscador({ abierto: false, piOrigen: -1, modo: "cambiar" });
 
     if (modo === "agregar") {
-      const nuevo = await crearProductoPapelDesdeSeleccion(
+      const creado = await crearProductoPapelDesdeSeleccion(
         prod.idproducto_papel, prod.tipo_producto, prod.medida ?? ""
       );
+      const { producto: nuevo, necesitaModal } = await resolverMaquinariaSiNoAmbigua(creado);
       setProductos(prev => {
         const actualizados = [...prev, nuevo];
-        const piNuevo = actualizados.length - 1;
-        setTimeout(() => abrirMaquinariaProducto(piNuevo), 0);
+        if (necesitaModal) {
+          const piNuevo = actualizados.length - 1;
+          setTimeout(() => abrirMaquinariaProducto(piNuevo), 0);
+        }
         return actualizados;
       });
     } else {
@@ -1281,11 +1330,14 @@ export default function EditarPedidoPapel() {
     setModalBuscador({ abierto: false, piOrigen: -1, modo: "cambiar" });
 
     if (modo === "agregar") {
-      const nuevo = await crearProductoPapelDesdeSeleccion(idproducto_papel, nombre, medida);
+      const creado = await crearProductoPapelDesdeSeleccion(idproducto_papel, nombre, medida);
+      const { producto: nuevo, necesitaModal } = await resolverMaquinariaSiNoAmbigua(creado);
       setProductos(prev => {
         const actualizados = [...prev, nuevo];
-        const piNuevo = actualizados.length - 1;
-        setTimeout(() => abrirMaquinariaProducto(piNuevo), 0);
+        if (necesitaModal) {
+          const piNuevo = actualizados.length - 1;
+          setTimeout(() => abrirMaquinariaProducto(piNuevo), 0);
+        }
         return actualizados;
       });
     } else {
@@ -1296,6 +1348,30 @@ export default function EditarPedidoPapel() {
   // ─── Procesos y maquinaria ───────────────────────────────────────────────────
   const abrirMaquinariaProducto = (pi: number) =>
     setModalMaquinaria({ abierto: true, piOrigen: pi });
+
+  // Si el catálogo de maquinaria del producto ya resuelve, cuando mucho, una
+  // sola máquina por cada proceso que le aplica, no hay nada que el usuario
+  // deba confirmar: se asigna directo y no se abre el modal. El modal solo
+  // se abre cuando de verdad hay más de una máquina para elegir en algún
+  // proceso.
+  const resolverMaquinariaSiNoAmbigua = async (
+    producto: ProductoPapelEdit
+  ): Promise<{ producto: ProductoPapelEdit; necesitaModal: boolean }> => {
+    try {
+      const detalle = await getProductoPapelDetalle(producto.idproducto_papel);
+      const { selecciones, requiereSeleccionManual } = resolverMaquinariaAutomatica(
+        productoParaModalMaquinaria(producto),
+        detalle
+      );
+      if (requiereSeleccionManual) return { producto, necesitaModal: true };
+      return {
+        producto: { ...producto, maquinaria_seleccionada: selecciones },
+        necesitaModal: false,
+      };
+    } catch {
+      return { producto, necesitaModal: true };
+    }
+  };
 
   const productoParaModalMaquinaria = (p: ProductoPapelEdit) => ({
     ...p,
@@ -1442,6 +1518,8 @@ export default function EditarPedidoPapel() {
       const payload = {
         productos: productosExistentes,
         productos_nuevos: productosNuevos,
+        prioridad,
+        sin_iva: sinIva,
       };
 
       await actualizarPedido(pedidoOrig.no_pedido, payload);
@@ -1613,7 +1691,7 @@ export default function EditarPedidoPapel() {
                   idTipoPanton={idTipoPanton}
                   idTipoPantonesDentro={idTipoPanton}
                   coloresAsa={coloresAsa}
-                  onChange={onChange}
+                  onChange={onChangeProducto}
                   onDetalleChange={onDetalleChange}
                   onEliminar={onEliminar}
                   onCambiarProducto={handleCambiarProducto}
@@ -1735,6 +1813,22 @@ export default function EditarPedidoPapel() {
               <span className="font-semibold text-gray-600">${fmt(totalGeneral * 1.16)}</span>
             </p>
           </div>
+        </div>
+
+        {/* Banderas de cabecera: sin IVA y urgente */}
+        <div className="flex flex-wrap items-center gap-4 pb-4">
+          <label htmlFor="chk-sin-iva-pedido-papel" className="flex items-center gap-2 cursor-pointer select-none">
+            <input type="checkbox" id="chk-sin-iva-pedido-papel" checked={sinIva}
+              onChange={e => setSinIva(e.target.checked)}
+              className="w-4 h-4 rounded border-gray-300 text-amber-600 focus:ring-amber-500" />
+            <span className="text-sm font-medium text-gray-700">Sin IVA</span>
+          </label>
+          <label htmlFor="chk-prioridad-pedido-papel" className="flex items-center gap-2 cursor-pointer select-none">
+            <input type="checkbox" id="chk-prioridad-pedido-papel" checked={prioridad}
+              onChange={e => setPrioridad(e.target.checked)}
+              className="w-4 h-4 rounded border-gray-300 text-amber-600 focus:ring-amber-500" />
+            <span className="text-sm font-medium text-amber-700">Pedido urgente</span>
+          </label>
         </div>
 
         {/* Botones */}

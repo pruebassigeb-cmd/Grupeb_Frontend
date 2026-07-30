@@ -797,6 +797,7 @@ export default function EditarCotizacionPapelCompleta() {
   const [cotOrig, setCotOrig] = useState<Cotizacion | null>(null);
   const [productos, setProductos] = useState<ProductoPapelEdit[]>([]);
   const [cotizacionMixta, setCotizacionMixta] = useState(false);
+  const [sinIva, setSinIva] = useState(false);
 
   const [catalogoTintas, setCatalogoTintas] = useState<CatItem[]>([]);
   const [foilsGlobales, setFoilsGlobales] = useState<FoilOpcion[]>([]);
@@ -841,6 +842,7 @@ export default function EditarCotizacionPapelCompleta() {
         }
 
         setCotOrig(cot);
+        setSinIva((cot as any).sin_iva ?? false);
 
         const prodsPapel = (cot.productos as any[]).filter(
           p => p.tipo_material === "papel" || p.tipoCotizacion === "papel"
@@ -1272,6 +1274,7 @@ export default function EditarCotizacionPapelCompleta() {
       await actualizarCotizacionProductos(cotOrig.no_cotizacion, {
         productos: productosExistentes,
         productos_nuevos: productosNuevos,
+        sin_iva: sinIva,
       });
 
       const todas = await getCotizaciones();
@@ -1457,6 +1460,16 @@ export default function EditarCotizacionPapelCompleta() {
               <span className="font-semibold text-gray-600">${fmt(totalGeneral * 1.16)}</span>
             </p>
           </div>
+        </div>
+
+        {/* Bandera de cabecera: sin IVA */}
+        <div className="flex flex-wrap items-center gap-4 pb-4">
+          <label htmlFor="chk-sin-iva-cotizacion-papel" className="flex items-center gap-2 cursor-pointer select-none">
+            <input type="checkbox" id="chk-sin-iva-cotizacion-papel" checked={sinIva}
+              onChange={e => setSinIva(e.target.checked)}
+              className="w-4 h-4 rounded border-gray-300 text-amber-600 focus:ring-amber-500" />
+            <span className="text-sm font-medium text-gray-700">Sin IVA</span>
+          </label>
         </div>
 
         <div className="flex items-center justify-between gap-3 pb-4">

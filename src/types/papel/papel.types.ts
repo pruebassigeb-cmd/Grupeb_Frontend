@@ -55,6 +55,7 @@ export interface Hojeado {
 
 export interface MaterialEntry {
   id: number;
+  iddetalle_material?: number;
   idcat_tipo_papel: number | null;
   idcat_calibre: number | null;
   tipo: string;

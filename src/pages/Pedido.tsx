@@ -73,7 +73,28 @@ export default function Pedidos() {
   const normalizar = (t: string) =>
     t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
 
+  // ── Pedidos ya enviados por completo ──────────────────────────────────
+  // Un producto cuenta como "enviado" cuando ya tiene orden de producción,
+  // no es una parcialidad, y el total de bultos generados ya se enviaron
+  // por completo (envio_total_bultos > 0 y envio_bultos_enviados lo
+  // iguala o supera). Si total_bultos es 0 NO cuenta como enviado — es
+  // que aún no se generan bultos, no que "no aplica" (a diferencia de
+  // Seguimiento, aquí "enviado" es justo lo que se está midiendo).
+  // Un pedido completo se oculta solo si TODOS sus productos cumplen esto.
+  const hayBusquedaActiva = busqueda.trim().length > 0;
+  const esProductoEnviadoPorCompleto = (prod: any): boolean => {
+    if (!prod.idproduccion) return false;
+    if (prod.es_parcialidad) return false;
+    const total = Number(prod.envio_total_bultos ?? 0);
+    const enviados = Number(prod.envio_bultos_enviados ?? 0);
+    return total > 0 && enviados >= total;
+  };
+  const esPedidoEnviadoPorCompleto = (p: Pedido): boolean =>
+    p.productos.length > 0 && p.productos.every(esProductoEnviadoPorCompleto);
+
   const pedidosFiltrados = pedidos.filter(p => {
+    if (!hayBusquedaActiva && esPedidoEnviadoPorCompleto(p)) return false;
+
     if (busqueda) {
       const t = normalizar(busqueda);
       const coincide =
