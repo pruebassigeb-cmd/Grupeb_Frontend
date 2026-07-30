@@ -2,10 +2,10 @@ import { useState, useEffect } from "react";
 import {
   getClientesRemisiones, getPedidosClienteRemisiones, getHistorialEntregas,
   getOrCreateNotaRemision, getNotaRemisionMulti,
-} from "../../services/enviosService";
-import { generarReporteRemisiones } from "../../utils/generarReporteRemisiones";
-import { generarNotaRemision, generarNotaRemisionMulti } from "../../utils/generarNotaRemision";
-import type { ClienteRemision, PedidoRemision, HistorialEntregasPedido } from "../../types/envios.types";
+} from "../../services/envio/enviosService";
+import { generarReporteRemisiones } from "../../utils/envio/generarReporteRemisiones";
+import { generarNotaRemision, generarNotaRemisionMulti } from "../../utils/envio/generarNotaRemision";
+import type { ClienteRemision, PedidoRemision, HistorialEntregasPedido } from "../../types/envio/envios.types";
 import { showAlert } from "./../CustomAlert";
 
 const fmtFecha = (iso: string) =>

@@ -1,10 +1,10 @@
 import { useState, useEffect } from "react";
 import Modal from "./../Modal";
-import { getGuiaPaqueteriaGeneral, getProductosSat } from "../../services/enviosService";
-import { generarGuiaPaqueteriaGeneral } from "../../utils/generarGuiaPaqueteriaGeneral";
+import { getGuiaPaqueteriaGeneral, getProductosSat } from "../../services/envio/enviosService";
+import { generarGuiaPaqueteriaGeneral } from "../../utils/envio/generarGuiaPaqueteriaGeneral";
 import { preguntarGuardarS3 } from "../../services/pdfS3.service";
 import { inputClass, labelClass } from "./../enviosConstants";
-import type { GuiaPaqueteriaGeneral, ProductoSat } from "../../types/envios.types";
+import type { GuiaPaqueteriaGeneral, ProductoSat } from "../../types/envio/envios.types";
 import { showAlert } from './../CustomAlert';
 
 

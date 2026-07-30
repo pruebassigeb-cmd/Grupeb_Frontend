@@ -4,8 +4,8 @@ import {
   getPedidosDisponibles, getBultosPedido, getEnviosPedido,
   agregarAlCarrito, updateEstadoEnvio, deleteEnvio,
   getOrCreateNotaRemision,
-} from "../../services/enviosService";
-import { generarNotaRemision } from "../../utils/generarNotaRemision";
+} from "../../services/envio/enviosService";
+import { generarNotaRemision } from "../../utils/envio/generarNotaRemision";
 import { preguntarGuardarS3 } from "../../services/pdfS3.service";
 import {
   ESTADO_ENVIO_BADGE, ESTADO_ENVIO_LABEL,
@@ -14,7 +14,7 @@ import {
   buildMapsUrl, copiarLink,
 } from "./../enviosConstants";
 import FormularioEnvioIndividual from "./FormularioEnvioIndividual";
-import type { PedidoDisponible, BultoPedido, Envio, CarritoPedido } from "../../types/envios.types";
+import type { PedidoDisponible, BultoPedido, Envio, CarritoPedido } from "../../types/envio/envios.types";
 import { showAlert } from "./../CustomAlert";
 import { showConfirm } from "./../CustomConfirm";
 

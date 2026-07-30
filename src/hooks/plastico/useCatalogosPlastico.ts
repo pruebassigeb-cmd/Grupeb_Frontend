@@ -3,7 +3,7 @@ import type {
   TipoProductoAdminItem,
   MaterialAdminItem,
   CalibreAdminItem,
-} from "../../types/productos-plastico.types";
+} from "../../types/plastico/productos-plastico.types";
 import {
   getTiposProductoAdmin,
   crearTipoProductoAdmin,

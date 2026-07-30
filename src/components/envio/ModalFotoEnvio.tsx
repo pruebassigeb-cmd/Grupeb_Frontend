@@ -1,8 +1,8 @@
 import { useState, useRef, useCallback, useEffect } from "react";
-import { subirArchivo, getFotosEnvio, type Archivo } from "../../services/archivos.service";
-import { updateGuiaEnvio } from "../../services/enviosService";
+import { subirArchivo, getFotosEnvio, type Archivo } from "../../services/archivos/archivos.service";
+import { updateGuiaEnvio } from "../../services/envio/enviosService";
 import { showAlert } from "./../CustomAlert";
-import type { EnvioPaqueteria, BitacoraRegistro } from "../../types/envios.types";
+import type { EnvioPaqueteria, BitacoraRegistro } from "../../types/envio/envios.types";
 
 interface PropsBase {
   onClose:      () => void;

@@ -1,12 +1,12 @@
 import { registrarManejadorOutbox } from "./outbox";
 import api from "../services/api";
 import { getCotizacionesExpo } from "../services/expo/expoService";
-import { enviarCorreoDocumento } from "../services/correoService";
-import { generarPdfCotizacion } from "../services/generarPdfCotizacion";
-import { generarPdfPedido } from "../services/generarPdfPedido";
+import { enviarCorreoDocumento } from "../services/expo/correoService";
+import { generarPdfCotizacion } from "../utils/generarPdfCotizacion";
+import { generarPdfPedido } from "../utils/generarPdfPedido";
 import { construirPayloadPdfCotizacionDesdeBackData } from "../utils/expo/construirPayloadPdfCotizacionExpo";
 import { construirPayloadPdfPedidoDesdeBackData } from "../utils/expo/construirPayloadPdfPedidoExpo";
-import { notificarMensajeExito } from "../pwa/notificacionesLocales";
+import { notificarMensajeExito } from "../utils/pwa/notificacionesLocales";
 
 export interface DatosCotizacionExpoConCorreo {
   payloadCotizacion: { clienteId: number; productos: unknown[]; comentarios?: string };

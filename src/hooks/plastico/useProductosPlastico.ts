@@ -2,14 +2,14 @@ import { useState, useEffect, useCallback } from "react";
 import type {
   ProductoPlastico,
   ProductoPlasticoCreate,
-} from "../../types/productos-plastico.types";
+} from "../../types/plastico/productos-plastico.types";
 import {
   getProductosPlastico,
   createProductoPlastico,
   updateProductoPlastico,
   deleteProductoPlastico,
   reactivarProductoPlastico,
-} from "../../services/productosPlasticoService";
+} from "../../services/plastico/productosPlasticoService";
 import { showAlert } from "../../components/CustomAlert";
 
 export function useProductosPlastico() {

@@ -1,5 +1,5 @@
 // src/types/formulario-solicitud.types.ts
-import type { MedidaKey } from "./productos-plastico.types";
+import type { MedidaKey } from "./plastico/productos-plastico.types";
 import type { ProductoPapelCotizacion } from "./papel/cotizacion-papel.types";
 
 export type TipoMaterialSolicitud = "plastico" | "papel";

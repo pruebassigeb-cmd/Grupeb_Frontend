@@ -1,6 +1,6 @@
 import api from "./api";
 import type { Usuario, CreateUsuarioRequest, UpdateUsuarioRequest } from "../types/usuario.types";
-import type { UsuarioParticipante } from "../types/ordenDiseno.types";
+import type { UsuarioParticipante } from "../types/diseno/ordenDiseno.types";
 
 export const getUsuarios = async (): Promise<Usuario[]> => {
   const response = await api.get<Usuario[]>("/usuarios");

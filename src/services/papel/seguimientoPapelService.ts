@@ -15,7 +15,7 @@ export {
   editarBulto,
   getBultosEtiqueta,
   marcarBultosParcialidad,
-} from "../seguimientoService";
+} from "../produccion/seguimientoService";
 export type {
   Bulto,
   BultosRespuesta,
@@ -24,7 +24,7 @@ export type {
   BultoBatchRespuesta,
   EtiquetaData,
   BultoEtiqueta,
-} from "../seguimientoService";
+} from "../produccion/seguimientoService";
 
 // ─────────────────────────────────────────────
 // PROCESOS DE PAPEL
@@ -123,5 +123,25 @@ export const registrarAvancePapel = async (
   payload: RegistrarAvancePapelPayload
 ): Promise<RegistrarAvancePapelRespuesta> => {
   const { data } = await api.post(`/procesos-papel/${idproduccion}/avance`, payload);
+  return data;
+};
+
+// ─────────────────────────────────────────────
+// PAR INTERCAMBIABLE HOJEADO / GUILLOTINA
+// ─────────────────────────────────────────────
+// Hojeado y Guillotina se eligen manualmente en planta (con el PDF físico
+// en mano), no dependen uno del otro ni son mutuamente excluyentes en el
+// sistema. Mientras ninguno tiene registro, ambos aparecen disponibles;
+// en cuanto uno recibe el primer avance/inicio, el otro se muestra como
+// "no_aplica". Este endpoint es la vía para deshacer eso si el operador
+// eligió la máquina equivocada, siempre que el siguiente proceso
+// (normalmente Impresión) todavía no haya arrancado con esos datos.
+export type NombreProcesoIntercambiablePapel = "hojeado_papel" | "guillotina_papel";
+
+export const reiniciarProcesoPreparacionPapel = async (
+  idproduccion: number,
+  tabla: NombreProcesoIntercambiablePapel
+): Promise<{ message: string; idproduccion: number; tabla: string }> => {
+  const { data } = await api.delete(`/procesos-papel/${idproduccion}/reiniciar/${tabla}`);
   return data;
 };

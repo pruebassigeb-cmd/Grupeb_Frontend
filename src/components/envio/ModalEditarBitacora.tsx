@@ -4,11 +4,11 @@ import { OBSERVACIONES, inputClass, labelClass } from "./../enviosConstants";
 import {
   getFotosEnvio,
   type Archivo,
-} from "../../services/archivos.service";
+} from "../../services/archivos/archivos.service";
 import type {
   BitacoraRegistro,
   UpdateBitacoraRequest,
-} from "../../types/envios.types";
+} from "../../types/envio/envios.types";
 
 interface Props {
   registro: BitacoraRegistro;

@@ -1,21 +1,21 @@
 import Dashboard from "../layouts/Sidebar";
 import Modal from "../components/Modal";
-import FormularioCotizacion from "../components/FormularioSolicitud";
+import FormularioCotizacion from "../components/plastico/FormularioSolicitud";
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { getCatalogosPlastico } from "../services/productosPlasticoService";
+import { getCatalogosPlastico } from "../services/plastico/productosPlasticoService";
 import { getPedidos, eliminarPedido } from "../services/pedidosService";
 import { crearCotizacion } from "../services/cotizacionesService";
-import { generarPdfPedido } from "../services/generarPdfPedido";
-import type { FormatoPedidoPdf } from "../services/generarPdfPedido";
+import { generarPdfPedido } from "../utils/generarPdfPedido";
+import type { FormatoPedidoPdf } from "../utils/generarPdfPedido";
 import { preguntarGuardarS3 } from "../services/pdfS3.service";
 import { getVentaByPedido } from "../services/ventasservice";
-import type { CatalogosPlastico } from "../types/productos-plastico.types";
+import type { CatalogosPlastico } from "../types/plastico/productos-plastico.types";
 import type { Pedido } from "../types/cotizaciones.types";
 import { showAlert } from '../components/CustomAlert';
 import { showConfirm } from '../components/CustomConfirm';
-import ModalRepetirPedido from "../components/ModalRepetirPedido";
-import { buildPayloadDesdePedido } from "../utils/buildPayloadDesdePedido";
+import ModalRepetirPedido from "../components/plastico/ModalRepetirPedido";
+import { buildPayloadDesdePedido } from "../utils/plastico/buildPayloadDesdePedido";
 import { getHistorialPedidosPorCliente } from "../services/pedidosService";
 
 const ITEMS_POR_PAGINA = 7;

@@ -13,13 +13,14 @@ import {
   getBultosEtiqueta,
   marcarBultosParcialidad,
   editarBulto as editarBultoService,
+  reiniciarProcesoPreparacionPapel,
 } from "../../services/papel/seguimientoPapelService";
 import type {
   ProcesosOrdenPapelRespuesta,
   AvanceParcialPapel,
 } from "../../services/papel/seguimientoPapelService";
-import type { Bulto, NuevoBultoPayload, NuevoBultoBatchPayload } from "../../services/seguimientoService";
-import { generarPdfEtiquetas } from "../../services/generarPdfEtiquetas";
+import type { Bulto, NuevoBultoPayload, NuevoBultoBatchPayload } from "../../services/produccion/seguimientoService";
+import { generarPdfEtiquetas } from "../../utils/generarPdfEtiquetas";
 import { preguntarGuardarS3 } from "../../services/pdfS3.service";
 import type { PedidoSeguimientoPapel, NombreProcesoPapel } from "../../types/papel/seguimientoPapel.types";
 import { NOMBRES_PROCESO_PAPEL, ULTIMO_PROCESO_PAPEL } from "../../types/papel/seguimientoPapel.types";
@@ -145,17 +146,13 @@ interface CampoFicha {
 }
 
 const CAMPOS_FICHA_PAPEL: Record<NombreProcesoPapel, CampoFicha[]> = {
-  hojeado_papel: [
-    { key: "hoj_bobina", label: "Bobina" },
-    { key: "hoj_corte", label: "Hojeado" },
-    { key: "hoj_rendimiento", label: "Rendimiento" },
-    { key: "pliego", label: "Medida del pliego" },
-  ],
-  guillotina_papel: [
-    { key: "pliego", label: "Pliego origen" },
-    { key: "hoj_rendimiento", label: "Rendimiento" },
-    { key: "hoj_corte", label: "Medida del corte" },
-  ],
+  // Hojeado y Guillotina ya se muestran completos y con las fuentes
+  // correctas en BloqueVisualHojeadoGuillotina (arriba) -- se dejan vacíos
+  // aquí a propósito para no duplicar el panel "Ficha del producto" con
+  // los mismos datos (y el riesgo de que queden desincronizados si se
+  // corrige uno y no el otro, como ya pasó).
+  hojeado_papel: [],
+  guillotina_papel: [],
   impresion_papel: [
     { key: "material", label: "Material" },
     { key: "calibre", label: "Calibre" },
@@ -324,11 +321,36 @@ function TarjetaProductoPapel({ pedido }: { pedido: PedidoSeguimientoPapel }) {
 // front, se muestran tal cual los campos propios de hojeado_papel /
 // guillotina_papel — bobina_cm, rendimiento, pliego_medida, etc).
 // ─────────────────────────────────────────────
-function BloqueVisualHojeadoGuillotina({
-  nombreProceso, registro,
-}: { nombreProceso: NombreProcesoPapel; registro: any }) {
-  if (!registro) return null;
+// CORREGIDO (según confirmación directa sobre GrupoBlock.tsx): estas
+// celdas NO se arman combinando campos ni caen en fallbacks -- cada una
+// tiene una fuente única y precisa:
+//  - Hojeado "Corte" y Guillotina "Corte"  -> el mismo `corte` genérico
+//    (celda "Corte" dentro de "Tipo de papel" en GrupoBlock).
+//  - Hojeado "Medida pliego" y Guillotina "Pliego origen" -> el mismo
+//    `pliego` genérico (celda "Pliego" en "Tipo de papel") -- es el
+//    mismo valor reusado en los dos bloques, no dos campos distintos.
+// `hoj_guillotina` ("Guill." dentro de la sección Hojeado en GrupoBlock)
+// NO se usa en esta ficha -- descartado tras confirmación.
+// "Bobina" (Hojeado) queda pendiente de confirmar: por su comportamiento
+// (fuente = un desplegable, no un input libre) probablemente sale de
+// acabados_papel.idrollo_lam / rollo_lam.medida_ancho (el mismo dato que
+// alimenta el costo de laminado), NO de detalle_material_papel.hoj_bobina
+// -- falta ese campo en el pedido para conectarlo aquí.
 
+// CORREGIDO: este bloque leía registro.bobina_cm / registro.hojeado_cm /
+// registro.rendimiento / registro.pliego_medida / registro.pliego_origen_medida
+// / registro.corte_medida -- NINGUNO de esos campos existe en las tablas
+// hojeado_papel/guillotina_papel (columnas reales: maquinaria_idmaquinaria,
+// cantidad_hojeado/pliegos, cortes, merma, cantidad_entregada -- puro
+// runtime de producción, ver DDL). Por eso siempre se veía todo en "—".
+//
+// Bobina/corte/rendimiento/pliego son datos de FICHA del producto (vienen
+// de detalle_material_papel vía JOIN en getSeguimiento), no algo que se
+// capture por corrida -- así que este bloque debe leer de `pedido`, igual
+// que "FICHA DEL PRODUCTO" arriba, no de `registro`.
+function BloqueVisualHojeadoGuillotina({
+  nombreProceso, pedido,
+}: { nombreProceso: NombreProcesoPapel; pedido: PedidoSeguimientoPapel }) {
   if (nombreProceso === "hojeado_papel") {
     return (
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
@@ -338,23 +360,36 @@ function BloqueVisualHojeadoGuillotina({
         <div className="grid grid-cols-2 gap-2 mb-2">
           <div className="text-center bg-white rounded border border-blue-100 px-2 py-2">
             <p className="text-[10px] text-blue-400 uppercase tracking-wide mb-0.5">Bobina</p>
-            <p className="text-sm font-bold text-blue-800">{registro.bobina_cm ?? "—"} cm</p>
+            <p className="text-sm font-bold text-blue-800">{pedido.hoj_bobina ?? "—"}</p>
           </div>
           <div className="text-center bg-white rounded border border-blue-100 px-2 py-2">
-            <p className="text-[10px] text-blue-400 uppercase tracking-wide mb-0.5">Hojeado</p>
-            <p className="text-sm font-bold text-blue-800">{registro.hojeado_cm ?? "—"} cm</p>
+            <p className="text-[10px] text-blue-400 uppercase tracking-wide mb-0.5">Corte</p>
+            <p className="text-sm font-bold text-blue-800">{pedido.corte ?? "—"}</p>
           </div>
         </div>
         <div className="grid grid-cols-2 gap-2">
           <div className="text-center bg-white rounded border border-blue-100 px-2 py-2">
             <p className="text-[10px] text-blue-400 uppercase tracking-wide mb-0.5">Rendimiento</p>
-            <p className="text-sm font-bold text-blue-800">{registro.rendimiento ?? "—"}</p>
+            <p className="text-sm font-bold text-blue-800">{pedido.hoj_rendimiento ?? "—"}</p>
           </div>
           <div className="text-center bg-white rounded border border-blue-100 px-2 py-2">
             <p className="text-[10px] text-blue-400 uppercase tracking-wide mb-0.5">Medida pliego</p>
-            <p className="text-sm font-bold text-blue-800">{registro.pliego_medida ?? "—"}</p>
+            <p className="text-sm font-bold text-blue-800">{pedido.pliego ?? "—"}</p>
           </div>
         </div>
+        {pedido.hoj_bobina_extra && (
+          <p className="text-[11px] text-blue-500 mt-2">{pedido.hoj_bobina_extra}</p>
+        )}
+        {pedido.pliegos_hojeado_calculado != null && (
+          <div className="mt-2 flex items-center justify-between bg-indigo-50 border border-indigo-100 rounded px-2 py-1.5">
+            <span className="text-[10px] text-indigo-500 uppercase tracking-wide">
+              Pliegos calculados
+            </span>
+            <span className="text-sm font-bold text-indigo-700">
+              {pedido.pliegos_hojeado_calculado.toLocaleString("es-MX")}
+            </span>
+          </div>
+        )}
       </div>
     );
   }
@@ -368,17 +403,27 @@ function BloqueVisualHojeadoGuillotina({
         <div className="grid grid-cols-2 gap-2 mb-2">
           <div className="text-center bg-white rounded border border-blue-100 px-2 py-2">
             <p className="text-[10px] text-blue-400 uppercase tracking-wide mb-0.5">Pliego origen</p>
-            <p className="text-sm font-bold text-blue-800">{registro.pliego_origen_medida ?? "—"}</p>
+            <p className="text-sm font-bold text-blue-800">{pedido.pliego ?? "—"}</p>
           </div>
           <div className="text-center bg-white rounded border border-blue-100 px-2 py-2">
             <p className="text-[10px] text-blue-400 uppercase tracking-wide mb-0.5">Corte</p>
-            <p className="text-sm font-bold text-blue-800">{registro.corte_medida ?? "—"}</p>
+            <p className="text-sm font-bold text-blue-800">{pedido.corte ?? "—"}</p>
           </div>
         </div>
         <div className="text-center bg-white rounded border border-blue-100 px-2 py-2">
           <p className="text-[10px] text-blue-400 uppercase tracking-wide mb-0.5">Rendimiento</p>
-          <p className="text-sm font-bold text-blue-800">{registro.rendimiento ?? "—"}</p>
+          <p className="text-sm font-bold text-blue-800">{pedido.rendimiento ?? "—"}</p>
         </div>
+        {pedido.pliegos_guillotina_calculado != null && (
+          <div className="mt-2 flex items-center justify-between bg-indigo-50 border border-indigo-100 rounded px-2 py-1.5">
+            <span className="text-[10px] text-indigo-500 uppercase tracking-wide">
+              Pliegos calculados <span className="normal-case">(estimado, cantidad × rendimiento)</span>
+            </span>
+            <span className="text-sm font-bold text-indigo-700">
+              {pedido.pliegos_guillotina_calculado.toLocaleString("es-MX")}
+            </span>
+          </div>
+        )}
       </div>
     );
   }
@@ -397,10 +442,15 @@ interface SeccionAvancesPapelProps {
   totalAvances: number;
   onAvanceRegistrado: () => void;
   limiteAnterior: number | null;
+  // Estimado informativo (cantidad x rendimiento) del proceso anterior,
+  // SOLO relevante cuando ese anterior es Hojeado/Guillotina y todavía no
+  // tiene ningún avance real -- una vez que sí lo tenga, limiteAnterior
+  // deja de ser null y este estimado ya no se muestra (el real manda).
+  estimadoAnterior: number | null;
 }
 
 function SeccionAvancesPapel({
-  idproduccion, nombreProceso, avances, totalAvances, onAvanceRegistrado, limiteAnterior,
+  idproduccion, nombreProceso, avances, totalAvances, onAvanceRegistrado, limiteAnterior, estimadoAnterior,
 }: SeccionAvancesPapelProps) {
   const [cantidad, setCantidad] = useState("");
   const [observaciones, setObservaciones] = useState("");
@@ -565,6 +615,17 @@ function SeccionAvancesPapel({
               </p>
             </div>
           </div>
+        </div>
+      )}
+
+      {limiteAnterior == null && estimadoAnterior != null && (
+        <div className="px-4 py-2.5 bg-indigo-50 border-b border-indigo-100 flex items-center justify-between">
+          <p className="text-[11px] text-indigo-600">
+            📐 Estimado (Hojeado/Guillotina aún sin avances): referencia, no un límite real todavía.
+          </p>
+          <p className="text-xs font-bold text-indigo-700">
+            {estimadoAnterior.toLocaleString("es-MX")} <span className="text-[9px] font-normal">{config.unidad}</span>
+          </p>
         </div>
       )}
 
@@ -1510,17 +1571,73 @@ export default function ModalProcesoIndividualPapel({ pedido, nombreProceso, onC
   // lo que el índice -1 funciona correctamente aquí — a diferencia de
   // plástico, donde el riesgo era asumir 4 procesos fijos sin filtrar.
   const procIndex = datos?.procesos.findIndex((p) => p.tabla === nombreProceso) ?? -1;
-  const procAnterior = procIndex > 0 ? datos?.procesos[procIndex - 1] : null;
+
+  // Hojeado y Guillotina son un par intercambiable, no una secuencia: si
+  // lo que queda justo antes en el array es uno de los dos, el "anterior"
+  // real para efectos de desbloqueo/límite es el que de verdad se usó
+  // (el que tenga avances o esté terminado), sin importar cuál de los dos
+  // ocupe la posición -1. Espejo del resolverAnteriorEfectivoPapel del
+  // backend — se necesita aquí también porque este componente calcula
+  // anteriorTerminado/anteriorTieneAvancesOTerminado localmente.
+  const esProcesoPreparacion = nombreProceso === "hojeado_papel" || nombreProceso === "guillotina_papel";
+  const esTablaPreparacion = (tabla?: string) => tabla === "hojeado_papel" || tabla === "guillotina_papel";
+
+  const procInmediatoAnterior = procIndex > 0 ? datos?.procesos[procIndex - 1] : null;
+  let procAnterior = procInmediatoAnterior;
+  if (procInmediatoAnterior && esTablaPreparacion(procInmediatoAnterior.tabla)) {
+    const candidatoDosAntes = procIndex > 1 ? datos?.procesos[procIndex - 2] : null;
+    const parCandidatos = [procInmediatoAnterior, candidatoDosAntes].filter(
+      (p): p is NonNullable<typeof p> => !!p && esTablaPreparacion(p.tabla)
+    );
+    procAnterior =
+      parCandidatos.find((p) => p.estado === "terminado" || (p.avances?.length ?? 0) > 0) ?? null;
+  }
+
   const anteriorTieneAvancesOTerminado =
+    esProcesoPreparacion || // Hojeado/Guillotina nunca dependen de nada anterior
     procAnterior?.estado === "terminado" ||
     (procAnterior?.avances != null && procAnterior.avances.length > 0);
-  const anteriorTerminado = procAnterior == null || procAnterior?.estado === "terminado";
+  const anteriorTerminado =
+    esProcesoPreparacion || procAnterior == null || procAnterior?.estado === "terminado";
+
+  // Estimado informativo (cantidad x rendimiento) del par Hojeado/Guillotina,
+  // para mostrar en el proceso siguiente (normalmente Impresión) ANTES de
+  // que cualquiera de los dos tenga un avance real. No se sabe todavía
+  // cuál de los dos se va a usar, así que se muestra el que exista.
+  const estimadoAnterior: number | null =
+    procInmediatoAnterior != null && esTablaPreparacion(procInmediatoAnterior.tabla)
+      ? pedido.pliegos_hojeado_calculado ?? pedido.pliegos_guillotina_calculado ?? null
+      : null;
 
   const campos = CAMPOS_PROCESO_PAPEL[nombreProceso] ?? [];
   const camposFicha = CAMPOS_FICHA_PAPEL[nombreProceso] ?? [];
   const camposRegistroPropio = CAMPOS_REGISTRO_PROPIO_PAPEL[nombreProceso] ?? [];
   const limiteAnterior: number | null = (proc as any)?.limite_avance ?? null;
-  const esBloqueVisual = nombreProceso === "hojeado_papel" || nombreProceso === "guillotina_papel";
+  const esBloqueVisual = esProcesoPreparacion;
+
+  // ── Reinicio del par Hojeado/Guillotina ──
+  const [reiniciando, setReiniciando] = useState(false);
+  const puedeReiniciarPreparacion =
+    esProcesoPreparacion && proc?.estado !== "no_aplica" && !!proc?.registro?.fecha_inicio;
+
+  const handleReiniciarPreparacion = async () => {
+    if (!pedido.idproduccion || !esProcesoPreparacion) return;
+    const confirmado = window.confirm(
+      `¿Seguro que quieres reiniciar ${NOMBRES_PROCESO_PAPEL[nombreProceso]}? Se borrará lo capturado y los avances de este proceso para poder elegir la otra máquina.`
+    );
+    if (!confirmado) return;
+
+    setReiniciando(true); setError(null);
+    try {
+      await reiniciarProcesoPreparacionPapel(
+        pedido.idproduccion,
+        nombreProceso as "hojeado_papel" | "guillotina_papel"
+      );
+      await cargar(); onActualizar();
+    } catch (e: any) {
+      setError(e.response?.data?.error || "Error al reiniciar el proceso");
+    } finally { setReiniciando(false); }
+  };
 
   const handleIniciar = async () => {
     if (!pedido.idproduccion) return;
@@ -1584,7 +1701,14 @@ export default function ModalProcesoIndividualPapel({ pedido, nombreProceso, onC
   };
 
   const tienePendienteSinIniciar = proc?.registro != null && !proc?.registro?.fecha_inicio;
-  const puedeIniciar = (datos?.proceso_actual === proc?.idproceso_cat && proc?.estado === "pendiente") || tienePendienteSinIniciar;
+  // Hojeado/Guillotina: cualquiera de los dos se puede iniciar mientras
+  // esté en "pendiente" (ninguno se ha comprometido todavía) — no dependen
+  // de que `proceso_actual` apunte justo a este, porque proceso_actual solo
+  // puede apuntar a uno de los dos a la vez y el otro seguiría bloqueado
+  // sin motivo.
+  const puedeIniciar = esProcesoPreparacion
+    ? proc?.estado === "pendiente"
+    : (datos?.proceso_actual === proc?.idproceso_cat && proc?.estado === "pendiente") || tienePendienteSinIniciar;
   const puedeFinalizar = proc?.estado === "en_proceso" && proc?.registro?.fecha_inicio && anteriorTerminado;
   const puedeAvance = proc?.estado === "en_proceso" && proc?.registro?.fecha_inicio;
   const nombreLabel = NOMBRES_PROCESO_PAPEL[nombreProceso] ?? nombreProceso.replace("_papel", "").replace("_", " ");
@@ -1668,8 +1792,24 @@ export default function ModalProcesoIndividualPapel({ pedido, nombreProceso, onC
         </div>
       )}
 
-      {esBloqueVisual && proc?.registro && (
-        <BloqueVisualHojeadoGuillotina nombreProceso={nombreProceso} registro={proc.registro} />
+      {esBloqueVisual && (
+        <BloqueVisualHojeadoGuillotina nombreProceso={nombreProceso} pedido={pedido} />
+      )}
+
+      {puedeReiniciarPreparacion && (
+        <div className="flex items-center justify-between bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+          <p className="text-xs text-red-700">
+            ¿Te equivocaste de máquina? Puedes reiniciar {NOMBRES_PROCESO_PAPEL[nombreProceso]} para
+            capturar en la otra.
+          </p>
+          <button
+            onClick={handleReiniciarPreparacion}
+            disabled={reiniciando}
+            className="shrink-0 ml-3 px-3 py-1.5 text-xs font-semibold text-red-700 border border-red-300 rounded-lg hover:bg-red-100 disabled:opacity-50"
+          >
+            {reiniciando ? "Reiniciando…" : "Reiniciar proceso"}
+          </button>
+        </div>
       )}
 
       {cargando ? (
@@ -1752,6 +1892,7 @@ export default function ModalProcesoIndividualPapel({ pedido, nombreProceso, onC
               totalAvances={proc.total_avances ?? 0}
               onAvanceRegistrado={async () => { await cargar(); onActualizar(); }}
               limiteAnterior={limiteAnterior}
+              estimadoAnterior={estimadoAnterior}
             />
           )}
 

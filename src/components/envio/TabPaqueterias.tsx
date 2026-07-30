@@ -2,8 +2,8 @@ import { useState, useEffect } from "react";
 import Modal from "./../Modal";
 import {
   getPaqueterias, createPaqueteria, updatePaqueteria, deletePaqueteria,
-} from "../../services/enviosService";
-import type { Paqueteria } from "../../types/envios.types";
+} from "../../services/envio/enviosService";
+import type { Paqueteria } from "../../types/envio/envios.types";
 import { inputClass, labelClass, buildMapsUrl, copiarLink } from "./../enviosConstants";
 import { showAlert } from './../CustomAlert';
 import { showConfirm } from './../CustomConfirm';

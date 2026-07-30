@@ -1,5 +1,5 @@
 import jsPDF from "jspdf";
-import { cargarLogoBase64 } from "../../services/Pdfutils";
+import { cargarLogoBase64 } from "../Pdfutils";
 import logoUrl from "../../assets/logogrupeb.png";
 
 const GOLD: [number, number, number] = [201, 146, 42];

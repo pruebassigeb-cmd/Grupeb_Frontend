@@ -9,8 +9,8 @@ import {
 } from "../../services/expo/expoService";
 import type { ClienteExpoAPI } from "../../services/expo/expoService";
 import { generarPdfAgradecimiento } from "../../utils/expo/generarPdfAgradecimiento";
-import { enviarCorreoDocumento } from "../../services/correoService";
-import ModalConfirmarCorreo from "../ModalConfirmarCorreo";
+import { enviarCorreoDocumento } from "../../services/expo/correoService";
+import ModalConfirmarCorreo from "./ModalConfirmarCorreo";
 import ModalCatalogoExpo from "./ModalCatalogoExpo";
 import { useAuth } from "../../context/AuthContext";
 import { OperacionEncoladaError } from "../../offline/outbox";

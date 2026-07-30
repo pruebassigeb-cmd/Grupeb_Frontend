@@ -3,12 +3,12 @@ import {
   quitarDelCarrito,
   vaciarCarrito,
   asignarTipoEnvioPedido,
-} from "../../services/enviosService";
+} from "../../services/envio/enviosService";
 import type {
   CarritoPedido,
   Paqueteria,
   TipoEnvioCarrito,
-} from "../../types/envios.types";
+} from "../../types/envio/envios.types";
 import { showAlert } from "../CustomAlert";
 import { showConfirm } from "../CustomConfirm";
 

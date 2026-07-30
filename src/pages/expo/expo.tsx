@@ -16,9 +16,9 @@ import ModalProducto     from "../../components/expo/ModalProducto";
 import ModalCatalogoExpo from "../../components/expo/ModalCatalogoExpo";
 import HojaCotizacion    from "../../components/expo/HojaCotizacion";
 import ListaCotizaciones from "../../components/expo/ListaCotizaciones";
-import BotonGuardarConOpciones from "../../components/BotonGuardarConOpciones";
-import ModalConfirmarCorreo from "../../components/ModalConfirmarCorreo";
-import NotificationOptIn from "../../components/NotificationOptIn";
+import BotonGuardarConOpciones from "../../components/expo/BotonGuardarConOpciones";
+import ModalConfirmarCorreo from "../../components/expo/ModalConfirmarCorreo";
+import NotificationOptIn from "../../components/pwa/NotificationOptIn";
 
 import {
   getCatalogoPropio, getCatalogoSistema,
@@ -35,8 +35,8 @@ import type { CatalogosPlastico, PigmentoDB } from "../../components/expo/Tablac
 import { getTiposInsumo, buscarInsumos, type Insumo } from "../../services/proveedoresService";
 import { useAuth } from "../../context/AuthContext";
 import { generarPdfCotizacionExpo, cotizacionBackDataAPdfParams } from "../../utils/expo/generarPdfCotizacionExpo";
-import { generarPdfCotizacion } from "../../services/generarPdfCotizacion";
-import { useEnvioDocumentoPdf } from "../../hooks/useEnvioDocumentoPdf";
+import { generarPdfCotizacion } from "../../utils/generarPdfCotizacion";
+import { useEnvioDocumentoPdf } from "../../hooks/expo/useEnvioDocumentoPdf";
 import { getClienteById } from "../../services/clientesService";
 import { construirPayloadPdfCotizacionDesdeBackData } from "../../utils/expo/construirPayloadPdfCotizacionExpo";
 import { useCalculoPrecioPapel } from "../../hooks/expo/useCalculoPrecioPapel";

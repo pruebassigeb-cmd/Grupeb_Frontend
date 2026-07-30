@@ -10,18 +10,18 @@ import {
   getConductores,
   getUnidades,
   getPaqueterias,
-} from "../../services/enviosService";
-import { getFotosEnvio, type Archivo } from "../../services/archivos.service";
+} from "../../services/envio/enviosService";
+import { getFotosEnvio, type Archivo } from "../../services/archivos/archivos.service";
 import type {
   BultoPedido,
   Envio,
   Conductor,
   Unidad,
   Paqueteria,
-} from "../../types/envios.types";
-import type { PedidoSeguimiento } from "../../types/seguimiento.types";
+} from "../../types/envio/envios.types";
+import type { PedidoSeguimiento } from "../../types/produccion/seguimiento.types";
 import FormularioEnvioIndividual from "./FormularioEnvioIndividual";
-import { generarNotaRemision } from "../../utils/generarNotaRemision";
+import { generarNotaRemision } from "../../utils/envio/generarNotaRemision";
 import { showAlert } from "../CustomAlert";
 import { showConfirm } from "../CustomConfirm";
 import { inputClass, labelClass } from "./../enviosConstants";

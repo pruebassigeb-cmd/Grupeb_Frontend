@@ -2,9 +2,9 @@ import { useState, useEffect } from "react";
 import {
   getConductores, getUnidades, procesarCarrito,
   getOrCreateNotaRemision, type EnvioCreado,
-} from "../../services/enviosService";
-import { generarNotasMultiples } from "../../utils/generarNotaRemision";
-import type { CarritoPedido, Conductor, TipoEnvioCarrito, Unidad } from "../../types/envios.types";
+} from "../../services/envio/enviosService";
+import { generarNotasMultiples } from "../../utils/envio/generarNotaRemision";
+import type { CarritoPedido, Conductor, TipoEnvioCarrito, Unidad } from "../../types/envio/envios.types";
 import { inputClass, labelClass } from "./../enviosConstants";
 import ModalFormatoCastores from "./ModalFormatoCastores";
 import ModalFormatoTresGuerras from "./ModalFormatoTresGuerras";

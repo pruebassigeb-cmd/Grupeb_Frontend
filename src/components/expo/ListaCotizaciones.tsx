@@ -1,15 +1,15 @@
 import { useState, useEffect } from "react";
 import { generarPdfCotizacionExpo, cotizacionBackDataAPdfParams } from "../../utils/expo/generarPdfCotizacionExpo";
 import { construirPayloadPdfPedidoDesdeBackData } from "../../utils/expo/construirPayloadPdfPedidoExpo";
-import { generarPdfPedido } from "../../services/generarPdfPedido";
-import { generarPdfCotizacion } from "../../services/generarPdfCotizacion";
+import { generarPdfPedido } from "../../utils/generarPdfPedido";
+import { generarPdfCotizacion } from "../../utils/generarPdfCotizacion";
 import { getCotizacionesExpo } from "../../services/expo/expoService";
-import { enviarCorreoDocumento } from "../../services/correoService";
+import { enviarCorreoDocumento } from "../../services/expo/correoService";
 import type { CotizacionGuardada, ItemPedidoAprobado } from "../../types/expo/expo.types";
 import { folioAPedido } from "../../types/expo/expo.types";
-import BotonAccionesPdf from "../BotonAccionesPdf";
-import ModalConfirmarCorreo from "../ModalConfirmarCorreo";
-import { useEnvioDocumentoPdf } from "../../hooks/useEnvioDocumentoPdf";
+import BotonAccionesPdf from "./BotonAccionesPdf";
+import ModalConfirmarCorreo from "./ModalConfirmarCorreo";
+import { useEnvioDocumentoPdf } from "../../hooks/expo/useEnvioDocumentoPdf";
 
 import FormularioCliente from "../FormularioCliente";
 import { getClienteById, updateCliente } from "../../services/clientesService";

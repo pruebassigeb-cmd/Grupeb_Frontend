@@ -4,7 +4,7 @@ import {
   notificarSincronizacionExpo,
   notificarMensajeExito,
   notificarResumenSincronizacion,
-} from "../pwa/notificacionesLocales";
+} from "../utils/pwa/notificacionesLocales";
 
 /** Por arriba de esto, se agrupan en un resumen en vez de una notificación por cada cambio. */
 const MAX_NOTIFICACIONES_INDIVIDUALES = 3;

@@ -1,0 +1,323 @@
+import api from "../api";
+import type {
+  CatalogosPlastico,
+  ProductoPlasticoCreate,
+  ProductoPlastico,
+  ProductoPlasticoDetalle,
+  ProductoPlasticoResponse,
+  ProductoBusqueda,
+  VerificarProductoResponse,
+  CatalogoCalibre,
+  CategoriaArchivoPlastico,
+  ArchivoProductoPlastico,
+  TipoProductoAdminItem,
+  MaterialAdminItem,
+  CalibreAdminItem,
+} from "../../types/plastico/productos-plastico.types";
+
+// ========================
+// FUNCIONES EXISTENTES
+// ========================
+export const getCalibres = async (
+  tipo: "normal" | "bopp" = "normal"
+): Promise<CatalogoCalibre[]> => {
+  try {
+    const params = { tipo };
+    const response = await api.get<CatalogoCalibre[]>(
+      "/catalogos-productos/plastico/calibres",
+      { params }
+    );
+    return response.data;
+  } catch (error: any) {
+    console.error("❌ Error al obtener calibres:", error);
+    throw error;
+  }
+};
+
+export const getCatalogosPlastico = async (): Promise<CatalogosPlastico> => {
+  try {
+    const response = await api.get("/catalogos-productos/plastico");
+    return response.data;
+  } catch (error: any) {
+    console.error("❌ Error al obtener catálogos:", error);
+    throw error;
+  }
+};
+
+export const createProductoPlastico = async (
+  producto: ProductoPlasticoCreate
+): Promise<ProductoPlasticoResponse> => {
+  try {
+    const response = await api.post("/productos-plastico", producto);
+    return response.data;
+  } catch (error: any) {
+    console.error("❌ Error al crear producto:", error);
+    throw error;
+  }
+};
+
+export const getProductosPlastico = async (): Promise<ProductoPlastico[]> => {
+  try {
+    const response = await api.get("/productos-plastico");
+    return response.data;
+  } catch (error: any) {
+    console.error("❌ Error al obtener productos:", error);
+    throw error;
+  }
+};
+
+export const getProductoPlasticoById = async (
+  id: number
+): Promise<ProductoPlasticoDetalle> => {
+  try {
+    const response = await api.get(`/productos-plastico/${id}`);
+    return response.data;
+  } catch (error: any) {
+    console.error("❌ Error al obtener producto:", error);
+    throw error;
+  }
+};
+
+export const updateProductoPlastico = async (
+  id: number,
+  producto: ProductoPlasticoCreate
+): Promise<ProductoPlasticoResponse> => {
+  try {
+    const response = await api.put(`/productos-plastico/${id}`, producto);
+    return response.data;
+  } catch (error: any) {
+    console.error("❌ Error al actualizar producto:", error);
+    throw error;
+  }
+};
+
+/** Soft-delete — el backend ahora marca activo=false, no borra el registro */
+export const deleteProductoPlastico = async (
+  id: number
+): Promise<{ message: string }> => {
+  try {
+    const response = await api.delete(`/productos-plastico/${id}`);
+    return response.data;
+  } catch (error: any) {
+    console.error("❌ Error al eliminar producto:", error);
+    throw error;
+  }
+};
+
+/** ✅ NUEVO — reactivar un producto previamente desactivado */
+export const reactivarProductoPlastico = async (
+  id: number
+): Promise<{ message: string }> => {
+  try {
+    const response = await api.patch(`/productos-plastico/${id}/reactivar`);
+    return response.data;
+  } catch (error: any) {
+    console.error("❌ Error al reactivar producto:", error);
+    throw error;
+  }
+};
+
+// ====================================
+// NUEVAS FUNCIONES PARA BÚSQUEDA
+// ====================================
+export const searchProductosPlastico = async (
+  query?: string
+): Promise<ProductoBusqueda[]> => {
+  try {
+    const params = query ? { query } : {};
+    const response = await api.get<ProductoBusqueda[]>(
+      "/catalogos-productos/plastico/search",
+      { params }
+    );
+    return response.data;
+  } catch (error: any) {
+    console.error("❌ Error al buscar productos:", error);
+    throw error;
+  }
+};
+
+export const verificarProductoExiste = async (data: {
+  tipo_producto_id: number;
+  material_id: number;
+  calibre_id: number;
+  medida: string;
+}): Promise<VerificarProductoResponse> => {
+  try {
+    const response = await api.post<VerificarProductoResponse>(
+      "/catalogos-productos/plastico/verificar",
+      data
+    );
+    return response.data;
+  } catch (error: any) {
+    console.error("❌ Error al verificar producto:", error);
+    throw error;
+  }
+};
+
+export const crearOObtenerProducto = async (
+  producto: ProductoPlasticoCreate
+): Promise<ProductoPlasticoResponse> => {
+  try {
+    const verificacion = await verificarProductoExiste({
+      tipo_producto_id: producto.tipo_producto_plastico_id,
+      material_id: producto.material_plastico_id,
+      calibre_id: producto.calibre_id,
+      medida: producto.medida,
+    });
+
+    if (verificacion.existe && verificacion.producto) {
+      return { message: "Producto encontrado", producto: verificacion.producto };
+    }
+
+    return await createProductoPlastico(producto);
+  } catch (error: any) {
+    console.error("❌ Error al crear/obtener producto:", error);
+    throw error;
+  }
+};
+
+interface CheckDuplicadoParams {
+  tipo_producto_plastico_id: number;
+  material_plastico_id: number;
+  calibre_id: number;
+  altura: number;
+  ancho: number;
+  fuelle_fondo?: number;
+  fuelle_latIz?: number;
+  fuelle_latDe?: number;
+  refuerzo?: number;
+}
+
+interface CheckDuplicadoResult {
+  existe: boolean;
+  detalle?: string;
+  producto_existente?: { id: number; medida: string };
+}
+
+export const checkProductoDuplicado = async (
+  params: CheckDuplicadoParams
+): Promise<CheckDuplicadoResult> => {
+  const queryString = new URLSearchParams(
+    Object.entries(params)
+      .filter(([, v]) => v !== undefined)
+      .map(([k, v]) => [k, String(v)])
+  ).toString();
+  const response = await api.get(`/productos-plastico/check-duplicado?${queryString}`);
+  return response.data;
+};
+
+// ====================================
+// ✅ NUEVO — ALTA INLINE DE CATÁLOGOS (tipo de producto / material / calibre)
+// Usadas por SelectorProducto (ConfigurarProducto.tsx) vía los props
+// onAgregarTipoProducto / onAgregarMaterial / onAgregarCalibre, tanto desde
+// la página de Configurar Producto como desde FormularioSolicitud.
+//
+// ⚠️ Verifica que estas 3 rutas coincidan con las que ya expone tu backend
+// para el alta de catálogos de plástico. Si tus rutas reales tienen otro
+// path (por ejemplo /catalogos-productos/plastico/tipo-producto en singular,
+// o un router aparte), solo hay que ajustar el string de cada api.post.
+// ====================================
+
+export const createTipoProductoPlastico = async (
+  nombre: string
+): Promise<TipoProductoAdminItem> => {
+  try {
+    const response = await api.post<TipoProductoAdminItem>(
+      "/catalogos-productos/plastico/tipos-producto",
+      { nombre }
+    );
+    return response.data;
+  } catch (error: any) {
+    console.error("❌ Error al crear tipo de producto:", error);
+    throw error;
+  }
+};
+
+export const createMaterialPlastico = async (
+  nombre: string,
+  valor: number
+): Promise<MaterialAdminItem> => {
+  try {
+    const response = await api.post<MaterialAdminItem>(
+      "/catalogos-productos/plastico/materiales",
+      { nombre, valor }
+    );
+    return response.data;
+  } catch (error: any) {
+    console.error("❌ Error al crear material:", error);
+    throw error;
+  }
+};
+
+export const createCalibrePlastico = async (
+  calibre: number,
+  calibre_bopp?: number | null,
+  gramos?: number | null
+): Promise<CalibreAdminItem> => {
+  try {
+    const response = await api.post<CalibreAdminItem>(
+      "/catalogos-productos/plastico/calibres",
+      { calibre, calibre_bopp: calibre_bopp ?? null, gramos: gramos ?? null }
+    );
+    return response.data;
+  } catch (error: any) {
+    console.error("❌ Error al crear calibre:", error);
+    throw error;
+  }
+};
+
+// ====================================
+// ✅ ARCHIVOS (imagen del producto de plástico)
+// Antes se guardaba en carpeta="catalogoproductos", subcarpeta="plastico".
+// Ahora se guarda en carpeta="suaje" (mostrada al usuario como "Productos"),
+// subcarpeta="plastico-producto" — ambas ya agregadas en:
+//   - backend:  config/multer.ts (SUBCARPETAS_SUAJE)
+//   - frontend: services/archivos.service.ts (SUBCARPETAS_SUAJE)
+// No requiere ningún otro ajuste: el backend valida la subcarpeta contra
+// esa misma lista (validarSubcarpeta en archivo.controller.ts).
+// ====================================
+
+export const subirArchivoProductoPlastico = async (
+  file: File,
+  categoria: CategoriaArchivoPlastico,
+  idconfiguracion_plastico: number
+): Promise<ArchivoProductoPlastico> => {
+  const BASE = (import.meta as any).env.VITE_API_URL;
+  const fd = new FormData();
+  fd.append("archivo", file);
+  fd.append("carpeta", "suaje");
+  fd.append("subcarpeta", "plastico-producto");
+  fd.append("categoria", categoria);
+  fd.append("idconfiguracion_plastico", String(idconfiguracion_plastico));
+
+  const res = await fetch(`${BASE}/archivos/upload`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${localStorage.getItem("token") ?? ""}` },
+    body: fd,
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error ?? "Error al subir el archivo");
+  }
+
+  return await res.json();
+};
+
+/** Elimina un archivo ya subido (imagen del producto) */
+export const eliminarArchivoProductoPlastico = async (
+  id_archivo: number
+): Promise<{ message: string }> => {
+  const response = await api.delete(`/archivos/${id_archivo}`);
+  return response.data;
+};
+
+/** GET /archivos/producto-plastico/:idproducto (ya existe en tus rutas reales) */
+export const getArchivosProductoPlastico = async (
+  idconfiguracion_plastico: number
+): Promise<ArchivoProductoPlastico[]> => {
+  const response = await api.get(
+    `/archivos/producto-plastico/${idconfiguracion_plastico}`
+  );
+  return response.data;
+};

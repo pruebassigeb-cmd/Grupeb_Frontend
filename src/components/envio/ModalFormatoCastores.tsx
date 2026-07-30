@@ -1,10 +1,10 @@
 import { useState, useEffect } from "react";
 import Modal from "./../Modal";
 import { inputClass, labelClass } from "./../enviosConstants";
-import { getFormatoCastores, getProductosSat, updateClavesSatBultos } from "../../services/enviosService";
-import { generarFormatoCastores } from "../../utils/generarFormatoCastores";
+import { getFormatoCastores, getProductosSat, updateClavesSatBultos } from "../../services/envio/enviosService";
+import { generarFormatoCastores } from "../../utils/envio/generarFormatoCastores";
 import { preguntarGuardarS3 } from "../../services/pdfS3.service";
-import type { ProductoSat } from "../../types/envios.types";
+import type { ProductoSat } from "../../types/envio/envios.types";
 import { showAlert } from './../CustomAlert';
 
 

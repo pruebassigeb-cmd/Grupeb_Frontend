@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, type ReactNode } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import logo from "../assets/grupeblanco.png";
-import InstallButton from "../components/InstallButton";
+import InstallButton from "../components/pwa/InstallButton";
 
 interface DashboardProps {
   children: ReactNode;

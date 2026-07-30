@@ -61,6 +61,11 @@ export interface PedidoSeguimientoPapel {
   tipo_pegue: string | null; // ej "Fuelle"
   suaje: string | null; // ej "312" — referencia visual, el folio real vive en suaje_papel
   rendimiento: string | null; // ej "0.5"
+  // CORREGIDO: faltaba en el tipo y en el mapeo final de getSeguimiento
+  // (el backend ya lo seleccionaba de detalle_material_papel pero nunca
+  // lo devolvía) -- es el "corte" genérico que usa Guillotina como su
+  // medida de salida, distinto de hoj_corte (que es el de Hojeado).
+  corte: string | null; // ej "45x30" — detalle_material_papel.corte
 
   // ── Campos de ficha agregados tras corrección del DDL (ddl_papel_produccion_true.sql) ──
   // Estos ya NO se capturan por proceso — el backend los trae por JOIN desde
@@ -69,9 +74,21 @@ export interface PedidoSeguimientoPapel {
   // Hojeado/Guillotina — detalle_material_papel (vía grupo_papel)
   hoj_bobina: string | null; // ej "61 cm"
   hoj_bobina_extra: string | null;
-  hoj_corte: string | null; // ej "61x45 cm"
+  hoj_corte: string | null; // ej "61x45 cm" -- OJO: en GrupoBlock esta celda se llama "Desarrollo", no "Corte"
   hoj_rendimiento: string | null; // ej ".5"
+  // "Guill." en GrupoBlock (dentro de la sección Hojeado) -- es el valor
+  // que Guillotina usa como "pliego origen" cuando esta orden se prepara
+  // por esa vía en vez de Hojeado. NO confundir con el `pliego` genérico
+  // de abajo (ese es el de la sección "Tipo de papel", usado por Hojeado).
+  hoj_guillotina: string | null;
   pliego: string | null; // medida del pliego, ej "61x90"
+
+  // Informativos: cantidad_orden x rendimiento respectivo. NO son un
+  // límite real ni sustituyen a limite_avance (ese sale de avances ya
+  // capturados) -- son solo la estimación de cuántos pliegos hacen falta,
+  // útil como referencia desde antes de iniciar el proceso.
+  pliegos_hojeado_calculado: number | null;
+  pliegos_guillotina_calculado: number | null;
 
   // Impresión — detalle_material_papel + solicitud_producto / solicitud_producto_papel
   tintas_frente: number | null;

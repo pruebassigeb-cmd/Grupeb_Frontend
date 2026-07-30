@@ -3,7 +3,7 @@ import type {
   TipoProductoAdminItem,
   MaterialAdminItem,
   CalibreAdminItem,
-} from "../../types/productos-plastico.types";
+} from "../../types/plastico/productos-plastico.types";
 
 const inputCls =
   "w-full px-3 py-1.5 border border-gray-300 rounded-md text-sm text-gray-900 bg-white focus:ring-2 focus:ring-blue-400 focus:border-blue-400 outline-none";

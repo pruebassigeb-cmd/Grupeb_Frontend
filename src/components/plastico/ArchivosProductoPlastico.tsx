@@ -3,11 +3,11 @@ import type {
   ArchivoProductoPlastico,
   ArchivoPendientePlastico,
   CategoriaArchivoPlastico,
-} from "../../types/productos-plastico.types";
+} from "../../types/plastico/productos-plastico.types";
 import {
   subirArchivoProductoPlastico,
   eliminarArchivoProductoPlastico,
-} from "../../services/productosPlasticoService";
+} from "../../services/plastico/productosPlasticoService";
 
 // ✅ Solo se maneja una categoría: la imagen del producto.
 // (Antes existían también "render-plastico" y "master-plastico"; se dejan

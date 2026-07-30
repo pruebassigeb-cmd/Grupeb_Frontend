@@ -4,8 +4,8 @@
   import Dashboard from "../../layouts/Sidebar";
   import type { CatKey, CatItem } from "../../types/papel/papel.types";
   import { useCatalogosPapel } from "../../hooks/papel/useCatalogosPapel";
-  import FoilPanel from "./FoilPanel";
-  import InsumoCatalogoPanel from "./InsumoCatalogoPanel";
+  import FoilPanel from "../../components/papel/FoilPanel";
+  import InsumoCatalogoPanel from "../../components/papel/InsumoCatalogoPanel";
   import { getCatalogoInsumo, type CatKeySincronizado } from "../../services/papel/catalogoPapelInsumoService";
   import { fetchFoils } from "../../services/papel/foil.service";
 

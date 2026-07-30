@@ -1,12 +1,12 @@
 import { useState, useEffect, useRef } from "react";
-import { getEnviosRecoleccion, marcarRecolectado, getOrCreateNotaRemision } from "../../services/enviosService";
-import { getFotosEnvio, subirArchivo, eliminarArchivo, type Archivo } from "../../services/archivos.service";
-import { generarNotaRemision } from "../../utils/generarNotaRemision";
+import { getEnviosRecoleccion, marcarRecolectado, getOrCreateNotaRemision } from "../../services/envio/enviosService";
+import { getFotosEnvio, subirArchivo, eliminarArchivo, type Archivo } from "../../services/archivos/archivos.service";
+import { generarNotaRemision } from "../../utils/envio/generarNotaRemision";
 import { ESTADO_BADGE, ESTADO_LABEL, formatFechaHora, inputClass, labelClass } from "./../enviosConstants";
 import ModalMarcarRecoleccion from "./ModalMarcarRecoleccion";
 import Modal from "./../Modal";
 import { showAlert } from "./../CustomAlert";
-import type { EnvioRecoleccion } from "../../types/envios.types";
+import type { EnvioRecoleccion } from "../../types/envio/envios.types";
 
 const ChevronIcon = ({ open }: { open: boolean }) => (
   <svg className={`w-4 h-4 text-gray-400 transition-transform duration-200 flex-shrink-0 ${open ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">

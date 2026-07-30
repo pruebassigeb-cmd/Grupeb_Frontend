@@ -1,17 +1,17 @@
 import Dashboard from "../layouts/Sidebar";
 import Modal from "../components/Modal";
-import FormularioCotizacion from "../components/FormularioSolicitud";
-import EditarCotizacion from "../components/EditarCotizacion";
+import FormularioCotizacion from "../components/plastico/FormularioSolicitud";
+import EditarCotizacion from "../components/plastico/EditarCotizacion";
 import { useState, useEffect } from "react";
-import { getCatalogosPlastico } from "../services/productosPlasticoService";
+import { getCatalogosPlastico } from "../services/plastico/productosPlasticoService";
 import {
   getCotizaciones,
   crearCotizacion,
   eliminarCotizacion,
 } from "../services/cotizacionesService";
-import { generarPdfCotizacion } from "../services/generarPdfCotizacion";
+import { generarPdfCotizacion } from "../utils/generarPdfCotizacion";
 import { preguntarGuardarS3 } from "../services/pdfS3.service";
-import type { CatalogosPlastico } from "../types/productos-plastico.types";
+import type { CatalogosPlastico } from "../types/plastico/productos-plastico.types";
 import type { Cotizacion } from "../types/cotizaciones.types";
 import { showAlert } from '../components/CustomAlert';
 import { showConfirm } from '../components/CustomConfirm';

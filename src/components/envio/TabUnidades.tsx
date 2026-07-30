@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import Modal from "../Modal";
-import { getUnidades, createUnidad, updateUnidad, deleteUnidad } from "../../services/enviosService";
-import type { Unidad } from "../../types/envios.types";
+import { getUnidades, createUnidad, updateUnidad, deleteUnidad } from "../../services/envio/enviosService";
+import type { Unidad } from "../../types/envio/envios.types";
 import { inputClass, labelClass } from "../enviosConstants";
 import { showAlert } from '../CustomAlert';
 import { showConfirm } from '../CustomConfirm';

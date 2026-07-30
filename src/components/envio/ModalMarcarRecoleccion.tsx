@@ -1,10 +1,10 @@
 import { useState, useRef } from "react";
-import { marcarRecolectado } from "../../services/enviosService";
-import { subirArchivo } from "../../services/archivos.service";
+import { marcarRecolectado } from "../../services/envio/enviosService";
+import { subirArchivo } from "../../services/archivos/archivos.service";
 import Modal from "./../Modal";
 import { inputClass, labelClass } from "./../enviosConstants";
 import { showAlert } from "./../CustomAlert";
-import type { EnvioRecoleccion } from "../../types/envios.types";
+import type { EnvioRecoleccion } from "../../types/envio/envios.types";
 
 interface ModalMarcarRecoleccionProps {
   recoleccion: EnvioRecoleccion;

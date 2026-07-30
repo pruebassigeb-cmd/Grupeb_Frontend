@@ -50,13 +50,19 @@ interface FilaProcesoProps {
 function FilaProceso({ proceso, esActual, onAbrir }: FilaProcesoProps) {
   const nombre = NOMBRES_PROCESO_PAPEL[proceso.tabla] ?? proceso.tabla;
   const tieneAvances = (proceso.avances ?? []).length > 0;
+  // "no_aplica" aquí normalmente significa: el hermano de Hojeado/Guillotina
+  // que no se usó una vez que el otro ya tiene registro. Se muestra pero
+  // no se puede abrir -- si el usuario se equivocó de máquina, la forma de
+  // corregirlo es reiniciar el que sí tiene registro, no entrar a este.
+  const deshabilitado = proceso.estado === "no_aplica";
  
   return (
     <button
-      onClick={onAbrir}
+      onClick={deshabilitado ? undefined : onAbrir}
+      disabled={deshabilitado}
       className={`w-full flex items-center justify-between px-4 py-3 rounded-lg border transition-all text-left
         ${esActual ? "border-blue-300 bg-blue-50 ring-1 ring-blue-200" : "border-gray-200 bg-white hover:bg-gray-50"}
-        hover:shadow-sm`}
+        ${deshabilitado ? "opacity-60 cursor-not-allowed hover:shadow-none hover:bg-white" : "hover:shadow-sm"}`}
     >
       <div className="flex items-center gap-3">
         <span className={`inline-flex items-center justify-center w-8 h-8 rounded-full text-sm font-bold border ${colorEstado(proceso.estado)}`}>
@@ -180,4 +186,3 @@ export default function ModalSelectorProcesoPapel({ pedido, onAbrirProceso, onCl
     </div>
   );
 }
- 

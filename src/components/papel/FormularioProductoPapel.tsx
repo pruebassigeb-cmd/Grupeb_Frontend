@@ -1,7 +1,7 @@
 // src/components/papel/FormularioProductoPapel.tsx
 import { useState, useEffect } from "react";
-import ComboboxInsumo from "../ComboboxInsumo";
-import ModalRegistrarInsumo from "../ModalRegistrarInsumo";
+import ComboboxInsumo from "../proveedores/ComboboxInsumo";
+import ModalRegistrarInsumo from "../proveedores/ModalRegistrarInsumo";
 import {
   getProductosPapel,
   getProductoPapelDetalle,

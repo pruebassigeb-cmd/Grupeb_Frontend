@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from "react";
 import { loginService, logoutService } from "../services/authService";
-import { warmApiCache } from "../pwa/warmApiCache";
+import { warmApiCache } from "../utils/pwa/warmApiCache";
 
 // ==========================
 // TIPOS

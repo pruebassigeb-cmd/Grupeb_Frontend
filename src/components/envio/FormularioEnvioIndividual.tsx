@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { getConductores, getUnidades, getPaqueterias, createEnvio, getEnviosPedido } from "../../services/enviosService";
-import type { Conductor, Unidad, Paqueteria, PedidoDisponible } from "../../types/envios.types";
+import { getConductores, getUnidades, getPaqueterias, createEnvio, getEnviosPedido } from "../../services/envio/enviosService";
+import type { Conductor, Unidad, Paqueteria, PedidoDisponible } from "../../types/envio/envios.types";
 import { inputClass, labelClass } from "./../enviosConstants";
 import ModalFormatoCastores       from "./ModalFormatoCastores";
 import ModalFormatoTresGuerras    from "./ModalFormatoTresGuerras";
