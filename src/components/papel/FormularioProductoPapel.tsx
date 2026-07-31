@@ -26,6 +26,8 @@ import FormularioProductoPapelAlta from "./FormularioProductoPapelAlta";
 import type { ArchivoPendiente } from "./FormularioProductoPapelAlta";
 import type { ProductoPapelForm } from "../../types/papel/papel.types";
 import { coincideBusquedaProductoPapel } from "../../utils/papel/buscarProductoPapel";
+import { convertirDesdeMXN } from "../../utils/moneda.utils";
+import { formatMoney, type Moneda } from "../../utils/formatMoney";
 
 export type { ProductoPapelCotizacion };
 
@@ -44,6 +46,10 @@ interface Props {
   caras?: { id: number; cantidad: number }[];
   idTipoPanton?: number | null;
   onRegistrarPanton?: (nombre: string, indice: number) => void;
+  // Moneda de la cotización/pedido (default MXN). precio_sugerido en el
+  // catálogo siempre es MXN — se convierte aquí antes de mostrarlo/usarlo.
+  moneda?: Moneda;
+  tipoCambio?: number | null;
 }
 
 const nuevoSpecs = () => ({
@@ -88,6 +94,8 @@ export default function FormularioProductoPapel({
   caras = [],
   idTipoPanton = null,
   onRegistrarPanton,
+  moneda = "MXN",
+  tipoCambio = null,
 }: Props) {
   const [modoProductoPapel, setModoProductoPapel] = useState<
     "registrado" | "nuevo"
@@ -459,7 +467,12 @@ export default function FormularioProductoPapel({
     }
   };
 
-  const aplicarSugerido = (precio: number | null) => {
+  const aplicarSugerido = (precioMXN: number | null) => {
+    if (precioMXN == null) return;
+    // precio_sugerido siempre viene en MXN del catálogo — se convierte a la
+    // moneda de la cotización antes de aplicarlo. Si es USD y aún no hay
+    // tipoCambio capturado, no se aplica nada (el vendedor lo captura a mano).
+    const precio = convertirDesdeMXN(precioMXN, moneda, tipoCambio);
     if (precio == null) return;
     setPreciosTexto((prev) => {
       const t = [...prev] as [string, string, string];
@@ -1131,7 +1144,7 @@ export default function FormularioProductoPapel({
                     <option key={g.idgrupo_papel} value={g.idgrupo_papel}>
                       {g.etiqueta}
                       {g.precio_sugerido != null
-                        ? `  —  $${g.precio_sugerido.toFixed(2)}`
+                        ? `  —  ${formatMoney(convertirDesdeMXN(g.precio_sugerido, moneda, tipoCambio) ?? g.precio_sugerido, moneda)}`
                         : ""}
                     </option>
                   ))}
@@ -1144,7 +1157,10 @@ export default function FormularioProductoPapel({
               {specs.precio_sugerido != null && (
                 <p className="text-xs text-amber-600 mt-1">
                   💡 Precio sugerido aplicado:{" "}
-                  <strong>${specs.precio_sugerido.toFixed(2)}</strong>
+                  <strong>{formatMoney(convertirDesdeMXN(specs.precio_sugerido, moneda, tipoCambio) ?? specs.precio_sugerido, moneda)}</strong>
+                  {moneda === "USD" && tipoCambio == null && (
+                    <span className="text-red-500"> (captura el tipo de cambio para convertir)</span>
+                  )}
                 </p>
               )}
             </div>

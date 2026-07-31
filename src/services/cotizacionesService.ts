@@ -124,6 +124,8 @@ export const crearCotizacion = async (
     tipo: datos.tipo ?? "cotizacion",
     prioridad: datos.prioridad ?? false,
     sin_iva: datos.sin_iva ?? false,
+    moneda: datos.moneda ?? "MXN",
+    tipoCambio: datos.tipoCambio ?? null,
     productos,
   };
 

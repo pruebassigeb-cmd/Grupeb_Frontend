@@ -152,6 +152,8 @@ export interface Cotizacion extends DatosClientePdf {
   total: number;
   sin_iva?: boolean;
   origen_expo?: boolean;
+  moneda?: "MXN" | "USD";
+  tipo_cambio?: number | null;
 }
 
 export interface Pedido extends DatosClientePdf {
@@ -172,6 +174,8 @@ export interface Pedido extends DatosClientePdf {
   productos: ProductoCotizacion[];
   total: number;
   sin_iva?: boolean;
+  moneda?: "MXN" | "USD";
+  tipo_cambio?: number | null;
 }
 
 export interface DetalleCrearCotizacion {
@@ -241,6 +245,8 @@ export interface CrearCotizacionPayload {
   tipo?: "cotizacion" | "pedido";
   prioridad?: boolean;
   sin_iva?: boolean;
+  moneda?: "MXN" | "USD";
+  tipoCambio?: number | null;
   productos: any[];
   [key: string]: any;
 }

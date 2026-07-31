@@ -4,6 +4,7 @@ import { cargarLogoBase64 } from "./Pdfutils";
 import type { EstadoCuenta } from "../services/anticipoLiquidacion/estadoCuentaService";
 import logoUrl from "../assets/grupeblanco.png";
 import { subirPdfA3 } from "../services/pdfS3.service";
+import { formatMoney, type Moneda } from "./formatMoney";
 
 const BLACK:   [number, number, number] = [0,   0,   0  ];
 const WHITE:   [number, number, number] = [255, 255, 255];
@@ -99,6 +100,10 @@ export async function generarPdfEstadoCuentaSimple(
   const logoBase64 = await cargarLogoBase64(logoUrl);
   const qrWaBase64 = await generarQRBase64("https://wa.me/523339540924");
   const sinIva     = (datos as any).sin_iva === true;
+  const moneda: Moneda = (datos.moneda as Moneda) ?? "MXN";
+  // Shadow del helper del módulo: toda llamada a fmtMoney(...) en esta
+  // función sale en la moneda del documento, sin tocar cada llamada.
+  const fmtMoney = (n: number): string => formatMoney(n, moneda);
 
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   const PW  = 210;
@@ -145,7 +150,7 @@ export async function generarPdfEstadoCuentaSimple(
   doc.setFont("helvetica", "bold");
   doc.setFontSize(10);
   doc.setTextColor(...GRAY_10);
-  doc.text(`Pedido #${datos.no_pedido}`, M + CW, bandaH / 2 - 2, { align: "right" });
+  doc.text(`Pedido #${datos.no_pedido}${moneda === "USD" ? "  (USD)" : ""}`, M + CW, bandaH / 2 - 2, { align: "right" });
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8.5);

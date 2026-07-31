@@ -20,6 +20,10 @@ import type { EstadoCuenta } from "../../services/anticipoLiquidacion/estadoCuen
 import type { Venta, VentaPago, MetodoPago } from "../../types/ventas.types";
 import { showAlert } from '../../components/CustomAlert';
 import { showConfirm } from '../../components/CustomConfirm';
+import { MONEDAS_OPERACION } from "../../constants/moneda.constants";
+import { useTipoCambioActual } from "../../hooks/useTipoCambioActual";
+import { convertirEntreMonedas } from "../../utils/moneda.utils";
+import { formatMoney, type Moneda } from "../../utils/formatMoney";
 
 const ESTADO = { PENDIENTE: 1, EN_PROCESO: 2, PAGADO: 6 } as const;
 const POR_PAGINA = 10;
@@ -491,6 +495,29 @@ export function EditarAntLiqReal({
     visible: false, folios: [],
   });
 
+  // ── Moneda del pago: default = moneda de la venta, editable si el
+  // cliente paga en la moneda contraria ────────────────────────────────────
+  const monedaVenta: Moneda = (venta.moneda as Moneda) ?? "MXN";
+  const [monedaPago, setMonedaPago] = useState<Moneda>(monedaVenta);
+  const [tipoCambioAplicadoTexto, setTipoCambioAplicadoTexto] = useState("");
+  const { tipoCambio: tipoCambioActual } = useTipoCambioActual();
+  const requiereConversionPago = monedaPago !== monedaVenta;
+  const tipoCambioAplicadoNum = tipoCambioAplicadoTexto ? Number(tipoCambioAplicadoTexto) : null;
+
+  useEffect(() => {
+    if (requiereConversionPago && !tipoCambioAplicadoTexto && tipoCambioActual) {
+      setTipoCambioAplicadoTexto(String(tipoCambioActual.valor));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requiereConversionPago, tipoCambioActual]);
+
+  // Monto ya convertido a la moneda de la venta — null si falta tipo de
+  // cambio cuando se requiere conversión (moneda de pago ≠ moneda de venta).
+  const montoParaValidar = parseFloat(monto);
+  const montoConvertido = isNaN(montoParaValidar)
+    ? null
+    : convertirEntreMonedas(montoParaValidar, monedaPago, monedaVenta, tipoCambioAplicadoNum);
+
   // anticipo = 50% guardado en BD — es lo que ve el cliente
   const anticipo    = Number(venta.anticipo);
   const saldo       = Number(venta.saldo);
@@ -541,8 +568,14 @@ export function EditarAntLiqReal({
     if (!monto || isNaN(montoNum) || montoNum <= 0) {
       setError("Ingresa un monto válido mayor a 0"); return;
     }
-    if (montoNum > saldo + 0.01) {
-      setError(`El monto excede el saldo pendiente ($${fmt(saldo)})`); return;
+    if (requiereConversionPago && (!tipoCambioAplicadoNum || tipoCambioAplicadoNum <= 0)) {
+      setError("Captura un tipo de cambio válido para registrar el pago en la moneda contraria"); return;
+    }
+    if (montoConvertido == null) {
+      setError("No se pudo calcular el equivalente del pago"); return;
+    }
+    if (montoConvertido > saldo + 0.01) {
+      setError(`El monto excede el saldo pendiente (${formatMoney(saldo, monedaVenta)})`); return;
     }
     setGuardando(true);
     setError(null);
@@ -553,10 +586,13 @@ export function EditarAntLiqReal({
         esAnticipo,
         observacion: observacion.trim() || undefined,
         fecha:       fechaPago || null,
+        moneda:             monedaPago,
+        tipoCambioAplicado: requiereConversionPago ? tipoCambioAplicadoNum : null,
       });
       await recargar();
       setMonto(""); setObservacion(""); setFechaPago("");
       setEsAnticipo(false); setMontoEsAnticipo(false);
+      setMonedaPago(monedaVenta); setTipoCambioAplicadoTexto("");
 
       const foliosNuevos: string[] = response?.ordenes_generadas ?? [];
       if (foliosNuevos.length > 0) {
@@ -600,7 +636,7 @@ export function EditarAntLiqReal({
   };
 
   const handleEliminarPago = async (pago: VentaPago) => {
-    if (!await showConfirm(`¿Eliminar el pago de $${fmt(pago.monto)}?`)) return;
+    if (!await showConfirm(`¿Eliminar el pago de ${formatMoney(pago.monto, (pago.moneda as Moneda) ?? monedaVenta)}?`)) return;
     setEliminando(pago.idventa_pago);
     try { await eliminarPago(pago.idventa_pago); await recargar(); }
     catch (e: any) { showAlert(e.response?.data?.error || "Error al eliminar pago"); }
@@ -660,6 +696,9 @@ export function EditarAntLiqReal({
           Pedido #{venta.no_pedido}
           {venta.no_cotizacion ? ` · Cot. #${venta.no_cotizacion}` : ""}
           {" · "}{fmtFecha(venta.fecha_pedido)}
+          {monedaVenta === "USD" && (
+            <span className="ml-2 px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 text-xs font-semibold align-middle">USD</span>
+          )}
         </p>
       </div>
 
@@ -667,15 +706,15 @@ export function EditarAntLiqReal({
       <div className="space-y-2">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {[
-            { label: "Subtotal orig.",  value: fmt(venta.subtotal), color: "text-gray-700"               },
-            { label: "IVA 16%",         value: fmt(venta.iva),      color: "text-gray-500"               },
-            { label: "Total orig.",     value: fmt(venta.total),    color: "text-gray-900 font-bold"     },
+            { label: "Subtotal orig.",  value: Number(venta.subtotal), color: "text-gray-700"               },
+            { label: "IVA 16%",         value: Number(venta.iva),      color: "text-gray-500"               },
+            { label: "Total orig.",     value: Number(venta.total),    color: "text-gray-900 font-bold"     },
             // 50% — anticipo oficial que ve el cliente
-            { label: "Anticipo (50%)",  value: fmt(anticipo),       color: "text-blue-700 font-semibold" },
+            { label: "Anticipo (50%)",  value: anticipo,                color: "text-blue-700 font-semibold" },
           ].map(item => (
             <div key={item.label} className="bg-gray-50 rounded-xl p-3 text-center border border-gray-100">
               <p className="text-xs text-gray-400 mb-1">{item.label}</p>
-              <p className={`text-sm ${item.color}`}>${item.value}</p>
+              <p className={`text-sm ${item.color}`}>{formatMoney(item.value, monedaVenta)}</p>
             </div>
           ))}
         </div>
@@ -690,7 +729,7 @@ export function EditarAntLiqReal({
                   <span className="text-xs text-orange-500 ml-1.5 font-normal">(incluido en el total del pedido)</span>
                 </div>
               </div>
-              <span className="text-sm font-bold text-orange-700">+${fmt(herramentalTotal)}</span>
+              <span className="text-sm font-bold text-orange-700">+{formatMoney(herramentalTotal, monedaVenta)}</span>
             </div>
             <div className="px-4 pb-3 border-t border-orange-100 pt-2">
               <p className="text-[10px] text-orange-700 leading-relaxed">
@@ -721,9 +760,9 @@ export function EditarAntLiqReal({
           }`} style={{ width: `${pctPagado}%` }} />
         </div>
         <div className="flex justify-between mt-2 text-xs text-gray-500">
-          <span>Pagado: <span className="font-semibold text-emerald-700">${fmt(totalPagado)}</span></span>
+          <span>Pagado: <span className="font-semibold text-emerald-700">{formatMoney(totalPagado, monedaVenta)}</span></span>
           <span>Saldo: <span className={`font-semibold ${saldo > 0.01 ? "text-red-600" : "text-emerald-600"}`}>
-            {saldo > 0.01 ? `$${fmt(saldo)}` : "Pagado ✓"}
+            {saldo > 0.01 ? formatMoney(saldo, monedaVenta) : "Pagado ✓"}
           </span></span>
         </div>
         <p className="text-center text-xs mt-1 text-blue-500">
@@ -735,7 +774,7 @@ export function EditarAntLiqReal({
                 ? "🤝 Anticipo a crédito — pago pendiente"
                 : anticipoCubierto
                   ? "✓ Anticipo cubierto — falta liquidar saldo"
-                  : `↑ Azul = producción activa desde 40% · Naranja = anticipo oficial 50% · Faltan $${fmt(anticipoRestante)}`}
+                  : `↑ Azul = producción activa desde 40% · Naranja = anticipo oficial 50% · Faltan ${formatMoney(anticipoRestante, monedaVenta)}`}
         </p>
 
         {/* Badge crédito */}
@@ -745,7 +784,7 @@ export function EditarAntLiqReal({
             <p className="text-xs text-amber-800 font-medium">
               Anticipo autorizado por crédito
               {totalPagado < anticipo - 0.01 && (
-                <> · Faltan <span className="font-bold">${fmt(anticipoRestante)}</span> por cobrar</>
+                <> · Faltan <span className="font-bold">{formatMoney(anticipoRestante, monedaVenta)}</span> por cobrar</>
               )}
             </p>
           </div>
@@ -756,7 +795,7 @@ export function EditarAntLiqReal({
             <span className="text-amber-500 text-sm mt-0.5">⚠️</span>
             <p className="text-xs text-amber-800">
               La producción real fue mayor a la cotizada. El saldo se actualizó a{" "}
-              <span className="font-bold">${fmt(saldo)}</span> — ya puedes registrar el pago pendiente.
+              <span className="font-bold">{formatMoney(saldo, monedaVenta)}</span> — ya puedes registrar el pago pendiente.
             </p>
           </div>
         )}
@@ -803,7 +842,9 @@ export function EditarAntLiqReal({
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
-                      <p className="text-sm font-semibold text-gray-800">${fmt(pago.monto)}</p>
+                      <p className="text-sm font-semibold text-gray-800">
+                        {formatMoney(pago.monto, (pago.moneda as Moneda) ?? monedaVenta)}
+                      </p>
                       {pago.es_credito_anticipo && (
                         <span className="text-xs px-1.5 py-0.5 bg-amber-50 text-amber-700 rounded font-medium">Crédito</span>
                       )}
@@ -811,6 +852,11 @@ export function EditarAntLiqReal({
                         <span className="text-xs px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded font-medium">Anticipo</span>
                       )}
                     </div>
+                    {pago.moneda && pago.moneda !== monedaVenta && pago.tipo_cambio_aplicado != null && (
+                      <p className="text-xs text-indigo-500">
+                        ≈ {formatMoney(pago.monto_moneda_venta ?? 0, monedaVenta)} (tc {pago.tipo_cambio_aplicado})
+                      </p>
+                    )}
                     <p className="text-xs text-gray-400">{pago.metodo_pago} · {fmtFecha(pago.fecha)}</p>
                     {pago.observacion && <p className="text-xs text-gray-500 italic">{pago.observacion}</p>}
                   </div>
@@ -852,7 +898,7 @@ export function EditarAntLiqReal({
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Monto *</label>
               <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">{monedaPago === "USD" ? "US$" : "$"}</span>
                 <input type="text" inputMode="decimal" value={monto} readOnly={montoEsAnticipo}
                   onChange={e => {
                     const val = e.target.value;
@@ -866,20 +912,22 @@ export function EditarAntLiqReal({
                   }`}
                 />
               </div>
-              <div className="flex gap-2 mt-1 flex-wrap">
-                {totalPagado < anticipo - 0.01 && !esCreditoAnticipo && (
+              {!requiereConversionPago && (
+                <div className="flex gap-2 mt-1 flex-wrap">
+                  {totalPagado < anticipo - 0.01 && !esCreditoAnticipo && (
+                    <button type="button"
+                      onClick={() => { setMonto(anticipoRestante.toFixed(2)); setEsAnticipo(true); setMontoEsAnticipo(true); }}
+                      className="text-xs text-blue-600 hover:text-blue-800 underline">
+                      Anticipo restante ({formatMoney(anticipoRestante, monedaVenta)})
+                    </button>
+                  )}
                   <button type="button"
-                    onClick={() => { setMonto(anticipoRestante.toFixed(2)); setEsAnticipo(true); setMontoEsAnticipo(true); }}
-                    className="text-xs text-blue-600 hover:text-blue-800 underline">
-                    Anticipo restante (${fmt(anticipoRestante)})
+                    onClick={() => { setMonto(saldo.toFixed(2)); setEsAnticipo(false); setMontoEsAnticipo(false); }}
+                    className="text-xs text-emerald-600 hover:text-emerald-800 underline">
+                    Saldo completo ({formatMoney(saldo, monedaVenta)})
                   </button>
-                )}
-                <button type="button"
-                  onClick={() => { setMonto(saldo.toFixed(2)); setEsAnticipo(false); setMontoEsAnticipo(false); }}
-                  className="text-xs text-emerald-600 hover:text-emerald-800 underline">
-                  Saldo completo (${fmt(saldo)})
-                </button>
-              </div>
+                </div>
+              )}
             </div>
 
             {/* Método de pago */}
@@ -893,6 +941,37 @@ export function EditarAntLiqReal({
               </select>
             </div>
           </div>
+
+          {/* Moneda del pago — solo se muestra el selector si el documento
+              permite pagar en la moneda contraria a la de la venta */}
+          <div className="grid grid-cols-2 gap-3 mb-3 items-end">
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Moneda del pago</label>
+              <select value={monedaPago} onChange={e => setMonedaPago(e.target.value as Moneda)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white focus:ring-2 focus:ring-blue-400 text-sm">
+                {MONEDAS_OPERACION.map(m => (
+                  <option key={m.value} value={m.value}>{m.value}{m.value === monedaVenta ? " (de la venta)" : ""}</option>
+                ))}
+              </select>
+            </div>
+            {requiereConversionPago && (
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Tipo de cambio aplicado</label>
+                <input type="number" step="0.0001" min="0" value={tipoCambioAplicadoTexto}
+                  onChange={e => setTipoCambioAplicadoTexto(e.target.value)}
+                  placeholder="18.50"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white focus:ring-2 focus:ring-blue-400 text-sm"
+                />
+              </div>
+            )}
+          </div>
+          {requiereConversionPago && monto && (
+            <p className="text-xs text-indigo-600 mb-3">
+              {montoConvertido != null
+                ? <>Equivale a <strong>{formatMoney(montoConvertido, monedaVenta)}</strong> (moneda de la venta)</>
+                : "Captura el tipo de cambio para ver el equivalente"}
+            </p>
+          )}
 
           {/* Fecha + Observación */}
           <div className="grid grid-cols-2 gap-3 mb-3">

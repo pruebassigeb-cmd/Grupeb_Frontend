@@ -70,6 +70,8 @@ export interface DatosCotizacion {
   tipo?: "cotizacion" | "pedido";
   prioridad?: boolean;
   sin_iva?: boolean;
+  moneda?: "MXN" | "USD";
+  tipoCambio?: number | null;
 }
 
 export interface FormularioCotizacionProps {

@@ -70,7 +70,7 @@ const GAP_FILA = 1.1;   // aire vertical entre bloques de proceso
 
 // ── Alturas por proceso ─────────────────────────────────────────────────
 const ALTO_PROCESO: Partial<Record<NombreProcesoOrdenPapel, number>> = {
-  hojeado_papel: 16.5,
+  hojeado_papel: 14, // antes 16.5 -- fila un poco menos alta
   impresion_papel: 33.8,
   laminacion_papel: 22.2,
   barniz_uv_papel: 11.9,
@@ -685,7 +685,7 @@ function columnaFirmas(doc: jsPDF, yBase: number) {
   filas.forEach(({ label, y }) => {
     txt(doc, "/", X1 - 4.2, y - 1.6, { size: FS.ETIQUETA, bold: true });
     linea(doc, X_FIRMA_L + 1.5, y, X1 - 1.5, y, 0.18);
-    txt(doc, label, cx, y + 2.4, { size: FS.ETIQUETA_MINI, align: "center", color: GRAY_LABEL });
+    txt(doc, label, cx, y + 1.1, { size: FS.ETIQUETA_MINI, align: "center", color: GRAY_LABEL });
   });
 }
 
@@ -954,15 +954,18 @@ function bloqueHojeado(
     cx += cw;
   });
 
-  // Celda destacada: cantidad calculada + "Corte Guillotina".
+  // Celda destacada: cantidad calculada arriba; abajo también se registran
+  // datos (ver registro del proceso), así que "Corte Guillotina" se deja
+  // como etiqueta chica en la esquina en vez de ocupar el centro completo
+  // de la mitad inferior.
   const destW = X0 + w - cx;
   caja(doc, cx, y, destW, h);
   const supH = h * 0.62;
   linea(doc, cx, y + supH, cx + destW, y + supH);
   etiqueta(doc, "Cantidad hojeado", cx, y, FS.ETIQUETA_MINI);
   txt(doc, entrada, cx + destW / 2, y + supH - 1.6, { size: 12, bold: true, align: "center" });
-  txt(doc, "Corte Guillotina", cx + destW / 2, y + h - 2, {
-    size: FS.ETIQUETA_MINI, align: "center", color: GRAY_LABEL,
+  txt(doc, "Corte Guillotina", cx + destW - 1.5, y + h - 1.2, {
+    size: FS.ETIQUETA_MINI, align: "right", color: GRAY_LABEL,
   });
 }
 

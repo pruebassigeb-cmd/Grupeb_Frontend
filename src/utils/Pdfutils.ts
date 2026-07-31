@@ -2,6 +2,7 @@
 
 import jsPDF from "jspdf";
 import QRCode from "qrcode";
+import { formatMoney, type Moneda } from "./formatMoney";
 
 // ── Paleta B&N ────────────────────────────────────────────────────────────────
 export const GRAY_DARK  = [0,   0,   0]   as [number, number, number];
@@ -119,9 +120,13 @@ export function formatFecha(iso: string): string {
 }
 
 // ── Cantidad/Precio — sin importe ─────────────────────────────────────────────
-export function formatCantidadCelda(det: DetallePdf, porKilo?: string | number | null): string {
-  const fmtMoneda = (n: number) =>
-    `$${n.toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+// `moneda` es opcional y por default MXN — no rompe a quien todavía no la pasa.
+export function formatCantidadCelda(
+  det: DetallePdf,
+  porKilo?: string | number | null,
+  moneda: Moneda = "MXN",
+): string {
+  const fmtMoneda = (n: number) => formatMoney(n, moneda);
 
   if (det.modo_cantidad === "kilo" && det.kilogramos && det.kilogramos > 0) {
     const precioKg = Math.round((det.precio_total / det.kilogramos) * 100) / 100;
@@ -135,10 +140,12 @@ export function formatCantidadCelda(det: DetallePdf, porKilo?: string | number |
   return `${det.cantidad.toLocaleString("es-MX")}\n${fmtMoneda(Math.round(precioUnit * 100) / 100)}/pza`;
 }
 // ── Importe — columna separada ────────────────────────────────────────────────
-export function formatImporte(det: DetallePdf, porKilo?: string | number | null): string {
-  const fmtMoneda = (n: number) =>
-    `$${n.toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  return fmtMoneda(Math.round(det.precio_total * 100) / 100);
+export function formatImporte(
+  det: DetallePdf,
+  porKilo?: string | number | null,
+  moneda: Moneda = "MXN",
+): string {
+  return formatMoney(Math.round(det.precio_total * 100) / 100, moneda);
 }
 
 // ── Encabezado compartido ─────────────────────────────────────────────────────

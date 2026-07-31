@@ -159,6 +159,11 @@ export default function Dashboard({ children }: DashboardProps) {
           path: "/precios-acabados-papel",
           permiso: "Modificar Catalogo de precios",
         },
+        {
+          name: "Tipo de cambio",
+          path: "/tipo-cambio",
+          permiso: "Modificar Catalogo de precios",
+        },
       ],
     },
     {

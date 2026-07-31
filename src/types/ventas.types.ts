@@ -13,6 +13,10 @@ export interface VentaPago {
   fecha:               string;
   metodo_pago:         string;
   idmetodo_pago:       number;
+  // ── Moneda del pago (puede diferir de la moneda de la venta) ──────────
+  moneda?:               "MXN" | "USD";
+  tipo_cambio_aplicado?: number | null;
+  monto_moneda_venta?:   number;
 }
 
 export interface Venta {
@@ -49,6 +53,9 @@ export interface Venta {
   pagos:                 VentaPago[];
   // ── Crédito ───────────────────────────────────────────────
   es_credito_anticipo?:  boolean;   // ← nuevo
+  // ── Moneda del documento ────────────────────────────────────
+  moneda?:               "MXN" | "USD";
+  tipo_cambio?:           number | null;
 }
 
 export interface DisenoProducto {

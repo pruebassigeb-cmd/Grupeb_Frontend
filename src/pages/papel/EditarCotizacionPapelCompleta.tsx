@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { useLocation, useParams, useNavigate } from "react-router-dom";
 import Dashboard from "../../layouts/Sidebar";
+import { formatMoney } from "../../utils/formatMoney";
 import { getCotizaciones, actualizarCotizacionProductos } from "../../services/cotizacionesService";
 import type {
   ProductoPapelCotizacionActualizar,
@@ -1343,6 +1344,9 @@ export default function EditarCotizacionPapelCompleta() {
             <h1 className="text-2xl font-bold text-gray-900">Editar Cotización — Papel</h1>
             <p className="text-sm text-gray-400 mt-0.5">
               <span className="font-semibold text-amber-600">{noCotizacion}</span>
+              {(cotOrig?.moneda ?? "MXN") === "USD" && (
+                <span className="ml-2 px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 text-xs font-semibold align-middle">USD</span>
+              )}
               {cotOrig && (
                 <span className="ml-2 text-gray-400">
                   — {cotOrig.impresion || cotOrig.cliente || cotOrig.empresa || ""}
@@ -1353,7 +1357,7 @@ export default function EditarCotizacionPapelCompleta() {
         </div>
         <div className="hidden sm:flex items-center gap-2 px-4 py-2 bg-amber-50 border border-amber-200 rounded-xl">
           <span className="text-xs text-amber-500 font-medium">Total estimado</span>
-          <span className="text-lg font-bold text-amber-700">${fmt(totalGeneral)}</span>
+          <span className="text-lg font-bold text-amber-700">{formatMoney(totalGeneral, cotOrig?.moneda ?? "MXN")}</span>
         </div>
       </div>
 

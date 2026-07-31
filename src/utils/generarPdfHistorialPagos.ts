@@ -3,6 +3,7 @@ import { cargarLogoBase64 } from "./Pdfutils";
 import type { Venta, VentaPago } from "../types/ventas.types";
 import logoUrl from "../assets/logogrupeb.png";
 import { subirPdfA3 } from "../services/pdfS3.service";
+import { formatMoney, type Moneda } from "./formatMoney";
 
 
 // ── Paleta monocromática ─────────────────────────────────────
@@ -82,6 +83,10 @@ function seccionHeader(
 
 export async function generarPdfHistorialPagos(venta: Venta, guardarEnS3 = false): Promise<void> {
 const logoBase64 = await cargarLogoBase64(logoUrl);
+  const moneda: Moneda = (venta.moneda as Moneda) ?? "MXN";
+  // Shadow del helper del módulo: toda llamada a fmtMoney(...) en esta
+  // función sale en la moneda del documento, sin tocar cada llamada.
+  const fmtMoney = (n: number): string => formatMoney(n, moneda);
 
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   const PW = 210;
@@ -132,7 +137,7 @@ const logoBase64 = await cargarLogoBase64(logoUrl);
   doc.text("PEDIDO", folioX + folioW / 2, y + 4.2, { align: "center" });
   doc.setTextColor(...BLACK);
   doc.setFontSize(15);
-  doc.text(`#${venta.no_pedido}`, folioX + folioW / 2, y + 12, { align: "center" });
+  doc.text(`#${venta.no_pedido}${moneda === "USD" ? " (USD)" : ""}`, folioX + folioW / 2, y + 12, { align: "center" });
   doc.setDrawColor(...GRAY_MED);
   doc.line(folioX, y + 14, folioX + folioW, y + 14);
   doc.setDrawColor(...BLACK);
@@ -256,12 +261,17 @@ const logoBase64 = await cargarLogoBase64(logoUrl);
     doc.setTextColor(...BLACK);
     y += pagoRowH;
   } else {
+    let huboConversion = false;
+
     pagos.forEach((pago, idx) => {
       const bg: [number,number,number] = idx % 2 === 0 ? WHITE : [248, 248, 248];
+      const monedaPago = (pago.moneda as Moneda) ?? moneda;
+      const fueConvertido = monedaPago !== moneda && pago.tipo_cambio_aplicado != null;
+      if (fueConvertido) huboConversion = true;
 
       const pagoVals = [
         { value: formatFecha(pago.fecha),                  w: pColFecha,  bold: false, color: BLACK      as [number,number,number], center: true  },
-        { value: fmtMoney(pago.monto),                     w: pColMonto,  bold: true,  color: GRAY_XDARK as [number,number,number], center: true  },
+        { value: fmtMoney(pago.monto_moneda_venta ?? pago.monto) + (fueConvertido ? " †" : ""), w: pColMonto,  bold: true,  color: GRAY_XDARK as [number,number,number], center: true  },
         { value: pago.metodo_pago ?? "—",                  w: pColMetodo, bold: false, color: BLACK      as [number,number,number], center: true  },
         { value: pago.es_anticipo ? "Anticipo" : "Abono",  w: pColTipo,   bold: false, color: GRAY_DARK  as [number,number,number], center: true  },
         { value: pago.observacion ?? "—",                  w: pColObs,    bold: false, color: GRAY_DARK  as [number,number,number], center: false },
@@ -285,10 +295,19 @@ const logoBase64 = await cargarLogoBase64(logoUrl);
         prx += pv.w;
       });
 
-      totalAcumulado += Number(pago.monto);
+      totalAcumulado += Number(pago.monto_moneda_venta ?? pago.monto);
       doc.setTextColor(...BLACK);
       y += pagoRowH;
     });
+
+    if (huboConversion) {
+      doc.setFont("helvetica", "italic");
+      doc.setFontSize(6.5);
+      doc.setTextColor(...GRAY_MED);
+      doc.text(`† Pago recibido en la otra moneda, convertido a ${moneda} con el tipo de cambio del día.`, M, y + 3);
+      doc.setTextColor(...BLACK);
+      y += 5;
+    }
   }
 
   // Fila total

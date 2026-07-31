@@ -8,6 +8,7 @@ import Plastico from "./pages/plastico/Plastico";
 import Cotizar from "./pages/Cotizar";
 import Clientes from "./pages/Clientes";
 import PrecioPlastico from "./pages/plastico/PrecioPlastico";
+import TipoCambio from "./pages/TipoCambio";
 import Diseno from "./pages/diseno/Diseno";
 import AnticipoLiquidacion from "./pages/anticipoLiquidacion/AnticipoLiquidacion";
 import Seguimiento from "./pages/produccion/Seguimiento";
@@ -227,6 +228,16 @@ function App() {
             element={
               <ProtectedRoute permiso={PERMISOS.precios}>
                 <PreciosAcabadosPapel />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Tipo de cambio USD/MXN */}
+          <Route
+            path="/tipo-cambio"
+            element={
+              <ProtectedRoute permiso={PERMISOS.precios}>
+                <TipoCambio />
               </ProtectedRoute>
             }
           />

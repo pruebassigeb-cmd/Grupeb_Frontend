@@ -223,7 +223,7 @@ export const createTipoProductoPlastico = async (
 ): Promise<TipoProductoAdminItem> => {
   try {
     const response = await api.post<TipoProductoAdminItem>(
-      "/catalogos-productos/plastico/tipos-producto",
+      "/catalogos-productos/plastico/admin/tipos-producto",
       { nombre }
     );
     return response.data;
@@ -239,7 +239,7 @@ export const createMaterialPlastico = async (
 ): Promise<MaterialAdminItem> => {
   try {
     const response = await api.post<MaterialAdminItem>(
-      "/catalogos-productos/plastico/materiales",
+      "/catalogos-productos/plastico/admin/materiales",
       { nombre, valor }
     );
     return response.data;
@@ -256,7 +256,7 @@ export const createCalibrePlastico = async (
 ): Promise<CalibreAdminItem> => {
   try {
     const response = await api.post<CalibreAdminItem>(
-      "/catalogos-productos/plastico/calibres",
+      "/catalogos-productos/plastico/admin/calibres",
       { calibre, calibre_bopp: calibre_bopp ?? null, gramos: gramos ?? null }
     );
     return response.data;

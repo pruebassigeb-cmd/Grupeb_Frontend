@@ -4,6 +4,7 @@ import type { EstadoCuenta } from "../services/anticipoLiquidacion/estadoCuentaS
 import type { VentaPago } from "../types/ventas.types";
 import logoUrl from "../assets/logogrupeb.png";
 import { subirPdfA3 } from "../services/pdfS3.service";
+import { formatMoney, type Moneda } from "./formatMoney";
 
 // ── Paleta monocromática ─────────────────────────────────────
 const BLACK:      [number, number, number] = [0,   0,   0  ];
@@ -90,6 +91,10 @@ export async function generarPdfEstadoCuenta(
 ): Promise<void> {
   const logoBase64 = await cargarLogoBase64(logoUrl);
   const sinIva     = (datos as any).sin_iva === true;
+  const moneda: Moneda = (datos.moneda as Moneda) ?? "MXN";
+  // Shadow del helper del módulo: todo lo que llame fmtMoney(...) dentro de
+  // esta función ya sale en la moneda del documento, sin tocar cada llamada.
+  const fmtMoney = (n: number): string => formatMoney(n, moneda);
 
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   const PW = 210;
@@ -143,7 +148,7 @@ export async function generarPdfEstadoCuenta(
   doc.text("PEDIDO", folioX + folioW / 2, y + 5.5, { align: "center" });
   doc.setTextColor(...BLACK);
   doc.setFontSize(18);
-  doc.text(`#${datos.no_pedido}`, folioX + folioW / 2, y + 15, { align: "center" });
+  doc.text(`#${datos.no_pedido}${moneda === "USD" ? "  (USD)" : ""}`, folioX + folioW / 2, y + 15, { align: "center" });
   doc.setDrawColor(...GRAY_MED);
   doc.line(folioX, y + 17, folioX + folioW, y + 17);
   doc.setDrawColor(...BLACK);
@@ -337,11 +342,20 @@ export async function generarPdfEstadoCuenta(
     const pagoRowH = 10;
     let totalAcumulado = 0;
 
+    let huboConversion = false;
+
     pagos.forEach((pago, idx) => {
       const bg: [number,number,number] = idx % 2 === 0 ? WHITE : [248, 248, 248];
+      const monedaPago = (pago.moneda as Moneda) ?? moneda;
+      const fueConvertido = monedaPago !== moneda && pago.tipo_cambio_aplicado != null;
+      if (fueConvertido) huboConversion = true;
+      // Se muestra siempre en la moneda del pedido (monto_moneda_venta) para
+      // que la columna sea consistente y sume igual que el total de abajo;
+      // el marcador † indica que ese pago se recibió en la otra moneda.
+      const montoTexto = formatMoney(pago.monto_moneda_venta ?? pago.monto, moneda) + (fueConvertido ? " †" : "");
       const pagoVals = [
         { value: formatFecha(pago.fecha),                 w: pColFecha,  bold: false, color: BLACK      as [number,number,number], center: true  },
-        { value: fmtMoney(pago.monto),                    w: pColMonto,  bold: true,  color: GRAY_XDARK as [number,number,number], center: true  },
+        { value: montoTexto,                              w: pColMonto,  bold: true,  color: GRAY_XDARK as [number,number,number], center: true  },
         { value: pago.metodo_pago ?? "—",                 w: pColMetodo, bold: false, color: BLACK      as [number,number,number], center: true  },
         { value: pago.es_anticipo ? "Anticipo" : "Abono", w: pColTipo,   bold: false, color: GRAY_DARK  as [number,number,number], center: true  },
         { value: pago.observacion ?? "—",                 w: pColObs,    bold: false, color: GRAY_DARK  as [number,number,number], center: false },
@@ -365,7 +379,7 @@ export async function generarPdfEstadoCuenta(
         prx += pv.w;
       });
 
-      totalAcumulado += Number(pago.monto);
+      totalAcumulado += Number(pago.monto_moneda_venta ?? pago.monto);
       doc.setTextColor(...BLACK);
       y += pagoRowH;
     });
@@ -384,6 +398,15 @@ export async function generarPdfEstadoCuenta(
     doc.text(fmtMoney(totalAcumulado), M + CW - 3, y + totRowH / 2 + 2, { align: "right" });
     doc.setTextColor(...BLACK);
     y += totRowH;
+
+    if (huboConversion) {
+      doc.setFont("helvetica", "italic");
+      doc.setFontSize(7.5);
+      doc.setTextColor(...GRAY_MED);
+      doc.text(`† Pago recibido en la otra moneda, convertido a ${moneda} con el tipo de cambio del día.`, M, y + 4);
+      doc.setTextColor(...BLACK);
+      y += 6;
+    }
   }
 
   // ════════════════════════════════════════════════════════════

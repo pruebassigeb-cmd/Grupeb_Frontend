@@ -23,6 +23,10 @@ export const registrarPago = async (
     esAnticipo?:  boolean;
     observacion?: string;
     fecha?:       string | null;
+    // Moneda en la que se recibió el pago (default = moneda de la venta).
+    // tipoCambioAplicado solo aplica si difiere de la moneda de la venta.
+    moneda?:             "MXN" | "USD";
+    tipoCambioAplicado?: number | null;
   }
 ) => {
   const response = await api.post(`/ventas/${idventas}/pagos`, datos);

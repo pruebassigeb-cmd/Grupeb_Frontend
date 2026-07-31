@@ -444,6 +444,15 @@ export function getValoresCalculadosPapel(data: OrdenProduccionPapelData): Parti
   const pliegosCalculado = calcularCantidadHojeada(data.cantidad, data.hoj_rendimiento);
   const pliegos = pliegosCalculado ?? n(data.pliegos_impresion_estimados);
 
+  // CORREGIDO: `pliegos_guillotina` estaba declarado en el tipo pero nunca
+  // se calculaba en ningún lado del código (ni aquí ni en el backend) --
+  // por eso la celda "Pliegos" del PDF solo mostraba `reg.pliegos` (dato
+  // real ya capturado) o quedaba en blanco/mal, nunca un estimado. Usa el
+  // rendimiento GENÉRICO (el de Guillotina), no hoj_rendimiento -- son dos
+  // rendimientos distintos, no intercambiables.
+  const pliegosGuillotinaCalculado = calcularCantidadHojeada(data.cantidad, data.rendimiento);
+
+
   // El backend ya resuelve desarrollo_laminacion_mm priorizando el valor
   // registrado al dar de alta el producto (acabados_papel.desarrollo_laminado)
   // sobre el cálculo automático desde las medidas del pliego — por eso aquí
@@ -461,6 +470,7 @@ export function getValoresCalculadosPapel(data: OrdenProduccionPapelData): Parti
   return {
     cantidad_hojeada_calculada: pliegosCalculado ?? n(data.cantidad_hojeada_calculada) ?? pliegos,
     pliegos_impresion_estimados: pliegos,
+    pliegos_guillotina: pliegosGuillotinaCalculado ?? n(data.pliegos_guillotina),
     desarrollo_laminacion_mm: desarrollo,
     desarrollo_mm: n(data.desarrollo_mm) ?? desarrollo,
     ctes_mod_laminacion:

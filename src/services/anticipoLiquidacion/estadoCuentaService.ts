@@ -52,6 +52,8 @@ export interface EstadoCuenta {
   estado_id:            number;
   tiene_productos_papel_pendientes: boolean;
   productos_papel_pendientes_count: number;
+  moneda?:              "MXN" | "USD";
+  tipo_cambio?:          number | null;
 }
 
 export interface ResumenEstadoCuenta {
@@ -69,6 +71,7 @@ export interface ResumenEstadoCuenta {
   total_ordenes:       number;
   ordenes_completas:   number;
   produccion_completa: boolean;
+  moneda?:             "MXN" | "USD";
 }
 
 export const getListaEstadoCuenta = async (): Promise<ResumenEstadoCuenta[]> => {

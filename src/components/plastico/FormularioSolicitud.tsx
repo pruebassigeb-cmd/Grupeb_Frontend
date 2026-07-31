@@ -26,6 +26,10 @@ import ModalRegistrarInsumo from "../proveedores/ModalRegistrarInsumo";
 import ComboboxInsumo from "../proveedores/ComboboxInsumo";
 import FormularioProductoPapel from "../papel/FormularioProductoPapel";
 import type { ProductoPapelCotizacion } from "../papel/FormularioProductoPapel";
+import { MONEDAS_OPERACION } from "../../constants/moneda.constants";
+import { useTipoCambioActual } from "../../hooks/useTipoCambioActual";
+import { convertirDesdeMXN } from "../../utils/moneda.utils";
+import { formatMoney } from "../../utils/formatMoney";
 
 const esProductoPapel = (p: any): boolean =>
   p?.tipoCotizacion === "papel" ||
@@ -52,7 +56,19 @@ export default function FormularioSolicitud({
     envio_codigo_postal: null, envio_poblacion: null, envio_estado: null,
     envio_referencia: null,
     productos: [], observaciones: "", prioridad: false, sin_iva: false,
+    moneda: "MXN", tipoCambio: null,
   });
+
+  const { tipoCambio: tipoCambioActual, error: errorTipoCambioActual } = useTipoCambioActual();
+
+  // Precarga el tipo de cambio vigente en cuanto esté disponible, si el
+  // usuario ya eligió USD y todavía no hay un valor capturado.
+  useEffect(() => {
+    if (datos.moneda === "USD" && datos.tipoCambio == null && tipoCambioActual) {
+      setDatos(prev => ({ ...prev, tipoCambio: tipoCambioActual.valor }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tipoCambioActual, datos.moneda]);
 
   const isMounted = useRef(false);
 
@@ -229,11 +245,17 @@ export default function FormularioSolicitud({
   useEffect(() => {
     if (tipoMaterial !== "plastico") return;
     if (resultados.length === 0) return;
+    // El calculador del backend siempre regresa precio_unitario en MXN
+    // (los catálogos son MXN-only) — si la cotización es en USD, se
+    // convierte aquí antes de mostrarlo/guardarlo. Si es USD pero aún no
+    // hay tipoCambio capturado, se deja el precio actual sin tocar.
     setProductoActual(prev => {
       const nuevosPrecios = [...prev.precios] as [number, number, number];
       resultados.forEach((r, i) => {
-        if (!preciosEditadosManualmente[i] && r?.precio_unitario !== undefined)
-          nuevosPrecios[i] = r.precio_unitario;
+        if (!preciosEditadosManualmente[i] && r?.precio_unitario !== undefined) {
+          const convertido = convertirDesdeMXN(r.precio_unitario, datos.moneda ?? "MXN", datos.tipoCambio);
+          if (convertido !== null) nuevosPrecios[i] = convertido;
+        }
       });
       return { ...prev, precios: nuevosPrecios };
     });
@@ -241,16 +263,18 @@ export default function FormularioSolicitud({
       const nuevosTextos = [...prev] as [string, string, string];
       resultados.forEach((r, i) => {
         if (!preciosEditadosManualmente[i] && r?.precio_unitario !== undefined) {
+          const precioBase = convertirDesdeMXN(r.precio_unitario, datos.moneda ?? "MXN", datos.tipoCambio);
+          if (precioBase === null) return;
           const precioMostrar =
             modoCantidad === "kilo" && porKiloNumerico > 0
-              ? r.precio_unitario * porKiloNumerico
-              : r.precio_unitario;
+              ? precioBase * porKiloNumerico
+              : precioBase;
           nuevosTextos[i] = precioMostrar.toFixed(4);
         }
       });
       return nuevosTextos;
     });
-  }, [resultados, preciosEditadosManualmente, tipoMaterial, modoCantidad, porKiloNumerico]);
+  }, [resultados, preciosEditadosManualmente, tipoMaterial, modoCantidad, porKiloNumerico, datos.moneda, datos.tipoCambio]);
 
   useEffect(() => {
     if (mostrarModalClientes && clientesCargados.length === 0) cargarClientes();
@@ -838,6 +862,10 @@ export default function FormularioSolicitud({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (datos.productos.length === 0 || enviando) return;
+    if (datos.moneda === "USD" && (!datos.tipoCambio || datos.tipoCambio <= 0)) {
+      showAlert("Captura un tipo de cambio válido para cotizar en USD");
+      return;
+    }
     setEnviando(true);
     try { await onSubmit({ ...datos, tipo: modo }); }
     finally { setEnviando(false); }
@@ -1063,6 +1091,8 @@ export default function FormularioSolicitud({
               tintas={tintas}
               caras={caras}
               idTipoPanton={idTipoPanton}
+              moneda={datos.moneda ?? "MXN"}
+              tipoCambio={datos.tipoCambio}
             />
           </div>
         )}
@@ -1789,13 +1819,62 @@ export default function FormularioSolicitud({
               })}
             </div>
             <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
-              <p className="text-xl font-bold text-gray-900">Total: ${calcularTotal().toFixed(2)}</p>
+              <p className="text-xl font-bold text-gray-900">Total: {formatMoney(calcularTotal(), datos.moneda ?? "MXN")}</p>
               {datos.productos.some((p: any) => p.herramental_precio != null && p.herramental_precio > 0) && (
-                <p className="text-xs text-orange-600 mt-1">Incluye herramental: +${datos.productos.reduce((s: number, p: any) => s + (p.herramental_precio ?? 0), 0).toFixed(2)}</p>
+                <p className="text-xs text-orange-600 mt-1">Incluye herramental: +{formatMoney(datos.productos.reduce((s: number, p: any) => s + (p.herramental_precio ?? 0), 0), datos.moneda ?? "MXN")}</p>
               )}
             </div>
           </div>
         )}
+
+        {/* Moneda */}
+        <div className="flex items-center gap-3 py-3 px-4 bg-indigo-50 border border-indigo-200 rounded-lg mb-4 flex-wrap">
+          <span className="text-indigo-700 font-semibold text-sm">Moneda:</span>
+          <select
+            value={datos.moneda ?? "MXN"}
+            onChange={e => {
+              const nuevaMoneda = e.target.value as "MXN" | "USD";
+              setDatos(prev => ({
+                ...prev,
+                moneda: nuevaMoneda,
+                tipoCambio: nuevaMoneda === "USD" ? (prev.tipoCambio ?? tipoCambioActual?.valor ?? null) : null,
+              }));
+            }}
+            className="px-3 py-1.5 border border-indigo-300 rounded-md text-sm text-gray-900 bg-white focus:ring-2 focus:ring-indigo-400"
+          >
+            {MONEDAS_OPERACION.map(m => (
+              <option key={m.value} value={m.value}>{m.label}</option>
+            ))}
+          </select>
+
+          {datos.moneda === "USD" && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <label className="text-indigo-700 text-xs font-medium">Tipo de cambio (MXN por USD):</label>
+              <input
+                type="number"
+                step="0.0001"
+                min="0"
+                value={datos.tipoCambio ?? ""}
+                onChange={e => setDatos(prev => ({
+                  ...prev,
+                  tipoCambio: e.target.value === "" ? null : Number(e.target.value),
+                }))}
+                className="w-28 px-2 py-1.5 border border-indigo-300 rounded-md text-sm text-gray-900 bg-white focus:ring-2 focus:ring-indigo-400"
+                placeholder="18.50"
+              />
+              {tipoCambioActual && (
+                <span className="text-indigo-500 text-xs">
+                  (Banxico {tipoCambioActual.fecha}: {tipoCambioActual.valor})
+                </span>
+              )}
+              {errorTipoCambioActual && !tipoCambioActual && (
+                <span className="text-red-500 text-xs">
+                  No se pudo obtener el tipo de cambio vigente — captúralo a mano.
+                </span>
+              )}
+            </div>
+          )}
+        </div>
 
         {/* Sin remisión */}
         <div className="flex items-center gap-3 py-3 px-4 bg-emerald-50 border border-emerald-200 rounded-lg mb-4">
