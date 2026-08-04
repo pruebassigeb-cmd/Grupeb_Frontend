@@ -3,7 +3,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { useLocation, useParams, useNavigate } from "react-router-dom";
 import Dashboard from "../../layouts/Sidebar";
 import { formatMoney } from "../../utils/formatMoney";
-import { getCotizaciones, actualizarCotizacionProductos } from "../../services/cotizacionesService";
+import { getCotizaciones, actualizarCotizacionProductos, cambiarMonedaCotizacion } from "../../services/cotizacionesService";
 import type {
   ProductoPlasticoCotizacionActualizar,
   ProductoCotizacionNuevoPlastico,
@@ -18,7 +18,6 @@ import ComboboxInsumo from "../../components/proveedores/ComboboxInsumo";
 import ModalRegistrarInsumo from "../../components/proveedores/ModalRegistrarInsumo";
 import { getTiposInsumo } from "../../services/proveedoresService";
 import type { Insumo } from "../../services/proveedoresService";
-import { showAlert } from "../../components/CustomAlert";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 interface DetalleEdit {
@@ -626,6 +625,9 @@ export default function EditarCotizacionCompleta() {
   const [errorGuardar, setErrorGuardar] = useState<string | null>(null);
   const [exito, setExito] = useState(false);
   const [cotOrig, setCotOrig] = useState<Cotizacion | null>(null);
+  // Moneda elegida en el selector — solo se aplica al guardar (handleGuardar),
+  // igual que cualquier otro campo editado en esta pantalla.
+  const [monedaSeleccionada, setMonedaSeleccionada] = useState<"MXN" | "USD">("MXN");
   const [productos, setProductos] = useState<ProductoRow[]>([]);
   const [cotizacionMixta, setCotizacionMixta] = useState(false);
   const [sinIva, setSinIva] = useState(false);
@@ -694,6 +696,7 @@ export default function EditarCotizacionCompleta() {
         setCotizacionMixta(tienePapel && tienePlastico);
         setSinIva((cot as any).sin_iva ?? false);
         setCotOrig(cot);
+        setMonedaSeleccionada((cot.moneda as "MXN" | "USD") ?? "MXN");
         setProductos((cot.productos as any[])
           .filter(p => p.tipo_material !== "papel" && p.tipoCotizacion !== "papel")
           .map(p => ({
@@ -937,6 +940,7 @@ export default function EditarCotizacionCompleta() {
         cliente_id: cotFresca.cliente_id ?? null,
         identificar: cotFresca.identificar ?? null,
         total: cotFresca.total,
+        moneda: cotFresca.moneda ?? "MXN",
         productos: productosPdf,
       }, true);
     } catch (pdfErr) {
@@ -1015,6 +1019,22 @@ export default function EditarCotizacionCompleta() {
         productos_nuevos: productosNuevos,
         sin_iva: sinIva,
       });
+
+      // La moneda se aplica hasta este punto (al guardar), no al cambiar el
+      // selector — si falla (ej. ya hay pagos registrados), lo demás ya
+      // quedó guardado y se avisa por separado.
+      if (monedaSeleccionada !== ((cotOrig.moneda as "MXN" | "USD") ?? "MXN")) {
+        try {
+          await cambiarMonedaCotizacion(cotOrig.no_cotizacion, monedaSeleccionada);
+        } catch (errMoneda: any) {
+          setErrorGuardar(
+            "Los demás cambios se guardaron, pero no se pudo cambiar la moneda: " +
+            (errMoneda.response?.data?.error || errMoneda.message)
+          );
+          setGuardando(false);
+          return;
+        }
+      }
 
       // Recargar la cotización ya actualizada para regenerar el PDF con datos frescos
       const todas = await getCotizaciones();
@@ -1100,9 +1120,15 @@ export default function EditarCotizacionCompleta() {
             <h1 className="text-2xl font-bold text-gray-900">Editar Cotización</h1>
             <p className="text-sm text-gray-400 mt-0.5">
               <span className="font-semibold text-blue-600">{noCotizacion}</span>
-              {(cotOrig?.moneda ?? "MXN") === "USD" && (
-                <span className="ml-2 px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 text-xs font-semibold align-middle">USD</span>
-              )}
+              <select
+                value={monedaSeleccionada}
+                onChange={e => setMonedaSeleccionada(e.target.value as "MXN" | "USD")}
+                title="La moneda se aplica hasta que presiones Guardar cambios"
+                className="ml-2 px-1.5 py-0.5 rounded border border-indigo-300 bg-indigo-50 text-indigo-700 text-xs font-semibold align-middle"
+              >
+                <option value="MXN">MXN</option>
+                <option value="USD">USD</option>
+              </select>
               {cotOrig && (
                 <span className="ml-2 text-gray-400">
                   — {(cotOrig as any).impresion || cotOrig.cliente || cotOrig.empresa || ""}

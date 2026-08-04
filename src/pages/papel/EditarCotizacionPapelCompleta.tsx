@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import { useLocation, useParams, useNavigate } from "react-router-dom";
 import Dashboard from "../../layouts/Sidebar";
 import { formatMoney } from "../../utils/formatMoney";
-import { getCotizaciones, actualizarCotizacionProductos } from "../../services/cotizacionesService";
+import { getCotizaciones, actualizarCotizacionProductos, cambiarMonedaCotizacion } from "../../services/cotizacionesService";
 import type {
   ProductoPapelCotizacionActualizar,
   ProductoCotizacionNuevoPapel,
@@ -796,6 +796,9 @@ export default function EditarCotizacionPapelCompleta() {
   const [errorGuardar, setErrorGuardar] = useState<string | null>(null);
   const [exito, setExito] = useState(false);
   const [cotOrig, setCotOrig] = useState<Cotizacion | null>(null);
+  // Moneda elegida en el selector — solo se aplica al guardar (handleGuardar),
+  // igual que cualquier otro campo editado en esta pantalla.
+  const [monedaSeleccionada, setMonedaSeleccionada] = useState<"MXN" | "USD">("MXN");
   const [productos, setProductos] = useState<ProductoPapelEdit[]>([]);
   const [cotizacionMixta, setCotizacionMixta] = useState(false);
   const [sinIva, setSinIva] = useState(false);
@@ -843,6 +846,7 @@ export default function EditarCotizacionPapelCompleta() {
         }
 
         setCotOrig(cot);
+        setMonedaSeleccionada((cot.moneda as "MXN" | "USD") ?? "MXN");
         setSinIva((cot as any).sin_iva ?? false);
 
         const prodsPapel = (cot.productos as any[]).filter(
@@ -1174,6 +1178,7 @@ export default function EditarCotizacionPapelCompleta() {
         cliente_id: cotFresca.cliente_id ?? null,
         identificar: cotFresca.identificar ?? null,
         total: cotFresca.total,
+        moneda: cotFresca.moneda ?? "MXN",
         productos: productosPdf,
       }, true);
     } catch (pdfErr) {
@@ -1278,6 +1283,22 @@ export default function EditarCotizacionPapelCompleta() {
         sin_iva: sinIva,
       });
 
+      // La moneda se aplica hasta este punto (al guardar), no al cambiar el
+      // selector — si falla (ej. ya hay pagos registrados), lo demás ya
+      // quedó guardado y se avisa por separado.
+      if (monedaSeleccionada !== ((cotOrig.moneda as "MXN" | "USD") ?? "MXN")) {
+        try {
+          await cambiarMonedaCotizacion(cotOrig.no_cotizacion, monedaSeleccionada);
+        } catch (errMoneda: any) {
+          setErrorGuardar(
+            "Los demás cambios se guardaron, pero no se pudo cambiar la moneda: " +
+            (errMoneda.response?.data?.error || errMoneda.message)
+          );
+          setGuardando(false);
+          return;
+        }
+      }
+
       const todas = await getCotizaciones();
       const cotFresca = todas.find(c => c.no_cotizacion === cotOrig.no_cotizacion);
       if (cotFresca) await regenerarPdfCotizacion(cotFresca);
@@ -1344,9 +1365,15 @@ export default function EditarCotizacionPapelCompleta() {
             <h1 className="text-2xl font-bold text-gray-900">Editar Cotización — Papel</h1>
             <p className="text-sm text-gray-400 mt-0.5">
               <span className="font-semibold text-amber-600">{noCotizacion}</span>
-              {(cotOrig?.moneda ?? "MXN") === "USD" && (
-                <span className="ml-2 px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 text-xs font-semibold align-middle">USD</span>
-              )}
+              <select
+                value={monedaSeleccionada}
+                onChange={e => setMonedaSeleccionada(e.target.value as "MXN" | "USD")}
+                title="La moneda se aplica hasta que presiones Guardar cambios"
+                className="ml-2 px-1.5 py-0.5 rounded border border-indigo-300 bg-indigo-50 text-indigo-700 text-xs font-semibold align-middle"
+              >
+                <option value="MXN">MXN</option>
+                <option value="USD">USD</option>
+              </select>
               {cotOrig && (
                 <span className="ml-2 text-gray-400">
                   — {cotOrig.impresion || cotOrig.cliente || cotOrig.empresa || ""}

@@ -33,6 +33,7 @@ import SyncStatusIndicator from "./components/pwa/SyncStatusIndicator";
 import ConnectivityToast from "./components/pwa/ConnectivityToast";
 import "./offline/expoOutboxHandlers";
 import ReportesCorreo from "./pages/ReportesCorreo";
+import CotizadorLibre from "./pages/cotizadorLibre/CotizadorLibre";
 
 const PERMISOS = {
   usuarios: "Crear/Editar/Eliminar Usuarios",
@@ -297,6 +298,19 @@ function App() {
             element={
               <ProtectedRoute>
                 <Expo />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Cotizador Interactivo — página pública/cliente, sin Dashboard/sidebar
+              (mismo patrón que /expo: la decisión de layout vive dentro del
+              componente de página, no aquí). Usa el rol dedicado
+              "CotizadorLibre" o el acceso de staff normal. */}
+          <Route
+            path="/cotizador-libre"
+            element={
+              <ProtectedRoute>
+                <CotizadorLibre />
               </ProtectedRoute>
             }
           />

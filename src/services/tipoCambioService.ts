@@ -24,12 +24,7 @@ export const getTipoCambioHistorial = async (
   return response.data;
 };
 
-export const registrarTipoCambioManual = async (
-  valor: number,
-): Promise<TipoCambioActual> => {
-  const response = await api.put("/tipo-cambio/manual", { valor });
-  return response.data;
-};
+// No hay corrección manual: el tipo de cambio es 100% automático (Banxico).
 
 // Reexport de conveniencia para quien solo necesita el tipo Moneda al
 // trabajar con este servicio.

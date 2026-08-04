@@ -495,21 +495,14 @@ export function EditarAntLiqReal({
     visible: false, folios: [],
   });
 
-  // ── Moneda del pago: default = moneda de la venta, editable si el
-  // cliente paga en la moneda contraria ────────────────────────────────────
+  // ── Moneda del pago: default = moneda de la venta. Si el cliente paga en
+  // la moneda contraria, el tipo de cambio NO es editable — siempre es el
+  // vigente (sincronizado a diario desde Banxico) ───────────────────────────
   const monedaVenta: Moneda = (venta.moneda as Moneda) ?? "MXN";
   const [monedaPago, setMonedaPago] = useState<Moneda>(monedaVenta);
-  const [tipoCambioAplicadoTexto, setTipoCambioAplicadoTexto] = useState("");
   const { tipoCambio: tipoCambioActual } = useTipoCambioActual();
   const requiereConversionPago = monedaPago !== monedaVenta;
-  const tipoCambioAplicadoNum = tipoCambioAplicadoTexto ? Number(tipoCambioAplicadoTexto) : null;
-
-  useEffect(() => {
-    if (requiereConversionPago && !tipoCambioAplicadoTexto && tipoCambioActual) {
-      setTipoCambioAplicadoTexto(String(tipoCambioActual.valor));
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [requiereConversionPago, tipoCambioActual]);
+  const tipoCambioAplicadoNum = requiereConversionPago ? (tipoCambioActual?.valor ?? null) : null;
 
   // Monto ya convertido a la moneda de la venta — null si falta tipo de
   // cambio cuando se requiere conversión (moneda de pago ≠ moneda de venta).
@@ -569,7 +562,7 @@ export function EditarAntLiqReal({
       setError("Ingresa un monto válido mayor a 0"); return;
     }
     if (requiereConversionPago && (!tipoCambioAplicadoNum || tipoCambioAplicadoNum <= 0)) {
-      setError("Captura un tipo de cambio válido para registrar el pago en la moneda contraria"); return;
+      setError("No hay tipo de cambio vigente disponible para registrar el pago en la moneda contraria"); return;
     }
     if (montoConvertido == null) {
       setError("No se pudo calcular el equivalente del pago"); return;
@@ -592,7 +585,7 @@ export function EditarAntLiqReal({
       await recargar();
       setMonto(""); setObservacion(""); setFechaPago("");
       setEsAnticipo(false); setMontoEsAnticipo(false);
-      setMonedaPago(monedaVenta); setTipoCambioAplicadoTexto("");
+      setMonedaPago(monedaVenta);
 
       const foliosNuevos: string[] = response?.ordenes_generadas ?? [];
       if (foliosNuevos.length > 0) {
@@ -949,19 +942,27 @@ export function EditarAntLiqReal({
               <label className="block text-xs font-medium text-gray-600 mb-1">Moneda del pago</label>
               <select value={monedaPago} onChange={e => setMonedaPago(e.target.value as Moneda)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white focus:ring-2 focus:ring-blue-400 text-sm">
-                {MONEDAS_OPERACION.map(m => (
-                  <option key={m.value} value={m.value}>{m.value}{m.value === monedaVenta ? " (de la venta)" : ""}</option>
-                ))}
+                {MONEDAS_OPERACION.map(m => {
+                  const esOtraMoneda = m.value !== monedaVenta;
+                  return (
+                    <option key={m.value} value={m.value} disabled={esOtraMoneda && !tipoCambioActual}>
+                      {m.value}{m.value === monedaVenta ? " (de la venta)" : ""}
+                      {esOtraMoneda && !tipoCambioActual ? " — no disponible" : ""}
+                    </option>
+                  );
+                })}
               </select>
             </div>
             {requiereConversionPago && (
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Tipo de cambio aplicado</label>
-                <input type="number" step="0.0001" min="0" value={tipoCambioAplicadoTexto}
-                  onChange={e => setTipoCambioAplicadoTexto(e.target.value)}
-                  placeholder="18.50"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white focus:ring-2 focus:ring-blue-400 text-sm"
-                />
+                {tipoCambioActual ? (
+                  <div className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-800 text-sm font-medium">
+                    {tipoCambioActual.valor} <span className="text-gray-400 font-normal">(fijo, Banxico {tipoCambioActual.fecha})</span>
+                  </div>
+                ) : (
+                  <p className="text-xs text-red-500 py-2">No disponible</p>
+                )}
               </div>
             )}
           </div>
@@ -969,7 +970,7 @@ export function EditarAntLiqReal({
             <p className="text-xs text-indigo-600 mb-3">
               {montoConvertido != null
                 ? <>Equivale a <strong>{formatMoney(montoConvertido, monedaVenta)}</strong> (moneda de la venta)</>
-                : "Captura el tipo de cambio para ver el equivalente"}
+                : "No se pudo obtener el tipo de cambio vigente"}
             </p>
           )}
 

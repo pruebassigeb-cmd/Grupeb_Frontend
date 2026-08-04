@@ -37,6 +37,14 @@ export default function ProtectedRoute({
     return <Navigate to="/expo" replace />;
   }
 
+  // Rol exclusivo: la cuenta compartida del Cotizador Interactivo
+  // (cotizacionlibre@grupoeb.com) solo puede entrar a /cotizador-libre,
+  // sin importar que tenga acceso_total. Mismo patrón que Expo, misma razón:
+  // va ANTES del bypass de acceso_total.
+  if (user.rol === "CotizadorLibre" && !location.pathname.startsWith("/cotizador-libre")) {
+    return <Navigate to="/cotizador-libre" replace />;
+  }
+
   // acceso_total → pasa siempre
   if (user.acceso_total) {
     return <>{children}</>;

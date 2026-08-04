@@ -173,6 +173,24 @@ export const eliminarCotizacion = async (noCotizacion: string) => {
   return response.data;
 };
 
+export interface ResultadoCambioMoneda {
+  idsolicitud: number;
+  moneda: "MXN" | "USD";
+  tipo_cambio: number | null;
+  ventas_actualizada: boolean;
+}
+
+// Cambia la moneda de una cotización ya creada, convirtiendo los precios ya
+// capturados con el tipo de cambio vigente. El backend rechaza el cambio si
+// el pedido asociado ya tiene pagos registrados.
+export const cambiarMonedaCotizacion = async (
+  noCotizacion: string,
+  moneda: "MXN" | "USD",
+): Promise<ResultadoCambioMoneda> => {
+  const response = await api.put(`/cotizaciones/${noCotizacion}/moneda`, { moneda });
+  return response.data;
+};
+
 // ─── Editar cotización (antes de aprobar) ────────────────────────────────
 
 export interface DetalleCotizacionActualizar {

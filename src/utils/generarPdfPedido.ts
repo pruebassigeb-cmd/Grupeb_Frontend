@@ -13,6 +13,7 @@ import {
 import type { ProductoPdf } from "./Pdfutils";
 import logoUrl from "../assets/logogrupeb.png";
 import { subirPdfA3 } from "../services/pdfS3.service";
+import { formatMoney, type Moneda } from "./formatMoney";
 
 interface PedidoPdf {
   no_pedido: string;
@@ -31,6 +32,7 @@ interface PedidoPdf {
   anticipo: number;
   saldo: number;
   sin_iva?: boolean;
+  moneda?: Moneda;
   celular?: string | null;
   razon_social?: string | null;
   rfc?: string | null;
@@ -106,7 +108,7 @@ function dibujarCeldaTintasDiagonal(
 }
 
 // ── Helper: fila observaciones ────────────────────────────────────────────────
-function buildObsRow(prod: ProductoPdf, headLength: number): string[] | null {
+function buildObsRow(prod: ProductoPdf, headLength: number, moneda: Moneda): string[] | null {
   const hasHerr = prod.herramental_precio != null && prod.herramental_precio > 0;
   const hasObs = !!prod.observacion?.trim();
 
@@ -117,7 +119,7 @@ function buildObsRow(prod: ProductoPdf, headLength: number): string[] | null {
   if (hasHerr) {
     const nombreHerr = prod.herramental_descripcion?.trim() || "Herramental / molde";
     comboRow[1] = `Herramental: ${nombreHerr}  —  Cargo único.`;
-    comboRow[headLength - 1] = `$${Number(prod.herramental_precio).toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    comboRow[headLength - 1] = formatMoney(prod.herramental_precio, moneda);
   }
   return comboRow;
 }
@@ -171,7 +173,7 @@ function parseObsCell(data: any, headAll: string[], MID_COL: number) {
 // ═══════════════════════════════════════════════════════════════════════════════
 function renderTablaPlasticoPedido(
   doc: jsPDF, productos: ProductoPdf[], startY: number,
-  M: number, PW: number, footerH: number
+  M: number, PW: number, footerH: number, moneda: Moneda
 ): number {
   const headAll = ["Descripción", "Medida", "Tintas", "Caras", "Material", "Calibre", "Asa/Suaje", "Pantones", "Pigmento", "Perf.", "Cantidad / Precio", "Importe"];
   const MID_COL = Math.floor(headAll.length / 2);
@@ -197,11 +199,11 @@ function renderTablaPlasticoPedido(
       parsePantones(prod.pantones),
       prod.pigmentos ? String(prod.pigmentos).trim() || "—" : "—",
       prod.perforacion ? "SI" : "—",
-      det ? formatCantidadCelda(det, prod.por_kilo) : "—",
-      det ? formatImporte(det, prod.por_kilo) : "—",
+      det ? formatCantidadCelda(det, prod.por_kilo, moneda) : "—",
+      det ? formatImporte(det, prod.por_kilo, moneda) : "—",
     ]);
 
-const obsRow = buildObsRow(prod, headAll.length);
+const obsRow = buildObsRow(prod, headAll.length, moneda);
     if (obsRow) bodyRows.push(obsRow);
     });
 
@@ -267,7 +269,7 @@ const obsRow = buildObsRow(prod, headAll.length);
 // ═══════════════════════════════════════════════════════════════════════════════
 function renderTablaPapelPedido(
   doc: jsPDF, productos: ProductoPdf[], startY: number,
-  M: number, PW: number, footerH: number
+  M: number, PW: number, footerH: number, moneda: Moneda
 ): number {
   const headAll = ["Descripción", "Medida", "Tintas", "Material", "HS", "Asa/Suaje", "AR", "Laminado", "UV", "Textura", "Pantones", "Cantidad / Precio", "Importe"];
   const MID_COL = Math.floor(headAll.length / 2);
@@ -300,11 +302,11 @@ function renderTablaPapelPedido(
       boolPdf((prod as any).uv ?? (prod as any).uvBr),
       texturaMostrar,
       parsePantones(prod.pantones),
-      det ? formatCantidadCelda(det, prod.por_kilo) : "—",
-      det ? formatImporte(det, prod.por_kilo) : "—",
+      det ? formatCantidadCelda(det, prod.por_kilo, moneda) : "—",
+      det ? formatImporte(det, prod.por_kilo, moneda) : "—",
     ]);
 
-    const obsRow = buildObsRow(prod, headAll.length);
+    const obsRow = buildObsRow(prod, headAll.length, moneda);
     if (obsRow) bodyRows.push(obsRow);
   });
 
@@ -368,7 +370,7 @@ function renderTablaPapelPedido(
 // ═══════════════════════════════════════════════════════════════════════════════
 function renderTablaMixtaPedido(
   doc: jsPDF, productos: ProductoPdf[], startY: number,
-  M: number, PW: number, footerH: number
+  M: number, PW: number, footerH: number, moneda: Moneda
 ): number {
   const headAll = [
     "Descripción", "Medida", "Tintas", "Caras",
@@ -411,11 +413,11 @@ function renderTablaMixtaPedido(
       parsePantones(prod.pantones),
       esPapel ? "—" : (prod.pigmentos ? String(prod.pigmentos).trim() || "—" : "—"),
       esPapel ? "—" : (prod.perforacion ? "SI" : "—"),
-      det ? formatCantidadCelda(det, prod.por_kilo) : "—",
-      det ? formatImporte(det, prod.por_kilo) : "—",
+      det ? formatCantidadCelda(det, prod.por_kilo, moneda) : "—",
+      det ? formatImporte(det, prod.por_kilo, moneda) : "—",
     ]);
 
-    const obsRow = buildObsRow(prod, headAll.length);
+    const obsRow = buildObsRow(prod, headAll.length, moneda);
     if (obsRow) bodyRows.push(obsRow);
   });
 
@@ -507,6 +509,7 @@ export async function generarPdfPedido(
     : (pedido.logoBase64 ?? await cargarLogoBase64(logoUrl));
 
   const sinIva = pedido.sin_iva === true;
+  const moneda: Moneda = pedido.moneda ?? "MXN";
 
   const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: formatoJsPdf });
   const PED_FOOTER_H = 55;
@@ -548,6 +551,7 @@ export async function generarPdfPedido(
     codigo_postal: pedido.codigo_postal ?? null, poblacion: pedido.poblacion ?? null,
     estado_cliente: pedido.estado_cliente ?? null, cliente_id: pedido.cliente_id ?? null,
     identificar: pedido.identificar ?? null,
+    moneda,
   });
 
   // ── Detección de modo ──────────────────────────────────────────────────────
@@ -557,11 +561,11 @@ export async function generarPdfPedido(
 
   let finalY = y;
   if (esMixto) {
-    finalY = renderTablaMixtaPedido(doc, pedido.productos, y, M, PW, PED_FOOTER_H);
+    finalY = renderTablaMixtaPedido(doc, pedido.productos, y, M, PW, PED_FOOTER_H, moneda);
   } else if (hayPapel) {
-    finalY = renderTablaPapelPedido(doc, pedido.productos, y, M, PW, PED_FOOTER_H);
+    finalY = renderTablaPapelPedido(doc, pedido.productos, y, M, PW, PED_FOOTER_H, moneda);
   } else {
-    finalY = renderTablaPlasticoPedido(doc, pedido.productos, y, M, PW, PED_FOOTER_H);
+    finalY = renderTablaPlasticoPedido(doc, pedido.productos, y, M, PW, PED_FOOTER_H, moneda);
   }
 
   if (finalY + PED_FOOTER_H + M > PH) doc.addPage();
@@ -572,7 +576,7 @@ export async function generarPdfPedido(
     total:    pedido.total,
     anticipo: pedido.anticipo,
     saldo:    pedido.saldo,
-  }, { pageWidth: PW, pageHeight: PH, margin: M }, sinIva);
+  }, { pageWidth: PW, pageHeight: PH, margin: M }, sinIva, moneda);
 
   dibujarPiePagina(doc, "PEDIDO", pedido.no_pedido, pedido.fecha, PW, PH);
 

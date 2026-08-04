@@ -341,6 +341,7 @@ export default function Cotizaciones() {
           identificar: datos.identificar ?? null,
           total: productosPdf.reduce((sum: number, prod: any) =>
             sum + prod.detalles.reduce((s: number, d: any) => s + d.precio_total, 0), 0),
+          moneda: datos.moneda ?? "MXN",
           productos: productosPdf,
         }, true);
       } catch (pdfErr) { console.warn("⚠️ PDF:", pdfErr); }
@@ -401,6 +402,7 @@ export default function Cotizaciones() {
         ? cot.productos.reduce((sum, p) =>
           sum + p.detalles.filter(d => d.aprobado === true).reduce((s, d) => s + d.precio_total, 0), 0)
         : cot.total,
+      moneda: cot.moneda ?? "MXN",
       productos: productosParaPdf,
     }, guardarS3);
   };

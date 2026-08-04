@@ -281,6 +281,7 @@ function BotonPdfPedido({ pedido, puedePdf }: { pedido: PedidoSeguimiento; puede
         total: Number(venta.total),
         anticipo: Number(venta.anticipo),
         saldo: Number(venta.saldo),
+        moneda: (venta as any).moneda ?? "MXN",
         productos: buildProductosPdf(ped.productos),
       }, guardarS3);
     } catch {

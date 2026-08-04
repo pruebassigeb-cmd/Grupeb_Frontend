@@ -173,6 +173,8 @@ export interface OpcionesEncabezado {
   estado_cliente?: string | null;
   cliente_id?:     number | null;
   identificar?:    string | null;
+  /** Moneda del documento — si es USD se marca junto al folio. Default MXN. */
+  moneda?:         Moneda;
   /** Ancho de página en mm. Por defecto la carta landscape (279.4mm). */
   pageWidth?:      number;
   /** Margen en mm. Por defecto 10mm. */
@@ -191,7 +193,7 @@ export async function dibujarEncabezado(opts: OpcionesEncabezado): Promise<numbe
     fecha, empresa, impresion, cliente, telefono, correo,
     celular, razon_social, rfc,
     domicilio, numero, colonia, codigo_postal, poblacion, estado_cliente,
-    cliente_id, identificar,
+    cliente_id, identificar, moneda,
     pageWidth, margin, mostrarLogo,
   } = opts;
 
@@ -275,7 +277,7 @@ export async function dibujarEncabezado(opts: OpcionesEncabezado): Promise<numbe
   const dataY = y + labelH;
   const dataH = row1H - labelH;
   doc.setFont("helvetica", "normal"); doc.setFontSize(7); doc.setTextColor(...GRAY_DARK);
-  doc.text(labelFolio, cotBoxX + halfBox / 2, dataY + 3.5, { align: "center" });
+  doc.text(moneda === "USD" ? `${labelFolio} · USD` : labelFolio, cotBoxX + halfBox / 2, dataY + 3.5, { align: "center" });
   doc.setFont("helvetica", "bold"); doc.setFontSize(12); doc.setTextColor(...BLACK);
   doc.text(String(folio), cotBoxX + halfBox / 2, dataY + dataH / 2 + 3.5, { align: "center" });
 
@@ -423,7 +425,8 @@ export function dibujarCajasPie(
   condLines: string[],
   totales?:  TotalesPdf,
   dims?:     DimensionesPagina,
-  ocultarDatosBancarios = false
+  ocultarDatosBancarios = false,
+  moneda:    Moneda = "MXN",
 ): void {
   const PW = dims?.pageWidth  ?? 279.4;
   const PH = dims?.pageHeight ?? 215.9;
@@ -435,8 +438,7 @@ export function dibujarCajasPie(
   doc.setDrawColor(...BLACK); doc.setLineWidth(0.3);
   doc.setTextColor(...BLACK);
 
-  const fmtN = (n: number) =>
-    `$${n.toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const fmtN = (n: number) => formatMoney(n, moneda);
 
   if (!totales) {
     const obsText = productos

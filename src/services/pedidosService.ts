@@ -167,6 +167,24 @@ export const actualizarPedido = async (
   return response.data;
 };
 
+export interface ResultadoCambioMoneda {
+  idsolicitud: number;
+  moneda: "MXN" | "USD";
+  tipo_cambio: number | null;
+  ventas_actualizada: boolean;
+}
+
+// Cambia la moneda de un pedido ya creado, convirtiendo los precios ya
+// capturados con el tipo de cambio vigente. El backend rechaza el cambio si
+// el pedido ya tiene pagos registrados.
+export const cambiarMonedaPedido = async (
+  noPedido: string,
+  moneda: "MXN" | "USD",
+): Promise<ResultadoCambioMoneda> => {
+  const response = await api.put(`/pedidos/${noPedido}/moneda`, { moneda });
+  return response.data;
+};
+
 export const getHistorialPedidosPorCliente = async (clienteId: number): Promise<Pedido[]> => {
   const { data } = await api.get(`/pedidos/historial/${clienteId}`);
   return data;

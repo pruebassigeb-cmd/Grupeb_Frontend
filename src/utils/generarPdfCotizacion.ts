@@ -12,6 +12,7 @@ import {
 import type { ProductoPdf } from "./Pdfutils";
 import logoUrl from "../assets/logogrupeb.png";
 import { subirPdfA3 } from "../services/pdfS3.service";
+import { formatMoney, type Moneda } from "./formatMoney";
 
 interface CotizacionPdf {
   no_cotizacion: string;
@@ -26,6 +27,7 @@ interface CotizacionPdf {
   productos: ProductoPdf[];
   total: number;
   sin_iva?: boolean;
+  moneda?: Moneda;
   celular?: string | null;
   razon_social?: string | null;
   rfc?: string | null;
@@ -107,7 +109,7 @@ function dibujarCeldaTintasDiagonal(
 // ═══════════════════════════════════════════════════════════════════════════════
 function renderTablaPlastico(
   doc: jsPDF, productos: ProductoPdf[], startY: number,
-  numCantCols: number, M: number, PW: number, footerH: number
+  numCantCols: number, M: number, PW: number, footerH: number, moneda: Moneda
 ): number {
   const headFixed = [
     "Descripción", "Medida", "Tintas", "Caras", "Material", "Calibre",
@@ -140,7 +142,7 @@ ${descripcion}` : tipoProducto(prod.nombre),
 
     for (let i = 0; i < numCantCols; i++) {
       const det = prod.detalles[i];
-      row.push(det && det.cantidad > 0 ? formatCantidadCelda(det, prod.por_kilo) : "—");
+      row.push(det && det.cantidad > 0 ? formatCantidadCelda(det, prod.por_kilo, moneda) : "—");
     }
 
     bodyRows.push(row);
@@ -154,7 +156,7 @@ ${descripcion}` : tipoProducto(prod.nombre),
       if (hasHerr) {
         const nombreHerr = prod.herramental_descripcion?.trim() || "Herramental / molde";
         comboRow[1] = `Herramental: ${nombreHerr}  —  Cargo único.`;
-        comboRow[headAll.length - 1] = `$${Number(prod.herramental_precio).toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        comboRow[headAll.length - 1] = formatMoney(prod.herramental_precio, moneda);
       }
       bodyRows.push(comboRow);
     }
@@ -258,7 +260,7 @@ ${descripcion}` : tipoProducto(prod.nombre),
 // ═══════════════════════════════════════════════════════════════════════════════
 function renderTablaPapel(
   doc: jsPDF, productos: ProductoPdf[], startY: number,
-  numCantCols: number, M: number, PW: number, footerH: number
+  numCantCols: number, M: number, PW: number, footerH: number, moneda: Moneda
 ): number {
   const headFixed = ["Descripción", "Medida", "Tintas", "Material", "HS", "Asa/Suaje", "AR", "Laminado", "UV", "Textura", "Pantones"];
   const headAll = [...headFixed, ...Array.from({ length: numCantCols }, (_, i) => `Cant ${i + 1}`)];
@@ -299,7 +301,7 @@ function renderTablaPapel(
 
     for (let i = 0; i < numCantCols; i++) {
       const det = prod.detalles[i];
-      row.push(det && det.cantidad > 0 ? formatCantidadCelda(det, prod.por_kilo) : "—");
+      row.push(det && det.cantidad > 0 ? formatCantidadCelda(det, prod.por_kilo, moneda) : "—");
     }
 
     if (tieneDiagonal) filasDiagonal.push({ rowIndex: rowIdx, exterior: tintasExt, interior: tintasInt });
@@ -319,7 +321,7 @@ function renderTablaPapel(
     if (hasHerr) {
       const nombreHerr = prod.herramental_descripcion?.trim() || "Herramental / molde";
       comboRow[1] = `Herramental: ${nombreHerr}  —  Cargo único.`;
-      comboRow[headAll.length - 1] = `$${Number(prod.herramental_precio).toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      comboRow[headAll.length - 1] = formatMoney(prod.herramental_precio, moneda);
     }
     bodyRows.push(comboRow);
     rowIdx++;
@@ -435,7 +437,7 @@ function renderTablaPapel(
 // ═══════════════════════════════════════════════════════════════════════════════
 function renderTablaMixta(
   doc: jsPDF, productos: ProductoPdf[], startY: number,
-  numCantCols: number, M: number, PW: number, footerH: number
+  numCantCols: number, M: number, PW: number, footerH: number, moneda: Moneda
 ): number {
   const headFixed = [
     "Descripción", "Medida", "Tintas", "Caras",
@@ -489,13 +491,12 @@ function renderTablaMixta(
 
     for (let i = 0; i < numCantCols; i++) {
       const det = prod.detalles[i];
-      row.push(det && det.cantidad > 0 ? formatCantidadCelda(det, prod.por_kilo) : "—");
+      row.push(det && det.cantidad > 0 ? formatCantidadCelda(det, prod.por_kilo, moneda) : "—");
     }
 
     bodyRows.push(row);
     rowIdx++;
 
-    // Fila observaciones
     // Fila observaciones
     const hasHerr = prod.herramental_precio != null && prod.herramental_precio > 0;
 
@@ -508,7 +509,7 @@ function renderTablaMixta(
     if (hasHerr) {
       const nombreHerr = prod.herramental_descripcion?.trim() || "Herramental / molde";
       comboRow[1] = `Herramental: ${nombreHerr}  —  Cargo único.`;
-      comboRow[headAll.length - 1] = `$${Number(prod.herramental_precio).toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      comboRow[headAll.length - 1] = formatMoney(prod.herramental_precio, moneda);
     }
     bodyRows.push(comboRow);
     rowIdx++;
@@ -633,6 +634,7 @@ export async function generarPdfCotizacion(
   descargar = true
 ): Promise<Blob> {  const logoBase64 = cotizacion.logoBase64 ?? await cargarLogoBase64(logoUrl);
   const sinIva = cotizacion.sin_iva === true;
+  const moneda: Moneda = cotizacion.moneda ?? "MXN";
 
   const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "letter" });
   const PW = 274.9;
@@ -651,6 +653,7 @@ export async function generarPdfCotizacion(
     codigo_postal: cotizacion.codigo_postal ?? null, poblacion: cotizacion.poblacion ?? null,
     estado_cliente: cotizacion.estado_cliente ?? null, cliente_id: cotizacion.cliente_id ?? null,
     identificar: cotizacion.identificar ?? null,
+    moneda,
   });
 
   // ── Detección de modo ──────────────────────────────────────────────────────
@@ -665,13 +668,13 @@ export async function generarPdfCotizacion(
 
   if (esMixto) {
     // Tabla general con todos los productos
-    finalY = renderTablaMixta(doc, cotizacion.productos, y, numCantCols, M, PW, COT_FOOTER_H);
+    finalY = renderTablaMixta(doc, cotizacion.productos, y, numCantCols, M, PW, COT_FOOTER_H, moneda);
   } else if (hayPapel) {
     // Solo papel
-    finalY = renderTablaPapel(doc, cotizacion.productos, y, numCantCols, M, PW, COT_FOOTER_H);
+    finalY = renderTablaPapel(doc, cotizacion.productos, y, numCantCols, M, PW, COT_FOOTER_H, moneda);
   } else {
     // Solo plástico
-    finalY = renderTablaPlastico(doc, cotizacion.productos, y, numCantCols, M, PW, COT_FOOTER_H);
+    finalY = renderTablaPlastico(doc, cotizacion.productos, y, numCantCols, M, PW, COT_FOOTER_H, moneda);
   }
 
   if (finalY + COT_FOOTER_H + M > PH) doc.addPage();
@@ -694,7 +697,7 @@ export async function generarPdfCotizacion(
       "• Precios sujetos a cambio sin previo aviso.",
     ];
 
-  dibujarCajasPie(doc, cotizacion.productos, condLines);
+  dibujarCajasPie(doc, cotizacion.productos, condLines, undefined, undefined, false, moneda);
   dibujarPiePagina(doc, "COTIZACION", cotizacion.no_cotizacion, cotizacion.fecha);
 
 const nombre = `Cotizacion_${cotizacion.no_cotizacion}.pdf`;

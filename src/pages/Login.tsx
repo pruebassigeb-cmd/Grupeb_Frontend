@@ -88,7 +88,6 @@ export default function Login() {
                 <input
                   type="email"
                   value={correo}
-                  placeholder="ejemplo@correo.com"
                   onChange={(e) => setCorreo(e.target.value.trim().toLowerCase())}
                   className="w-full px-4 py-2 rounded-lg bg-slate-800 text-white border border-slate-700 focus:border-blue-500 focus:outline-none transition-colors"
                   required
@@ -106,7 +105,6 @@ export default function Login() {
                   type="password"
                   value={codigo}
                   inputMode="numeric"
-                  placeholder="Mínimo 4 dígitos"
                   onChange={(e) => setCodigo(e.target.value.replace(/\D/g, ""))}
                   className="w-full px-4 py-2 rounded-lg bg-slate-800 text-white border border-slate-700 focus:border-blue-500 focus:outline-none transition-colors"
                   required

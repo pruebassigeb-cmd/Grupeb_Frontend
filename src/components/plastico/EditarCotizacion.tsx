@@ -410,6 +410,7 @@ export default function EditarCotizacion({
           total: Number(venta.total),
           anticipo: Number(venta.anticipo),
           saldo: Number(venta.saldo),
+          moneda: (venta as any).moneda ?? "MXN",
           productos: buildProductosPdf(
             filtrarProductosConCantidadAprobada(productos),
           ),

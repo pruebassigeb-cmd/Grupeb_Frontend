@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import Dashboard from "../../layouts/Sidebar";
 import { formatMoney } from "../../utils/formatMoney";
-import { getPedidos, actualizarPedido } from "../../services/pedidosService";
+import { getPedidos, actualizarPedido, cambiarMonedaPedido } from "../../services/pedidosService";
 import type {
   ProductoPapelActualizar,
   ProductoNuevoPapel,
@@ -906,6 +906,9 @@ export default function EditarPedidoPapel() {
   const [errorGuardar, setErrorGuardar] = useState<string | null>(null);
   const [exito, setExito] = useState(false);
   const [pedidoOrig, setPedidoOrig] = useState<Pedido | null>(null);
+  // Moneda elegida en el selector — solo se aplica al guardar (handleGuardar),
+  // igual que cualquier otro campo editado en esta pantalla.
+  const [monedaSeleccionada, setMonedaSeleccionada] = useState<"MXN" | "USD">("MXN");
   const [productos, setProductos] = useState<ProductoPapelEdit[]>([]);
   const [prioridad, setPrioridad] = useState(false);
   const [sinIva, setSinIva] = useState(false);
@@ -986,6 +989,7 @@ export default function EditarPedidoPapel() {
         setPrioridad((ped as any).prioridad ?? false);
         setSinIva((ped as any).sin_iva ?? false);
         setPedidoOrig(ped);
+        setMonedaSeleccionada((ped.moneda as "MXN" | "USD") ?? "MXN");
 
         const prodsPapel = (ped.productos as any[]).filter(
           p => p.tipo_material === "papel" || p.tipoCotizacion === "papel"
@@ -1524,6 +1528,23 @@ export default function EditarPedidoPapel() {
       };
 
       await actualizarPedido(pedidoOrig.no_pedido, payload);
+
+      // La moneda se aplica hasta este punto (al guardar), no al cambiar el
+      // selector — si falla (ej. ya hay pagos registrados), lo demás ya
+      // quedó guardado y se avisa por separado.
+      if (monedaSeleccionada !== ((pedidoOrig.moneda as "MXN" | "USD") ?? "MXN")) {
+        try {
+          await cambiarMonedaPedido(pedidoOrig.no_pedido, monedaSeleccionada);
+        } catch (errMoneda: any) {
+          setErrorGuardar(
+            "Los demás cambios se guardaron, pero no se pudo cambiar la moneda: " +
+            (errMoneda.response?.data?.error || errMoneda.message)
+          );
+          setGuardando(false);
+          return;
+        }
+      }
+
       setExito(true);
       setTimeout(() => navigate("/pedido"), 1500);
     } catch (e: any) {
@@ -1600,9 +1621,15 @@ export default function EditarPedidoPapel() {
             <h1 className="text-2xl font-bold text-gray-900">Editar Pedido — Papel</h1>
             <p className="text-sm text-gray-400 mt-0.5">
               <span className="font-semibold text-amber-600">{noPedido}</span>
-              {(pedidoOrig?.moneda ?? "MXN") === "USD" && (
-                <span className="ml-2 px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 text-xs font-semibold align-middle">USD</span>
-              )}
+              <select
+                value={monedaSeleccionada}
+                onChange={e => setMonedaSeleccionada(e.target.value as "MXN" | "USD")}
+                title="La moneda se aplica hasta que presiones Guardar cambios"
+                className="ml-2 px-1.5 py-0.5 rounded border border-indigo-300 bg-indigo-50 text-indigo-700 text-xs font-semibold align-middle"
+              >
+                <option value="MXN">MXN</option>
+                <option value="USD">USD</option>
+              </select>
               {pedidoOrig?.no_cotizacion && (
                 <span className="ml-2 text-purple-500">• De {pedidoOrig.no_cotizacion}</span>
               )}

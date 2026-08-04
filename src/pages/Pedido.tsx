@@ -293,6 +293,7 @@ export default function Pedidos() {
     total: Number(venta.total),
     anticipo: Number(venta.anticipo),
     saldo: Number(venta.saldo),
+    moneda: (venta as any).moneda ?? "MXN",
     productos: productosPdf,
   }, true);
 };
@@ -373,6 +374,7 @@ export default function Pedidos() {
         total: Number(venta.total),
         anticipo: Number(venta.anticipo),
         saldo: Number(venta.saldo),
+        moneda: (venta as any).moneda ?? "MXN",
         productos: buildProductosPdf(ped.productos),
       }, guardarS3, true, formato);
     } catch (e) {

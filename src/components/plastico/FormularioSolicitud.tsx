@@ -30,12 +30,18 @@ import { MONEDAS_OPERACION } from "../../constants/moneda.constants";
 import { useTipoCambioActual } from "../../hooks/useTipoCambioActual";
 import { convertirDesdeMXN } from "../../utils/moneda.utils";
 import { formatMoney } from "../../utils/formatMoney";
+import { useAuth } from "../../context/AuthContext";
 
 const esProductoPapel = (p: any): boolean =>
   p?.tipoCotizacion === "papel" ||
   p?.tipo_material === "papel" ||
   p?.idproducto_papel != null ||
   p?.producto_papel_idproducto_papel != null;
+
+const esBolsaEnvio = (tipoProducto?: string | null): boolean => {
+  const t = (tipoProducto || "").toLowerCase();
+  return t.includes("bolsa envio") || t.includes("bolsa envío");
+};
 
 export default function FormularioSolicitud({
   onSubmit,
@@ -61,12 +67,17 @@ export default function FormularioSolicitud({
 
   const { tipoCambio: tipoCambioActual, error: errorTipoCambioActual } = useTipoCambioActual();
 
-  // Precarga el tipo de cambio vigente en cuanto esté disponible, si el
-  // usuario ya eligió USD y todavía no hay un valor capturado.
+  const { user } = useAuth();
+  const esAdmin = user?.acceso_total === true;
+
+  // El tipo de cambio no es editable: mientras la cotización esté en USD,
+  // datos.tipoCambio siempre refleja el valor vigente (sincronizado a diario
+  // desde Banxico). Si el valor vigente cambia mientras el formulario está
+  // abierto, se actualiza aquí también.
   useEffect(() => {
-    if (datos.moneda === "USD" && datos.tipoCambio == null && tipoCambioActual) {
-      setDatos(prev => ({ ...prev, tipoCambio: tipoCambioActual.valor }));
-    }
+    if (datos.moneda !== "USD" || !tipoCambioActual) return;
+    if (datos.tipoCambio === tipoCambioActual.valor) return;
+    setDatos(prev => ({ ...prev, tipoCambio: tipoCambioActual.valor }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tipoCambioActual, datos.moneda]);
 
@@ -706,6 +717,9 @@ export default function FormularioSolicitud({
     const tipo = modoProducto === "nuevo" ? datosProductoNuevo.tipoProducto : productoActual.nombre;
     // Bobina / Rollo perforado: se venden por unidad (pieza), de 1 a N, sin mínimo.
     if (esTipoSinCalculoPrecio(tipo)) return null;
+    // Bolsa de envío: solo un administrador puede registrar cualquier cantidad
+    // (desde 1), sin el mínimo general de 30 kg.
+    if (esBolsaEnvio(tipo) && esAdmin) return null;
     const n = cantidadesTexto[index] === "" ? 0 : Number(cantidadesTexto[index]);
     if (n <= 0) return null;
     const pk = productoActual.porKilo ? Number(productoActual.porKilo) : 0;
@@ -877,6 +891,7 @@ export default function FormularioSolicitud({
 
   const tipoActualCantidad = modoProducto === "nuevo" ? datosProductoNuevo.tipoProducto : productoActual.nombre;
   const esVentaPorUnidadSinMinimo = esTipoSinCalculoPrecio(tipoActualCantidad);
+  const esBolsaEnvioSinMinimo = esBolsaEnvio(tipoActualCantidad) && esAdmin;
 
   const esBopp = productoActual.material?.toUpperCase().includes("BOPP") ||
     productoActual.material?.toUpperCase().includes("CELOFAN") ||
@@ -1548,6 +1563,9 @@ export default function FormularioSolicitud({
                   {esVentaPorUnidadSinMinimo && (
                     <p className="mt-1 text-xs text-emerald-600 font-medium">✓ Se vende por pieza — de 1 a N, sin mínimo</p>
                   )}
+                  {esBolsaEnvioSinMinimo && (
+                    <p className="mt-1 text-xs text-emerald-600 font-medium">✓ Modo administrador: cualquier cantidad, sin el mínimo de 30 kg</p>
+                  )}
                 </div>
 
                 {/* Cantidades */}
@@ -1837,39 +1855,33 @@ export default function FormularioSolicitud({
               setDatos(prev => ({
                 ...prev,
                 moneda: nuevaMoneda,
-                tipoCambio: nuevaMoneda === "USD" ? (prev.tipoCambio ?? tipoCambioActual?.valor ?? null) : null,
+                tipoCambio: nuevaMoneda === "USD" ? (tipoCambioActual?.valor ?? null) : null,
               }));
             }}
             className="px-3 py-1.5 border border-indigo-300 rounded-md text-sm text-gray-900 bg-white focus:ring-2 focus:ring-indigo-400"
           >
             {MONEDAS_OPERACION.map(m => (
-              <option key={m.value} value={m.value}>{m.label}</option>
+              <option key={m.value} value={m.value} disabled={m.value === "USD" && !tipoCambioActual}>
+                {m.label}{m.value === "USD" && !tipoCambioActual ? " (no disponible)" : ""}
+              </option>
             ))}
           </select>
 
           {datos.moneda === "USD" && (
             <div className="flex items-center gap-2 flex-wrap">
-              <label className="text-indigo-700 text-xs font-medium">Tipo de cambio (MXN por USD):</label>
-              <input
-                type="number"
-                step="0.0001"
-                min="0"
-                value={datos.tipoCambio ?? ""}
-                onChange={e => setDatos(prev => ({
-                  ...prev,
-                  tipoCambio: e.target.value === "" ? null : Number(e.target.value),
-                }))}
-                className="w-28 px-2 py-1.5 border border-indigo-300 rounded-md text-sm text-gray-900 bg-white focus:ring-2 focus:ring-indigo-400"
-                placeholder="18.50"
-              />
-              {tipoCambioActual && (
-                <span className="text-indigo-500 text-xs">
-                  (Banxico {tipoCambioActual.fecha}: {tipoCambioActual.valor})
-                </span>
-              )}
-              {errorTipoCambioActual && !tipoCambioActual && (
+              <span className="text-indigo-700 text-xs font-medium">Tipo de cambio:</span>
+              {tipoCambioActual ? (
+                <>
+                  <span className="px-2 py-1 rounded-md bg-white border border-indigo-300 text-sm font-semibold text-indigo-900">
+                    {tipoCambioActual.valor}
+                  </span>
+                  <span className="text-indigo-500 text-xs">
+                    MXN por USD — Banxico {tipoCambioActual.fecha} (fijo, no editable)
+                  </span>
+                </>
+              ) : (
                 <span className="text-red-500 text-xs">
-                  No se pudo obtener el tipo de cambio vigente — captúralo a mano.
+                  {errorTipoCambioActual ?? "No se pudo obtener el tipo de cambio vigente"} — no se puede cotizar en USD por ahora.
                 </span>
               )}
             </div>
