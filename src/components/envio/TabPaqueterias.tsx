@@ -8,6 +8,7 @@ import { inputClass, labelClass, buildMapsUrl, copiarLink } from "./../enviosCon
 import { showAlert } from './../CustomAlert';
 import { showConfirm } from './../CustomConfirm';
 import { buscarCodigoPostal } from "../../services/codigoPostalService";
+import { leerBorrador, useAutoguardarBorrador, limpiarBorrador } from "../../hooks/useBorradorFormulario";
 
 type OpcionCP = {
   colonia: string;
@@ -37,6 +38,9 @@ export default function TabPaqueterias() {
   const [opcionesCP,   setOpcionesCP]   = useState<OpcionCP[]>([]);
   const [buscandoCP,   setBuscandoCP]   = useState(false);
   const [errorCP,      setErrorCP]      = useState<string | null>(null);
+
+  const claveBorrador = editando ? `paqueteria-editar-${editando.idpaqueteria}` : "paqueteria-nueva";
+  useAutoguardarBorrador(claveBorrador, form, modalOpen);
 
   useEffect(() => { cargar(); }, []);
 
@@ -81,7 +85,7 @@ export default function TabPaqueterias() {
 
   const abrirCrear = () => {
     setEditando(null);
-    setForm(emptyForm);
+    setForm(leerBorrador<typeof emptyForm>("paqueteria-nueva") ?? emptyForm);
     setOpcionesCP([]);
     setErrorCP(null);
     setModalOpen(true);
@@ -89,7 +93,7 @@ export default function TabPaqueterias() {
 
   const abrirEditar = (p: Paqueteria) => {
     setEditando(p);
-    setForm({
+    setForm(leerBorrador<typeof emptyForm>(`paqueteria-editar-${p.idpaqueteria}`) ?? {
       nombre:    p.nombre    || "",
       telefono:  p.telefono  || "",
       sitioweb:  p.sitioweb  || "",
@@ -122,6 +126,7 @@ export default function TabPaqueterias() {
       };
       if (editando) await updatePaqueteria(editando.idpaqueteria, { ...data, activo: editando.activo });
       else await createPaqueteria(data);
+      limpiarBorrador(claveBorrador);
       setModalOpen(false);
       await cargar();
     } catch (e: any) {

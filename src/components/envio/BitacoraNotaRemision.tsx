@@ -9,6 +9,7 @@ import { OBSERVACIONES, formatFechaHora, inputClass, labelClass } from "./../env
 import Modal from "./../Modal";
 import { showAlert } from "./../CustomAlert";
 import type { NotaRemisionBitacoraItem } from "../../types/envio/envios.types";
+import { leerBorrador, useAutoguardarBorrador, limpiarBorrador } from "../../hooks/useBorradorFormulario";
 
 const ChevronIcon = ({ open }: { open: boolean }) => (
   <svg className={`w-4 h-4 text-gray-400 transition-transform duration-200 flex-shrink-0 ${open ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -68,17 +69,29 @@ function ModalMarcarLlegadaNota({ nota, onClose, onSuccess }: { nota: NotaRemisi
     const pad = (n: number) => String(n).padStart(2, "0");
     return `${dt.getFullYear()}-${pad(dt.getMonth()+1)}-${pad(dt.getDate())}T${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
   };
-  const [form, setForm] = useState({
+  interface FormLlegadaNota {
+    hora_llegada: string;
+    observacion: "" | "E" | "RA" | "RD" | "PD";
+    observacion_extra: string;
+    firma: string;
+  }
+  const claveBorrador = `nota-llegada-${nota.idnota}`;
+  const [borradorInicial] = useState(() => leerBorrador<FormLlegadaNota>(claveBorrador));
+  const [form, setForm] = useState<FormLlegadaNota>(borradorInicial ?? {
     hora_llegada:     toLocal(d?.hora_llegada ?? null),
     observacion:      (d?.observacion ?? "") as "" | "E" | "RA" | "RD" | "PD",
     observacion_extra: d?.observacion_extra ?? "",
     firma:            d?.firma ?? "",
   });
+  // La foto (File) no es serializable — si se pierde hay que volver a
+  // adjuntarla, no hay forma de "restaurar" un archivo.
   const [foto, setFoto] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [fotoExistente, setFotoExistente] = useState<Archivo | null>(null);
   const [guardando, setGuardando] = useState(false);
   const inputFotoRef = useRef<HTMLInputElement>(null);
+
+  useAutoguardarBorrador(claveBorrador, form, true);
 
   useEffect(() => {
     getFotosNota(nota.idnota)
@@ -94,6 +107,7 @@ function ModalMarcarLlegadaNota({ nota, onClose, onSuccess }: { nota: NotaRemisi
         const ext = foto.name.match(/\.[^/.]+$/)?.[0] || "";
         await subirArchivo(new File([foto], `nota-${nota.idnota}-${nota.no_nota}-${Date.now()}${ext}`, { type: foto.type }), "fotos-envios", undefined, undefined, nota.idnota);
       }
+      limpiarBorrador(claveBorrador);
       onSuccess();
     } catch (err: any) { showAlert(err.response?.data?.error || "Error al registrar llegada"); }
     finally { setGuardando(false); }
@@ -145,7 +159,17 @@ function ModalMarcarLlegadaNota({ nota, onClose, onSuccess }: { nota: NotaRemisi
 // ── Modal recolección nota — igual que recolección individual + observacion_extra ──
 function ModalMarcarRecoleccionNota({ nota, onClose, onSuccess }: { nota: NotaRemisionBitacoraItem; onClose: () => void; onSuccess: () => void }) {
   const rd = nota.recoleccion_datos;
-  const [form, setForm] = useState({
+  interface FormRecoleccionNota {
+    nombre_quien_recogio: string;
+    empresa: string;
+    unidad_marca: string;
+    unidad_modelo: string;
+    unidad_placas: string;
+    observacion_extra: string;
+  }
+  const claveBorrador = `nota-recoleccion-${nota.idnota}`;
+  const [borradorInicial] = useState(() => leerBorrador<FormRecoleccionNota>(claveBorrador));
+  const [form, setForm] = useState<FormRecoleccionNota>(borradorInicial ?? {
     nombre_quien_recogio: rd?.nombre_quien_recogio ?? "",
     empresa:              rd?.empresa              ?? "",
     unidad_marca:         rd?.unidad_marca         ?? "",
@@ -158,6 +182,8 @@ function ModalMarcarRecoleccionNota({ nota, onClose, onSuccess }: { nota: NotaRe
   const [fotoExistente, setFotoExistente] = useState<Archivo | null>(null);
   const [guardando, setGuardando] = useState(false);
   const inputFotoRef = useRef<HTMLInputElement>(null);
+
+  useAutoguardarBorrador(claveBorrador, form, true);
 
   useEffect(() => {
     getFotosNota(nota.idnota)
@@ -177,6 +203,7 @@ function ModalMarcarRecoleccionNota({ nota, onClose, onSuccess }: { nota: NotaRe
         unidad_placas: form.unidad_placas || undefined,
         observacion_extra: form.observacion_extra || undefined,
       });
+      limpiarBorrador(claveBorrador);
       if (foto) {
         const ext = foto.name.match(/\.[^/.]+$/)?.[0] || "";
         await subirArchivo(new File([foto], `nota-${nota.idnota}-${nota.no_nota}-${Date.now()}${ext}`, { type: foto.type }), "fotos-envios", undefined, undefined, nota.idnota);

@@ -17,7 +17,16 @@ import HistorialVersiones from "./HistorialVersiones";
 import Modal from "../Modal";
 import ModalAprobarDiseno from "./ModalAprobarDiseno";
 import { usePermisos } from "../../hooks/usePermiso";
+import FichaDisenoPanel from "./Fichadisenopanel";
 import { showAlert } from "../CustomAlert";
+import {
+  getFicha,
+  crearFicha,
+  verPdfFicha,
+  descargarPdfFicha,
+  type FichaDiseno,
+} from "../../services/diseno/fichaService";
+import PanelAuditoria from "../auditoria/PanelAuditoria";
 
 const POLLING_MS = 3000;
 
@@ -32,6 +41,8 @@ const fmtFecha = (iso: string) => {
     return new Date(iso).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" });
   } catch { return iso; }
 };
+
+
 
 // ── Sube un archivo a S3 y devuelve el id_archivo ──
 async function subirArchivoS3(file: File): Promise<number> {
@@ -50,7 +61,7 @@ function ArchivosRevision({ revision, esMio }: { revision: RevisionDiseno; esMio
   return (
     <div className={`flex flex-wrap gap-2 mt-1 ${esMio ? "justify-end" : "justify-start"}`}>
       {revision.archivos.map(archivo => {
-        const esPdf    = archivo.mime_type === "application/pdf";
+        const esPdf = archivo.mime_type === "application/pdf";
         const esImagen = archivo.mime_type?.startsWith("image/");
         return (
           <a key={archivo.id_archivo} href={archivo.url} target="_blank" rel="noopener noreferrer"
@@ -67,9 +78,8 @@ function ArchivosRevision({ revision, esMio }: { revision: RevisionDiseno; esMio
                 </span>
               </div>
             ) : esPdf ? (
-              <div className={`flex items-center gap-2 px-3 py-2 border rounded-xl transition-colors max-w-[200px] ${
-                esMio ? "bg-blue-500 border-blue-400 hover:bg-blue-400" : "bg-white border-gray-200 hover:border-blue-300 hover:bg-blue-50"
-              }`}>
+              <div className={`flex items-center gap-2 px-3 py-2 border rounded-xl transition-colors max-w-[200px] ${esMio ? "bg-blue-500 border-blue-400 hover:bg-blue-400" : "bg-white border-gray-200 hover:border-blue-300 hover:bg-blue-50"
+                }`}>
                 <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${esMio ? "bg-blue-400" : "bg-red-100"}`}>
                   <svg className={`w-4 h-4 ${esMio ? "text-white" : "text-red-600"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
@@ -80,9 +90,8 @@ function ArchivosRevision({ revision, esMio }: { revision: RevisionDiseno; esMio
                 </span>
               </div>
             ) : (
-              <div className={`flex items-center gap-2 px-3 py-2 border rounded-xl transition-colors ${
-                esMio ? "bg-blue-500 border-blue-400 hover:bg-blue-400" : "bg-white border-gray-200 hover:border-blue-300 hover:bg-blue-50"
-              }`}>
+              <div className={`flex items-center gap-2 px-3 py-2 border rounded-xl transition-colors ${esMio ? "bg-blue-500 border-blue-400 hover:bg-blue-400" : "bg-white border-gray-200 hover:border-blue-300 hover:bg-blue-50"
+                }`}>
                 <svg className={`w-4 h-4 flex-shrink-0 ${esMio ? "text-white" : "text-gray-400"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
                 </svg>
@@ -106,15 +115,15 @@ function SubirRevisionInline({
   onSuccess,
   onCancel,
 }: {
-  idorden:   number;
-  noPedido:  string;
-  tipo:      "render" | "feedback";
+  idorden: number;
+  noPedido: string;
+  tipo: "render" | "feedback";
   onSuccess: () => void;
-  onCancel:  () => void;
+  onCancel: () => void;
 }) {
-  const [archivos,    setArchivos]    = useState<File[]>([]);
-  const [obs,         setObs]         = useState("");
-  const [subiendo,    setSubiendo]    = useState(false);
+  const [archivos, setArchivos] = useState<File[]>([]);
+  const [obs, setObs] = useState("");
+  const [subiendo, setSubiendo] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const handleSubir = async () => {
@@ -125,7 +134,7 @@ function SubirRevisionInline({
       await subirRevision(idorden, {
         tipo,
         observaciones: obs.trim() || undefined,
-        archivos:      ids.map(id => ({ id_archivo: id })),
+        archivos: ids.map(id => ({ id_archivo: id })),
       });
       onSuccess();
     } catch {
@@ -198,32 +207,31 @@ function SubirRevisionInline({
 // ══════════════════════════════════════════════════
 interface Props {
   idorden_diseno: number;
-  pedido:         PedidoSeguimiento;
-  onClose:        () => void;
+  pedido: PedidoSeguimiento;
+  onClose: () => void;
 }
 
-type PanelActivo = "chat" | "historial" | "participantes";
-
+type PanelActivo = "ficha" | "chat" | "historial" | "participantes" | "auditoria";
 export default function ModalOrdenDiseno({ idorden_diseno, pedido, onClose }: Props) {
   const { puedeEditarDiseno, puedeOrdenDiseno } = usePermisos({
     puedeEditarDiseno: "Editar Diseño",
-    puedeOrdenDiseno:  "Orden de Diseño",
+    puedeOrdenDiseno: "Orden de Diseño",
   });
 
-  const [orden,        setOrden]        = useState<OrdenDisenoDetalle | null>(null);
-  const [mensajes,     setMensajes]     = useState<MensajeDiseno[]>([]);
-  const [texto,        setTexto]        = useState("");
-  const [loading,      setLoading]      = useState(true);
-  const [enviando,     setEnviando]     = useState(false);
-  const [panel,        setPanel]        = useState<PanelActivo>("chat");
-  const [modalSubir,   setModalSubir]   = useState<"render" | "feedback" | null>(null);
+  const [orden, setOrden] = useState<OrdenDisenoDetalle | null>(null);
+  const [mensajes, setMensajes] = useState<MensajeDiseno[]>([]);
+  const [texto, setTexto] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [enviando, setEnviando] = useState(false);
+  const [panel, setPanel] = useState<PanelActivo>("chat");
+  const [modalSubir, setModalSubir] = useState<"render" | "feedback" | null>(null);
   const [modalAprobar, setModalAprobar] = useState(false);
-  const [aprobando,    setAprobando]    = useState(false);
+  const [aprobando, setAprobando] = useState(false);
 
-  const chatRef        = useRef<HTMLDivElement>(null);
-  const pollingRef     = useRef<ReturnType<typeof setInterval> | null>(null);
-  const ultimoMsgRef   = useRef<string | undefined>(undefined);
-  const aprobadoRef    = useRef<boolean>(false);
+  const chatRef = useRef<HTMLDivElement>(null);
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const ultimoMsgRef = useRef<string | undefined>(undefined);
+  const aprobadoRef = useRef<boolean>(false);
   const revisionMapRef = useRef<Map<number, RevisionDiseno>>(new Map());
   const cargarOrdenRef = useRef<() => Promise<void>>(() => Promise.resolve());
 
@@ -329,7 +337,7 @@ export default function ModalOrdenDiseno({ idorden_diseno, pedido, onClose }: Pr
     </div>
   );
 
-  const aprobado  = orden.estado === "aprobado";
+  const aprobado = orden.estado === "aprobado";
   const versiones = orden.revisiones.filter(r => r.tipo === "render").length;
   const revisionMap = new Map<number, RevisionDiseno>(orden.revisiones.map(r => [r.idrevision, r]));
 
@@ -337,38 +345,49 @@ export default function ModalOrdenDiseno({ idorden_diseno, pedido, onClose }: Pr
     <div className="flex flex-col h-full" style={{ minHeight: 520 }}>
 
       {/* ── Header ── */}
-      <div className={`px-4 py-3 rounded-t-xl border-b ${
-        aprobado ? "bg-green-50 border-green-200" : "bg-blue-50 border-blue-200"
-      }`}>
+      <div className={`px-4 py-3 rounded-t-xl border-b ${aprobado ? "bg-green-50 border-green-200" : "bg-blue-50 border-blue-200"
+        }`}>
         <div className="flex items-center justify-between">
           <p className="font-bold text-gray-900 text-sm">
             {orden.no_pedido}
             {orden.no_cotizacion ? ` · Cot. #${orden.no_cotizacion}` : ""}
             {" · "}v{orden.version_actual}
           </p>
-          <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-            aprobado ? "bg-green-100 text-green-800" : "bg-blue-100 text-blue-800"
-          }`}>
+          <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${aprobado ? "bg-green-100 text-green-800" : "bg-blue-100 text-blue-800"
+            }`}>
             {aprobado ? "✓ Aprobado" : "En revisión"}
           </span>
         </div>
 
         {/* Tabs */}
         <div className="flex gap-1 mt-3">
-          {(["chat", "historial", "participantes"] as PanelActivo[]).map(tab => (
+          {(["ficha", "chat", "historial", "participantes", "auditoria"] as PanelActivo[]).map(tab => (
             <button key={tab} onClick={() => setPanel(tab)}
-              className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${
-                panel === tab ? "bg-white text-blue-700 shadow-sm" : "text-gray-500 hover:text-gray-700"
-              }`}>
-              {tab === "chat"
-                ? "💬 Chat"
-                : tab === "historial"
-                ? `📋 Historial (${orden.revisiones.length})`
-                : `👥 Participantes (${orden.participantes.length})`}
+              className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${panel === tab ? "bg-white text-blue-700 shadow-sm" : "text-gray-500 hover:text-gray-700"
+                }`}>
+              {tab === "ficha"
+                ? "📋 Ficha"
+                : tab === "chat"
+                  ? "💬 Chat"
+                  : tab === "historial"
+                    ? `🗂️ Historial (${orden.revisiones.length})`
+                    : tab === "participantes"
+                      ? `👥 Participantes (${orden.participantes.length})`
+                      : "ⓘ Auditoría"}
             </button>
           ))}
         </div>
       </div>
+
+      {/* ══════════════ PANEL FICHA ══════════════ */}
+      {panel === "ficha" && (
+        <div className="flex-1 overflow-y-auto px-4 py-3 bg-gray-50" style={{ maxHeight: 440 }}>
+          <FichaDisenoPanel
+            idorden_diseno={idorden_diseno}
+            onCambio={cargarOrden}
+          />
+        </div>
+      )}
 
       {/* ══════════════ PANEL CHAT ══════════════ */}
       {panel === "chat" && (
@@ -381,11 +400,11 @@ export default function ModalOrdenDiseno({ idorden_diseno, pedido, onClose }: Pr
                 Aún no hay mensajes. ¡Empieza la conversación!
               </div>
             ) : mensajes.map((msg, idx) => {
-              const esMio     = msg.usuario_id === (orden.participantes.find(p => p.usuario_id)?.usuario_id ?? -1);
+              const esMio = msg.usuario_id === (orden.participantes.find(p => p.usuario_id)?.usuario_id ?? -1);
               const esSistema = msg.tipo === "sistema";
-              const anterior  = idx > 0 ? mensajes[idx - 1] : null;
+              const anterior = idx > 0 ? mensajes[idx - 1] : null;
               const mismaFecha = anterior ? fmtFecha(anterior.created_at) === fmtFecha(msg.created_at) : false;
-              const revision   = (esSistema && msg.revision_id) ? revisionMap.get(msg.revision_id) : undefined;
+              const revision = (esSistema && msg.revision_id) ? revisionMap.get(msg.revision_id) : undefined;
               const revisionEsMia = revision ? revision.subido_por_id === (orden.participantes[0]?.usuario_id ?? -1) : false;
 
               return (
@@ -416,11 +435,10 @@ export default function ModalOrdenDiseno({ idorden_diseno, pedido, onClose }: Pr
                             {msg.usuario_nombre} {msg.usuario_apellido}
                           </span>
                         )}
-                        <div className={`px-3 py-2 rounded-2xl text-sm ${
-                          esMio
-                            ? "bg-blue-600 text-white rounded-br-sm"
-                            : "bg-white border border-gray-200 text-gray-800 rounded-bl-sm"
-                        }`}>
+                        <div className={`px-3 py-2 rounded-2xl text-sm ${esMio
+                          ? "bg-blue-600 text-white rounded-br-sm"
+                          : "bg-white border border-gray-200 text-gray-800 rounded-bl-sm"
+                          }`}>
                           {msg.contenido}
                         </div>
                         <span className="text-xs text-gray-400 mt-0.5 px-1">{fmtHora(msg.created_at)}</span>
@@ -437,11 +455,10 @@ export default function ModalOrdenDiseno({ idorden_diseno, pedido, onClose }: Pr
                             {revision.subido_por_nombre} {revision.subido_por_apellido}
                           </span>
                         )}
-                        <div className={`px-3 py-2 rounded-2xl text-sm ${
-                          revisionEsMia
-                            ? "bg-blue-600 text-white rounded-br-sm"
-                            : "bg-white border border-gray-200 text-gray-800 rounded-bl-sm"
-                        }`}>
+                        <div className={`px-3 py-2 rounded-2xl text-sm ${revisionEsMia
+                          ? "bg-blue-600 text-white rounded-br-sm"
+                          : "bg-white border border-gray-200 text-gray-800 rounded-bl-sm"
+                          }`}>
                           {revision.observaciones}
                         </div>
                       </div>
@@ -558,6 +575,18 @@ export default function ModalOrdenDiseno({ idorden_diseno, pedido, onClose }: Pr
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {panel === "auditoria" && (
+        <div className="flex-1 overflow-y-auto bg-gray-50 px-4 py-4" style={{ maxHeight: 440 }}>
+          <PanelAuditoria
+            tabla="orden_diseno"
+            id={idorden_diseno}
+            titulo={`Auditoría de la orden del pedido ${orden.no_pedido}`}
+            limite={50}
+            className="rounded-xl bg-white p-4 shadow-sm"
+          />
         </div>
       )}
 

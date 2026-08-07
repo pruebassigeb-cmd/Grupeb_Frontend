@@ -6,6 +6,7 @@ import ModalEditarBitacora from "./ModalEditarBitacora";
 import ModalFotoEnvio from "./ModalFotoEnvio";
 import { showAlert } from "./../CustomAlert";
 import type { EnvioPaqueteria, BitacoraRegistro, UpdateBitacoraRequest } from "../../types/envio/envios.types";
+import { leerBorrador, useAutoguardarBorrador, limpiarBorrador } from "../../hooks/useBorradorFormulario";
 
 const toDatetimeLocal = (iso: string) => {
   const d = new Date(iso), pad = (n: number) => String(n).padStart(2, "0");
@@ -93,7 +94,9 @@ export default function BitacoraPaqueteria() {
       no_pedido: e.no_pedido, cliente: e.cliente, chofer: null, unidad: null,
       envio: { idenvio: e.idenvio, tipo: "paqueteria", estado: e.estado, numero_guia: e.numero_guia, es_parcialidad: e.es_parcialidad },
     });
-    setFormEdit(editar
+    const claveBorrador = `bitacora-paqueteria-editar-${e.idenvio}`;
+    const borrador = leerBorrador<UpdateBitacoraRequest & { numero_guia?: string }>(claveBorrador);
+    setFormEdit(borrador ?? (editar
       ? {
           hora_salida:       (e.hora_salida    && e.hora_salida    !== "null") ? toDatetimeLocal(e.hora_salida)    : undefined,
           hora_llegada:      (e.hora_llegada   && e.hora_llegada   !== "null") ? toDatetimeLocal(e.hora_llegada)   : undefined,
@@ -104,8 +107,14 @@ export default function BitacoraPaqueteria() {
           observacion_extra: undefined,
           numero_guia:       e.numero_guia || "",
         }
-    );
+    ));
   };
+
+  useAutoguardarBorrador(
+    editando ? `bitacora-paqueteria-editar-${editando.envio.idenvio}` : "bitacora-paqueteria-sin-editar",
+    formEdit,
+    editando !== null
+  );
 
   const handleGuardar = async (data: UpdateBitacoraRequest & { numero_guia?: string }, foto?: File | null, fotosAEliminar?: string[]) => {
     if (!editando) return;
@@ -122,6 +131,7 @@ export default function BitacoraPaqueteria() {
         const ext = foto.name.match(/\.[^/.]+$/)?.[0] || "";
         await subirArchivo(new File([foto], `envio-${editando.envio.idenvio}-${editando.no_pedido}-${Date.now()}${ext}`, { type: foto.type }), "fotos-envios", undefined, editando.envio.idenvio);
       }
+      limpiarBorrador(`bitacora-paqueteria-editar-${editando.envio.idenvio}`);
       setEditando(null); await cargar();
     } catch (err: any) { showAlert(err.response?.data?.error || "Error al guardar cambios"); }
     finally { setGuardando(false); }

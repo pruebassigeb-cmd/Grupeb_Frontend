@@ -10,6 +10,7 @@ import ModalFormatoCastores from "./ModalFormatoCastores";
 import ModalFormatoTresGuerras from "./ModalFormatoTresGuerras";
 import ModalGuiaPaqueteriaGeneral from "./ModalGuiaPaqueteriaGeneral";
 import { showAlert } from './../CustomAlert';
+import { leerBorrador, useAutoguardarBorrador, limpiarBorrador } from "../../hooks/useBorradorFormulario";
 
 interface Props {
   carrito: CarritoPedido[];
@@ -23,7 +24,27 @@ interface ModalPendiente {
   tipo: "castores" | "tres_guerras" | "general";
 }
 
+// `seleccion` es un Map<number, Set<number>> — JSON.stringify lo convierte en
+// "{}" y pierde todo, así que se guarda/restaura como pares [idsolicitud,
+// idbulto[]].
+type SeleccionSerializada = [number, number[]][];
+interface BorradorProcesarCarrito {
+  form: {
+    usuarios_idusuario: number;
+    unidades_idunidad: number;
+    costo_flete: string;
+    fecha_entrega_estimada: string;
+    observaciones: string;
+  };
+  seleccion: SeleccionSerializada;
+}
+
 export default function FormularioProcesarCarrito({ carrito, onSuccess, onCancel }: Props) {
+  // Misma convención que FormularioNotaRemisionMulti: la clave depende del
+  // contenido exacto del carrito que se está procesando.
+  const claveBorrador = `procesar-carrito-${carrito.map(p => p.idsolicitud).sort().join(",")}`;
+  const [borradorInicial] = useState(() => leerBorrador<BorradorProcesarCarrito>(claveBorrador));
+
   const [conductores, setConductores] = useState<Conductor[]>([]);
   const [unidades, setUnidades] = useState<Unidad[]>([]);
   const [cargandoCatalogos, setCargandoCatalogos] = useState(true);
@@ -32,7 +53,7 @@ export default function FormularioProcesarCarrito({ carrito, onSuccess, onCancel
   // Cola unificada de modales pendientes
   const [modalPendientes, setModalPendientes] = useState<ModalPendiente[]>([]);
 
-  const [form, setForm] = useState({
+  const [form, setForm] = useState(borradorInicial?.form ?? {
     usuarios_idusuario: 0,
     unidades_idunidad: 0,
     costo_flete: "",
@@ -41,12 +62,20 @@ export default function FormularioProcesarCarrito({ carrito, onSuccess, onCancel
   });
 
   const [seleccion, setSeleccion] = useState<Map<number, Set<number>>>(() => {
+    if (borradorInicial?.seleccion) {
+      return new Map(borradorInicial.seleccion.map(([id, bultos]) => [id, new Set(bultos)]));
+    }
     const m = new Map<number, Set<number>>();
     carrito.forEach(p => {
       m.set(p.idsolicitud, new Set(p.bultos.map(b => b.idbulto)));
     });
     return m;
   });
+
+  useAutoguardarBorrador<BorradorProcesarCarrito>(claveBorrador, {
+    form,
+    seleccion: Array.from(seleccion.entries()).map(([id, bultos]) => [id, Array.from(bultos)]),
+  }, true);
 
   useEffect(() => {
     const cargarCatalogos = async () => {
@@ -118,6 +147,7 @@ export default function FormularioProcesarCarrito({ carrito, onSuccess, onCancel
         pedidos,
       });
 
+      limpiarBorrador(claveBorrador);
       const enviosCreados: EnvioCreado[] = result.envios_creados;
 
       // ── Notas de remisión para envíos locales y recolecciones ──

@@ -5,6 +5,7 @@ import type { Unidad } from "../../types/envio/envios.types";
 import { inputClass, labelClass } from "../enviosConstants";
 import { showAlert } from '../CustomAlert';
 import { showConfirm } from '../CustomConfirm';
+import { leerBorrador, useAutoguardarBorrador, limpiarBorrador } from "../../hooks/useBorradorFormulario";
 
 
 
@@ -21,6 +22,9 @@ export default function TabUnidades() {
   const [guardando, setGuardando] = useState(false);
   const [form,      setForm]      = useState(emptyForm);
 
+  const claveBorrador = editando ? `unidad-editar-${editando.idunidad}` : "unidad-nueva";
+  useAutoguardarBorrador(claveBorrador, form, modalOpen);
+
   useEffect(() => { cargar(); }, []);
 
   const cargar = async () => {
@@ -30,11 +34,15 @@ export default function TabUnidades() {
     finally { setLoading(false); }
   };
 
-  const abrirCrear = () => { setEditando(null); setForm(emptyForm); setModalOpen(true); };
+  const abrirCrear = () => {
+    setEditando(null);
+    setForm(leerBorrador<typeof emptyForm>("unidad-nueva") ?? emptyForm);
+    setModalOpen(true);
+  };
 
   const abrirEditar = (u: Unidad) => {
     setEditando(u);
-    setForm({
+    setForm(leerBorrador<typeof emptyForm>(`unidad-editar-${u.idunidad}`) ?? {
       tipo: u.tipo || "", marca: u.marca || "", modelo: u.modelo || "",
       placa: u.placa || "", num_serie: u.num_serie || "", num_motor: u.num_motor || "",
       color: u.color || "", propietario: u.propietario || "",
@@ -67,6 +75,7 @@ export default function TabUnidades() {
     try {
       if (editando) await updateUnidad(editando.idunidad, { ...form, activo: editando.activo });
       else await createUnidad(form);
+      limpiarBorrador(claveBorrador);
       setModalOpen(false);
       await cargar();
     } catch (e: any) { showAlert(e.response?.data?.error || "Error al guardar"); }

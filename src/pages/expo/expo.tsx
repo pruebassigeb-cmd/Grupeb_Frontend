@@ -41,6 +41,7 @@ import { getClienteById } from "../../services/clientesService";
 import { construirPayloadPdfCotizacionDesdeBackData } from "../../utils/expo/construirPayloadPdfCotizacionExpo";
 import { useCalculoPrecioPapel } from "../../hooks/expo/useCalculoPrecioPapel";
 import { useCalculoPrecioPlastico } from "../../hooks/expo/useCalculoPrecioPlastico";
+import { leerBorrador, useAutoguardarBorrador, limpiarBorrador } from "../../hooks/useBorradorFormulario";
 
 const TODAY_NOW = () =>
   new Date().toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" });
@@ -78,11 +79,28 @@ export default function Expo() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const [filas,    setFilas]    = useState<FilaProducto[]>([]);
+  // Punto de guardado (ver src/hooks/useBorradorFormulario.ts) — cubre la
+  // cotización en construcción (filas = equivalente al "carrito"), el
+  // cliente ya identificado y el comentario. Deliberadamente NO incluye
+  // catálogos, estado de UI (drawer, paneles abiertos) ni `clienteData`
+  // (estado propio del sub-formulario de identificación en
+  // RegistroCliente.tsx).
+  interface BorradorExpo {
+    filas: FilaProducto[];
+    columnasPrecio: 1 | 2 | 3;
+    cliente: string;
+    coment: string;
+    clienteGuardado: ClienteExpo | null;
+    clienteIdReal: number | null;
+  }
+  const CLAVE_BORRADOR_EXPO = "expo-cotizacion";
+  const [borradorExpoInicial] = useState(() => leerBorrador<BorradorExpo>(CLAVE_BORRADOR_EXPO));
+
+  const [filas,    setFilas]    = useState<FilaProducto[]>(borradorExpoInicial?.filas ?? []);
   // NUEVO: subido desde HojaCotizacion.tsx — se necesita aquí para poder
   // ignorar, justo al guardar, las columnas de precio que el vendedor ya
   // ocultó (ver guardarConOpciones más abajo).
-  const [columnasPrecio, setColumnasPrecio] = useState<1 | 2 | 3>(1);
+  const [columnasPrecio, setColumnasPrecio] = useState<1 | 2 | 3>(borradorExpoInicial?.columnasPrecio ?? 1);
   const [vista,    setVista]    = useState<"registro" | "cotizacion">("registro");
   const [catalogo, setCatalogo] = useState<Producto[]>([]);
   const [sistemaProductos, setSistemaProductos] = useState<Producto[]>([]);
@@ -96,11 +114,15 @@ export default function Expo() {
   const folioPreview = "Se asigna al guardar";
 
   const [clienteData,     setClienteData]     = useState<ClienteExpo>(CLIENTE_VACIO);
-  const [clienteGuardado, setClienteGuardado] = useState<ClienteExpo | null>(null);
-  const [clienteIdReal,   setClienteIdReal]   = useState<number | null>(null);
+  const [clienteGuardado, setClienteGuardado] = useState<ClienteExpo | null>(borradorExpoInicial?.clienteGuardado ?? null);
+  const [clienteIdReal,   setClienteIdReal]   = useState<number | null>(borradorExpoInicial?.clienteIdReal ?? null);
 
-  const [cliente, setCliente] = useState("");
-  const [coment,  setComent]  = useState("");
+  const [cliente, setCliente] = useState(borradorExpoInicial?.cliente ?? "");
+  const [coment,  setComent]  = useState(borradorExpoInicial?.coment ?? "");
+
+  useAutoguardarBorrador<BorradorExpo>(CLAVE_BORRADOR_EXPO, {
+    filas, columnasPrecio, cliente, coment, clienteGuardado, clienteIdReal,
+  }, true);
 
   const [over,         setOver]         = useState(false);
   const [catOpen,      setCatOpen]      = useState(true);
@@ -548,7 +570,10 @@ useEffect(() => {
 
   const delFila = useCallback((uid: string) => setFilas(p => p.filter(f => f.uid !== uid)), []);
 
-  const limpiar = () => { setFilas([]); setComent(""); setFolioActual(null); setColumnasPrecio(1); };
+  const limpiar = () => {
+    setFilas([]); setComent(""); setFolioActual(null); setColumnasPrecio(1);
+    limpiarBorrador(CLAVE_BORRADOR_EXPO);
+  };
 
   const prepararFilas = async (filasActuales: FilaProducto[]): Promise<FilaProducto[]> => {
     const resultado: FilaProducto[] = [];

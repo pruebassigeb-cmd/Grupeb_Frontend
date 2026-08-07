@@ -16,6 +16,8 @@ import {
 import { showAlert } from "../CustomAlert";
 import { showConfirm } from "../CustomConfirm";
 import Dashboard from "../../layouts/Sidebar";
+import BotonAuditoria from "../auditoria/BotonAuditoria";
+import { leerBorrador, useAutoguardarBorrador, limpiarBorrador } from "../../hooks/useBorradorFormulario";
 
 interface Props {
     proveedor: Proveedor;
@@ -52,6 +54,16 @@ export default function ProductosProveedor({ proveedor, onVolver }: Props) {
     const idTipoOtro = tipos.find(t => t.nombre === "Otro")?.idtipo_insumo;
     const esTipoOtro = form.tipo_insumo_id === idTipoOtro;
 
+    // Punto de guardado (ver src/hooks/useBorradorFormulario.ts) — solo para
+    // ALTA de insumo nuevo (form en blanco, potencialmente muchos campos
+    // capturados desde cero). La edición de un insumo ya existente no se
+    // cubre: parte de datos ya guardados, así que perder un ajuste rápido a
+    // medio escribir es mucho más barato que perder un alta completa.
+    const claveBorradorNuevo = `producto-proveedor-nuevo-${proveedor.idproveedor}`;
+    useAutoguardarBorrador<{ form: CreateProductoDto; precioTexto: string }>(
+        claveBorradorNuevo, { form, precioTexto }, mostrarForm && !editando
+    );
+
     useEffect(() => { cargar(); }, [proveedor.idproveedor]);
 
     useEffect(() => {
@@ -87,8 +99,9 @@ export default function ProductosProveedor({ proveedor, onVolver }: Props) {
 
     const abrirNuevo = () => {
         setEditando(null);
-        setForm({ ...FORM_VACIO, tipo_insumo_id: tipos[0]?.idtipo_insumo ?? 0 });
-        setPrecioTexto("");
+        const borrador = leerBorrador<{ form: CreateProductoDto; precioTexto: string }>(claveBorradorNuevo);
+        setForm(borrador?.form ?? { ...FORM_VACIO, tipo_insumo_id: tipos[0]?.idtipo_insumo ?? 0 });
+        setPrecioTexto(borrador?.precioTexto ?? "");
         setMostrarForm(true);
     };
 
@@ -213,6 +226,7 @@ export default function ProductosProveedor({ proveedor, onVolver }: Props) {
                 const nuevo = await crearProductoProveedor(proveedor.idproveedor, dto);
                 setProductos(prev => [...prev, nuevo]);
                 showAlert(`Insumo "${dto.nombre}" agregado`, "success");
+                limpiarBorrador(claveBorradorNuevo);
             }
             cerrarForm();
         } catch (error: any) {
@@ -533,6 +547,11 @@ const getBadgeClass = (tipo: string) => {
                                                 </td>
                                                 <td className="px-4 py-3">
                                                     <div className="flex items-center justify-end gap-1">
+                                                        <BotonAuditoria
+                                                            tabla="insumo_proveedor"
+                                                            id={p.idproveedor_producto}
+                                                            etiqueta={`Información de auditoría de ${p.nombre}`}
+                                                        />
                                                         <button onClick={() => abrirEditar(p)}
                                                             className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Editar">
                                                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

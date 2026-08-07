@@ -6,6 +6,7 @@ import {
   type TipoCambioActual,
 } from "../services/tipoCambioService";
 import { formatMoney } from "../utils/formatMoney";
+import BotonAuditoria from "../components/auditoria/BotonAuditoria";
 
 export default function TipoCambio() {
   const [actual, setActual] = useState<TipoCambioActual | null>(null);
@@ -75,6 +76,7 @@ export default function TipoCambio() {
                 <tr className="bg-gray-100 text-gray-600">
                   <th className="border px-3 py-2 text-left">Fecha</th>
                   <th className="border px-3 py-2 text-left">Valor</th>
+                  <th className="border px-3 py-2 text-center">Auditoría</th>
                 </tr>
               </thead>
               <tbody>
@@ -82,6 +84,13 @@ export default function TipoCambio() {
                   <tr key={h.idtipo_cambio} className="even:bg-gray-50">
                     <td className="border px-3 py-2">{h.fecha}</td>
                     <td className="border px-3 py-2 font-medium">{formatMoney(h.valor, "MXN")}</td>
+                    <td className="border px-3 py-2 text-center">
+                      <BotonAuditoria
+                        tabla="tipo_cambio"
+                        id={h.idtipo_cambio}
+                        etiqueta={`Auditoría del tipo de cambio del ${h.fecha}`}
+                      />
+                    </td>
                   </tr>
                 ))}
               </tbody>

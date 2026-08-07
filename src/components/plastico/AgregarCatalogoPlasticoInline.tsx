@@ -253,13 +253,11 @@ export function AgregarCalibreInline({
   };
 
   const handleGuardar = async () => {
-    const c = parseInt(calibre, 10);
-    if (isNaN(c) || c <= 0) {
-      alert("El calibre debe ser un número entero mayor a 0");
-      return;
-    }
-
     if (esBopp) {
+      // Contexto Celofán + BOPP: solo pedimos calibre BOPP y gramos.
+      // La columna "calibre" (normal) sigue siendo NOT NULL en la BD, así
+      // que aquí la reflejamos internamente con el mismo valor de BOPP —
+      // el usuario nunca la ve ni la captura por separado.
       const cb = parseInt(calibreBopp, 10);
       const g = parseFloat(gramos);
       if (isNaN(cb) || cb <= 0) {
@@ -272,7 +270,7 @@ export function AgregarCalibreInline({
       }
       setSaving(true);
       try {
-        await onAgregar(c, cb, g);
+        await onAgregar(cb, cb, g);
         limpiar();
       } catch (e: any) {
         alert(e.response?.data?.error ?? "Error al agregar el calibre");
@@ -282,6 +280,12 @@ export function AgregarCalibreInline({
       return;
     }
 
+    // Contexto normal: se captura y valida el calibre normal.
+    const c = parseInt(calibre, 10);
+    if (isNaN(c) || c <= 0) {
+      alert("El calibre debe ser un número entero mayor a 0");
+      return;
+    }
     setSaving(true);
     try {
       await onAgregar(c, null, null);
@@ -350,27 +354,17 @@ export function AgregarCalibreInline({
         </>
       )}
 
-      {/* ── Campos: solo lo relevante al tipo elegido/forzado ── */}
-      <label className="block text-xs font-medium text-gray-600 mb-1 mt-3">
-        {esBopp ? "Calibre (normal, de referencia)" : "Calibre"}
-      </label>
-      <input
-        ref={ref}
-        type="text"
-        inputMode="numeric"
-        value={calibre}
-        onChange={(e) => /^\d*$/.test(e.target.value) && setCalibre(e.target.value)}
-        placeholder="Ej. 200"
-        className={inputCls}
-      />
-
-      {esBopp && (
-        <div className="grid grid-cols-2 gap-2 mt-2">
+      {/* ── Campos: solo lo relevante al tipo elegido/forzado ──
+          Celofán+BOPP → solo Calibre BOPP + Gramos (2 campos).
+          Normal       → solo Calibre (1 campo). ──────────────────────── */}
+      {esBopp ? (
+        <div className="grid grid-cols-2 gap-2 mt-3">
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">
               Calibre BOPP <span className="text-red-500">*</span>
             </label>
             <input
+              ref={ref}
               type="text"
               inputMode="numeric"
               value={calibreBopp}
@@ -393,6 +387,19 @@ export function AgregarCalibreInline({
             />
           </div>
         </div>
+      ) : (
+        <>
+          <label className="block text-xs font-medium text-gray-600 mb-1 mt-3">Calibre</label>
+          <input
+            ref={ref}
+            type="text"
+            inputMode="numeric"
+            value={calibre}
+            onChange={(e) => /^\d*$/.test(e.target.value) && setCalibre(e.target.value)}
+            placeholder="Ej. 200"
+            className={inputCls}
+          />
+        </>
       )}
 
       <BotonesGuardarCancelar

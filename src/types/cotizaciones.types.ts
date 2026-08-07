@@ -152,6 +152,7 @@ export interface Cotizacion extends DatosClientePdf {
   total: number;
   sin_iva?: boolean;
   origen_expo?: boolean;
+  origen_cotizador_libre?: boolean;
   moneda?: "MXN" | "USD";
   tipo_cambio?: number | null;
 }
@@ -160,6 +161,7 @@ export interface Pedido extends DatosClientePdf {
   no_pedido: string;
   no_cotizacion?: string | null;
   es_directo: boolean;
+  origen_cotizador_libre?: boolean;
   fecha: string;
   estado_id: number;
   estado: string;

@@ -17,6 +17,8 @@ import { showConfirm } from '../components/CustomConfirm';
 import ModalRepetirPedido from "../components/plastico/ModalRepetirPedido";
 import { buildPayloadDesdePedido } from "../utils/plastico/buildPayloadDesdePedido";
 import { getHistorialPedidosPorCliente } from "../services/pedidosService";
+import BotonAuditoria from "../components/auditoria/BotonAuditoria";
+import PanelAuditoria from "../components/auditoria/PanelAuditoria";
 
 const ITEMS_POR_PAGINA = 7;
 
@@ -587,6 +589,9 @@ export default function Pedidos() {
                         {ped.prioridad && (
                           <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-700" title="Pedido urgente">⚡</span>
                         )}
+                        {ped.origen_cotizador_libre && (
+                         <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-green-50 text-green-700 border border-green-200">🌐 Cliente</span>
+                       )}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">{origenBadge(ped)}</td>
@@ -674,6 +679,13 @@ export default function Pedidos() {
                     <tr key={`det-${ped.no_pedido}`} className="bg-blue-50 border-t border-blue-100">
                       <td colSpan={8} className="px-8 py-4">
                         <div className="space-y-3">
+                          <PanelAuditoria
+                            tabla="solicitud"
+                            id={ped.productos[0]?.idsolicitud}
+                            titulo={`Auditoría del pedido ${ped.no_pedido}`}
+                            limite={20}
+                            className="rounded-lg bg-white p-4 shadow-sm"
+                          />
                           <div className="grid grid-cols-2 gap-3 mb-2">
                             {ped.correo && <p className="text-xs text-gray-500">📧 {ped.correo}</p>}
                             {ped.telefono && <p className="text-xs text-gray-500">📞 {ped.telefono}</p>}
@@ -740,12 +752,33 @@ export default function Pedidos() {
                                       {p.observacion && <p className="text-xs text-gray-500 mt-1 italic">Obs: {p.observacion}</p>}
                                     </>
                                   )}
+                                  {p.herramental_id && (
+                                    <div className="mt-1 flex items-center gap-2">
+                                      <p className="text-xs text-amber-700">
+                                        🔧 Herramental{p.herramental_descripcion ? `: ${p.herramental_descripcion}` : ""}
+                                        {p.herramental_precio != null && Number(p.herramental_precio) > 0
+                                          ? ` — $${Number(p.herramental_precio).toLocaleString("es-MX", { minimumFractionDigits: 2 })}`
+                                          : ""}
+                                      </p>
+                                      <BotonAuditoria
+                                        tabla="herramental"
+                                        id={p.herramental_id}
+                                        etiqueta="Historial del herramental"
+                                      />
+                                    </div>
+                                  )}
                                 </div>
                                 <div className="flex flex-wrap gap-2 flex-shrink-0">
                                   {p.detalles.map((d: any, j: number) => (
                                     <div key={j} className="text-center bg-gray-50 rounded px-2 py-1 border border-gray-200">
                                       <p className="text-xs font-semibold text-gray-700">{formatCantidadTabla(d)}</p>
                                       <p className="text-xs text-green-600">${d.precio_total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p>
+                                      <BotonAuditoria
+                                        tabla="solicitud_detalle"
+                                        id={d.iddetalle}
+                                        etiqueta={`Auditoría de la partida ${j + 1}`}
+                                        className="mt-1"
+                                      />
                                     </div>
                                   ))}
                                 </div>

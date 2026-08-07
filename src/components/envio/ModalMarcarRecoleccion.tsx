@@ -5,6 +5,7 @@ import Modal from "./../Modal";
 import { inputClass, labelClass } from "./../enviosConstants";
 import { showAlert } from "./../CustomAlert";
 import type { EnvioRecoleccion } from "../../types/envio/envios.types";
+import { leerBorrador, useAutoguardarBorrador, limpiarBorrador } from "../../hooks/useBorradorFormulario";
 
 interface ModalMarcarRecoleccionProps {
   recoleccion: EnvioRecoleccion;
@@ -17,8 +18,13 @@ export default function ModalMarcarRecoleccion({
   onClose,
   onSuccess,
 }: ModalMarcarRecoleccionProps) {
+  const claveBorrador = `recoleccion-marcar-${recoleccion.idenvio}`;
+  const [borradorInicial] = useState(() => leerBorrador<{
+    nombre_quien_recogio: string; empresa: string; unidad_marca: string;
+    unidad_modelo: string; unidad_placas: string; observacion_extra: string;
+  }>(claveBorrador));
   // ✅ Estado con observacion_extra
-  const [form, setForm] = useState({
+  const [form, setForm] = useState(borradorInicial ?? {
     nombre_quien_recogio: "",
     empresa: "",
     unidad_marca: "",
@@ -30,6 +36,8 @@ export default function ModalMarcarRecoleccion({
   const [preview, setPreview] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
   const inputFotoRef = useRef<HTMLInputElement>(null);
+
+  useAutoguardarBorrador(claveBorrador, form, true);
 
   const handleFoto = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -69,6 +77,7 @@ export default function ModalMarcarRecoleccion({
         );
       }
 
+      limpiarBorrador(claveBorrador);
       onSuccess();
     } catch (err: any) {
       showAlert(err.response?.data?.error || "Error al registrar recolección");

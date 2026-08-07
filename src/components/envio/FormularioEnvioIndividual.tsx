@@ -6,6 +6,7 @@ import ModalFormatoCastores       from "./ModalFormatoCastores";
 import ModalFormatoTresGuerras    from "./ModalFormatoTresGuerras";
 import ModalGuiaPaqueteriaGeneral from "./ModalGuiaPaqueteriaGeneral";
 import { showAlert } from './../CustomAlert';
+import { leerBorrador, useAutoguardarBorrador, limpiarBorrador } from "../../hooks/useBorradorFormulario";
 
 
 interface Props {
@@ -17,8 +18,23 @@ interface Props {
 
 type TipoEnvio = "local" | "paqueteria" | "recoleccion";
 
+interface BorradorEnvioIndividual {
+  tipo: TipoEnvio;
+  form: {
+    usuarios_idusuario: number;
+    unidades_idunidad: number;
+    paqueteria_idpaqueteria: number;
+    costo_flete: string;
+    fecha_entrega_estimada: string;
+    observaciones: string;
+  };
+}
+
 export default function FormularioEnvioIndividual({ pedido, bultosIds, onSuccess, onCancel }: Props) {
-  const [tipo,              setTipo]              = useState<TipoEnvio>("local");
+  const claveBorrador = `envio-individual-${pedido.idsolicitud}`;
+  const [borradorInicial] = useState(() => leerBorrador<BorradorEnvioIndividual>(claveBorrador));
+
+  const [tipo,              setTipo]              = useState<TipoEnvio>(borradorInicial?.tipo ?? "local");
   const [conductores,       setConductores]       = useState<Conductor[]>([]);
   const [unidades,          setUnidades]          = useState<Unidad[]>([]);
   const [paqueterias,       setPaqueterias]       = useState<Paqueteria[]>([]);
@@ -27,7 +43,7 @@ export default function FormularioEnvioIndividual({ pedido, bultosIds, onSuccess
   const [idenvioNuevo,      setIdenvioNuevo]      = useState<number | null>(null);
   const [paqueteriaEnvio,   setPaqueteriaEnvio]   = useState<"castores" | "tres_guerras" | "general" | null>(null);
 
-  const [form, setForm] = useState({
+  const [form, setForm] = useState(borradorInicial?.form ?? {
     usuarios_idusuario:      0,
     unidades_idunidad:       0,
     paqueteria_idpaqueteria: 0,
@@ -35,6 +51,8 @@ export default function FormularioEnvioIndividual({ pedido, bultosIds, onSuccess
     fecha_entrega_estimada:  "",
     observaciones:           "",
   });
+
+  useAutoguardarBorrador<BorradorEnvioIndividual>(claveBorrador, { tipo, form }, true);
 
   useEffect(() => {
     const cargar = async () => {
@@ -76,6 +94,7 @@ export default function FormularioEnvioIndividual({ pedido, bultosIds, onSuccess
         observaciones:           form.observaciones          || undefined,
         bultos_ids:              bultosIds,
       });
+      limpiarBorrador(claveBorrador);
 
       const enviosActualizados = await getEnviosPedido(pedido.idsolicitud);
       const nuevoId = enviosActualizados.length > 0 ? enviosActualizados[0].idenvio : null;

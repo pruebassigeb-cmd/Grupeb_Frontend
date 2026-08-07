@@ -45,6 +45,11 @@ export interface PedidoSeguimientoBase {
   pago_fecha_estado: string | null;
   diseno_fecha_estado: string | null;
   od_fecha_estado: string | null;
+  /** Fecha real en que se aprobó la orden de diseño (orden_diseno.autorizado_at). */
+  od_fecha_aprobacion: string | null;
+  /** Fecha en que quedó habilitado el PDF de orden de producción — el mayor
+   *  entre (anticipo/pago cubierto) y (diseño aprobado). */
+  op_fecha_aprobacion: string | null;
   envio_fecha_estado: string | null;
 
   nombre_producto: string;

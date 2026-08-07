@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   getProcesosOrden,
   iniciarProceso,
@@ -24,6 +24,8 @@ import type {
 import { generarPdfEtiquetas } from "../../utils/generarPdfEtiquetas";
 import { preguntarGuardarS3 } from "../../services/pdfS3.service";
 import type { PedidoSeguimiento } from "../../types/produccion/seguimiento.types";
+import PanelAuditoria from "../auditoria/PanelAuditoria";
+import { leerBorrador, useAutoguardarBorrador, limpiarBorrador } from "../../hooks/useBorradorFormulario";
 
 // ─────────────────────────────────────────────
 // CONSTANTES
@@ -224,15 +226,26 @@ function SeccionAvances({
   idproduccion, nombreProceso, avances, totalAvances, onAvanceRegistrado,
   metaKg, metaPzas, modoCantidad, limiteAnterior,
 }: SeccionAvancesProps) {
-  const [cantidad, setCantidad] = useState("");
-  const [observaciones, setObservaciones] = useState("");
+  interface BorradorAvance {
+    cantidad: string; observaciones: string; esAvanceFinal: boolean;
+    ajusteFinal: string; datosFinales: Record<string, string>;
+  }
+  const claveBorrador = `avance-plastico-${idproduccion}-${nombreProceso}`;
+  const [borradorInicial] = useState(() => leerBorrador<BorradorAvance>(claveBorrador));
+
+  const [cantidad, setCantidad] = useState(borradorInicial?.cantidad ?? "");
+  const [observaciones, setObservaciones] = useState(borradorInicial?.observaciones ?? "");
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [expandido, setExpandido] = useState(false);
   const [formularioAbierto, setFormularioAbierto] = useState(false);
-  const [esAvanceFinal, setEsAvanceFinal] = useState(false);
-  const [ajusteFinal, setAjusteFinal] = useState("");
-  const [datosFinales, setDatosFinales] = useState<Record<string, string>>({});
+  const [esAvanceFinal, setEsAvanceFinal] = useState(borradorInicial?.esAvanceFinal ?? false);
+  const [ajusteFinal, setAjusteFinal] = useState(borradorInicial?.ajusteFinal ?? "");
+  const [datosFinales, setDatosFinales] = useState<Record<string, string>>(borradorInicial?.datosFinales ?? {});
+
+  useAutoguardarBorrador<BorradorAvance>(claveBorrador, {
+    cantidad, observaciones, esAvanceFinal, ajusteFinal, datosFinales,
+  }, true);
 
   const esProcesoPorKilo = modoCantidad === "kilo" &&
     (nombreProceso === "bolseo" || nombreProceso === "asa_flexible");
@@ -362,6 +375,7 @@ function SeccionAvances({
         await finalizarProceso(idproduccion, payloadFinalizar);
       }
 
+      limpiarBorrador(claveBorrador);
       setCantidad("");
       setObservaciones("");
       setAjusteFinal("");
@@ -913,6 +927,9 @@ function SeccionBultos({
   modoKilo: boolean;
   limiteEnCurso?: number | null;
 }) {
+  const claveBorradorBulto = `bulto-plastico-nuevo-${pedido.idproduccion}`;
+  const [borradorBultoInicial] = useState(() => leerBorrador<{ form: NuevoBultoForm; repetir: string }>(claveBorradorBulto));
+
   const [bultos, setBultos] = useState<Bulto[]>([]);
   const [totalUnidades, setTotalUnidades] = useState(0);
   const [totalKg, setTotalKg] = useState(0);
@@ -922,13 +939,15 @@ function SeccionBultos({
   const [finalizando, setFinalizando] = useState(false);
   const [confirmFinalizar, setConfirmFinalizar] = useState(false);
   const [eliminando, setEliminando] = useState<number | null>(null);
-  const [form, setForm] = useState<NuevoBultoForm>(FORM_VACIO);
+  const [form, setForm] = useState<NuevoBultoForm>(borradorBultoInicial?.form ?? FORM_VACIO);
   const [error, setError] = useState<string | null>(null);
   const [generandoEtiquetas, setGenerandoEtiquetas] = useState(false);
   const [editandoBulto, setEditandoBulto] = useState<Bulto | null>(null);
   const [formEditar, setFormEditar] = useState<NuevoBultoForm>(FORM_VACIO);
   const [guardandoEdicion, setGuardandoEdicion] = useState(false);
-  const [repetir, setRepetir] = useState("1");
+  const [repetir, setRepetir] = useState(borradorBultoInicial?.repetir ?? "1");
+
+  useAutoguardarBorrador(claveBorradorBulto, { form, repetir }, true);
 
   const esParcialidad = Boolean((pedido as any).es_parcialidad);
 
@@ -1061,6 +1080,7 @@ function SeccionBultos({
         );
       }
 
+      limpiarBorrador(claveBorradorBulto);
       setForm(FORM_VACIO);
       setRepetir("1");
     } catch (e: any) {
@@ -1562,6 +1582,9 @@ interface Props {
 }
 
 export default function ModalProcesoIndividual({ pedido, nombreProceso, onClose, onActualizar }: Props) {
+  const claveBorradorFinalizar = `finalizar-proceso-plastico-${pedido.idproduccion}-${nombreProceso}`;
+  const borradorFinalizarAplicado = useRef(false);
+
   const [datos, setDatos] = useState<ProcesosOrdenRespuesta | null>(null);
   const [cargando, setCargando] = useState(true);
   const [accion, setAccion] = useState<"iniciar" | "finalizar" | null>(null);
@@ -1575,6 +1598,8 @@ export default function ModalProcesoIndividual({ pedido, nombreProceso, onClose,
   const [obsEditar, setObsEditar] = useState("");
   const [guardandoEdit, setGuardandoEdit] = useState(false);
 
+  useAutoguardarBorrador(claveBorradorFinalizar, { formDatos, observaciones }, accion === "finalizar");
+
   useEffect(() => { cargar(); }, []);
 
   const cargar = async () => {
@@ -1583,6 +1608,17 @@ export default function ModalProcesoIndividual({ pedido, nombreProceso, onClose,
       const res = await getProcesosOrden(pedido.idproduccion!);
       setDatos(res);
       const proc = res.procesos.find((p: any) => p.tabla === nombreProceso || p.nombre_proceso === nombreProceso);
+      if (!borradorFinalizarAplicado.current) {
+        borradorFinalizarAplicado.current = true;
+        const borrador = leerBorrador<{ formDatos: Record<string, unknown>; observaciones: string }>(claveBorradorFinalizar);
+        if (borrador) {
+          setFormDatos(borrador.formDatos);
+          setObservaciones(borrador.observaciones);
+          setAccion("finalizar");
+          setCargando(false);
+          return;
+        }
+      }
       if (proc?.registro?.observaciones) setObservaciones(String(proc.registro.observaciones));
     } catch { setError("No se pudieron cargar los procesos."); }
     finally { setCargando(false); }
@@ -1650,6 +1686,7 @@ export default function ModalProcesoIndividual({ pedido, nombreProceso, onClose,
       await finalizarProceso(pedido.idproduccion, {
         ...formDatos, observaciones: observaciones.trim() || null, tabla_proceso: nombreProceso,
       });
+      limpiarBorrador(claveBorradorFinalizar);
       await cargar(); onActualizar(); setAccion(null); setFormDatos({});
     } catch (e: any) {
       setError(e.response?.data?.error || "Error al finalizar proceso");
@@ -1792,6 +1829,13 @@ export default function ModalProcesoIndividual({ pedido, nombreProceso, onClose,
           </span>
         )}
       </div>
+
+      <PanelAuditoria
+        tabla="orden_produccion"
+        id={pedido.idproduccion}
+        titulo={`Auditoría de ${pedido.no_produccion ?? "la orden de producción"}`}
+        limite={25}
+      />
 
       <TarjetaProducto pedido={pedido} />
 

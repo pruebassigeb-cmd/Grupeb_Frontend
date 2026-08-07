@@ -21,6 +21,8 @@ import {
 } from "../../utils/papel/costoLaminado.utils";
 import SelConAlta from "./SelConAlta";
 import GrupoBlock from "./GrupoBlock";
+import { leerBorrador, useAutoguardarBorrador } from "../../hooks/useBorradorFormulario";
+import { claveBorradorProductoPapel } from "../../utils/clavesBorrador";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // HELPERS
@@ -637,12 +639,16 @@ export default function FormularioProductoPapelAlta({ initial, onSave, onCancel,
   topOffset?: number;
 }) {
   const isEdit = !!initial;
+  const claveBorrador = claveBorradorProductoPapel(initial?.idproducto_papel);
+  const [borradorInicial] = useState(() => leerBorrador<ProductoPapelForm>(claveBorrador));
+
   const { catalogs, names, addItem } = useCatalogosPapel();
   const [tamanosProducto, setTamanosProducto] = useState<TamanoProductoOpcion[]>([]);
   useEffect(() => {
     fetchTamanosProducto().then(setTamanosProducto).catch(() => setTamanosProducto([]));
   }, []);
-  const [form, setForm] = useState<ProductoPapelForm>(initial ?? newProductoForm());
+  const [form, setForm] = useState<ProductoPapelForm>(borradorInicial ?? initial ?? newProductoForm());
+  useAutoguardarBorrador(claveBorrador, form, true);
   const [expandedGrupoId, setExpandedGrupoId] = useState<number | null>(form.grupos[0]?.id ?? null);
   const [costoMetroLaminado, setCostoMetroLaminado] = useState<number | null>(null);
   const [cargandoCostoMetro, setCargandoCostoMetro] = useState(true);
@@ -1109,6 +1115,34 @@ export default function FormularioProductoPapelAlta({ initial, onSave, onCancel,
               />
             </Field>
           </FG>
+
+          {/* NUEVO: checkboxes para saber si el producto lleva estos
+              procesos — sirven de default al generar cotizaciones (ya no
+              hay que decidirlo a mano cada vez en FormularioProductoPapel). */}
+          <div style={{ marginTop: 12, display: "flex", gap: 14, flexWrap: "wrap" }}>
+            {(
+              [
+                ["llevaUv", "🔆 UV"],
+                ["llevaAltoRelieve", "🔳 Alto relieve"],
+                ["llevaTextura", "🟫 Textura"],
+                ["llevaHotStamping", "🌟 HS (Foil)"],
+              ] as [keyof typeof form.acabados, string][]
+            ).map(([key, label]) => (
+              <label key={key} style={{
+                display: "flex", alignItems: "center", gap: 8, cursor: "pointer", userSelect: "none",
+                padding: "6px 12px", borderRadius: 6, transition: "all 0.15s ease",
+                background: form.acabados[key] ? "#EFF6FF" : "#F9FAFB",
+                border: `1px solid ${form.acabados[key] ? "#BFDBFE" : "#E5E7EB"}`,
+              }}>
+                <input type="checkbox" checked={!!form.acabados[key]}
+                  onChange={e => updAcabados({ [key]: e.target.checked })}
+                  style={{ width: 16, height: 16, accentColor: "#1D4ED8", cursor: "pointer", margin: 0 }} />
+                <span style={{ fontSize: 12, fontWeight: 700, color: form.acabados[key] ? "#1D4ED8" : "#374151", letterSpacing: "0.05em", textTransform: "uppercase" }}>
+                  {label}
+                </span>
+              </label>
+            ))}
+          </div>
         </Sec>
 
         <Sec title="Refuerzo y base" colorKey="acabados">

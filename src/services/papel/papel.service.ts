@@ -299,6 +299,12 @@ const mapFormToApi = (form: ProductoPapelForm) => ({
     pzs_caja: form.acabados.pzs_caja
       ? parseInt(form.acabados.pzs_caja)
       : null,
+    // ✅ NUEVO — defaults del producto que precargan los "Acabados
+    // especiales" de la cotización.
+    lleva_uv: form.acabados.llevaUv,
+    lleva_alto_relieve: form.acabados.llevaAltoRelieve,
+    lleva_textura: form.acabados.llevaTextura,
+    lleva_hot_stamping: form.acabados.llevaHotStamping,
   },
   maquinaria: {
     hojeado_guillotina: form.maquinaria.hojeado_guillotina,

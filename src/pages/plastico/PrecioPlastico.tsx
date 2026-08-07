@@ -1,8 +1,10 @@
-import { useState, useEffect } from "react";
+import { Fragment, useState, useEffect, useRef } from "react";
 import Dashboard from "../../layouts/Sidebar";
 import { getTarifas, updateTarifasBatch } from "../../services/plastico/tarifas.service";
 import type { Tarifa } from "../../types/plastico/tarifas.types";
 import { showAlert } from '../../components/CustomAlert';
+import BotonAuditoria from "../../components/auditoria/BotonAuditoria";
+import { leerBorrador, useAutoguardarBorrador, limpiarBorrador } from "../../hooks/useBorradorFormulario";
 
 
 interface PrecioRow {
@@ -30,6 +32,10 @@ export default function PrecioPlastico() {
   const [preciosBackup, setPreciosBackup] = useState<PrecioRow[]>([]);
   const [textos, setTextos] = useState<TextoMap>({});
   const [textosBackup, setTextosBackup] = useState<TextoMap>({});
+
+  const CLAVE_BORRADOR = "precios-plastico";
+  const borradorAplicado = useRef(false);
+  useAutoguardarBorrador(CLAVE_BORRADOR, { precios, textos }, editando);
 
   useEffect(() => {
     cargarTarifas();
@@ -72,6 +78,20 @@ export default function PrecioPlastico() {
       });
 
       const preciosArray = Array.from(preciosMap.values()).sort((a, b) => a.kilos - b.kilos);
+
+      if (!borradorAplicado.current) {
+        borradorAplicado.current = true;
+        const borrador = leerBorrador<{ precios: PrecioRow[]; textos: TextoMap }>(CLAVE_BORRADOR);
+        if (borrador) {
+          setPreciosBackup(preciosArray);
+          setTextosBackup(buildTextos(preciosArray));
+          setPrecios(borrador.precios);
+          setTextos(borrador.textos);
+          setEditando(true);
+          return;
+        }
+      }
+
       setPrecios(preciosArray);
       setTextos(buildTextos(preciosArray));
     } catch (error) {
@@ -128,6 +148,7 @@ export default function PrecioPlastico() {
     setTextos(textosBackup);
     setEditando(false);
     setMostrarConfirmacion(false);
+    limpiarBorrador(CLAVE_BORRADOR);
   };
 
   const confirmarCambios = async () => {
@@ -146,6 +167,7 @@ export default function PrecioPlastico() {
 
       setEditando(false);
       setMostrarConfirmacion(false);
+      limpiarBorrador(CLAVE_BORRADOR);
       showAlert("Tarifas actualizadas exitosamente");
     } catch (error: any) {
       console.error("Error al guardar tarifas:", error);
@@ -232,8 +254,8 @@ export default function PrecioPlastico() {
                     const claveMerma  = `${row.kilos}-${cantidadTintas}-merma`;
 
                     return (
-                      <>
-                        <td key={`precio-${cantidadTintas}`} className="border px-3 py-2 text-center">
+                      <Fragment key={`${row.kilos}-${cantidadTintas}`}>
+                        <td className="border px-3 py-2 text-center">
                           {editando ? (
                             <input
                               type="text"
@@ -250,24 +272,31 @@ export default function PrecioPlastico() {
                             <span className="font-semibold text-gray-700">${tarifa.precio}</span>
                           )}
                         </td>
-                        <td key={`merma-${cantidadTintas}`} className="border px-3 py-2 text-center bg-amber-50">
-                          {editando ? (
-                            <input
-                              type="text"
-                              inputMode="decimal"
-                              value={textos[claveMerma] ?? ""}
-                              onChange={(e) =>
-                                actualizarTexto(row.kilos, cantidadTintas, "merma", e.target.value)
-                              }
-                              onKeyDown={handleKeyDown}
-                              className="w-16 text-center border rounded-lg px-2 py-1 focus:border-blue-500 focus:outline-none"
-                              placeholder="0.00"
+                        <td className="border px-3 py-2 text-center bg-amber-50">
+                          <div className="flex items-center justify-center gap-2">
+                            {editando ? (
+                              <input
+                                type="text"
+                                inputMode="decimal"
+                                value={textos[claveMerma] ?? ""}
+                                onChange={(e) =>
+                                  actualizarTexto(row.kilos, cantidadTintas, "merma", e.target.value)
+                                }
+                                onKeyDown={handleKeyDown}
+                                className="w-16 text-center border rounded-lg px-2 py-1 focus:border-blue-500 focus:outline-none"
+                                placeholder="0.00"
+                              />
+                            ) : (
+                              <span className="font-semibold text-amber-700">{tarifa.merma}%</span>
+                            )}
+                            <BotonAuditoria
+                              tabla="tarifas_produccion"
+                              id={tarifa.id}
+                              etiqueta={`Historial de la tarifa de ${row.kilos} kg y ${cantidadTintas} tinta${cantidadTintas === 1 ? "" : "s"}`}
                             />
-                          ) : (
-                            <span className="font-semibold text-amber-700">{tarifa.merma}%</span>
-                          )}
+                          </div>
                         </td>
-                      </>
+                      </Fragment>
                     );
                   })}
                 </tr>

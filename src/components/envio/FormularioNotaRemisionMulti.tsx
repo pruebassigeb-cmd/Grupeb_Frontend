@@ -7,6 +7,7 @@ import { generarNotaRemisionMulti } from "../../utils/envio/generarNotaRemision"
 import type { CarritoPedido, Conductor, Unidad, TipoEnvioCarrito } from "../../types/envio/envios.types";
 import { inputClass, labelClass } from "./../enviosConstants";
 import { showAlert } from ".././CustomAlert";
+import { leerBorrador, useAutoguardarBorrador, limpiarBorrador } from "../../hooks/useBorradorFormulario";
 
 interface Props {
   carrito:   CarritoPedido[];
@@ -14,18 +15,36 @@ interface Props {
   onCancel:  () => void;
 }
 
+interface BorradorNotaRemisionMulti {
+  tipoEntrega: "recoleccion" | "local" | null;
+  choferSeleccionado: number;
+  unidadSeleccionada: number;
+  costoFlete: string;
+  fechaEntregaEstimada: string;
+  observaciones: string;
+}
+
 export default function FormularioNotaRemisionMulti({ carrito, onSuccess, onCancel }: Props) {
+  // Clave derivada del contenido exacto del carrito: si cambia qué pedidos
+  // se están agrupando, es en la práctica un lote distinto.
+  const claveBorrador = `nota-remision-multi-${carrito.map(p => p.idsolicitud).sort().join(",")}`;
+  const [borradorInicial] = useState(() => leerBorrador<BorradorNotaRemisionMulti>(claveBorrador));
+
   const [conductores,    setConductores]    = useState<Conductor[]>([]);
   const [unidades,       setUnidades]       = useState<Unidad[]>([]);
   const [cargando,       setCargando]       = useState(true);
   const [procesando,     setProcesando]     = useState(false);
 
-  const [tipoEntrega,          setTipoEntrega]          = useState<"recoleccion" | "local" | null>(null);
-  const [choferSeleccionado,   setChoferSeleccionado]   = useState(0);
-  const [unidadSeleccionada,   setUnidadSeleccionada]   = useState(0);
-  const [costoFlete,           setCostoFlete]           = useState("");
-  const [fechaEntregaEstimada, setFechaEntregaEstimada] = useState("");
-  const [observaciones,        setObservaciones]        = useState("");
+  const [tipoEntrega,          setTipoEntrega]          = useState<"recoleccion" | "local" | null>(borradorInicial?.tipoEntrega ?? null);
+  const [choferSeleccionado,   setChoferSeleccionado]   = useState(borradorInicial?.choferSeleccionado ?? 0);
+  const [unidadSeleccionada,   setUnidadSeleccionada]   = useState(borradorInicial?.unidadSeleccionada ?? 0);
+  const [costoFlete,           setCostoFlete]           = useState(borradorInicial?.costoFlete ?? "");
+  const [fechaEntregaEstimada, setFechaEntregaEstimada] = useState(borradorInicial?.fechaEntregaEstimada ?? "");
+  const [observaciones,        setObservaciones]        = useState(borradorInicial?.observaciones ?? "");
+
+  useAutoguardarBorrador<BorradorNotaRemisionMulti>(claveBorrador, {
+    tipoEntrega, choferSeleccionado, unidadSeleccionada, costoFlete, fechaEntregaEstimada, observaciones,
+  }, true);
 
   useEffect(() => {
     const cargarCatalogos = async () => {
@@ -83,6 +102,7 @@ export default function FormularioNotaRemisionMulti({ carrito, onSuccess, onCanc
       });
 
       await generarNotaRemisionMulti(notaMulti);
+      limpiarBorrador(claveBorrador);
       await onSuccess();
     } catch (error: any) {
       console.error("❌ Error nota remision:", error.response?.data || error.message);

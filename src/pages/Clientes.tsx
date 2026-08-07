@@ -1,6 +1,9 @@
 import Dashboard from "../layouts/Sidebar";
 import Modal from "../components/Modal";
 import FormularioCliente from "../components/FormularioCliente";
+import { limpiarBorrador } from "../hooks/useBorradorFormulario";
+import { claveBorradorCliente } from "../utils/clavesBorrador";
+import BotonAuditoria from "../components/auditoria/BotonAuditoria";
 import { useState, useEffect } from "react";
 import { getClientes, getClienteById, createCliente, updateCliente, deleteCliente } from "../services/clientesService";
 import type { Cliente } from "../types/clientes.types";
@@ -99,6 +102,7 @@ export default function Clientes() {
       }
 
       await cargarClientes();
+      limpiarBorrador(claveBorradorCliente(clienteEditar));
       setModalOpen(false);
       setClienteEditar(null);
     } catch (error: any) {
@@ -218,6 +222,12 @@ export default function Clientes() {
                     {cliente.rfc || "—"}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                    <BotonAuditoria
+                      tabla="clientes"
+                      id={cliente.idclientes}
+                      etiqueta={`Información de auditoría de ${cliente.empresa || "cliente"}`}
+                      className="mr-3 align-middle"
+                    />
                     <button
                       onClick={() => handleEditar(cliente.idclientes)}
                       className="text-blue-600 hover:text-blue-900 mr-4"

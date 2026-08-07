@@ -7,6 +7,9 @@ import {
 import FormularioProveedor from "../proveedores/FormularioProveedor";
 import { showAlert } from "../../components/CustomAlert";
 import { getProductosSat, type ProductoSat } from "../../services/proveedoresService";
+import { leerBorrador, useAutoguardarBorrador, limpiarBorrador } from "../../hooks/useBorradorFormulario";
+import ImagenCatalogo, { SelectorImagenPendiente } from "./ImagenCatalogo";
+import type { UseImagenesCatalogo } from "../../hooks/papel/useImagenesCatalogo";
 
 // ── Primitivos de la TABLA (se mantienen igual — solo el form se rediseñó) ──
 function Btn({ children, onClick, variant = "primary", small, disabled }: {
@@ -40,16 +43,22 @@ function Btn({ children, onClick, variant = "primary", small, disabled }: {
 // (Proveedores, Color, Código, Clave auto, Precio, Mínimo, Unidad, Notas,
 // Presentaciones) — solo cambia el empaque visual.
 // ═══════════════════════════════════════════════════════════════════════════
-function FoilFormModal({ initial, proveedores, productosSat, onSave, onCancel, saving }: {
+function FoilFormModal({ initial, proveedores, productosSat, onSave, onCancel, saving, imagenPendiente, onImagenPendienteChange }: {
   initial?: Foil;
   proveedores: { idproveedor: number; nombre: string }[];
   productosSat: ProductoSat[];
   onSave: (form: FoilForm) => Promise<void>;
   onCancel: () => void;
   saving: boolean;
+  /** ✅ NUEVO — solo aplica al crear (no al editar, que ya usa la miniatura del renglón). */
+  imagenPendiente?: File | null;
+  onImagenPendienteChange?: (file: File | null) => void;
 }) {
-  const [form, setForm] = useState<FoilForm>(
-    initial ? {
+  const claveBorrador = initial ? `foil-editar-${initial.idfoil}` : "foil-nuevo";
+  const [borradorInicial] = useState(() => leerBorrador<FoilForm>(claveBorrador));
+
+  const [form, setForm] = useState<FoilForm>(borradorInicial ??
+    (initial ? {
       colorfoil:        initial.colorfoil,
       codigofoil:       initial.codigofoil ?? "",
       precio:           initial.proveedores[0]?.precio != null ? String(initial.proveedores[0].precio) : "",
@@ -59,8 +68,9 @@ function FoilFormModal({ initial, proveedores, productosSat, onSave, onCancel, s
       producto_sat_idproducto_sat: initial.producto_sat_idproducto_sat ?? null,
       proveedores_ids:  initial.proveedores.map(p => p.idproveedor),
       presentaciones:   initial.presentaciones.map(p => p.presentacion),
-    } : newFoilForm()
+    } : newFoilForm())
   );
+  useAutoguardarBorrador(claveBorrador, form, true);
   const [nuevaPresentacion, setNuevaPresentacion] = useState("");
 
   const upd = (patch: Partial<FoilForm>) => setForm(prev => ({ ...prev, ...patch }));
@@ -271,7 +281,13 @@ function FoilFormModal({ initial, proveedores, productosSat, onSave, onCancel, s
         </div>
 
         {/* Footer */}
-        <div className="flex justify-end gap-3 px-6 py-4 border-t border-gray-100">
+        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-100">
+          {!initial && onImagenPendienteChange && (
+            <div className="flex items-center gap-2 mr-auto">
+              <SelectorImagenPendiente file={imagenPendiente ?? null} onChange={onImagenPendienteChange} size={38} />
+              <span className="text-xs text-gray-400">Imagen (opcional)</span>
+            </div>
+          )}
           <button onClick={onCancel}
             className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
             Cancelar
@@ -294,9 +310,11 @@ function FoilFormModal({ initial, proveedores, productosSat, onSave, onCancel, s
 // ═══════════════════════════════════════════════════════════════════════════
 interface Props {
   onCambio?: (count: number) => void;
+  /** ✅ NUEVO — imagen de referencia por foil (catalogo_key="foil", catalogo_id=idfoil). */
+  imgApi?: UseImagenesCatalogo;
 }
 
-export default function FoilPanel({ onCambio }: Props) {
+export default function FoilPanel({ onCambio, imgApi }: Props) {
   const [foils, setFoils]           = useState<Foil[]>([]);
   const [proveedores, setProveedores] = useState<{ idproveedor: number; nombre: string }[]>([]);
   const [productosSat, setProductosSat] = useState<ProductoSat[]>([]);
@@ -308,6 +326,7 @@ export default function FoilPanel({ onCambio }: Props) {
   const [deleteTarget, setDeleteTarget] = useState<{ foil: Foil; idproveedor: number } | null>(null);
   const [errorCarga, setErrorCarga] = useState<string | null>(null);
   const [mostrarNuevoProveedor, setMostrarNuevoProveedor] = useState(false);
+  const [imagenPendiente, setImagenPendiente] = useState<File | null>(null);
   const BASE = import.meta.env.VITE_API_URL;
 
   useEffect(() => {
@@ -346,11 +365,17 @@ export default function FoilPanel({ onCambio }: Props) {
         const idProveedorRuta = editTarget.proveedores[0]?.idproveedor ?? form.proveedores_ids[0];
         await actualizarFoil(idProveedorRuta, editTarget.idfoil, form);
       } else {
-        await crearFoil(form);
+        const creado = await crearFoil(form);
+        if (imagenPendiente && imgApi) {
+          try { await imgApi.subir("foil", creado.idfoil, imagenPendiente); }
+          catch { /* la imagen se puede volver a subir después desde el renglón */ }
+        }
       }
       await cargarDatos();
+      limpiarBorrador(vista === "editar" && editTarget ? `foil-editar-${editTarget.idfoil}` : "foil-nuevo");
       setVista("tabla");
       setEditTarget(null);
+      setImagenPendiente(null);
     } catch (e: any) {
       showAlert(e.message, "error");
     } finally {
@@ -432,8 +457,10 @@ export default function FoilPanel({ onCambio }: Props) {
           proveedores={proveedores}
           productosSat={productosSat}
           onSave={handleSave}
-          onCancel={() => { setVista("tabla"); setEditTarget(null); }}
+          onCancel={() => { setVista("tabla"); setEditTarget(null); setImagenPendiente(null); }}
           saving={saving}
+          imagenPendiente={imgApi ? imagenPendiente : undefined}
+          onImagenPendienteChange={imgApi ? setImagenPendiente : undefined}
         />
       )}
 
@@ -456,8 +483,8 @@ export default function FoilPanel({ onCambio }: Props) {
 
       {/* Tabla */}
       <div style={{ border: "1px solid #E5E7EB", borderRadius: 9, overflow: "hidden" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 100px 1.3fr 1fr auto", background: "#F9FAFB", borderBottom: "1px solid #E5E7EB", padding: "0 16px" }}>
-          {["Color / Clave", "Código", "Proveedores", "Presentaciones", ""].map((h, i) => (
+        <div style={{ display: "grid", gridTemplateColumns: (imgApi ? "48px " : "") + "1fr 100px 1.3fr 1fr auto", background: "#F9FAFB", borderBottom: "1px solid #E5E7EB", padding: "0 16px" }}>
+          {[...(imgApi ? [""] : []), "Color / Clave", "Código", "Proveedores", "Presentaciones", ""].map((h, i) => (
             <div key={i} style={{ padding: "10px 0", fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#6B7280" }}>{h}</div>
           ))}
         </div>
@@ -467,7 +494,12 @@ export default function FoilPanel({ onCambio }: Props) {
             {search ? "Sin resultados." : "No hay foils registrados."}
           </div>
         ) : filtered.map((f, idx) => (
-          <div key={f.idfoil} style={{ display: "grid", gridTemplateColumns: "1fr 100px 1.3fr 1fr auto", padding: "0 16px", alignItems: "center", minHeight: 52, background: idx % 2 === 0 ? "#fff" : "#FAFAFA", borderBottom: idx < filtered.length - 1 ? "1px solid #F3F4F6" : "none" }}>
+          <div key={f.idfoil} style={{ display: "grid", gridTemplateColumns: (imgApi ? "48px " : "") + "1fr 100px 1.3fr 1fr auto", padding: "0 16px", alignItems: "center", minHeight: 52, background: idx % 2 === 0 ? "#fff" : "#FAFAFA", borderBottom: idx < filtered.length - 1 ? "1px solid #F3F4F6" : "none" }}>
+            {imgApi && (
+              <div style={{ alignSelf: "center" }}>
+                <ImagenCatalogo api={imgApi} catalogoKey="foil" catalogoId={f.idfoil} size={36} />
+              </div>
+            )}
             <div>
               <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: "#111827" }}>{f.colorfoil}</p>
               {f.clavefoil && <p style={{ margin: 0, fontSize: 11, color: "#6B7280", fontFamily: "monospace" }}>{f.clavefoil}</p>}

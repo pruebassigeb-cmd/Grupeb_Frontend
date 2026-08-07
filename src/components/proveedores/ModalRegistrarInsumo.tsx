@@ -11,12 +11,21 @@ import {
   type ProductoSat,
 } from "../../services/proveedoresService";
 import { showAlert } from "../CustomAlert";
+import { leerBorrador, useAutoguardarBorrador, limpiarBorrador } from "../../hooks/useBorradorFormulario";
+import { SelectorImagenPendiente } from "../papel/ImagenCatalogo";
+import type { UseImagenesCatalogo } from "../../hooks/papel/useImagenesCatalogo";
 
 interface Props {
   tipoInsumoInicial: number;
   nombreInicial: string;
   onRegistrado: (item: Insumo) => void;
   onCancelar: () => void;
+  // ✅ NUEVO — solo lo pasa InsumoCatalogoPanel para Tipo de papel/Laminado
+  // (los 2 de los 6 catálogos unificados que llevan imagen de referencia).
+  // Si no se pasa, el modal se comporta exactamente igual que antes.
+  conImagen?: boolean;
+  catalogoKeyImagen?: string;
+  imgApi?: UseImagenesCatalogo;
 }
 
 interface FormRegistrarInsumo {
@@ -39,12 +48,29 @@ const OPCIONES_UNIDAD = [
   { value: "metros", label: "Metros" },
 ];
 
+// Punto de guardado (ver src/hooks/useBorradorFormulario.ts). Se usa una sola
+// clave para todo alta de insumo sin importar desde cuál de los 7 flujos que
+// montan este modal se abrió (papel, plástico, editar pedido/cotización) —
+// mismo criterio que "cliente-nuevo" en FormularioCliente.tsx: es el mismo
+// tipo de captura corta en cualquier lado.
+interface BorradorInsumo {
+  form: FormRegistrarInsumo;
+  proveedoresSeleccionados: number[];
+}
+const CLAVE_BORRADOR_INSUMO = "insumo-nuevo";
+
 export default function ModalRegistrarInsumo({
   tipoInsumoInicial,
   nombreInicial,
   onRegistrado,
   onCancelar,
+  conImagen = false,
+  catalogoKeyImagen,
+  imgApi,
 }: Props) {
+  const [borradorInicial] = useState(() => leerBorrador<BorradorInsumo>(CLAVE_BORRADOR_INSUMO));
+  const [imagenPendiente, setImagenPendiente] = useState<File | null>(null);
+
   const [tipos, setTipos] = useState<TipoInsumo[]>([]);
   const [proveedores, setProveedores] = useState<Proveedor[]>([]);
   const [productosSat, setProductosSat] = useState<ProductoSat[]>([]);
@@ -53,7 +79,7 @@ export default function ModalRegistrarInsumo({
   const [verificando, setVerificando] = useState(false);
   const [duplicado, setDuplicado] = useState<string | null>(null);
 
-  const [form, setForm] = useState<FormRegistrarInsumo>({
+  const [form, setForm] = useState<FormRegistrarInsumo>(borradorInicial?.form ?? {
     tipo_insumo_id: tipoInsumoInicial,
     nombre: nombreInicial,
     codigo: "",
@@ -68,7 +94,11 @@ export default function ModalRegistrarInsumo({
   const [
     proveedoresSeleccionados,
     setProveedoresSeleccionados,
-  ] = useState<number[]>([]);
+  ] = useState<number[]>(borradorInicial?.proveedoresSeleccionados ?? []);
+
+  useAutoguardarBorrador<BorradorInsumo>(
+    CLAVE_BORRADOR_INSUMO, { form, proveedoresSeleccionados }, true
+  );
 
   useEffect(() => {
     const cargar = async () => {
@@ -226,6 +256,12 @@ export default function ModalRegistrarInsumo({
         "success"
       );
 
+      if (imagenPendiente && catalogoKeyImagen && imgApi) {
+        try { await imgApi.subir(catalogoKeyImagen, resultado.idinsumo, imagenPendiente); }
+        catch { /* la imagen se puede volver a subir después desde el renglón */ }
+      }
+
+      limpiarBorrador(CLAVE_BORRADOR_INSUMO);
       onRegistrado(resultado);
     } catch (error: any) {
       const mensaje =
@@ -607,7 +643,14 @@ export default function ModalRegistrarInsumo({
         </div>
 
         {/* Footer */}
-        <div className="flex justify-end gap-3 px-6 py-4 border-t border-gray-100">
+        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-100">
+          {conImagen && imgApi && (
+            <div className="flex items-center gap-2 mr-auto">
+              <SelectorImagenPendiente file={imagenPendiente} onChange={setImagenPendiente} size={38} />
+              <span className="text-xs text-gray-400">Imagen (opcional)</span>
+            </div>
+          )}
+
           <button
             type="button"
             onClick={onCancelar}

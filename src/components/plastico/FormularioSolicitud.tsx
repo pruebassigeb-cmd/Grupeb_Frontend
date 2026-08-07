@@ -31,6 +31,8 @@ import { useTipoCambioActual } from "../../hooks/useTipoCambioActual";
 import { convertirDesdeMXN } from "../../utils/moneda.utils";
 import { formatMoney } from "../../utils/formatMoney";
 import { useAuth } from "../../context/AuthContext";
+import { leerBorrador, useAutoguardarBorrador, limpiarBorrador } from "../../hooks/useBorradorFormulario";
+import { claveBorradorCliente } from "../../utils/clavesBorrador";
 
 const esProductoPapel = (p: any): boolean =>
   p?.tipoCotizacion === "papel" ||
@@ -43,6 +45,36 @@ const esBolsaEnvio = (tipoProducto?: string | null): boolean => {
   return t.includes("bolsa envio") || t.includes("bolsa envío");
 };
 
+// Punto de guardado (ver src/hooks/useBorradorFormulario.ts): lo que un
+// usuario puede estar a medio capturar cuando se recarga la pestaña — datos
+// del cliente, productos ya agregados, y el producto que está configurando
+// en ESTE momento (calibre, medidas, cantidades, pantones, herramental...)
+// antes de darle "Agregar". Deliberadamente NO incluye estado de puro UI
+// (catálogos cargados, buscadores de cliente/producto abiertos, dropdowns) —
+// eso se puede rehacer en un clic y no vale la pena arrastrarlo.
+interface BorradorSolicitud {
+  datos: DatosCotizacion;
+  paso: number;
+  tipoMaterial: "plastico" | "papel";
+  modoProducto: "registrado" | "nuevo";
+  productoActual: Producto;
+  datosProductoNuevo: DatosProducto;
+  editandoProductoIndex: number | null;
+  editandoPapelIndex: number | null;
+  preciosEditadosManualmente: [boolean, boolean, boolean];
+  preciosTexto: [string, string, string];
+  modoColor: "pantones" | null;
+  inputsPantones: string[];
+  idTipoPigmento: number | null;
+  idTipoPanton: number | null;
+  modoCantidad: "unidad" | "kilo";
+  cantidadesTexto: [string, string, string];
+  herramentalExpandido: boolean;
+  herramentalDescripcion: string;
+  herramentalPrecioTexto: string;
+  productoNuevoListo: boolean;
+}
+
 export default function FormularioSolicitud({
   onSubmit,
   onCancel,
@@ -50,9 +82,14 @@ export default function FormularioSolicitud({
   modo = "cotizacion",
 }: FormularioCotizacionProps) {
 
-  const [paso, setPaso] = useState(1);
+  // Cotización y pedido son dos flujos de alta independientes: cada uno
+  // guarda su propio progreso, sin pisarse.
+  const claveBorrador = `solicitud-${modo}-nueva`;
+  const [borradorInicial] = useState(() => leerBorrador<BorradorSolicitud>(claveBorrador));
 
-  const [datos, setDatos] = useState<DatosCotizacion>({
+  const [paso, setPaso] = useState(borradorInicial?.paso ?? 1);
+
+  const [datos, setDatos] = useState<DatosCotizacion>(borradorInicial?.datos ?? {
     cliente: "", telefono: "", correo: "", empresa: "",
     identificar: null,
     impresion: null, celular: null, razon_social: null, rfc: null,
@@ -83,8 +120,8 @@ export default function FormularioSolicitud({
 
   const isMounted = useRef(false);
 
-  const [tipoMaterial, setTipoMaterial] = useState<"plastico" | "papel">("plastico");
-  const [editandoPapelIndex, setEditandoPapelIndex] = useState<number | null>(null);
+  const [tipoMaterial, setTipoMaterial] = useState<"plastico" | "papel">(borradorInicial?.tipoMaterial ?? "plastico");
+  const [editandoPapelIndex, setEditandoPapelIndex] = useState<number | null>(borradorInicial?.editandoPapelIndex ?? null);
 
   const [caras, setCaras] = useState<Cara[]>([]);
   const [tintas, setTintas] = useState<Tinta[]>([]);
@@ -98,8 +135,8 @@ export default function FormularioSolicitud({
   const [loadingClientes, setLoadingClientes] = useState(false);
   const [errorClientes, setErrorClientes] = useState<string | null>(null);
 
-  const [modoProducto, setModoProducto] = useState<"registrado" | "nuevo">("registrado");
-  const [productoNuevoListo, setProductoNuevoListo] = useState(false);
+  const [modoProducto, setModoProducto] = useState<"registrado" | "nuevo">(borradorInicial?.modoProducto ?? "registrado");
+  const [productoNuevoListo, setProductoNuevoListo] = useState(borradorInicial?.productoNuevoListo ?? false);
   const [mostrarModalProductos, setMostrarModalProductos] = useState(false);
   const [busquedaProducto, setBusquedaProducto] = useState("");
   const [productosCargados, setProductosCargados] = useState<ProductoBusqueda[]>([]);
@@ -115,13 +152,13 @@ export default function FormularioSolicitud({
   const [mostrarDropdownColorAsa, setMostrarDropdownColorAsa] = useState(false);
   const [mostrarDropdownTroquel, setMostrarDropdownTroquel] = useState(false);
 
-  const [preciosEditadosManualmente, setPreciosEditadosManualmente] = useState<[boolean, boolean, boolean]>([false, false, false]);
-  const [preciosTexto, setPreciosTexto] = useState<[string, string, string]>(["", "", ""]);
+  const [preciosEditadosManualmente, setPreciosEditadosManualmente] = useState<[boolean, boolean, boolean]>(borradorInicial?.preciosEditadosManualmente ?? [false, false, false]);
+  const [preciosTexto, setPreciosTexto] = useState<[string, string, string]>(borradorInicial?.preciosTexto ?? ["", "", ""]);
 
-  const [modoColor, setModoColor] = useState<"pantones" | null>("pantones");
-  const [inputsPantones, setInputsPantones] = useState<string[]>(Array(1).fill(""));
-  const [idTipoPigmento, setIdTipoPigmento] = useState<number | null>(null);
-  const [idTipoPanton, setIdTipoPanton] = useState<number | null>(null);
+  const [modoColor, setModoColor] = useState<"pantones" | null>(borradorInicial?.modoColor ?? "pantones");
+  const [inputsPantones, setInputsPantones] = useState<string[]>(borradorInicial?.inputsPantones ?? Array(1).fill(""));
+  const [idTipoPigmento, setIdTipoPigmento] = useState<number | null>(borradorInicial?.idTipoPigmento ?? null);
+  const [idTipoPanton, setIdTipoPanton] = useState<number | null>(borradorInicial?.idTipoPanton ?? null);
 
   const [modalInsumo, setModalInsumo] = useState<{
     abierto: boolean; tipoId: number; nombre: string; indice: number | null;
@@ -131,18 +168,18 @@ export default function FormularioSolicitud({
   // para forzar a TODOS los ComboboxInsumo montados a refrescar su lista.
   const [catalogoInsumosVersion, setCatalogoInsumosVersion] = useState(0);
 
-  const [modoCantidad, setModoCantidad] = useState<"unidad" | "kilo">("unidad");
-  const [cantidadesTexto, setCantidadesTexto] = useState<[string, string, string]>(["", "", ""]);
+  const [modoCantidad, setModoCantidad] = useState<"unidad" | "kilo">(borradorInicial?.modoCantidad ?? "unidad");
+  const [cantidadesTexto, setCantidadesTexto] = useState<[string, string, string]>(borradorInicial?.cantidadesTexto ?? ["", "", ""]);
 
-  const [herramentalExpandido, setHerramentalExpandido] = useState(false);
-  const [herramentalDescripcion, setHerramentalDescripcion] = useState("");
-  const [herramentalPrecioTexto, setHerramentalPrecioTexto] = useState("");
+  const [herramentalExpandido, setHerramentalExpandido] = useState(borradorInicial?.herramentalExpandido ?? false);
+  const [herramentalDescripcion, setHerramentalDescripcion] = useState(borradorInicial?.herramentalDescripcion ?? "");
+  const [herramentalPrecioTexto, setHerramentalPrecioTexto] = useState(borradorInicial?.herramentalPrecioTexto ?? "");
 
   // (antes había aquí un estado para "precio por kilo manual" — se quitó:
   // porKilo es el factor bolsas/kg, no un precio; para Bobina/Rollo
   // perforado ese factor simplemente se fija en "1", ver esTipoSinCalculoPrecio)
 
-  const [editandoProductoIndex, setEditandoProductoIndex] = useState<number | null>(null);
+  const [editandoProductoIndex, setEditandoProductoIndex] = useState<number | null>(borradorInicial?.editandoProductoIndex ?? null);
 
   const estadoInicialProducto: Producto = {
     nombre: "", cantidades: [0, 0, 0], kilogramos: [0, 0, 0], precios: [0, 0, 0],
@@ -163,15 +200,22 @@ export default function FormularioSolicitud({
   const [catalogosLocal, setCatalogosLocal] = useState(catalogos);
   useEffect(() => { setCatalogosLocal(catalogos); }, [catalogos]);
 
-  const [productoActual, setProductoActual] = useState<Producto>(estadoInicialProducto);
-  const [datosProductoNuevo, setDatosProductoNuevo] = useState<DatosProducto>({
+  const [productoActual, setProductoActual] = useState<Producto>(borradorInicial?.productoActual ?? estadoInicialProducto);
+  const [datosProductoNuevo, setDatosProductoNuevo] = useState<DatosProducto>(borradorInicial?.datosProductoNuevo ?? {
     tipoProducto: "", tipoProductoId: 0,
     material: "", materialId: 0,
     calibre: "", calibreId: 0,
     medidas: { ...ESTADO_INICIAL_PRODUCTO_MEDIDAS },
     medidasFormateadas: "", nombreCompleto: "", descripcion: "",
   });
- 
+
+  useAutoguardarBorrador<BorradorSolicitud>(claveBorrador, {
+    datos, paso, tipoMaterial, modoProducto, productoActual, datosProductoNuevo,
+    editandoProductoIndex, editandoPapelIndex, preciosEditadosManualmente, preciosTexto,
+    modoColor, inputsPantones, idTipoPigmento, idTipoPanton, modoCantidad, cantidadesTexto,
+    herramentalExpandido, herramentalDescripcion, herramentalPrecioTexto, productoNuevoListo,
+  }, true);
+
   const tintasPlastico = useMemo(
     () =>
       tintas
@@ -376,6 +420,7 @@ export default function FormularioSolicitud({
       empresa: datosCliente.empresa || "",
       impresion: datosCliente.impresion || null,
     }));
+    limpiarBorrador(claveBorradorCliente(null));
     setPaso(2);
   };
 
@@ -881,8 +926,13 @@ export default function FormularioSolicitud({
       return;
     }
     setEnviando(true);
-    try { await onSubmit({ ...datos, tipo: modo }); }
-    finally { setEnviando(false); }
+    try {
+      await onSubmit({ ...datos, tipo: modo });
+      // Se guardó de verdad: el borrador ya cumplió su propósito. Si fallara
+      // (throw), se salta esta línea a propósito y el borrador queda intacto
+      // para no perder la captura por un error de guardado.
+      limpiarBorrador(claveBorrador);
+    } finally { setEnviando(false); }
   };
 
   const hayProductoSeleccionado =
@@ -1178,6 +1228,7 @@ export default function FormularioSolicitud({
                     catalogos={catalogosLocal}
                     onProductoChange={handleProductoNuevoChange}
                     mostrarFigura={false}
+                    datosIniciales={datosProductoNuevo}
                     onAgregarTipoProducto={handleAgregarTipoProductoInline}
                     onAgregarMaterial={handleAgregarMaterialInline}
                     onAgregarCalibre={handleAgregarCalibreInline}

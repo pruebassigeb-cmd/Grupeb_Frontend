@@ -8,6 +8,7 @@ import {
 } from "../../services/proveedoresService";
 import { showAlert } from "../CustomAlert";
 import { showConfirm } from "../CustomConfirm";
+import BotonAuditoria from "../auditoria/BotonAuditoria";
 
 interface Props {
   onNuevo: () => void;
@@ -190,6 +191,11 @@ export default function ListaProveedores({ onNuevo, onEditar, onVerProductos }: 
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-2">
+                        <BotonAuditoria
+                          tabla="proveedor"
+                          id={p.idproveedor}
+                          etiqueta={`Información de auditoría de ${p.nombre}`}
+                        />
                         <button onClick={() => onEditar(p)}
                           className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Editar">
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -234,6 +240,15 @@ export default function ListaProveedores({ onNuevo, onEditar, onVerProductos }: 
                                   </svg>
                                 </div>
                                 <div className="space-y-0.5">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-semibold text-gray-800">Datos bancarios</span>
+                                    <BotonAuditoria
+                                      tabla="proveedor_facturacion"
+                                      id={f.idproveedor_facturacion}
+                                      etiqueta="Información de auditoría de facturación"
+                                      alineacion="izquierda"
+                                    />
+                                  </div>
                                   <p className="font-semibold text-gray-800">
                                     {f.banco || "—"}{f.nombre_cuenta ? ` — ${f.nombre_cuenta}` : ""}
                                   </p>

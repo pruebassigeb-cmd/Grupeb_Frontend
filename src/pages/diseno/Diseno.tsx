@@ -1,7 +1,7 @@
 import Dashboard from "../../layouts/Sidebar";
 import RequiereConexion from "../../components/pwa/RequiereConexion";
 import Modal from "../../components/Modal";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { descargarPdfOrdenProduccionUniversal } from "../../services/produccion/descargarPdfOrdenProduccion";
 import { getDisenoByPedido, actualizarEstadoProductoDiseno } from "../../services/diseno/disenoservice";
 import { getPedidos } from "../../services/pedidosService";
@@ -12,6 +12,7 @@ import { useAuth } from "../../context/AuthContext";
 import { usePermisos } from "../../hooks/usePermiso";
 import { showAlert } from '../../components/CustomAlert';
 import { showConfirm } from '../../components/CustomConfirm';
+import { leerBorrador, useAutoguardarBorrador } from "../../hooks/useBorradorFormulario";
 
 
 
@@ -134,6 +135,16 @@ export function EditarDisenoReal({
   });
   const [chatProducto, setChatProducto] = useState<number | null>(null);
 
+  // Punto de guardado (ver src/hooks/useBorradorFormulario.ts) — solo para
+  // obsMap: es el único campo de texto libre de este panel (las notas de
+  // observación por producto antes de cambiar su estado). `cargar()` trae
+  // obsMap del servidor cada vez que se monta o se refresca, así que un
+  // borrador restaurado NO se pisa con lo recién llegado — se restaura una
+  // sola vez, la primera vez que carga.
+  const claveBorrador = `diseno-obs-${pedido.no_pedido}`;
+  const borradorYaAplicado = useRef(false);
+  useAutoguardarBorrador(claveBorrador, obsMap, true);
+
   useEffect(() => { cargar(); }, []);
 
   const cargar = async () => {
@@ -142,6 +153,11 @@ export function EditarDisenoReal({
     try {
       const data = await getDisenoByPedido(pedido.no_pedido);
       setDiseno(data);
+      if (!borradorYaAplicado.current) {
+        borradorYaAplicado.current = true;
+        const borrador = leerBorrador<Record<number, string>>(claveBorrador);
+        if (borrador) { setObsMap(borrador); return; }
+      }
       const map: Record<number, string> = {};
       data.productos.forEach((p: DisenoProducto) => {
         map[p.iddiseno_producto] = p.observaciones ?? "";

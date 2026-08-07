@@ -17,6 +17,8 @@ import { showAlert } from '../components/CustomAlert';
 import { showConfirm } from '../components/CustomConfirm';
 import { OperacionEncoladaError } from "../offline/outbox";
 import { useNavigate } from "react-router-dom";
+import BotonAuditoria from "../components/auditoria/BotonAuditoria";
+import PanelAuditoria from "../components/auditoria/PanelAuditoria";
 
 
 
@@ -603,6 +605,9 @@ export default function Cotizaciones() {
                       {cot.origen_expo && (
                         <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-yellow-50 text-yellow-700 border border-yellow-200">⭐ Expo</span>
                       )}
+                      {cot.origen_cotizador_libre && (
+                        <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-green-50 text-green-700 border border-green-200">🌐 Cliente</span>
+                    )}
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-500 whitespace-nowrap">{formatFecha(cot.fecha)}</td>
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -668,6 +673,13 @@ export default function Cotizaciones() {
                     <tr key={`det-${cot.no_cotizacion}`} className="bg-blue-50 border-t border-blue-100">
                       <td colSpan={8} className="px-8 py-4">
                         <div className="space-y-3">
+                          <PanelAuditoria
+                            tabla="solicitud"
+                            id={cot.productos[0]?.idsolicitud}
+                            titulo={`Auditoría de la cotización ${cot.no_cotizacion}`}
+                            limite={20}
+                            className="rounded-lg bg-white p-4 shadow-sm"
+                          />
                           {cot.productos.map((p: any, i: number) => {
                             const detallesMostrar = cot.estado === "Aprobada"
                               ? p.detalles.filter((d: any) => d.aprobado === true)
@@ -685,6 +697,9 @@ export default function Cotizaciones() {
                                     )}
                                     {(cot.origen_expo || p.tipo_material === "expo") && (
                                       <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-yellow-50 text-yellow-700 border border-yellow-200">⭐ Expo</span>
+                                    )}
+                                    {cot.origen_cotizador_libre && (
+                                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-green-50 text-green-700 border border-green-200">🌐 Cliente</span>
                                     )}
                                     {!papel && productoTieneKilos(p) && (
                                       <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-emerald-100 text-emerald-700">Incluye kg</span>
@@ -734,9 +749,16 @@ export default function Cotizaciones() {
                                       )}
                                       {p.pigmentos && <p className="text-xs text-orange-600 mt-0.5">🧪 {p.pigmentos}</p>}
                                       {p.herramental_precio != null && p.herramental_precio > 0 && (
-                                        <p className="text-xs text-amber-700 mt-0.5">
-                                          🔧 Herramental{p.herramental_descripcion ? `: ${p.herramental_descripcion}` : ""} — ${Number(p.herramental_precio).toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                                        </p>
+                                        <div className="mt-0.5 flex items-center gap-2">
+                                          <p className="text-xs text-amber-700">
+                                            🔧 Herramental{p.herramental_descripcion ? `: ${p.herramental_descripcion}` : ""} — ${Number(p.herramental_precio).toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                                          </p>
+                                          <BotonAuditoria
+                                            tabla="herramental"
+                                            id={p.herramental_id}
+                                            etiqueta="Historial del herramental"
+                                          />
+                                        </div>
                                       )}
                                     </>
                                   )}
@@ -746,6 +768,12 @@ export default function Cotizaciones() {
                                     <div key={j} className="text-center bg-gray-50 rounded px-2 py-1 border border-gray-200">
                                       <p className="text-xs font-semibold text-gray-700">{formatCantidadTabla(d)}</p>
                                       <p className="text-xs text-green-600">${d.precio_total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p>
+                                      <BotonAuditoria
+                                        tabla="solicitud_detalle"
+                                        id={d.iddetalle}
+                                        etiqueta={`Auditoría de la partida ${j + 1}`}
+                                        className="mt-1"
+                                      />
                                     </div>
                                   ))}
                                 </div>

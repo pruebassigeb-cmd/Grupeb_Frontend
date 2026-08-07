@@ -18,6 +18,7 @@ import { useCodigoPostal } from "../../hooks/useCodigoPostal";
 import type { OpcionCP } from "../../types/formulario-solicitud.types";
 import { showAlert } from "../CustomAlert";
 import { showConfirm } from "../CustomConfirm";
+import { leerBorrador, useAutoguardarBorrador, limpiarBorrador } from "../../hooks/useBorradorFormulario";
 
 interface Props {
   proveedor?: Proveedor | null;
@@ -47,14 +48,30 @@ const PESTAÑAS: { key: Pestaña; label: string }[] = [
   { key: "facturacion", label: "Facturación" },
 ];
 
+// Punto de guardado (ver src/hooks/useBorradorFormulario.ts). Cubre las tres
+// pestañas (general/domicilio/facturación) como un solo borrador — es un
+// único flujo de captura, no tres formularios independientes. Como el
+// domicilio y la facturación de EDICIÓN llegan async (cargarDatosEdicion),
+// las dos partes del efecto de abajo comprueban `borradorInicial` antes de
+// pisar lo restaurado con lo recién llegado del servidor.
+interface BorradorProveedor {
+  form: CreateProveedorDto;
+  domicilio: DomicilioProveedor;
+  facturaciones: FacturacionProveedor[];
+  pestaña: Pestaña;
+}
+
 export default function FormularioProveedor({ proveedor, onGuardado, onCancel }: Props) {
-  const [pestaña, setPestaña] = useState<Pestaña>("general");
+  const claveBorrador = proveedor ? `proveedor-editar-${proveedor.idproveedor}` : "proveedor-nuevo";
+  const [borradorInicial] = useState(() => leerBorrador<BorradorProveedor>(claveBorrador));
+
+  const [pestaña, setPestaña] = useState<Pestaña>(borradorInicial?.pestaña ?? "general");
   const [proveedorLocal, setProveedorLocal] = useState<Proveedor | null>(proveedor ?? null);
 
   // ── Estado acumulado ──────────────────────────────────────────────────────
-  const [form, setForm] = useState<CreateProveedorDto>(VACIO_PROVEEDOR);
-  const [domicilio, setDomicilio] = useState<DomicilioProveedor>(VACIO_DOMICILIO);
-  const [facturaciones, setFacturaciones] = useState<FacturacionProveedor[]>([]);
+  const [form, setForm] = useState<CreateProveedorDto>(borradorInicial?.form ?? VACIO_PROVEEDOR);
+  const [domicilio, setDomicilio] = useState<DomicilioProveedor>(borradorInicial?.domicilio ?? VACIO_DOMICILIO);
+  const [facturaciones, setFacturaciones] = useState<FacturacionProveedor[]>(borradorInicial?.facturaciones ?? []);
 
   // ── UI ────────────────────────────────────────────────────────────────────
   const [regimenes, setRegimenes] = useState<RegimenFiscal[]>([]);
@@ -67,6 +84,7 @@ export default function FormularioProveedor({ proveedor, onGuardado, onCancel }:
   const [pasosVisitados, setPasosVisitados] = useState<Set<Pestaña>>(new Set(["general"]));
 
   const esEdicion = !!proveedor;
+  useAutoguardarBorrador<BorradorProveedor>(claveBorrador, { form, domicilio, facturaciones, pestaña }, true);
   const { buscarCP, cargandoCP, errorCP, setErrorCP } = useCodigoPostal();
   const pasoNumero: Record<Pestaña, number> = { general: 1, domicilio: 2, facturacion: 3 };
 
@@ -82,19 +100,23 @@ export default function FormularioProveedor({ proveedor, onGuardado, onCancel }:
   // ── Cargar datos del proveedor en edición ─────────────────────────────────
   useEffect(() => {
     if (proveedorLocal) {
-      setForm({
-        nombre: proveedorLocal.nombre ?? "",
-        contacto: proveedorLocal.contacto ?? "",
-        telefono: proveedorLocal.telefono ?? "",
-        correo: proveedorLocal.correo ?? "",
-        notas: proveedorLocal.notas ?? "",
-        rfc_proveedor: proveedorLocal.rfc_proveedor ?? "",
-        regimen_fiscal_idregimen_fiscal: proveedorLocal.regimen_fiscal_idregimen_fiscal ?? null,
-      });
+      // Si hay un borrador restaurado, `form` ya trae lo que se estaba
+      // escribiendo — no se pisa con los valores crudos del registro.
+      if (!borradorInicial) {
+        setForm({
+          nombre: proveedorLocal.nombre ?? "",
+          contacto: proveedorLocal.contacto ?? "",
+          telefono: proveedorLocal.telefono ?? "",
+          correo: proveedorLocal.correo ?? "",
+          notas: proveedorLocal.notas ?? "",
+          rfc_proveedor: proveedorLocal.rfc_proveedor ?? "",
+          regimen_fiscal_idregimen_fiscal: proveedorLocal.regimen_fiscal_idregimen_fiscal ?? null,
+        });
+      }
       setPasosVisitados(new Set(["general", "domicilio", "facturacion"]));
       // Cargar domicilio y facturación existentes
       cargarDatosEdicion();
-    } else {
+    } else if (!borradorInicial) {
       setForm(VACIO_PROVEEDOR);
       setDomicilio(VACIO_DOMICILIO);
       setFacturaciones([]);
@@ -110,8 +132,13 @@ export default function FormularioProveedor({ proveedor, onGuardado, onCancel }:
         getDomicilioProveedor(proveedorLocal.idproveedor),
         getFacturacionProveedor(proveedorLocal.idproveedor),
       ]);
-      setDomicilio(dom ?? VACIO_DOMICILIO);
-      setFacturaciones(facts);
+      // Mismo criterio que arriba: un borrador restaurado ya trae domicilio
+      // y facturaciones tal como se estaban editando, no se sobreescriben
+      // con lo que acaba de llegar del servidor.
+      if (!borradorInicial) {
+        setDomicilio(dom ?? VACIO_DOMICILIO);
+        setFacturaciones(facts);
+      }
       if (dom?.codigo_postal && dom.codigo_postal.length === 5) {
         const opciones = await buscarCP(dom.codigo_postal);
         setOpcionesCP(opciones);
@@ -204,6 +231,7 @@ export default function FormularioProveedor({ proveedor, onGuardado, onCancel }:
       }
 
       showAlert("Proveedor guardado correctamente", "success");
+      limpiarBorrador(claveBorrador);
       onGuardado(resultado);
     } catch (error: any) {
       showAlert(error?.response?.data?.error || "Error al guardar proveedor", "error");

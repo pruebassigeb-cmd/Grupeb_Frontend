@@ -22,6 +22,7 @@ export interface AsaOpcion {
 export interface ColorAsaOpcion {
   id_color: number;
   color: string;
+  hex?: string | null;
 }
 
 export interface LaminadoOpcion {

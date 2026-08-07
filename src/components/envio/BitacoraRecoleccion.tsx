@@ -7,6 +7,13 @@ import ModalMarcarRecoleccion from "./ModalMarcarRecoleccion";
 import Modal from "./../Modal";
 import { showAlert } from "./../CustomAlert";
 import type { EnvioRecoleccion } from "../../types/envio/envios.types";
+import { leerBorrador, useAutoguardarBorrador, limpiarBorrador } from "../../hooks/useBorradorFormulario";
+
+// Compartida por ModalEditarRecoleccion y handleGuardarRecoleccion (este
+// último no relanza sus errores — atrapa y muestra su propia alerta — así
+// que el modal no puede saber con certeza si el guardado tuvo éxito; quien
+// SÍ lo sabe es handleGuardarRecoleccion, y es quien limpia el borrador).
+const claveBorradorRecoleccion = (idenvio: number) => `nota-recoleccion-editar-${idenvio}`;
 
 const ChevronIcon = ({ open }: { open: boolean }) => (
   <svg className={`w-4 h-4 text-gray-400 transition-transform duration-200 flex-shrink-0 ${open ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -61,7 +68,14 @@ function ModalEditarRecoleccion({ recoleccion, onClose, onGuardar, guardando }: 
 }) {
   const inputFotoRef = useRef<HTMLInputElement>(null);
   const d = recoleccion.recoleccion_datos;
-  const [form, setForm] = useState({ nombre_quien_recogio: d?.nombre_quien_recogio || "", empresa: d?.empresa || "", unidad_marca: d?.unidad_marca || "", unidad_modelo: d?.unidad_modelo || "", unidad_placas: d?.unidad_placas || "", observacion_extra: d?.observacion_extra || "" });
+  interface FormEditarRecoleccion {
+    nombre_quien_recogio: string; empresa: string; unidad_marca: string;
+    unidad_modelo: string; unidad_placas: string; observacion_extra: string;
+  }
+  const claveBorrador = claveBorradorRecoleccion(recoleccion.idenvio);
+  const [borradorInicial] = useState(() => leerBorrador<FormEditarRecoleccion>(claveBorrador));
+  const [form, setForm] = useState<FormEditarRecoleccion>(borradorInicial ?? { nombre_quien_recogio: d?.nombre_quien_recogio || "", empresa: d?.empresa || "", unidad_marca: d?.unidad_marca || "", unidad_modelo: d?.unidad_modelo || "", unidad_placas: d?.unidad_placas || "", observacion_extra: d?.observacion_extra || "" });
+  useAutoguardarBorrador(claveBorrador, form, true);
   const [foto, setFoto] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [fotoActual, setFotoActual] = useState<Archivo | null>(null);
@@ -178,6 +192,7 @@ export default function BitacoraRecoleccion() {
         const ext = foto.name.match(/\.[^/.]+$/)?.[0] || "";
         await subirArchivo(new File([foto], `recoleccion-${editandoRecoleccion.idenvio}-${editandoRecoleccion.no_pedido}-${Date.now()}${ext}`, { type: foto.type }), "fotos-envios", undefined, editandoRecoleccion.idenvio);
       }
+      limpiarBorrador(claveBorradorRecoleccion(editandoRecoleccion.idenvio));
       setEditandoRecoleccion(null); await cargar();
     } catch (err: any) { showAlert(err.response?.data?.error || "Error al guardar recolección"); }
     finally { setGuardando(false); }

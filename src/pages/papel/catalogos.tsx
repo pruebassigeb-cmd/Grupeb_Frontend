@@ -1,4 +1,4 @@
-    import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
   import type { CSSProperties, ReactNode } from "react";
   import { useAuth } from "../../context/AuthContext";
   import Dashboard from "../../layouts/Sidebar";
@@ -6,8 +6,26 @@
   import { useCatalogosPapel } from "../../hooks/papel/useCatalogosPapel";
   import FoilPanel from "../../components/papel/FoilPanel";
   import InsumoCatalogoPanel from "../../components/papel/InsumoCatalogoPanel";
+  import ImagenCatalogo, { SelectorImagenPendiente } from "../../components/papel/ImagenCatalogo";
+  import { useImagenesCatalogo, type UseImagenesCatalogo } from "../../hooks/papel/useImagenesCatalogo";
+  import CatalogoPlasticoPanel from "../../components/plastico/CatalogoPlasticoPanel";
+  import {
+    getTiposProductoAdmin,
+    getMaterialesAdmin,
+    getCalibresAdmin,
+  } from "../../services/plastico/catalogosPlasticoAdminService";
   import { getCatalogoInsumo, type CatKeySincronizado } from "../../services/papel/catalogoPapelInsumoService";
   import { fetchFoils } from "../../services/papel/foil.service";
+  import { showAlert } from "../../components/CustomAlert";
+  import {
+    getColoresAsaAdmin,
+    getColoresAsaInactivos,
+    crearColorAsa,
+    editarColorAsa,
+    desactivarColorAsa,
+    reactivarColorAsa,
+    type ColorAsaAdmin,
+  } from "../../services/papel/colorAsaAdminService";
 
   type TipoMaquinaHojeado = "hojeadora" | "guillotina";
   type CatalogMap = Partial<Record<CatKey, CatItem[]>>;
@@ -34,7 +52,7 @@
   ) => Promise<unknown>;
 
   interface TabConfig {
-    key: CatKey | "refuerzoBase" | "foil";
+    key: CatKey | "refuerzoBase" | "foil" | "plastico_tipoProducto" | "plastico_material" | "plastico_calibre";
     label: string;
     hasMedida: boolean;
     tieneNumMaquina?: boolean;
@@ -51,6 +69,18 @@
     conMedida?: boolean;
     prefijoNombre?: string;
     placeholderMedida?: string;
+    // ✅ NUEVO — esta pestaña admite una imagen de referencia por renglón
+    // (Tipo de producto, Tipo de asa, Textura, Tipo de papel, Laminado).
+    conImagen?: boolean;
+    // ✅ NUEVO — esta pestaña admite UNA imagen GLOBAL para todo el
+    // catálogo (HS y AR, UV), en vez de una por renglón.
+    conImagenGlobal?: boolean;
+    // ✅ NUEVO — sección de catálogos de plástico (tipo de producto, material,
+    // calibre). A diferencia de esInsumo, estos NO están vinculados a
+    // proveedores; cada uno es su propio renglón (mismo formato que el resto)
+    // y se renderiza con CatalogoPlasticoPanel indicándole cuál mostrar.
+    esPlastico?: boolean;
+    plasticoTipo?: "tipoProducto" | "material" | "calibre";
   }
 
   interface TabGroup { groupLabel: string; tabs: TabConfig[]; }
@@ -59,17 +89,17 @@
     {
       groupLabel: "Producto",
       tabs: [
-        { key: "tipo_producto", label: "Tipo de producto", hasMedida: false, icon: "📦" },
+        { key: "tipo_producto", label: "Tipo de producto", hasMedida: false, icon: "📦", conImagen: true },
         // ✅ Unificado con insumos — mismo tipo_insumo "Tipo de papel"
-        { key: "tipo_papel", label: "Tipo de papel", hasMedida: false, icon: "📄", esInsumo: true, tipoInsumoNombre: "Tipo de papel" },
+        { key: "tipo_papel", label: "Tipo de papel", hasMedida: false, icon: "📄", esInsumo: true, tipoInsumoNombre: "Tipo de papel", conImagen: true },
         { key: "calibre", label: "Calibre", hasMedida: false, icon: "📐" },
         { key: "tipo_pegado", label: "Tipo de pegado", hasMedida: false, icon: "🔧" },
         // ✅ Unificado con insumos
         { key: "pegamento", label: "Pegamento", hasMedida: false, icon: "🧴", esInsumo: true, tipoInsumoNombre: "Pegamento" },
-        { key: "tipo_asa", label: "Tipo de asa", hasMedida: false, icon: "🪢" },
+        { key: "tipo_asa", label: "Tipo de asa", hasMedida: false, icon: "🪢", conImagen: true },
         // ✅ Unificado con insumos
-        { key: "laminado", label: "Laminado", hasMedida: false, icon: "✨", esInsumo: true, tipoInsumoNombre: "Laminado" },
-        { key: "textura", label: "Textura", hasMedida: false, icon: "🟫" },
+        { key: "laminado", label: "Laminado", hasMedida: false, icon: "✨", esInsumo: true, tipoInsumoNombre: "Laminado", conImagen: true },
+        { key: "textura", label: "Textura", hasMedida: false, icon: "🟫", conImagen: true },
         { key: "refuerzoBase", label: "Refuerzo y base", hasMedida: false, icon: "🔩", combined: true },
         { key: "empaque", label: "Empaque", hasMedida: false, icon: "📫" },
         { key: "foil", label: "Foil", hasMedida: false, icon: "🌟" },
@@ -92,9 +122,9 @@
       tabs: [
         { key: "hojeado_guillotina", label: "Hojeado / Guillotina", hasMedida: false, tieneNumMaquina: true, usaTipoMaquina: true, icon: "✂️" },
         { key: "impresora", label: "Impresora", hasMedida: false, tieneNumMaquina: true, icon: "🖨️" },
-        { key: "hs_ar", label: "HS y AR", hasMedida: false, tieneNumMaquina: true, icon: "⚙️" },
+        { key: "hs_ar", label: "HS y AR", hasMedida: false, tieneNumMaquina: true, icon: "⚙️", conImagenGlobal: true },
         { key: "suaje_maquina", label: "Suaje (máquina)", hasMedida: false, tieneNumMaquina: true, icon: "🗜️" },
-        { key: "uv", label: "UV", hasMedida: false, tieneNumMaquina: true, icon: "🔆" },
+        { key: "uv", label: "UV", hasMedida: false, tieneNumMaquina: true, icon: "🔆", conImagenGlobal: true },
         { key: "texturizadora" as CatKey, label: "Texturizadora", hasMedida: false, tieneNumMaquina: true, icon: "🧵" },
         { key: "laminado_maquina" as CatKey, label: "Laminadora", hasMedida: false, tieneNumMaquina: true, icon: "✨" },
         { key: "empalme", label: "Empalme", hasMedida: false, tieneNumMaquina: true, icon: "🔗" },
@@ -102,6 +132,18 @@
         { key: "asas_maquina", label: "Asas (máquina)", hasMedida: false, tieneNumMaquina: true, icon: "🔄" },
         { key: "desbarbe", label: "Desbarbe", hasMedida: false, tieneNumMaquina: true, icon: "🪚" },
         { key: "empaque_maquina" as CatKey, label: "Empaque (máquina)", hasMedida: false, tieneNumMaquina: true, icon: "📦" },
+      ],
+    },
+    {
+      groupLabel: "Plástico",
+      tabs: [
+        // ✅ NUEVO — 3 renglones independientes, mismo formato que el resto
+        // de la lista (no un switcher aparte). Cada uno apunta al mismo
+        // CatalogoPlasticoPanel, indicándole vía plasticoTipo cuál de los 3
+        // sub-catálogos mostrar.
+        { key: "plastico_tipoProducto", label: "Tipo de producto", hasMedida: false, icon: "🥡", esPlastico: true, plasticoTipo: "tipoProducto" },
+        { key: "plastico_material", label: "Material", hasMedida: false, icon: "🧪", esPlastico: true, plasticoTipo: "material" },
+        { key: "plastico_calibre", label: "Calibre", hasMedida: false, icon: "📏", esPlastico: true, plasticoTipo: "calibre" },
       ],
     },
   ];
@@ -442,7 +484,7 @@
     );
   }
 
-  function CatPanel({ tab, items, onAdd, onEdit, onDelete, onReactivar, verInactivos, loadingInactivos }: {
+  function CatPanel({ tab, items, onAdd, onEdit, onDelete, onReactivar, verInactivos, loadingInactivos, imgApi }: {
     tab: TabConfig & { key: CatKey };
     items: CatItem[];
     onAdd?: (nombre: string, medida?: string, numeroMaquina?: string, tipoMaquina?: TipoMaquinaHojeado) => Promise<unknown>;
@@ -451,6 +493,7 @@
     onReactivar?: (id: number) => Promise<unknown>;
     verInactivos?: boolean;
     loadingInactivos?: boolean;
+    imgApi?: UseImagenesCatalogo;
   }) {
     const [search, setSearch] = useState("");
     const [newNombre, setNewNombre] = useState("");
@@ -465,6 +508,7 @@
     const [deleteId, setDeleteId] = useState<number | null>(null);
     const [saving, setSaving] = useState(false);
     const [addKey, setAddKey] = useState(0);
+    const [newImagenFile, setNewImagenFile] = useState<File | null>(null);
 
     const usaTipoMaquina = tab.usaTipoMaquina === true || tab.key === "hojeado_guillotina";
 
@@ -488,7 +532,15 @@
       setNewMedida("");
       setNewNumMaquina("");
       setNewTipoMaquina("hojeadora");
+      setNewImagenFile(null);
       setAddKey(k => k + 1);
+    };
+
+    const subirImagenPendiente = async (creado: unknown) => {
+      if (!newImagenFile || !imgApi) return;
+      const id = (creado as { id?: number } | undefined)?.id;
+      if (id == null) return;
+      try { await imgApi.subir(tab.key, id, newImagenFile); } catch { /* la imagen se puede volver a subir desde el renglón */ }
     };
 
     const handleAdd = async () => {
@@ -498,7 +550,7 @@
         if (!newNombre.trim()) return;
         const nombreFinal = tab.key === "sacabocados" ? "Sacabocado" : "Perforación";
         setSaving(true);
-        try { await onAdd(nombreFinal, newNombre.trim()); limpiarNuevo(); }
+        try { const creado = await onAdd(nombreFinal, newNombre.trim()); await subirImagenPendiente(creado); limpiarNuevo(); }
         finally { setSaving(false); }
         return;
       }
@@ -506,7 +558,8 @@
       if (!nombreFinal) return;
       setSaving(true);
       try {
-        await onAdd(nombreFinal, tab.hasMedida ? newMedida.trim() : undefined, tab.tieneNumMaquina ? newNumMaquina.trim() : undefined, usaTipoMaquina ? newTipoMaquina : undefined);
+        const creado = await onAdd(nombreFinal, tab.hasMedida ? newMedida.trim() : undefined, tab.tieneNumMaquina ? newNumMaquina.trim() : undefined, usaTipoMaquina ? newTipoMaquina : undefined);
+        await subirImagenPendiente(creado);
         limpiarNuevo();
       } finally { setSaving(false); }
     };
@@ -550,8 +603,9 @@
     const colLabel = tab.key === "refuerzo_medidas" ? "Medida" : tab.key === "sacabocados" ? "Sacabocado" : tab.key === "perforado" ? "Perforación" : "Nombre";
     const esFijoTab = tab.key === "sacabocados" || tab.key === "perforado";
     const formCols = esFijoTab ? "1fr auto" : tab.tieneNumMaquina && usaTipoMaquina ? "1fr 120px 140px auto" : tab.tieneNumMaquina ? "1fr 120px auto" : tab.hasMedida ? "1fr 1fr auto" : "1fr auto";
-    const gridCols = tab.hasMedida ? "40px 1fr 1fr auto" : tab.tieneNumMaquina && usaTipoMaquina ? "40px 1fr 100px 120px auto" : tab.tieneNumMaquina ? "40px 1fr 100px auto" : "40px 1fr auto";
-    const headers = ["#", colLabel, ...(tab.hasMedida ? ["Medida"] : []), ...(tab.tieneNumMaquina ? ["N° Máquina"] : []), ...(usaTipoMaquina ? ["Tipo"] : []), ""];
+    const colImagen = tab.conImagen && imgApi ? "48px " : "";
+    const gridCols = colImagen + (tab.hasMedida ? "40px 1fr 1fr auto" : tab.tieneNumMaquina && usaTipoMaquina ? "40px 1fr 100px 120px auto" : tab.tieneNumMaquina ? "40px 1fr 100px auto" : "40px 1fr auto");
+    const headers = [...(colImagen ? [""] : []), "#", colLabel, ...(tab.hasMedida ? ["Medida"] : []), ...(tab.tieneNumMaquina ? ["N° Máquina"] : []), ...(usaTipoMaquina ? ["Tipo"] : []), ""];
 
     return (
       <div>
@@ -575,7 +629,12 @@
               )}
               {tab.tieneNumMaquina && <div><label style={labelStyle}>N° Máquina</label><Inp placeholder="ej: 1.2" value={newNumMaquina} onChange={setNewNumMaquina} /></div>}
               {usaTipoMaquina && <div><label style={labelStyle}>Tipo</label><TipoMaquinaSelect value={newTipoMaquina} onChange={setNewTipoMaquina} /></div>}
-              <Btn variant="primary" onClick={handleAdd} disabled={saving}>{saving ? "…" : "+ Agregar"}</Btn>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                {tab.conImagen && imgApi && (
+                  <SelectorImagenPendiente file={newImagenFile} onChange={setNewImagenFile} size={38} />
+                )}
+                <Btn variant="primary" onClick={handleAdd} disabled={saving}>{saving ? "…" : "+ Agregar"}</Btn>
+              </div>
             </div>
           </div>
         )}
@@ -597,6 +656,9 @@
             const tipoActual: TipoMaquinaHojeado = itemAny.tipo_maquina === "guillotina" ? "guillotina" : "hojeadora";
             return (
               <div key={item.id} style={{ display: "grid", gridTemplateColumns: gridCols, padding: "0 16px", borderBottom: idx < filtered.length - 1 ? "1px solid #F3F4F6" : "none", background: editId === item.id ? "#FFFBEB" : idx % 2 === 0 ? "#fff" : "#FAFAFA", alignItems: "center", minHeight: 48 }}>
+                {colImagen && imgApi && (
+                  <ImagenCatalogo api={imgApi} catalogoKey={tab.key} catalogoId={item.id} size={32} />
+                )}
                 <span style={{ fontSize: 12, color: "#9CA3AF" }}>{idx + 1}</span>
                 {editId === item.id ? <div style={{ paddingRight: 8 }}>{tab.key === "calibre" ? <CalibreInput value={editNombre} onChange={setEditNombre} /> : <Inp value={editNombre} onChange={setEditNombre} />}</div> : <span style={{ fontSize: 13, color: "#111827" }}>{item.nombre}</span>}
                 {tab.hasMedida && (editId === item.id ? <div style={{ paddingRight: 8 }}><Inp value={editMedida} onChange={setEditMedida} /></div> : <span style={{ fontSize: 13, color: "#6B7280" }}>{item.medida ?? "—"}</span>)}
@@ -659,6 +721,199 @@
     );
   }
 
+  // ✅ NUEVO — colores de asa. A propósito es una tabla independiente de
+  // cat_tipo_asa (sin FK entre ambas, confirmado con el usuario): solo
+  // comparten pestaña en la UI porque se eligen juntos al cotizar.
+  function ColorAsaPanel() {
+    const [colores, setColores] = useState<ColorAsaAdmin[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [verInactivos, setVerInactivos] = useState(false);
+    const [search, setSearch] = useState("");
+    const [newColor, setNewColor] = useState("");
+    const [newHex, setNewHex] = useState("#CCCCCC");
+    const [editId, setEditId] = useState<number | null>(null);
+    const [editColor, setEditColor] = useState("");
+    const [editHex, setEditHex] = useState("#CCCCCC");
+    const [deleteId, setDeleteId] = useState<number | null>(null);
+    const [saving, setSaving] = useState(false);
+
+    const cargar = useCallback(async (inactivos: boolean) => {
+      setLoading(true);
+      try {
+        setColores(inactivos ? await getColoresAsaInactivos() : await getColoresAsaAdmin());
+      } catch {
+        showAlert("Error al cargar colores de asa", "error");
+      } finally {
+        setLoading(false);
+      }
+    }, []);
+
+    useEffect(() => { cargar(verInactivos); }, [verInactivos, cargar]);
+
+    const filtered = colores.filter(c => c.color.toLowerCase().includes(search.toLowerCase()));
+
+    const handleAdd = async () => {
+      if (!newColor.trim()) return;
+      setSaving(true);
+      try {
+        await crearColorAsa(newColor.trim(), newHex);
+        setNewColor("");
+        setNewHex("#CCCCCC");
+        await cargar(false);
+      } finally { setSaving(false); }
+    };
+
+    const handleEdit = async () => {
+      if (editId === null || !editColor.trim()) return;
+      setSaving(true);
+      try {
+        await editarColorAsa(editId, editColor.trim(), editHex);
+        setEditId(null);
+        await cargar(verInactivos);
+      } finally { setSaving(false); }
+    };
+
+    const handleDelete = async () => {
+      if (deleteId === null) return;
+      await desactivarColorAsa(deleteId);
+      setDeleteId(null);
+      await cargar(verInactivos);
+    };
+
+    const handleReactivar = async (id: number) => {
+      await reactivarColorAsa(id);
+      await cargar(verInactivos);
+    };
+
+    const startEdit = (c: ColorAsaAdmin) => {
+      setEditId(c.id_color);
+      setEditColor(c.color);
+      setEditHex(c.hex ?? "#CCCCCC");
+    };
+
+    return (
+      <div>
+        {deleteId !== null && <ConfirmModal message="¿Desactivar este color de asa?" onConfirm={handleDelete} onCancel={() => setDeleteId(null)} />}
+
+        {!verInactivos && (
+          <div style={{ background: "#F9FAFB", border: "1px dashed #D1D5DB", borderRadius: 9, padding: "16px 18px", marginBottom: 20 }}>
+            <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#6B7280", margin: "0 0 12px" }}>Agregar nuevo</p>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 80px auto", gap: "0 10px", alignItems: "end" }}>
+              <div><label style={labelStyle}>Color</label><Inp placeholder="Ej. Rojo cereza" value={newColor} onChange={setNewColor} /></div>
+              <div>
+                <label style={labelStyle}>Hex</label>
+                <input type="color" value={newHex} onChange={e => setNewHex(e.target.value)}
+                  style={{ width: "100%", height: 38, padding: 2, border: "1px solid #D1D5DB", borderRadius: 7, cursor: "pointer" }} />
+              </div>
+              <Btn variant="primary" onClick={handleAdd} disabled={saving}>{saving ? "…" : "+ Agregar"}</Btn>
+            </div>
+          </div>
+        )}
+
+        {verInactivos && (
+          <div style={{ background: "#FEF2F2", border: "1px dashed #FECACA", borderRadius: 9, padding: "12px 16px", marginBottom: 20, display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ fontSize: 14 }}>⚠️</span>
+            <p style={{ margin: 0, fontSize: 12, color: "#DC2626", fontWeight: 500 }}>Registros desactivados — puedes reactivarlos.</p>
+          </div>
+        )}
+
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+          <div style={{ flex: 1 }}><SearchBox value={search} onChange={setSearch} /></div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0, marginBottom: 14 }}>
+            <span style={{ fontSize: 12, color: "#6B7280", fontWeight: 500 }}>{verInactivos ? "Mostrando inactivos" : "Mostrar inactivos"}</span>
+            <button type="button" onClick={() => setVerInactivos(v => !v)}
+              style={{ width: 40, height: 22, borderRadius: 12, border: "none", cursor: "pointer", background: verInactivos ? "#DC2626" : "#D1D5DB", position: "relative" }}>
+              <span style={{ position: "absolute", top: 2, left: verInactivos ? 20 : 2, width: 18, height: 18, borderRadius: "50%", background: "#fff", transition: "left 0.2s" }} />
+            </button>
+          </div>
+        </div>
+
+        <div style={{ border: "1px solid #E5E7EB", borderRadius: 9, overflow: "hidden" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "60px 1fr auto", background: "#F9FAFB", borderBottom: "1px solid #E5E7EB", padding: "0 16px" }}>
+            {["Color", "Nombre", ""].map((h, i) => <HeaderCell key={i}>{h}</HeaderCell>)}
+          </div>
+          {loading ? (
+            <div style={{ padding: "32px 16px", textAlign: "center", color: "#9CA3AF", fontSize: 13 }}>Cargando…</div>
+          ) : filtered.length === 0 ? <EmptyRows search={search} /> : filtered.map((c, idx) => (
+            <div key={c.id_color} style={{ display: "grid", gridTemplateColumns: "60px 1fr auto", padding: "0 16px", borderBottom: idx < filtered.length - 1 ? "1px solid #F3F4F6" : "none", background: editId === c.id_color ? "#FFFBEB" : idx % 2 === 0 ? "#fff" : "#FAFAFA", alignItems: "center", minHeight: 48 }}>
+              {editId === c.id_color ? (
+                <input type="color" value={editHex} onChange={e => setEditHex(e.target.value)}
+                  style={{ width: 40, height: 30, padding: 2, border: "1px solid #D1D5DB", borderRadius: 5, cursor: "pointer" }} />
+              ) : (
+                <span title={c.hex ?? ""} style={{ width: 24, height: 24, borderRadius: "50%", background: c.hex ?? "#E5E7EB", border: "1px solid #D1D5DB", display: "inline-block" }} />
+              )}
+              {editId === c.id_color ? <div style={{ paddingRight: 8 }}><Inp value={editColor} onChange={setEditColor} /></div> : <span style={{ fontSize: 13, color: "#111827" }}>{c.color}</span>}
+              <Actions verInactivos={verInactivos} editando={editId === c.id_color} saving={saving} onReactivar={() => handleReactivar(c.id_color)} onGuardar={handleEdit} onCancelar={() => setEditId(null)} onEditar={() => startEdit(c)} onEliminar={() => setDeleteId(c.id_color)} />
+            </div>
+          ))}
+        </div>
+        <Counter filtered={filtered.length} total={colores.length} />
+      </div>
+    );
+  }
+
+  function TipoAsaPanel({ catalogs, addItem, editItem, deleteItem, reactivarItem, verInactivos, loadingInactivos, imgApi, onToggleInactivos }: {
+    catalogs: CatalogMap;
+    addItem: AddCatalogoFn;
+    editItem: EditCatalogoFn;
+    deleteItem: (key: CatKey, id: number) => Promise<unknown>;
+    reactivarItem: (key: CatKey, id: number) => Promise<unknown>;
+    verInactivos: boolean;
+    loadingInactivos?: boolean;
+    imgApi: UseImagenesCatalogo;
+    onToggleInactivos: () => void;
+  }) {
+    const [activeSection, setActiveSection] = useState<"tipos" | "colores">("tipos");
+    const tab: TabConfig & { key: CatKey } = { key: "tipo_asa", label: "Tipos", hasMedida: false, icon: "🪢", conImagen: true };
+
+    return (
+      <div>
+        <div style={{ display: "flex", border: "1px solid #E5E7EB", borderRadius: 9, overflow: "hidden", marginBottom: 18 }}>
+          {[
+            { key: "tipos" as const, label: "Tipos", icon: "🪢", count: getItems(catalogs, "tipo_asa" as CatKey).length },
+            { key: "colores" as const, label: "Colores", icon: "🎨", count: null },
+          ].map((s, i) => {
+            const selected = activeSection === s.key;
+            return (
+              <button key={s.key} type="button" onClick={() => setActiveSection(s.key)}
+                style={{ flex: 1, height: 42, border: "none", borderRight: i === 0 ? "1px solid #E5E7EB" : "none", background: selected ? "#1D4ED8" : "#F9FAFB", color: selected ? "#fff" : "#6B7280", cursor: "pointer", fontSize: 13, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", gap: 7 }}>
+                <span style={{ fontSize: 15 }}>{s.icon}</span>{s.label}
+                {s.count !== null && <span style={{ fontSize: 11, fontWeight: 700, background: selected ? "rgba(255,255,255,0.25)" : "#E5E7EB", color: selected ? "#fff" : "#6B7280", borderRadius: 10, padding: "1px 7px" }}>{s.count}</span>}
+              </button>
+            );
+          })}
+        </div>
+
+        {activeSection === "tipos" && (
+          <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 8, marginBottom: 14 }}>
+            <span style={{ fontSize: 12, color: "#6B7280", fontWeight: 500 }}>{verInactivos ? "Mostrando inactivos" : "Mostrar inactivos"}</span>
+            <button type="button" onClick={onToggleInactivos}
+              style={{ width: 40, height: 22, borderRadius: 12, border: "none", cursor: "pointer", background: verInactivos ? "#DC2626" : "#D1D5DB", position: "relative" }}>
+              <span style={{ position: "absolute", top: 2, left: verInactivos ? 20 : 2, width: 18, height: 18, borderRadius: "50%", background: "#fff", transition: "left 0.2s" }} />
+            </button>
+          </div>
+        )}
+
+        {activeSection === "tipos" ? (
+          <CatPanel
+            key={verInactivos ? "tipos-inactivos" : "tipos"}
+            tab={tab}
+            items={getItems(catalogs, "tipo_asa" as CatKey)}
+            onAdd={verInactivos ? undefined : async (nombre) => addItem("tipo_asa" as CatKey, nombre)}
+            onEdit={verInactivos ? undefined : async (id, nombre) => { await editItem("tipo_asa" as CatKey, id, nombre); }}
+            onDelete={verInactivos ? undefined : id => deleteItem("tipo_asa" as CatKey, id)}
+            onReactivar={verInactivos ? id => reactivarItem("tipo_asa" as CatKey, id) : undefined}
+            verInactivos={verInactivos}
+            loadingInactivos={loadingInactivos}
+            imgApi={imgApi}
+          />
+        ) : (
+          <ColorAsaPanel />
+        )}
+      </div>
+    );
+  }
+
   export default function Catalogos() {
     useAuth();
     const {
@@ -674,8 +929,11 @@
     } = useCatalogosPapel();
 
     const [verInactivos, setVerInactivos] = useState(false);
-    const [activeTab, setActiveTab] = useState<CatKey | "refuerzoBase" | "foil">("tipo_producto");
+    const [activeTab, setActiveTab] = useState<CatKey | "refuerzoBase" | "foil" | "plastico_tipoProducto" | "plastico_material" | "plastico_calibre">("tipo_producto");
     const activeCatalogs = (verInactivos ? catalogsInactivos : catalogs) as CatalogMap;
+    // ✅ NUEVO — imágenes de referencia de catálogo, compartidas entre todas
+    // las pestañas (una sola carga para toda la pantalla).
+    const imagenesApi = useImagenesCatalogo();
 
     // ✅ NUEVO — conteos reales para las 6 pestañas unificadas con insumos.
     // No se pueden sacar de `catalogs` (ese hook ya no las alimenta), así que
@@ -683,6 +941,11 @@
     const [insumoCounts, setInsumoCounts] = useState<Partial<Record<CatKey, number>>>({});
     // ✅ NUEVO — conteo de Foil (misma idea: no viene de `catalogs`, se carga aparte)
     const [foilCount, setFoilCount] = useState<number | null>(null);
+    // ✅ NUEVO — conteos de los 3 catálogos de plástico, uno por renglón
+    // (mismo criterio que insumoCounts/foilCount: se precargan al montar,
+    // para que el badge aparezca aunque el usuario nunca haya visitado esa
+    // pestaña; CatalogoPlasticoPanel los mantiene sincronizados después).
+    const [plasticoCounts, setPlasticoCounts] = useState<{ tipoProducto: number | null; material: number | null; calibre: number | null }>({ tipoProducto: null, material: null, calibre: null });
 
     const tabsInsumo = ALL_TABS.filter((t) => t.esInsumo);
 
@@ -698,6 +961,9 @@
     useEffect(() => {
       tabsInsumo.forEach((t) => cargarConteoInsumo(t.key as CatKey));
       fetchFoils().then((data) => setFoilCount(data.length)).catch(() => {});
+      getTiposProductoAdmin(true).then((rows) => setPlasticoCounts((prev) => ({ ...prev, tipoProducto: rows.length }))).catch(() => {});
+      getMaterialesAdmin(true).then((rows) => setPlasticoCounts((prev) => ({ ...prev, material: rows.length }))).catch(() => {});
+      getCalibresAdmin(true).then((rows) => setPlasticoCounts((prev) => ({ ...prev, calibre: rows.length }))).catch(() => {});
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
@@ -713,6 +979,7 @@
     // unificados con Proveedores/Insumos (se renderiza distinto, sin pasar
     // por el hook genérico useCatalogosPapel para esta parte).
     const esInsumoTab = !!activeTabConfig?.esInsumo;
+    const esPlasticoTab = !!activeTabConfig?.esPlastico;
 
     if (loading) {
       return <Dashboard><div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "60vh", fontSize: 14, color: "#9CA3AF" }}>Cargando catálogos…</div></Dashboard>;
@@ -722,8 +989,8 @@
       <Dashboard>
         <div style={{ width: "100%", margin: "0", fontFamily: "'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif", color: "#111827" }}>
           <div style={{ marginBottom: 24 }}>
-            <h1 style={{ margin: 0, fontSize: 24, fontWeight: 800, color: "#111827" }}>Catálogos de papel</h1>
-            <p style={{ margin: "4px 0 0", fontSize: 13, color: "#6B7280" }}>Administra catálogos comerciales, acabados, herramentales y maquinaria.</p>
+            <h1 style={{ margin: 0, fontSize: 24, fontWeight: 800, color: "#111827" }}>Catálogos</h1>
+            <p style={{ margin: "4px 0 0", fontSize: 13, color: "#6B7280" }}>Administra catálogos comerciales, acabados, herramentales, maquinaria y plástico.</p>
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "280px 1fr", gap: 24, alignItems: "start" }}>
@@ -733,7 +1000,7 @@
                   <div style={{ padding: "12px 16px 6px", fontSize: 10, fontWeight: 800, letterSpacing: "0.11em", textTransform: "uppercase", color: "#9CA3AF" }}>{group.groupLabel}</div>
                   {group.tabs.map(tab => {
                     const active = activeTab === tab.key;
-                    const count = tab.key === "refuerzoBase" ? refuerzoBaseCount : tab.key === "foil" ? foilCount : tab.esInsumo ? (insumoCounts[tab.key as CatKey] ?? null) : getItems(catalogs as CatalogMap, tab.key as CatKey).length;
+                    const count = tab.key === "refuerzoBase" ? refuerzoBaseCount : tab.key === "foil" ? foilCount : tab.esPlastico ? plasticoCounts[tab.plasticoTipo!] : tab.esInsumo ? (insumoCounts[tab.key as CatKey] ?? null) : getItems(catalogs as CatalogMap, tab.key as CatKey).length;
                     return (
                       <button key={String(tab.key)} type="button" onClick={() => { setActiveTab(tab.key); setVerInactivos(false); }}
                         style={{ width: "100%", minHeight: 42, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "8px 14px", border: "none", borderLeft: active ? "4px solid #1D4ED8" : "4px solid transparent", background: active ? "#EFF6FF" : "#fff", color: active ? "#1D4ED8" : "#374151", cursor: "pointer", textAlign: "left" }}>
@@ -756,12 +1023,19 @@
                     {activeTab === "cortes" && <p style={{ fontSize: 11, color: "#9CA3AF", margin: "2px 0 0" }}>Medida en pulgadas, altura en mm.</p>}
                     {activeTab === "dobles" && <p style={{ fontSize: 11, color: "#9CA3AF", margin: "2px 0 0" }}>Medida en pulgadas, altura se puede editar después.</p>}
                     {esInsumoTab && <p style={{ fontSize: 11, color: "#9CA3AF", margin: "2px 0 0" }}>Unificado con Proveedores/Insumos — puedes ver código y proveedor de cada uno.</p>}
+                    {esPlasticoTab && <p style={{ fontSize: 11, color: "#9CA3AF", margin: "2px 0 0" }}>Tipo de producto, material y calibre — no están vinculados a proveedores.</p>}
+                    {activeTabConfig?.conImagenGlobal && <p style={{ fontSize: 11, color: "#9CA3AF", margin: "2px 0 0" }}>Una sola imagen de referencia para todo el proceso (no por máquina).</p>}
                   </div>
+                  {/* ✅ NUEVO — imagen GLOBAL del catálogo (HS y AR, UV): una
+                      sola por catálogo, catalogo_id = null. */}
+                  {activeTabConfig?.conImagenGlobal && (
+                    <ImagenCatalogo api={imagenesApi} catalogoKey={activeTabConfig.key} catalogoId={null} size={56} />
+                  )}
                 </div>
 
                 {/* El toggle de inactivos genérico no aplica a Foil ni a los
                     catálogos de insumo — cada uno maneja su propio toggle. */}
-                {activeTab !== "foil" && !esInsumoTab && (
+                {activeTab !== "foil" && activeTab !== "tipo_asa" && !esInsumoTab && !esPlasticoTab && (
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8 }}>
                     <span style={{ fontSize: 12, color: "#6B7280", fontWeight: 500 }}>{verInactivos ? "Mostrando inactivos" : "Mostrar inactivos"}</span>
                     <button type="button" onClick={handleToggleInactivos}
@@ -773,7 +1047,12 @@
               </div>
 
               {activeTab === "foil" ? (
-                <FoilPanel onCambio={setFoilCount} />
+                <FoilPanel onCambio={setFoilCount} imgApi={imagenesApi} />
+              ) : esPlasticoTab && activeTabConfig ? (
+                <CatalogoPlasticoPanel
+                  tipo={activeTabConfig.plasticoTipo!}
+                  onCambio={(counts) => setPlasticoCounts(counts)}
+                />
               ) : esInsumoTab && activeTabConfig ? (
                 // ✅ NUEVO — panel unificado con Proveedores/Insumos (estilo Foil)
                 <InsumoCatalogoPanel
@@ -782,9 +1061,27 @@
                   prefijoNombre={activeTabConfig.prefijoNombre}
                   placeholderMedida={activeTabConfig.placeholderMedida}
                   onCambio={() => cargarConteoInsumo(activeTabConfig.key as CatKey)}
+                  conImagen={activeTabConfig.conImagen}
+                  catalogoKeyImagen={activeTabConfig.key as CatKey}
+                  imgApi={imagenesApi}
                 />
               ) : activeTab === "refuerzoBase" ? (
                 <RefuerzoBasePanel catalogs={activeCatalogs} addItem={agregarCatalogo as AddCatalogoFn} editItem={editarCatalogo as EditCatalogoFn} deleteItem={deleteItem} reactivarItem={reactivarItem} verInactivos={verInactivos} loadingInactivos={loadingInactivos} />
+              ) : activeTab === "tipo_asa" ? (
+                // ✅ NUEVO — "Tipo de asa" ahora tiene dos sub-secciones: Tipos
+                // (cat_tipo_asa, igual que antes) y Colores (color_asa, tabla
+                // independiente que solo comparte pestaña por conveniencia).
+                <TipoAsaPanel
+                  catalogs={activeCatalogs}
+                  addItem={agregarCatalogo as AddCatalogoFn}
+                  editItem={editarCatalogo as EditCatalogoFn}
+                  deleteItem={deleteItem}
+                  reactivarItem={reactivarItem}
+                  verInactivos={verInactivos}
+                  loadingInactivos={loadingInactivos}
+                  imgApi={imagenesApi}
+                  onToggleInactivos={handleToggleInactivos}
+                />
               ) : isCorteDoble && activeTabConfig ? (
                 <CorteDoblePanel
                   tab={activeTabConfig as TabConfig & { key: CatKey }}
@@ -801,12 +1098,13 @@
                   key={String(activeTab) + (verInactivos ? "-inactivos" : "")}
                   tab={activeTabConfig as TabConfig & { key: CatKey }}
                   items={getItems(activeCatalogs, activeTab as CatKey)}
-                  onAdd={verInactivos ? undefined : async (nombre, medida, numeroMaquina, tipoMaquina) => { await agregarCatalogo(activeTab as CatKey, nombre, medida, numeroMaquina, undefined, undefined, tipoMaquina ?? null); }}
+                  onAdd={verInactivos ? undefined : async (nombre, medida, numeroMaquina, tipoMaquina) => agregarCatalogo(activeTab as CatKey, nombre, medida, numeroMaquina, undefined, undefined, tipoMaquina ?? null)}
                   onEdit={verInactivos ? undefined : async (id, nombre, medida, numeroMaquina, tipoMaquina) => { await editarCatalogo(activeTab as CatKey, id, nombre, medida, numeroMaquina, undefined, undefined, tipoMaquina ?? null); }}
                   onDelete={verInactivos ? undefined : id => deleteItem(activeTab as CatKey, id)}
                   onReactivar={verInactivos ? id => reactivarItem(activeTab as CatKey, id) : undefined}
                   verInactivos={verInactivos}
                   loadingInactivos={loadingInactivos}
+                  imgApi={imagenesApi}
                 />
               ) : null}
             </main>

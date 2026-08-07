@@ -22,6 +22,7 @@ import {
   productosPlasticoCompatibles,
   valorFormulario,
 } from "../../utils/expo/opcionesRegistroExpo";
+import { leerBorrador, useAutoguardarBorrador, limpiarBorrador } from "../../hooks/useBorradorFormulario";
 
 // ─── Tipos catálogos plástico ─────────────────────────────────────────────────
 interface TipoProducto { id: number; nombre: string; }
@@ -185,8 +186,21 @@ interface Props {
   coloresAsa?: {id: number; nombre: string}[];
 }
 
+interface BorradorModalProducto {
+  form: Partial<Producto>;
+  formCat: "papel" | "plastico" | "carton";
+  usaTintasDentroModal: boolean;
+  productoPapelBaseId: number | null;
+  grupoPapelBaseId: number | null;
+  productoPlasticoBaseId: number | null;
+}
+
 export default function ModalProducto({ editando, catInicial="papel", saving, onClose, onGuardar, catalogs, foils, texturas, coloresAsa=[] }: Props) {
-  const [form, setForm] = useState<Partial<Producto>>(editando ? {
+  // La imagen (File) no se persiste — no es serializable.
+  const claveBorrador = editando ? `expo-producto-editar-${editando.id}` : `expo-producto-nuevo-${catInicial}`;
+  const [borradorInicial] = useState(() => leerBorrador<BorradorModalProducto>(claveBorrador));
+
+  const [form, setForm] = useState<Partial<Producto>>(borradorInicial?.form ?? (editando ? {
     ...editando,
     tipoLaminado: editando.tipoLaminado || "",
     tipoAsa:      editando.tipoAsa      || "",
@@ -200,15 +214,15 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
     // valor inicial por compatibilidad con su flujo actual.
     tintasFrenteDefault: editando.tintasFrenteDefault
       ?? (editando.categoria === "plastico" ? 1 : 0),
-  } : { ...formVacio(), categoria: catInicial });
+  } : { ...formVacio(), categoria: catInicial }));
 
-  const [formCat, setFormCat] = useState<"papel"|"plastico"|"carton">(editando?.categoria ?? catInicial);
+  const [formCat, setFormCat] = useState<"papel"|"plastico"|"carton">(borradorInicial?.formCat ?? (editando?.categoria ?? catInicial));
 
   const [subiendoFoto, setSubiendoFoto] = useState(false);
   const [imagenPendiente, setImagenPendiente] = useState<File | null>(null);
 
   // Toggle de "¿tintas por dentro?" en el registro (solo papel/cartón)
-  const [usaTintasDentroModal, setUsaTintasDentroModal] = useState(!!editando?.tintasDentroDefault);
+  const [usaTintasDentroModal, setUsaTintasDentroModal] = useState(borradorInicial?.usaTintasDentroModal ?? !!editando?.tintasDentroDefault);
 
   // Productos del catálogo del sistema usados únicamente como plantilla.
   // El producto nuevo sigue guardándose como producto Expo independiente.
@@ -219,9 +233,13 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
   });
   const [loadingOpcionesSistema, setLoadingOpcionesSistema] = useState(true);
   const [errorOpcionesSistema, setErrorOpcionesSistema] = useState("");
-  const [productoPapelBaseId, setProductoPapelBaseId] = useState<number | null>(null);
-  const [grupoPapelBaseId, setGrupoPapelBaseId] = useState<number | null>(null);
-  const [productoPlasticoBaseId, setProductoPlasticoBaseId] = useState<number | null>(null);
+  const [productoPapelBaseId, setProductoPapelBaseId] = useState<number | null>(borradorInicial?.productoPapelBaseId ?? null);
+  const [grupoPapelBaseId, setGrupoPapelBaseId] = useState<number | null>(borradorInicial?.grupoPapelBaseId ?? null);
+  const [productoPlasticoBaseId, setProductoPlasticoBaseId] = useState<number | null>(borradorInicial?.productoPlasticoBaseId ?? null);
+
+  useAutoguardarBorrador<BorradorModalProducto>(claveBorrador, {
+    form, formCat, usaTintasDentroModal, productoPapelBaseId, grupoPapelBaseId, productoPlasticoBaseId,
+  }, true);
 
   // Pigmentos: reutiliza el mismo catálogo de insumos que usa el cotizador.
   // El input conserva texto libre, así que el usuario puede escribir uno nuevo
@@ -816,6 +834,7 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
           },
           imagenPendiente
         );
+        limpiarBorrador(claveBorrador);
       } else {
         const medida = construirMedida();
         await onGuardar({
@@ -834,6 +853,7 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
           pigmento:     form.pigmento || "",
           tamanoProd:    "",
         }, imagenPendiente);
+        limpiarBorrador(claveBorrador);
       }
     } catch {
       // onGuardar ya mostró su propio alert con el error

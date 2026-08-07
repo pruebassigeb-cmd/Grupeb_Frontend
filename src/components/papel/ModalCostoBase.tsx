@@ -5,6 +5,7 @@
 // puede tener 1 o N grupos (opciones de material), y cada uno tiene su
 // propio costo base — por eso se muestra una fila por grupo.
 import { useState, useEffect } from "react";
+import { leerBorrador, useAutoguardarBorrador, limpiarBorrador } from "../../hooks/useBorradorFormulario";
 
 interface GrupoCosto {
   idgrupo_papel: number;
@@ -30,10 +31,13 @@ function formatearLabelGrupo(materiales: any[] | undefined, index: number): stri
 }
 
 export default function ModalCostoBase({ idProducto, nombreProducto, onClose, onSaved }: Props) {
+  const claveBorrador = `costo-base-${idProducto}`;
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [grupos, setGrupos] = useState<GrupoCosto[]>([]);
+
+  useAutoguardarBorrador(claveBorrador, grupos, grupos.length > 0);
 
   useEffect(() => {
     let cancelado = false;
@@ -45,6 +49,8 @@ export default function ModalCostoBase({ idProducto, nombreProducto, onClose, on
       .then((r) => r.json())
       .then((d) => {
         if (cancelado) return;
+        const borrador = leerBorrador<GrupoCosto[]>(claveBorrador);
+        if (borrador) { setGrupos(borrador); return; }
         const lista: GrupoCosto[] = (d.grupos ?? []).map((g: any, i: number) => ({
           idgrupo_papel: g.idgrupo_papel,
           label: formatearLabelGrupo(g.materiales, i),
@@ -60,7 +66,7 @@ export default function ModalCostoBase({ idProducto, nombreProducto, onClose, on
       });
 
     return () => { cancelado = true; };
-  }, [idProducto]);
+  }, [idProducto, claveBorrador]);
 
   const actualizarPrecio = (idgrupo_papel: number, valor: string) => {
     // Mismo criterio que el input de "Costo" en GrupoBlock: solo dígitos y un punto.
@@ -97,6 +103,7 @@ export default function ModalCostoBase({ idProducto, nombreProducto, onClose, on
       }
 
       const data = await res.json();
+      limpiarBorrador(claveBorrador);
       onSaved(data.grupos ?? []);
       onClose();
     } catch (e: any) {

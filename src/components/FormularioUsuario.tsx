@@ -7,6 +7,8 @@ import type { CreateUsuarioRequest, UpdateUsuarioRequest, Usuario } from "../typ
 import { showAlert } from './CustomAlert';
 import api from '../services/api';
 import { buscarCodigoPostal } from "../services/codigoPostalService";
+import { leerBorrador, useAutoguardarBorrador } from "../hooks/useBorradorFormulario";
+import { claveBorradorUsuario } from "../utils/clavesBorrador";
 
 const ROLES_CON_PRIVILEGIOS_BASE = ["Planta", "Ventas", "Diseño"];
 const TIPOS_SANGRE = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
@@ -37,8 +39,23 @@ interface FormularioUsuarioProps {
   usuarioEditar?: Usuario | null;
 }
 
+// Punto de guardado (ver src/hooks/useBorradorFormulario.ts). Deliberadamente
+// EXCLUYE dos campos de `datos`: `codigo` es el código de acceso que se le
+// asigna al usuario — una credencial, igual que el código de login — y NO
+// debe quedar en texto plano en sessionStorage; `fotoFile` es un objeto
+// `File`, no serializable a JSON (si se pierde, hay que volver a
+// seleccionar el archivo, no hay forma de "restaurar" un File). Tampoco se
+// intenta persistir `archivosINEPendientes` por la misma razón (son File[]).
+type BorradorUsuario = Omit<FormData, "codigo" | "fotoFile"> & {
+  paso: number;
+  ineAEliminar: number[];
+};
+
 export default function FormularioUsuario({ onSubmit, onCancel, usuarioEditar }: FormularioUsuarioProps) {
-  const [paso, setPaso]               = useState(1);
+  const claveBorrador = claveBorradorUsuario(usuarioEditar);
+  const [borradorInicial] = useState(() => leerBorrador<BorradorUsuario>(claveBorrador));
+
+  const [paso, setPaso]               = useState(borradorInicial?.paso ?? 1);
   const [roles, setRoles]             = useState<Rol[]>([]);
   const [privilegios, setPrivilegios] = useState<Privilegio[]>([]);
   const [loading, setLoading]         = useState(false);
@@ -54,10 +71,10 @@ export default function FormularioUsuario({ onSubmit, onCancel, usuarioEditar }:
 
   const [fotosINE, setFotosINE]                           = useState<ArchivoINE[]>([]);
   const [archivosINEPendientes, setArchivosINEPendientes] = useState<File[]>([]);
-  const [ineAEliminar, setIneAEliminar]                   = useState<number[]>([]);
+  const [ineAEliminar, setIneAEliminar]                   = useState<number[]>(borradorInicial?.ineAEliminar ?? []);
   const [subiendoINE, setSubiendoINE]                     = useState(false);
 
-  const [datos, setDatos] = useState<FormData>({
+  const [datos, setDatos] = useState<FormData>(borradorInicial ? { ...borradorInicial, codigo: "", fotoFile: null } : {
     correo:        usuarioEditar?.correo        || "",
     nombre:        usuarioEditar?.nombre        || "",
     apellido:      usuarioEditar?.apellido      || "",
@@ -87,6 +104,14 @@ export default function FormularioUsuario({ onSubmit, onCancel, usuarioEditar }:
     emergencia_telefono:   usuarioEditar?.emergencia_telefono   || "",
     fotoFile: null,
   });
+
+  const { codigo: codigoActual, fotoFile: fotoFileActual, ...datosSinSensibles } = datos;
+  void codigoActual; void fotoFileActual; // deliberadamente excluidos del borrador, ver comentario de BorradorUsuario
+  useAutoguardarBorrador<BorradorUsuario>(
+    claveBorrador,
+    { ...datosSinSensibles, paso, ineAEliminar },
+    true
+  );
 
   useEffect(() => {
     (async () => {

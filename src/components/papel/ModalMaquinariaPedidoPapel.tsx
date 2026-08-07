@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { getProductoPapelDetalle } from "../../services/papel/papelCotizacionService";
 import type { ProductoPapelDetalleCotizacion } from "../../services/papel/papelCotizacionService";
 import type { ProductoCotizacion } from "../../types/cotizaciones.types";
@@ -7,6 +7,7 @@ import type {
   MaquinariaSeleccionadaPedidoPapel,
 } from "../../types/papel/maquinaria-pedido.types";
 import type { MaquinaPapelOpcion } from "../../types/papel/cotizacion-papel.types";
+import { leerBorrador, useAutoguardarBorrador, limpiarBorrador } from "../../hooks/useBorradorFormulario";
 
 type ProductoEntrada = ProductoCotizacion | (Record<string, any> & { nombre?: string });
 
@@ -254,12 +255,28 @@ export default function ModalMaquinariaPedidoPapel({
 }: Props) {
   const productosPapel = useMemo(() => productos.filter(esPapel), [productos]);
 
+  // Punto de guardado (ver src/hooks/useBorradorFormulario.ts) — clave según
+  // el conjunto exacto de productos que se están configurando en este modal.
+  const claveBorrador = `maquinaria-pedido-papel-${productosPapel
+    .map((p) => getIdSolicitudProducto(p))
+    .sort()
+    .join(",")}`;
+  const borradorAplicado = useRef(false);
+
   const [detalles, setDetalles] = useState<Record<number, ProductoPapelDetalleCotizacion>>({});
   const [selecciones, setSelecciones] = useState<Record<number, MaquinariaSeleccionadaPedidoPapel>>({});
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  useAutoguardarBorrador(claveBorrador, selecciones, productosPapel.length > 0);
+
   useEffect(() => {
+    if (!borradorAplicado.current) {
+      borradorAplicado.current = true;
+      const borrador = leerBorrador<Record<number, MaquinariaSeleccionadaPedidoPapel>>(claveBorrador);
+      if (borrador) { setSelecciones(borrador); return; }
+    }
+
     const seleccionesIniciales: Record<number, MaquinariaSeleccionadaPedidoPapel> = {};
 
     for (const producto of productosPapel) {
@@ -271,7 +288,7 @@ export default function ModalMaquinariaPedidoPapel({
     }
 
     setSelecciones(seleccionesIniciales);
-  }, [productosPapel]);
+  }, [productosPapel, claveBorrador]);
 
   useEffect(() => {
     let activo = true;
@@ -386,6 +403,7 @@ export default function ModalMaquinariaPedidoPapel({
       }
     }
 
+    limpiarBorrador(claveBorrador);
     onConfirm(
       productosPapel.map((producto) => {
         const id = getIdSolicitudProducto(producto);

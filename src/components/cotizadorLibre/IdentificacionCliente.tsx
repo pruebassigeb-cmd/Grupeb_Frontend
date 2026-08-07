@@ -21,7 +21,16 @@ interface IdentificacionClienteProps {
   // sea existente (verificado o no) o recién creado. El paso de GUARDAR la
   // cotización/pedido en sí (Fase 4.5) recibe este resultado y decide el
   // estado final (cotizacion/pedido normal, o en_revision si no verificó).
-  onCompletado: (resultado: { clienteId: number; verificado: boolean }) => void;
+  // `datosContacto` trae lo que el propio usuario tecleó en el formulario —
+  // útil solo para MOSTRAR en el PDF (nunca para decidir a dónde se manda
+  // el correo real, eso lo resuelve el backend por clienteId). Si el
+  // cliente ya existía, `correoMostrar` es la versión enmascarada, nunca
+  // el correo completo.
+  onCompletado: (resultado: {
+    clienteId: number;
+    verificado: boolean;
+    datosContacto: { empresa: string; telefono: string; correoMostrar: string };
+  }) => void;
 }
 
 export default function IdentificacionCliente({
@@ -63,8 +72,12 @@ export default function IdentificacionCliente({
     setResultadoFinal(null);
   };
 
-  const cerrarYReiniciar = () => {
-    reiniciar();
+  // Cerrar (❌ o clic fuera) NO debe perder el progreso — si el cliente ya
+  // buscó, ya le mandamos el código, o ya está por escribirlo, todo eso debe
+  // seguir ahí cuando vuelva a abrir el panel. Solo se resetea de verdad
+  // cuando el flujo termina con éxito (ver handleContinuar).
+  const cerrarSinReiniciar = () => {
+    setError(null);
     onCerrar();
   };
 
@@ -165,15 +178,27 @@ export default function IdentificacionCliente({
 
   const handleContinuar = () => {
     if (clienteId === null || resultadoFinal === null) return;
-    onCompletado({ clienteId, verificado: resultadoFinal.verificado });
-    cerrarYReiniciar();
+    onCompletado({
+      clienteId,
+      verificado: resultadoFinal.verificado,
+      datosContacto: {
+        empresa,
+        telefono,
+        correoMostrar: impresion?.correo_mask || correo || "",
+      },
+    });
+    // Aquí sí se reinicia — el flujo terminó con éxito, la próxima vez que
+    // se abra el panel (si acaso) debe empezar limpio, no seguir donde
+    // quedó esta identificación ya usada.
+    reiniciar();
+    onCerrar();
   };
 
   return (
     <>
       {/* Backdrop */}
       <div
-        onClick={cerrarYReiniciar}
+        onClick={cerrarSinReiniciar}
         className={`fixed inset-0 bg-black/30 transition-opacity z-40 ${
           abierto ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
         }`}
@@ -187,7 +212,7 @@ export default function IdentificacionCliente({
       >
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#e2ddd0]">
           <h3 className="font-bold text-[#1e3a2b]">Identifícate para continuar</h3>
-          <button onClick={cerrarYReiniciar} className="text-[#6b6f63] hover:text-[#1e3a2b]">
+          <button onClick={cerrarSinReiniciar} className="text-[#6b6f63] hover:text-[#1e3a2b]">
             ✕
           </button>
         </div>

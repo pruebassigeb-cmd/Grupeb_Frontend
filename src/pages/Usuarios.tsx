@@ -1,6 +1,10 @@
 import Dashboard from "../layouts/Sidebar";
 import Modal from "../components/Modal";
 import FormularioUsuario from "../components/FormularioUsuario";
+import { limpiarBorrador } from "../hooks/useBorradorFormulario";
+import { claveBorradorUsuario } from "../utils/clavesBorrador";
+import BotonAuditoria from "../components/auditoria/BotonAuditoria";
+import PanelAuditoria from "../components/auditoria/PanelAuditoria";
 import { useState, useEffect } from "react";
 import { getUsuarios, getUsuarioById, createUsuario, updateUsuario, deleteUsuario, toggleActivoUsuario } from "../services/usuariosService";
 import type { Usuario } from "../types/usuario.types";
@@ -101,6 +105,7 @@ export default function Usuarios() {
         showAlert("Usuario creado exitosamente");
       }
       await cargarUsuarios();
+      limpiarBorrador(claveBorradorUsuario(usuarioEditar));
       setModalOpen(false);
       setUsuarioEditar(null);
     } catch (error: any) {
@@ -265,6 +270,12 @@ export default function Usuarios() {
 
                   {/* ACCIONES */}
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                    <BotonAuditoria
+                      tabla="usuarios"
+                      id={usuario.idusuario}
+                      etiqueta={`Historial de ${usuario.nombre} ${usuario.apellido}`}
+                      className="mr-3 align-middle"
+                    />
                     <button
                       onClick={() => handleEditar(usuario.idusuario)}
                       className="text-blue-600 hover:text-blue-900 mr-4"
@@ -304,6 +315,22 @@ export default function Usuarios() {
           onCancel={handleCancelar}
           usuarioEditar={usuarioEditar}
         />
+        {usuarioEditar && (
+          <div className="mt-6 space-y-5 border-t border-gray-200 pt-5">
+            <PanelAuditoria
+              tabla="usuarios"
+              id={usuarioEditar.idusuario}
+              titulo="Información de auditoría del usuario"
+              limite={20}
+            />
+            <PanelAuditoria
+              tabla="privilegios_has_usuarios"
+              id={usuarioEditar.idusuario}
+              titulo="Historial de permisos del usuario"
+              limite={20}
+            />
+          </div>
+        )}
       </Modal>
     </Dashboard>
   );

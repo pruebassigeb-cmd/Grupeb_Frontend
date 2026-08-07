@@ -125,6 +125,13 @@ export interface Acabados {
   base_medida: string;
   idcat_empaque: number | null;
   pzs_caja: string;
+
+  // ✅ NUEVO — defaults del producto que precargan los "Acabados especiales"
+  // de la cotización (solicitud_producto_papel.uv/alto_relieve, etc.).
+  llevaUv: boolean;
+  llevaAltoRelieve: boolean;
+  llevaTextura: boolean;
+  llevaHotStamping: boolean;
 }
 
 export interface Maquinaria {
@@ -271,6 +278,10 @@ export const newAcabados = (): Acabados => ({
   base_medida: "",
   idcat_empaque: null,
   pzs_caja: "",
+  llevaUv: false,
+  llevaAltoRelieve: false,
+  llevaTextura: false,
+  llevaHotStamping: false,
 });
 
 export const newMaquinaria = (): Maquinaria => ({

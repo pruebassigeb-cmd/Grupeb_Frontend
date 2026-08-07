@@ -25,6 +25,9 @@ import { generarNotaRemision } from "../../utils/envio/generarNotaRemision";
 import { showAlert } from "../CustomAlert";
 import { showConfirm } from "../CustomConfirm";
 import { inputClass, labelClass } from "./../enviosConstants";
+import BotonAuditoria from "../auditoria/BotonAuditoria";
+import PanelAuditoria from "../auditoria/PanelAuditoria";
+import { leerBorrador, useAutoguardarBorrador, limpiarBorrador } from "../../hooks/useBorradorFormulario";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TIPOS LOCALES
@@ -174,9 +177,27 @@ function DetalleCompletoEnvio({ envio }: { envio: EnvioDetallado }) {
           )}
 
           {envio.nota_remision && (
-            <div>
+            <div className="flex items-center gap-2">
+              <div>
               <p className="text-gray-400 uppercase tracking-wide font-semibold">Nota de remisión</p>
               <p className="text-blue-600 font-medium">{envio.nota_remision.no_nota}</p>
+              </div>
+              <BotonAuditoria
+                tabla="nota_remision"
+                id={envio.nota_remision.idnota}
+                etiqueta={`Historial de la nota ${envio.nota_remision.no_nota}`}
+              />
+            </div>
+          )}
+
+          {envio.idbitacora && (
+            <div className="flex items-center gap-2">
+              <p className="text-gray-400 uppercase tracking-wide font-semibold">Bitácora de reparto</p>
+              <BotonAuditoria
+                tabla="bitacora_reparto"
+                id={envio.idbitacora}
+                etiqueta="Historial de la bitácora de reparto"
+              />
             </div>
           )}
 
@@ -317,6 +338,15 @@ function TarjetaEnvio({
             </button>
           )}
         </div>
+      </div>
+
+      <div className="border-b border-gray-100 bg-white px-4 py-3">
+        <PanelAuditoria
+          tabla="envio"
+          id={envio.idenvio}
+          titulo={`Auditoría del envío #${envio.idenvio}`}
+          limite={20}
+        />
       </div>
 
       {/* ── Bultos de este envío ── */}
@@ -518,14 +548,25 @@ function FormularioMarcarCompletado({
   onSuccess: () => Promise<void> | void;
   onCancel: () => void;
 }) {
-  const [tipo, setTipo] = useState<"local" | "paqueteria" | "recoleccion">("local");
+  interface BorradorMarcarCompletado {
+    tipo: "local" | "paqueteria" | "recoleccion";
+    form: {
+      usuarios_idusuario: number; unidades_idunidad: number;
+      paqueteria_idpaqueteria: number; numero_guia: string;
+      costo_flete: string; observaciones: string; nombre_quien_recogio: string;
+    };
+  }
+  const claveBorrador = `envio-marcar-completado-${idsolicitud}`;
+  const [borradorInicial] = useState(() => leerBorrador<BorradorMarcarCompletado>(claveBorrador));
+
+  const [tipo, setTipo] = useState<"local" | "paqueteria" | "recoleccion">(borradorInicial?.tipo ?? "local");
   const [conductores, setConductores] = useState<Conductor[]>([]);
   const [unidades, setUnidades] = useState<Unidad[]>([]);
   const [paqueterias, setPaqueterias] = useState<Paqueteria[]>([]);
   const [cargandoCatalogos, setCargandoCatalogos] = useState(true);
   const [guardando, setGuardando] = useState(false);
 
-  const [form, setForm] = useState({
+  const [form, setForm] = useState(borradorInicial?.form ?? {
     usuarios_idusuario:      0,
     unidades_idunidad:       0,
     paqueteria_idpaqueteria: 0,
@@ -534,6 +575,8 @@ function FormularioMarcarCompletado({
     observaciones:           "",
     nombre_quien_recogio:    "",
   });
+
+  useAutoguardarBorrador<BorradorMarcarCompletado>(claveBorrador, { tipo, form }, true);
 
   useEffect(() => {
     const cargar = async () => {
@@ -563,6 +606,7 @@ function FormularioMarcarCompletado({
         observaciones:           form.observaciones           || undefined,
         nombre_quien_recogio:    form.nombre_quien_recogio    || undefined,
       });
+      limpiarBorrador(claveBorrador);
       await onSuccess();
     } catch (error: any) {
       showAlert(error.response?.data?.error || "Error al marcar el envío como completado.");

@@ -17,6 +17,9 @@ import ModalAprobarDiseno from "./ModalAprobarDiseno";
 import Modal from "../Modal";
 import { usePermisos } from "../../hooks/usePermiso";
 import { showAlert } from '../CustomAlert';
+import FichaDisenoPanel from "./Fichadisenopanel";
+import BotonAuditoria from "../auditoria/BotonAuditoria";
+import PanelAuditoria from "../auditoria/PanelAuditoria";
 
 
 const POLLING_MS = 3000;
@@ -124,7 +127,7 @@ interface Props {
   onDisenoAprobado?: (noProduccion: string | null) => void;
 }
 
-type PanelActivo = "chat" | "historial" | "participantes";
+type PanelActivo = "ficha" | "chat" | "historial" | "participantes" | "auditoria";
 
 export default function ChatRevision({ idorden, usuarioId, onClose, onDisenoAprobado }: Props) {
   const { puedeEditarDiseno, puedeOrdenDiseno } = usePermisos({
@@ -157,9 +160,9 @@ export default function ChatRevision({ idorden, usuarioId, onClose, onDisenoApro
     perforacion: boolean;
     nombre_producto: string | null;
     medida: string | null;
-      tipo_material?: string;     // ← NUEVO
-  uv?: boolean | null;         // ← NUEVO
-  alto_relieve?: boolean | null; // ← NUEVO
+    tipo_material?: string;     // ← NUEVO
+    uv?: boolean | null;         // ← NUEVO
+    alto_relieve?: boolean | null; // ← NUEVO
   } | null>(null);
 
   const cargarOrden = useCallback(async () => {
@@ -325,7 +328,7 @@ export default function ChatRevision({ idorden, usuarioId, onClose, onDisenoApro
 
         {/* Tabs */}
         <div className="flex gap-1 mt-3">
-          {(["chat", "historial", "participantes"] as PanelActivo[]).map(tab => (
+          {(["ficha", "chat", "historial", "participantes", "auditoria"] as PanelActivo[]).map(tab => (
             <button
               key={tab}
               onClick={() => setPanel(tab)}
@@ -334,48 +337,62 @@ export default function ChatRevision({ idorden, usuarioId, onClose, onDisenoApro
                 : "text-gray-500 hover:text-gray-700"
                 }`}
             >
-              {tab === "chat"
-                ? "💬 Chat"
-                : tab === "historial"
-                  ? `📋 Historial (${orden.revisiones.length})`
-                  : `👥 Participantes (${orden.participantes.length})`}
+              {tab === "ficha"
+                ? "📋 Ficha"
+                : tab === "chat"
+                  ? "💬 Chat"
+                  : tab === "historial"
+                    ? `🗂️ Historial (${orden.revisiones.length})`
+                    : tab === "participantes"
+                      ? `👥 Participantes (${orden.participantes.length})`
+                      : "ⓘ Auditoría"}
             </button>
           ))}
         </div>
       </div>
 
+      {/* ── Panel Ficha ── */}
+      {panel === "ficha" && (
+        <div className="flex-1 overflow-y-auto px-4 py-3 bg-gray-50" style={{ maxHeight: 440 }}>
+          <FichaDisenoPanel
+            idorden_diseno={idorden}
+            onCambio={cargarOrden}
+          />
+        </div>
+      )}
+
       {/* ── Panel Chat ── */}
       {panel === "chat" && (
         <>
           {infoProducto && (infoProducto.observacion || infoProducto.descripcion || infoProducto.pigmentos || infoProducto.perforacion || infoProducto.uv || infoProducto.alto_relieve) && (
-  <div className="mx-4 mt-3 mb-1 p-3 bg-amber-50 border border-amber-200 rounded-xl">
-    <p className="text-xs font-semibold text-amber-700 mb-1.5">
-      📋 Info del producto
-      {infoProducto.tipo_material === "papel" && (
-        <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-200 text-amber-800">
-          📄 Papel
-        </span>
-      )}
-    </p>
-    <p className="text-xs text-gray-700">
-      {[
-        infoProducto.nombre_producto && `${infoProducto.nombre_producto}${infoProducto.medida ? ` ${infoProducto.medida}` : ""}`,
-        infoProducto.descripcion && `📌 ${infoProducto.descripcion}`,
-        infoProducto.observacion && `💬 ${infoProducto.observacion}`,
-      ].filter(Boolean).join("  ·  ")}
-    </p>
-    {(infoProducto.pigmentos || infoProducto.perforacion || infoProducto.uv || infoProducto.alto_relieve) && (
-      <p className="text-xs text-gray-600 mt-0.5">
-        {[
-          infoProducto.pigmentos && `🧪 ${infoProducto.pigmentos}`,
-          infoProducto.perforacion && "🔵 Con perforación",
-          infoProducto.uv && "🔆 UV",
-          infoProducto.alto_relieve && "🔳 Alto relieve",
-        ].filter(Boolean).join("  ·  ")}
-      </p>
-    )}
-  </div>
-)}
+            <div className="mx-4 mt-3 mb-1 p-3 bg-amber-50 border border-amber-200 rounded-xl">
+              <p className="text-xs font-semibold text-amber-700 mb-1.5">
+                📋 Info del producto
+                {infoProducto.tipo_material === "papel" && (
+                  <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-200 text-amber-800">
+                    📄 Papel
+                  </span>
+                )}
+              </p>
+              <p className="text-xs text-gray-700">
+                {[
+                  infoProducto.nombre_producto && `${infoProducto.nombre_producto}${infoProducto.medida ? ` ${infoProducto.medida}` : ""}`,
+                  infoProducto.descripcion && `📌 ${infoProducto.descripcion}`,
+                  infoProducto.observacion && `💬 ${infoProducto.observacion}`,
+                ].filter(Boolean).join("  ·  ")}
+              </p>
+              {(infoProducto.pigmentos || infoProducto.perforacion || infoProducto.uv || infoProducto.alto_relieve) && (
+                <p className="text-xs text-gray-600 mt-0.5">
+                  {[
+                    infoProducto.pigmentos && `🧪 ${infoProducto.pigmentos}`,
+                    infoProducto.perforacion && "🔵 Con perforación",
+                    infoProducto.uv && "🔆 UV",
+                    infoProducto.alto_relieve && "🔳 Alto relieve",
+                  ].filter(Boolean).join("  ·  ")}
+                </p>
+              )}
+            </div>
+          )}
           <div
             ref={chatRef}
             className="flex-1 overflow-y-auto px-4 py-3 space-y-2 bg-gray-50"
@@ -415,10 +432,15 @@ export default function ChatRevision({ idorden, usuarioId, onClose, onDisenoApro
 
                   {/* Mensaje de sistema — pill centrado */}
                   {esSistema && (
-                    <div className="flex justify-center mb-1">
+                    <div className="flex items-center justify-center gap-1.5 mb-1">
                       <span className="text-xs text-gray-400 bg-white border border-gray-200 px-3 py-1 rounded-full">
                         {msg.contenido}
                       </span>
+                      <BotonAuditoria
+                        tabla="mensaje_diseno"
+                        id={msg.idmensaje}
+                        etiqueta="Historial del mensaje"
+                      />
                     </div>
                   )}
 
@@ -437,9 +459,14 @@ export default function ChatRevision({ idorden, usuarioId, onClose, onDisenoApro
                           }`}>
                           {msg.contenido}
                         </div>
-                        <span className="text-xs text-gray-400 mt-0.5 px-1">
-                          {fmtHora(msg.created_at)}
-                        </span>
+                        <div className="mt-0.5 flex items-center gap-1 px-1">
+                          <span className="text-xs text-gray-400">{fmtHora(msg.created_at)}</span>
+                          <BotonAuditoria
+                            tabla="mensaje_diseno"
+                            id={msg.idmensaje}
+                            etiqueta="Historial del mensaje"
+                          />
+                        </div>
                       </div>
                     </div>
                   )}
@@ -576,9 +603,27 @@ export default function ChatRevision({ idorden, usuarioId, onClose, onDisenoApro
                   {p.nombre} {p.apellido}
                 </p>
                 <p className="text-xs text-gray-400">{p.rol_sistema}</p>
+                <p className="text-[11px] text-gray-400">Agregado: {fmtFecha(p.agregado_at)}</p>
               </div>
+              <BotonAuditoria
+                tabla="orden_diseno_participante"
+                id={p.idparticipante}
+                etiqueta={`Historial de ${p.nombre} ${p.apellido} en la orden`}
+              />
             </div>
           ))}
+        </div>
+      )}
+
+      {panel === "auditoria" && (
+        <div className="flex-1 overflow-y-auto bg-gray-50 px-4 py-4" style={{ maxHeight: 440 }}>
+          <PanelAuditoria
+            tabla="orden_diseno"
+            id={idorden}
+            titulo={`Auditoría de la orden del pedido ${orden.no_pedido}`}
+            limite={50}
+            className="rounded-xl bg-white p-4 shadow-sm"
+          />
         </div>
       )}
 

@@ -551,7 +551,7 @@ export function dibujarCajasPie(
 
   if (ocultarDatosBancarios) {
     doc.setFont("helvetica", "bold"); doc.setFontSize(12); doc.setTextColor(...BLACK);
-    doc.text("Sin remisión", lX + lW / 2, pfY + BANCO_H / 2 + 3, { align: "center" });
+    //doc.text("Sin remisión", lX + lW / 2, pfY + BANCO_H / 2 + 3, { align: "center" });
   } else {
     const y1     = pfY + 5;
     const parteA = "Favor de depositar en Banamex  —  A nombre de  ";

@@ -1,6 +1,7 @@
 // src/pages/papel/PreciosAcabadosPapel.tsx
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Dashboard from "../../layouts/Sidebar";
+import BotonAuditoria from "../../components/auditoria/BotonAuditoria";
 import type {
   AcabadoCostoCatalogo,
   EscalaCostoCatalogo,
@@ -22,6 +23,7 @@ import {
   formatearPrecioInput,
   normalizarPrecioInput,
 } from "../../utils/papel/preciosAcabadosPapel.utils";
+import { leerBorrador, useAutoguardarBorrador, limpiarBorrador } from "../../hooks/useBorradorFormulario";
 
 type EstadoPrecios = Record<string, string>;
 
@@ -39,6 +41,18 @@ export default function PreciosAcabadosPapel() {
   const [guardandoCostoMetro, setGuardandoCostoMetro] = useState(false);
   const [mensaje, setMensaje] = useState("");
   const [error, setError] = useState("");
+
+  // Punto de guardado (ver src/hooks/useBorradorFormulario.ts) — la matriz
+  // se recarga del servidor cada vez que cambia idAcabado Y también después
+  // de cada guardado exitoso; el borrador solo se aplica la PRIMERA vez que
+  // se carga un acabado dado, para no pisar los precios recién guardados en
+  // la siguiente recarga automática.
+  const borradorAplicadoParaId = useRef<number | null>(null);
+  useAutoguardarBorrador(
+    idAcabado ? `precios-acabados-${idAcabado}` : "precios-acabados-sin-seleccion",
+    precios,
+    idAcabado !== null
+  );
 
   const acabadoSeleccionado = useMemo(
     () => acabados.find((item) => item.id === idAcabado) ?? null,
@@ -114,6 +128,11 @@ export default function PreciosAcabadosPapel() {
         }
       }
 
+      if (borradorAplicadoParaId.current !== acabadoId) {
+        borradorAplicadoParaId.current = acabadoId;
+        const borrador = leerBorrador<EstadoPrecios>(`precios-acabados-${acabadoId}`);
+        if (borrador) { setPrecios(borrador); return; }
+      }
       setPrecios(siguiente);
     } catch (err: any) {
       setError(err?.response?.data?.error || "No se pudo cargar la matriz");
@@ -155,6 +174,7 @@ export default function PreciosAcabadosPapel() {
       setMensaje(
         `${resultado.message}. Celdas procesadas: ${resultado.actualizadas}.`,
       );
+      limpiarBorrador(`precios-acabados-${idAcabado}`);
       await cargarMatriz(idAcabado);
     } catch (err: any) {
       setError(err?.response?.data?.error || "No se pudo guardar la matriz");
@@ -793,6 +813,7 @@ export default function PreciosAcabadosPapel() {
                       {matriz.escalas.map((escala) => {
                         const key = `${fila.idTamano}:${escala.id}`;
                         const habilitada = escala.activo && fila.activo;
+                        const celda = fila.precios[String(escala.id)];
 
                         return (
                           <td
@@ -803,7 +824,8 @@ export default function PreciosAcabadosPapel() {
                                 : "bg-slate-50/60"
                             } ${habilitada ? "opacity-100" : "opacity-45"}`}
                           >
-                            <div className="relative mx-auto w-[104px]">
+                            <div className="mx-auto flex w-[136px] items-center gap-2">
+                              <div className="relative w-[104px]">
                               <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400">
                                 $
                               </span>
@@ -820,6 +842,13 @@ export default function PreciosAcabadosPapel() {
                                   escala.cantidad,
                                 )} piezas`}
                                 className="h-9 w-full rounded-lg border border-slate-300 bg-white pl-6 pr-2 text-right text-sm font-semibold text-slate-700 outline-none transition placeholder:text-slate-300 focus:border-amber-400 focus:ring-4 focus:ring-amber-100 disabled:cursor-not-allowed disabled:bg-slate-100"
+                              />
+                              </div>
+                              <BotonAuditoria
+                                tabla="acabado_costo"
+                                id={celda?.id}
+                                etiqueta={`Auditoría de ${fila.tamano} / ${formatearCantidad(escala.cantidad)} piezas`}
+                                alineacion="derecha"
                               />
                             </div>
                           </td>

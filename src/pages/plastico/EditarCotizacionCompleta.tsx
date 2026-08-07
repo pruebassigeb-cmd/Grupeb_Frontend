@@ -18,6 +18,7 @@ import ComboboxInsumo from "../../components/proveedores/ComboboxInsumo";
 import ModalRegistrarInsumo from "../../components/proveedores/ModalRegistrarInsumo";
 import { getTiposInsumo } from "../../services/proveedoresService";
 import type { Insumo } from "../../services/proveedoresService";
+import { leerBorrador, useAutoguardarBorrador, limpiarBorrador } from "../../hooks/useBorradorFormulario";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 interface DetalleEdit {
@@ -632,6 +633,18 @@ export default function EditarCotizacionCompleta() {
   const [cotizacionMixta, setCotizacionMixta] = useState(false);
   const [sinIva, setSinIva] = useState(false);
 
+  interface BorradorEditarCotizacion {
+    monedaSeleccionada: "MXN" | "USD";
+    productos: ProductoRow[];
+    cotizacionMixta: boolean;
+    sinIva: boolean;
+  }
+  const claveBorrador = `cotizacion-editar-${noCotizacion}`;
+  const borradorAplicado = useRef(false);
+  useAutoguardarBorrador<BorradorEditarCotizacion>(claveBorrador, {
+    monedaSeleccionada, productos, cotizacionMixta, sinIva,
+  }, productos.length > 0);
+
   const [suajes, setSuajes] = useState<any[]>([]);
   const [coloresAsa, setColoresAsa] = useState<any[]>([]);
   const [medidasTroquel, setMedidasTroquel] = useState<any[]>([]);
@@ -693,9 +706,22 @@ export default function EditarCotizacionCompleta() {
           return;
         }
 
+        setCotOrig(cot);
+
+        if (!borradorAplicado.current) {
+          borradorAplicado.current = true;
+          const borrador = leerBorrador<BorradorEditarCotizacion>(claveBorrador);
+          if (borrador) {
+            setMonedaSeleccionada(borrador.monedaSeleccionada);
+            setProductos(borrador.productos);
+            setCotizacionMixta(borrador.cotizacionMixta);
+            setSinIva(borrador.sinIva);
+            return;
+          }
+        }
+
         setCotizacionMixta(tienePapel && tienePlastico);
         setSinIva((cot as any).sin_iva ?? false);
-        setCotOrig(cot);
         setMonedaSeleccionada((cot.moneda as "MXN" | "USD") ?? "MXN");
         setProductos((cot.productos as any[])
           .filter(p => p.tipo_material !== "papel" && p.tipoCotizacion !== "papel")
@@ -748,7 +774,7 @@ export default function EditarCotizacionCompleta() {
         setCargando(false);
       }
     })();
-  }, [noCotizacion, navigate]);
+  }, [noCotizacion, navigate, claveBorrador]);
 
   // ── Helpers de estado ──────────────────────────────────────────────────────
   const setProductoField = <K extends keyof ProductoEdit>(pi: number, k: K, v: ProductoEdit[K]) =>
@@ -1041,6 +1067,7 @@ export default function EditarCotizacionCompleta() {
       const cotFresca = todas.find(c => c.no_cotizacion === cotOrig.no_cotizacion);
       if (cotFresca) await regenerarPdfCotizacion(cotFresca);
 
+      limpiarBorrador(claveBorrador);
       setExito(true);
       setTimeout(() => volverAlOrigen(), 1500);
     } catch (e: any) {

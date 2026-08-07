@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import type { Archivo, CarpetaFrontend, Estadisticas, SubcarpetaPDF, SubcarpetaSuaje, SubcarpetaCatalogo } from "../../services/archivos/archivos.service";
-import { subirArchivo, listarArchivos, eliminarArchivo, CARPETAS_LABELS, obtenerEstadisticas, SUBCARPETAS_PDF, SUBCARPETAS_SUAJE, SUBCARPETAS_CATALOGO } from "../../services/archivos/archivos.service";
+import { subirArchivo, listarArchivos, eliminarArchivo, CARPETAS_LABELS, obtenerEstadisticas, SUBCARPETAS_PDF, SUBCARPETAS_SUAJE, SUBCARPETAS_CATALOGO, SUBCARPETAS_CATALOGOS_ADMIN } from "../../services/archivos/archivos.service";
 import { verificarCodigo } from "../../services/archivos/backup.service";
 import Dashboard from "../../layouts/Sidebar";
 import { showAlert } from '../../components/CustomAlert';
@@ -18,12 +18,13 @@ const CARPETAS_OPTIONS: { value: CarpetaFrontend; label: string }[] = [
   { value: "backups", label: "Backups BD" },
   { value: "suaje", label: "Productos" },
   { value: "catalogoproductos", label: "Catálogo de Productos" },
+  { value: "catalogos-admin", label: "Catálogos de Papel" },
 ];
 
 const CARPETAS_PROTEGIDAS: CarpetaFrontend[] = ["backups"];
 
 // Carpetas que tienen subcarpetas y deben mostrar la vista intermedia
-const CARPETAS_CON_SUBCARPETAS: CarpetaFrontend[] = ["pdfs", "suaje", "catalogoproductos"];
+const CARPETAS_CON_SUBCARPETAS: CarpetaFrontend[] = ["pdfs", "suaje", "catalogoproductos", "catalogos-admin"];
 const ORDEN_OPTIONS: { value: OrdenTipo; label: string }[] = [
   { value: "fecha_desc", label: "Fecha: más reciente" },
   { value: "fecha_asc", label: "Fecha: más antiguo" },
@@ -199,6 +200,7 @@ const getSubcarpetasDeCarpeta = (carpeta: CarpetaFrontend) => {
   if (carpeta === "pdfs") return SUBCARPETAS_PDF;
   if (carpeta === "suaje") return SUBCARPETAS_SUAJE;
   if (carpeta === "catalogoproductos") return SUBCARPETAS_CATALOGO;
+  if (carpeta === "catalogos-admin") return SUBCARPETAS_CATALOGOS_ADMIN;
   return [];
 };
 
@@ -552,12 +554,11 @@ const [subcarpetaActiva, setSubcarpetaActiva] = useState<SubcarpetaPDF | Subcarp
   const ordenActualLabel = ORDEN_OPTIONS.find(o => o.value === orden)?.label ?? "Ordenar";
   const agrupaActualLabel = AGRUPA_OPTIONS.find(o => o.value === agrupacion)?.label ?? "Agrupar";
 
-  // Label de subcarpeta activa (busca en PDF y Suaje)
-const subcarpetaLabel = carpetaActiva === "suaje"
-    ? SUBCARPETAS_SUAJE.find(s => s.value === subcarpetaActiva)?.label ?? ""
-    : carpetaActiva === "catalogoproductos"
-    ? SUBCARPETAS_CATALOGO.find(s => s.value === subcarpetaActiva)?.label ?? ""
-    : SUBCARPETAS_PDF.find(s => s.value === subcarpetaActiva)?.label ?? "";
+  // Label de subcarpeta activa — usa el mismo mapeo carpeta→subcarpetas que
+  // el resto de la pantalla, así cualquier carpeta nueva con subcarpetas
+  // (ej. catalogos-admin) queda cubierta automáticamente.
+  const subcarpetaLabel = (carpetaActiva ? getSubcarpetasDeCarpeta(carpetaActiva) : [])
+    .find(s => s.value === subcarpetaActiva)?.label ?? "";
 
   // Subcarpetas para el modal de subida según carpeta seleccionada
   const subcarpetasDelModal = getSubcarpetasDeCarpeta(carpetaSeleccion);
@@ -575,6 +576,7 @@ const colores: Record<CarpetaFrontend, string> = {
       "backups": "text-gray-400",
       "suaje": "text-purple-400",
       "catalogoproductos": "text-amber-400",
+      "catalogos-admin": "text-teal-400",
     };
     return (
       <svg className={`w-16 h-16 ${colores[carpeta]}`} fill="currentColor" viewBox="0 0 24 24">

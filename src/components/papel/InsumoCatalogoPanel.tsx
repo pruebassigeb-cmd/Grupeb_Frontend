@@ -15,6 +15,10 @@ import {
 import ModalRegistrarInsumo from "../proveedores/ModalRegistrarInsumo";
 import FormularioProveedor from "../proveedores/FormularioProveedor";
 import { showAlert } from "../../components/CustomAlert";
+import BotonAuditoria from "../auditoria/BotonAuditoria";
+import { leerBorrador, useAutoguardarBorrador, limpiarBorrador } from "../../hooks/useBorradorFormulario";
+import ImagenCatalogo from "./ImagenCatalogo";
+import type { UseImagenesCatalogo } from "../../hooks/papel/useImagenesCatalogo";
 
 // ── Primitivos (mismo estilo visual que FoilPanel) ─────────────────────────
 function Btn({ children, onClick, variant = "primary", small, disabled }: {
@@ -66,10 +70,14 @@ function FormularioAltaConMedida({
   onCreado: () => void;
   onCancelar: () => void;
 }) {
-  const [medida, setMedida] = useState("");
-  const [codigo, setCodigo] = useState("");
-  const [seleccionados, setSeleccionados] = useState<number[]>([]);
+  const claveBorrador = `insumo-catalogo-nuevo-${tipoInsumoId}`;
+  const [borradorInicial] = useState(() => leerBorrador<{ medida: string; codigo: string; seleccionados: number[] }>(claveBorrador));
+  const [medida, setMedida] = useState(borradorInicial?.medida ?? "");
+  const [codigo, setCodigo] = useState(borradorInicial?.codigo ?? "");
+  const [seleccionados, setSeleccionados] = useState<number[]>(borradorInicial?.seleccionados ?? []);
   const [saving, setSaving] = useState(false);
+
+  useAutoguardarBorrador(claveBorrador, { medida, codigo, seleccionados }, true);
 
   const toggleProveedor = (id: number) =>
     setSeleccionados((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
@@ -85,6 +93,7 @@ function FormularioAltaConMedida({
         proveedores_ids: seleccionados,
       });
       showAlert(`"${prefijoNombre} ${medida.trim()}" registrado`, "success");
+      limpiarBorrador(claveBorrador);
       onCreado();
     } catch (error: any) {
       showAlert(error?.response?.data?.error || "Error al registrar", "error");
@@ -212,6 +221,11 @@ interface Props {
   /** ✅ NUEVO — se llama tras crear/desactivar/reactivar un registro, para que
    *  el padre (Catalogos.tsx) pueda refrescar el contador del sidebar. */
   onCambio?: () => void;
+  /** ✅ NUEVO — muestra una miniatura de imagen por renglón (Tipo de papel,
+   *  Laminado), usando idinsumo como catalogo_id. */
+  conImagen?: boolean;
+  catalogoKeyImagen?: string;
+  imgApi?: UseImagenesCatalogo;
 }
 
 export default function InsumoCatalogoPanel({
@@ -220,6 +234,9 @@ export default function InsumoCatalogoPanel({
   prefijoNombre = "",
   placeholderMedida = "",
   onCambio,
+  conImagen = false,
+  catalogoKeyImagen,
+  imgApi,
 }: Props) {
   const [tipoInsumoId, setTipoInsumoId] = useState<number | null>(null);
   const [insumos, setInsumos] = useState<Insumo[]>([]);
@@ -371,6 +388,9 @@ export default function InsumoCatalogoPanel({
             nombreInicial=""
             onRegistrado={() => { setMostrarAlta(false); recargar(); }}
             onCancelar={() => setMostrarAlta(false)}
+            conImagen={conImagen}
+            catalogoKeyImagen={catalogoKeyImagen}
+            imgApi={imgApi}
           />
         )
       )}
@@ -401,9 +421,9 @@ export default function InsumoCatalogoPanel({
       </div>
 
       <div style={{ border: "1px solid #E5E7EB", borderRadius: 9, overflow: "hidden" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1.4fr 2fr auto", background: "#F9FAFB", borderBottom: "1px solid #E5E7EB", padding: "0 16px" }}>
-          {["Nombre", "Proveedores", ""].map((h) => (
-            <div key={h} style={{ padding: "10px 0", fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#6B7280" }}>{h}</div>
+        <div style={{ display: "grid", gridTemplateColumns: (conImagen ? "48px " : "") + "1.4fr 2fr auto", background: "#F9FAFB", borderBottom: "1px solid #E5E7EB", padding: "0 16px" }}>
+          {[...(conImagen ? [""] : []), "Nombre", "Proveedores", ""].map((h, i) => (
+            <div key={i} style={{ padding: "10px 0", fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#6B7280" }}>{h}</div>
           ))}
         </div>
 
@@ -414,7 +434,12 @@ export default function InsumoCatalogoPanel({
             {search ? "Sin resultados." : verInactivos ? "No hay registros inactivos." : "No hay registros aún."}
           </div>
         ) : insumos.map((item, idx) => (
-          <div key={item.idinsumo} style={{ display: "grid", gridTemplateColumns: "1.4fr 2fr auto", padding: "10px 16px", borderBottom: idx < insumos.length - 1 ? "1px solid #F3F4F6" : "none", background: idx % 2 === 0 ? "#fff" : "#FAFAFA" }}>
+          <div key={item.idinsumo} style={{ display: "grid", gridTemplateColumns: (conImagen ? "48px " : "") + "1.4fr 2fr auto", padding: "10px 16px", borderBottom: idx < insumos.length - 1 ? "1px solid #F3F4F6" : "none", background: idx % 2 === 0 ? "#fff" : "#FAFAFA" }}>
+            {conImagen && imgApi && catalogoKeyImagen && (
+              <div style={{ alignSelf: "center" }}>
+                <ImagenCatalogo api={imgApi} catalogoKey={catalogoKeyImagen} catalogoId={item.idinsumo} size={36} />
+              </div>
+            )}
             <div style={{ fontSize: 13, color: "#111827", fontWeight: 500, alignSelf: "center" }}>{item.nombre}</div>
 
             <div>
@@ -422,8 +447,16 @@ export default function InsumoCatalogoPanel({
                 {item.proveedores.length === 0 ? (
                   <span style={{ fontSize: 11, color: "#9CA3AF" }}>Sin proveedor</span>
                 ) : item.proveedores.map((p) => (
-                  <ChipProveedor key={p.idinsumo_proveedor} nombre={p.proveedor_nombre} codigo={p.codigo}
-                    onQuitar={() => handleQuitarProveedor(p.idproveedor, p.idinsumo_proveedor, item.nombre)} />
+                  <span key={p.idinsumo_proveedor} className="inline-flex items-center gap-1">
+                    <ChipProveedor nombre={p.proveedor_nombre} codigo={p.codigo}
+                      onQuitar={() => handleQuitarProveedor(p.idproveedor, p.idinsumo_proveedor, item.nombre)} />
+                    <BotonAuditoria
+                      tabla="insumo_proveedor"
+                      id={p.idinsumo_proveedor}
+                      etiqueta={`Auditoría de ${item.nombre} con ${p.proveedor_nombre}`}
+                      alineacion="izquierda"
+                    />
+                  </span>
                 ))}
                 {!verInactivos && (
                   <button onClick={() => setAgregandoProveedorA(agregandoProveedorA === item.idinsumo ? null : item.idinsumo)}
@@ -444,6 +477,11 @@ export default function InsumoCatalogoPanel({
             </div>
 
             <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 6 }}>
+              <BotonAuditoria
+                tabla="insumo"
+                id={item.idinsumo}
+                etiqueta={`Información de auditoría de ${item.nombre}`}
+              />
               {verInactivos ? (
                 <Btn variant="primary" small onClick={() => handleReactivar(item.idinsumo)} disabled={procesando === item.idinsumo}>
                   {procesando === item.idinsumo ? "..." : "↩ Reactivar"}

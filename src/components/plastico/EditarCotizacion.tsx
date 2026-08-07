@@ -13,6 +13,7 @@ import {
 import { generarPdfPedido } from "../../utils/generarPdfPedido";
 import { getVentaByPedido } from "../../services/ventasservice";
 import { showConfirm } from "../CustomConfirm";
+import { leerBorrador, useAutoguardarBorrador, limpiarBorrador } from "../../hooks/useBorradorFormulario";
 
 const ESTADO_ID = {
   PENDIENTE: 1,
@@ -223,12 +224,16 @@ export default function EditarCotizacion({
     "Pendiente" | "Aprobada" | "Rechazada"
   >(normalizarEstado(cotizacion.estado));
 
+  const claveBorrador = `cotizacion-aprobar-${cotizacion.no_cotizacion}`;
+  const [borradorInicial] = useState(() => leerBorrador<ProductoCotizacion[]>(claveBorrador));
+
   const [productos, setProductos] = useState<ProductoCotizacion[]>(
-    cotizacion.productos.map((producto) => ({
+    borradorInicial ?? cotizacion.productos.map((producto) => ({
       ...producto,
       detalles: [...producto.detalles],
     })),
   );
+  useAutoguardarBorrador(claveBorrador, productos, true);
 
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -447,6 +452,7 @@ export default function EditarCotizacion({
       const estadoNombre =
         estadoId === ESTADO_ID.APROBADO ? "Aprobada" : "Rechazada";
       setEstadoActual(estadoNombre);
+      limpiarBorrador(claveBorrador);
 
       if (respuesta.convertida_a_pedido && respuesta.no_pedido) {
         setMensajeExito(

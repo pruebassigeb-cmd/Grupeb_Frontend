@@ -4,6 +4,7 @@ import { usePermisos } from "../../hooks/usePermiso";
 import api from "../../services/api";
 import { showAlert } from '../CustomAlert';
 import { showConfirm } from '../CustomConfirm';
+import BotonAuditoria from "../auditoria/BotonAuditoria";
 
 
 
@@ -97,6 +98,11 @@ export default function HistorialVersiones({ revisiones, idorden, onActualizar }
                 )}
 
                 <span className="text-xs text-gray-400">{fmtFecha(rev.created_at)}</span>
+                <BotonAuditoria
+                  tabla="revision_diseno"
+                  id={rev.idrevision}
+                  etiqueta={`Historial de la revisión v${rev.numero_version}`}
+                />
               </div>
 
               <p className="text-xs text-gray-500 mb-2">

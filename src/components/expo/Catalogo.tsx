@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { CATS, claveProducto } from "../../types/expo/expo.types";
 import type { Producto } from "../../types/expo/expo.types";
+import BotonAuditoria from "../auditoria/BotonAuditoria";
 
 export const busquedaStore: Record<string, string> = {
   "papel-expo": "",
@@ -684,6 +685,15 @@ function TarjetaProducto({
       </div>
 
       {indicador}
+      {esPropio && (
+        <BotonAuditoria
+          tabla="catalogo_expo"
+          id={p.id}
+          etiqueta={`Información de auditoría de ${p.nombre}`}
+          alineacion="izquierda"
+          className="absolute bottom-1.5 right-1.5 z-10"
+        />
+      )}
       {desk && <span style={{ position:"absolute", right:compacto?6:7, top:"50%", transform:"translateY(-50%)", color:"#333", fontSize:compacto?11:13 }}>⠿</span>}
     </div>
   );

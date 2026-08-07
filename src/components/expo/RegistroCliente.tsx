@@ -14,6 +14,7 @@ import ModalConfirmarCorreo from "./ModalConfirmarCorreo";
 import ModalCatalogoExpo from "./ModalCatalogoExpo";
 import { useAuth } from "../../context/AuthContext";
 import { OperacionEncoladaError } from "../../offline/outbox";
+import { leerBorrador, useAutoguardarBorrador, limpiarBorrador } from "../../hooks/useBorradorFormulario";
 
 interface Props {
   clienteData: ClienteExpo;
@@ -124,7 +125,10 @@ function FormEdicion({ inicial, onGuardar, onCancelar, guardando }: FormEdicionP
 
   const { usuario, ext, extCustom } = parsearCorreo(inicial.correo);
 
-  const [form, setForm] = useState<ClienteExpo>({
+  const claveBorrador = `expo-prospecto-editar-${inicial.idclientes}`;
+  const [borradorInicial] = useState(() => leerBorrador<ClienteExpo>(claveBorrador));
+
+  const [form, setForm] = useState<ClienteExpo>(borradorInicial ?? {
     nombre: inicial.nombre || "",
     celular: inicial.celular || "",
     correoUsuario: usuario,
@@ -137,6 +141,8 @@ function FormEdicion({ inicial, onGuardar, onCancelar, guardando }: FormEdicionP
     intereses: (inicial.intereses || []) as ClienteExpo["intereses"],
     observaciones: inicial.observaciones || "",
   });
+
+  useAutoguardarBorrador(claveBorrador, form, true);
 
   const setF = (k: keyof ClienteExpo, v: unknown) => setForm(p => ({ ...p, [k]: v }));
   const toggleInteres = (i: ClienteExpo["intereses"][number]) =>
@@ -279,9 +285,11 @@ function ModalProspectos({ onSeleccionar, onClose }: ModalProspectosProps) {
     try {
       await actualizarClienteExpo(id, data);
       await cargar();
+      limpiarBorrador(`expo-prospecto-editar-${id}`);
       setEditandoId(null);
     } catch (e) {
       if (e instanceof OperacionEncoladaError) {
+        limpiarBorrador(`expo-prospecto-editar-${id}`);
         alert("Sin conexión: los cambios del prospecto se guardaron y se sincronizarán automáticamente.");
         setEditandoId(null);
         return;

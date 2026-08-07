@@ -38,6 +38,17 @@ const diasDesde = (fecha: string | null): number | null => {
   return Math.floor(diff / (1000 * 60 * 60 * 24));
 };
 
+const formatearFechaAprobacion = (fecha: string | null): string | null => {
+  if (!fecha) return null;
+  return new Date(fecha).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" });
+};
+
+const FechaAprobacion = ({ fecha }: { fecha: string | null }) => {
+  const texto = formatearFechaAprobacion(fecha);
+  if (!texto) return null;
+  return <div className="text-[10px] text-gray-400 leading-tight mt-0.5 whitespace-nowrap">✓ {texto}</div>;
+};
+
 const obtenerColorEstadoProceso = (estado: string, fechaEstado: string | null): string => {
   if (estado === "finalizado" || estado === "no-aplica" || estado === "aprobado" || estado === "pagado") {
     return obtenerColorEstado(estado);
@@ -371,15 +382,18 @@ function BotonPdfDirecto({ pedido }: { pedido: PedidoSeguimiento }) {
   };
 
   return (
-    <div className="flex items-center gap-1.5 justify-center">
-      <span className="text-xs font-medium text-gray-700">{pedido.no_produccion}</span>
-      <button onClick={handleDescargar} disabled={descargando}
-        className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white text-xs font-medium rounded transition-colors">
-        {descargando
-          ? <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
-          : <IconoPdf />}
-        PDF
-      </button>
+    <div className="flex flex-col items-center gap-0.5">
+      <div className="flex items-center gap-1.5 justify-center">
+        <span className="text-xs font-medium text-gray-700">{pedido.no_produccion}</span>
+        <button onClick={handleDescargar} disabled={descargando}
+          className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white text-xs font-medium rounded transition-colors">
+          {descargando
+            ? <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+            : <IconoPdf />}
+          PDF
+        </button>
+      </div>
+      <FechaAprobacion fecha={(pedido as any).op_fecha_aprobacion ?? null} />
     </div>
   );
 }
@@ -826,17 +840,23 @@ export default function Seguimiento() {
         <td className={`${px} text-center`}>
           {odId ? (
             (puedeVerOD || esRolPlanta) ? (
-              <BadgeTextoBtn
-                estado={estadoOD}
-                fechaEstado={(pedido as any).od_fecha_estado}
-                onClick={() => {
-                  puedeVerOD
-                    ? setModalOD(pedido)
-                    : setModalVerificacion({ pedido, proceso: "orden_diseno" });
-                }}
-              />
+              <>
+                <BadgeTextoBtn
+                  estado={estadoOD}
+                  fechaEstado={(pedido as any).od_fecha_estado}
+                  onClick={() => {
+                    puedeVerOD
+                      ? setModalOD(pedido)
+                      : setModalVerificacion({ pedido, proceso: "orden_diseno" });
+                  }}
+                />
+                <FechaAprobacion fecha={(pedido as any).od_fecha_aprobacion ?? null} />
+              </>
             ) : (
-              <BadgeTexto estado={estadoOD} fechaEstado={(pedido as any).od_fecha_estado} />
+              <>
+                <BadgeTexto estado={estadoOD} fechaEstado={(pedido as any).od_fecha_estado} />
+                <FechaAprobacion fecha={(pedido as any).od_fecha_aprobacion ?? null} />
+              </>
             )
           ) : (
             <BadgeTexto estado="no-aplica" />

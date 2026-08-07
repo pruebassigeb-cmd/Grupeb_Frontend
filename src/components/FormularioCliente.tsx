@@ -4,6 +4,8 @@ import type { RegimenFiscal, MetodoPago, FormaPago } from "../types/clientes.typ
 import type { CreateClienteRequest, UpdateClienteRequest, Cliente } from "../types/clientes.types";
 import { showAlert } from './CustomAlert';
 import { buscarCodigoPostal } from "../services/codigoPostalService";
+import { leerBorrador, useAutoguardarBorrador } from "../hooks/useBorradorFormulario";
+import { claveBorradorCliente } from "../utils/clavesBorrador";
 const MONEDAS = [
   { codigo: "MXN", nombre: "Peso mexicano (MXN)" },
   { codigo: "USD", nombre: "Dólar estadounidense (USD)" },
@@ -52,8 +54,25 @@ function useCodigoPostal() {
   return { buscarCP, cargandoCP, errorCP, setErrorCP };
 }
 
+// Punto de guardado (ver src/hooks/useBorradorFormulario.ts). Se usa UNA sola
+// clave para toda alta de cliente sin importar desde dónde se abrió el
+// formulario (Clientes.tsx directo, o anidado dentro de "cliente nuevo" en
+// Cotizar/Pedido/Expo) — es deliberado: es el mismo tipo de captura en
+// cualquier lado, y si alguien la empezó en un lugar y la retoma en otro,
+// sigue siendo "un cliente que casi terminaba de capturar". La edición sí se
+// separa por id de cliente, para que el borrador de uno nunca se restaure
+// encima de otro.
+interface BorradorCliente {
+  datos: CreateClienteRequest | UpdateClienteRequest;
+  paso: number;
+}
+
 export default function FormularioCliente({ onSubmit, onCancel, clienteEditar }: FormularioClienteProps) {
-  const [paso, setPaso] = useState(1);
+  const esEdicion = !!clienteEditar;
+  const claveBorrador = claveBorradorCliente(clienteEditar);
+  const [borradorInicial] = useState(() => leerBorrador<BorradorCliente>(claveBorrador));
+
+  const [paso, setPaso] = useState(borradorInicial?.paso ?? 1);
   const [regimenesFiscales, setRegimenesFiscales] = useState<RegimenFiscal[]>([]);
   const [metodosPago, setMetodosPago]             = useState<MetodoPago[]>([]);
   const [formasPago, setFormasPago]               = useState<FormaPago[]>([]);
@@ -65,9 +84,7 @@ export default function FormularioCliente({ onSubmit, onCancel, clienteEditar }:
   const [opcionesCPPrincipal, setOpcionesCPPrincipal] = useState<OpcionCP[]>([]);
   const [opcionesCPEnvio, setOpcionesCPEnvio] = useState<OpcionCP[]>([]);
 
-  const esEdicion = !!clienteEditar;
-
-  const [datos, setDatos] = useState<CreateClienteRequest | UpdateClienteRequest>({
+  const [datos, setDatos] = useState<CreateClienteRequest | UpdateClienteRequest>(borradorInicial?.datos ?? {
     empresa:                         clienteEditar?.empresa                         || "",
     correo:                          clienteEditar?.correo                          || "",
     telefono:                        clienteEditar?.telefono                        || "",
@@ -98,6 +115,8 @@ export default function FormularioCliente({ onSubmit, onCancel, clienteEditar }:
     envio_estado:                    clienteEditar?.envio_estado                    || "",
     envio_referencia:                clienteEditar?.envio_referencia                || "",
   });
+
+  useAutoguardarBorrador<BorradorCliente>(claveBorrador, { datos, paso }, true);
 
   useEffect(() => { cargarDatos(); }, []);
 
@@ -206,6 +225,12 @@ export default function FormularioCliente({ onSubmit, onCancel, clienteEditar }:
     if (!datosFinales.metodo_pago_idmetodo_pago)       datosFinales.metodo_pago_idmetodo_pago       = null as any;
     if (!datosFinales.forma_pago_idforma_pago)         datosFinales.forma_pago_idforma_pago         = null as any;
 
+    // La limpieza del borrador NO se hace aquí: al menos uno de los
+    // llamadores (Clientes.tsx) atrapa sus propios errores sin relanzarlos,
+    // así que un `await onSubmit(...)` que resuelve no es garantía de que se
+    // haya guardado de verdad. Cada llamador conoce su propia señal real de
+    // éxito y es quien debe llamar a limpiarBorrador(claveBorradorCliente(...))
+    // — ver Clientes.tsx, FormularioSolicitud.tsx y ListaCotizaciones.tsx.
     await onSubmit(datosFinales);
   } catch (error: any) {
     console.error("Error al guardar cliente:", error);

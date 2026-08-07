@@ -36,6 +36,8 @@ import type { ArchivoPendiente } from "../../components/papel/FormularioProducto
 import type { ProductoPapelForm } from "../../types/papel/papel.types";
 import { crearProductoPapel } from "../../services/papel/papel.service";
 import api from "../../services/api";
+import { limpiarBorrador } from "../../hooks/useBorradorFormulario";
+import { claveBorradorProductoPapel } from "../../utils/clavesBorrador";
 
 // ─── Tipos internos ───────────────────────────────────────────────────────────
 interface DetalleEdit {
@@ -193,6 +195,7 @@ function BuscadorProductoPapel({
         catch { /* no bloquear si falla un archivo */ }
       }
 
+      limpiarBorrador(claveBorradorProductoPapel(null));
       const nombre = form.tipoProductoNombre || "Producto papel";
       const medida = form.medida || "";
       onCreado(nuevoId, nombre, medida);

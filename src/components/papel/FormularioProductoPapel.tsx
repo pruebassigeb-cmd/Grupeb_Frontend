@@ -28,6 +28,7 @@ import type { ProductoPapelForm } from "../../types/papel/papel.types";
 import { coincideBusquedaProductoPapel } from "../../utils/papel/buscarProductoPapel";
 import { convertirDesdeMXN } from "../../utils/moneda.utils";
 import { formatMoney, type Moneda } from "../../utils/formatMoney";
+import { leerBorrador, useAutoguardarBorrador, limpiarBorrador } from "../../hooks/useBorradorFormulario";
 
 export type { ProductoPapelCotizacion };
 
@@ -85,6 +86,20 @@ const nuevoSpecs = () => ({
   precios: [0, 0, 0] as [number, number, number],
 });
 
+interface BorradorProductoPapel {
+  modoProductoPapel: "registrado" | "nuevo";
+  productoSel: ProductoPapelBusqueda | null;
+  specs: ReturnType<typeof nuevoSpecs>;
+  inputsPantones: string[];
+  usaTintasDentro: boolean;
+  inputsPantonesDentro: string[];
+  cantidadesTexto: [string, string, string];
+  preciosTexto: [string, string, string];
+  herramentalExpandido: boolean;
+  herramentalDescripcion: string;
+  herramentalPrecioTexto: string;
+}
+
 export default function FormularioProductoPapel({
   modo,
   onAgregar,
@@ -97,9 +112,19 @@ export default function FormularioProductoPapel({
   moneda = "MXN",
   tipoCambio = null,
 }: Props) {
+  // Punto de guardado (ver src/hooks/useBorradorFormulario.ts) — solo cuando
+  // se está agregando un producto NUEVO (productoEditando == null). Editar
+  // una línea ya agregada se identifica por su índice en el arreglo del
+  // padre, no por un id estable, así que no se cubre aquí (mismo criterio
+  // que en otros paneles de "editar" de bajo riesgo de este proyecto).
+  const claveBorrador = `papel-producto-en-solicitud-${modo}`;
+  const [borradorInicial] = useState(() =>
+    productoEditando ? null : leerBorrador<BorradorProductoPapel>(claveBorrador)
+  );
+
   const [modoProductoPapel, setModoProductoPapel] = useState<
     "registrado" | "nuevo"
-  >("registrado");
+  >(borradorInicial?.modoProductoPapel ?? "registrado");
 
   const [mostrarModal, setMostrarModal] = useState(false);
   const [busqueda, setBusqueda] = useState("");
@@ -110,7 +135,7 @@ export default function FormularioProductoPapel({
   const [savingNuevo, setSavingNuevo] = useState(false);
 
   const [productoSel, setProductoSel] = useState<ProductoPapelBusqueda | null>(
-    null,
+    borradorInicial?.productoSel ?? null,
   );
   const [grupos, setGrupos] = useState<GrupoOpcion[]>([]);
   const [asas, setAsas] = useState<AsaOpcion[]>([]);
@@ -118,27 +143,41 @@ export default function FormularioProductoPapel({
 
   const [foils, setFoils] = useState<FoilOpcion[]>([]);
   const [texturas, setTexturas] = useState<TexturaOpcion[]>([]);
+  // ✅ NUEVO — defaults de "Pegado y acabados" del producto seleccionado
+  // (UV, Alto relieve, Textura, Hot stamping/Foil). Precargan specs.uv /
+  // specs.alto_relieve y ocultan Foil/Textura cuando el producto no los usa,
+  // para no pedirle al vendedor decidirlo de nuevo en cada cotización.
+  const [acabadosProducto, setAcabadosProducto] = useState<{
+    lleva_uv: boolean;
+    lleva_alto_relieve: boolean;
+    lleva_textura: boolean;
+    lleva_hot_stamping: boolean;
+  } | null>(null);
   const [coloresAsa, setColoresAsa] = useState<ColorAsaOpcion[]>([]);
   const [loadingColores, setLoadingColores] = useState(true);
-  const [specs, setSpecs] = useState(nuevoSpecs());
-  const [inputsPantones, setInputsPantones] = useState<string[]>([]);
-  const [usaTintasDentro, setUsaTintasDentro] = useState(false);
+  const [specs, setSpecs] = useState(borradorInicial?.specs ?? nuevoSpecs());
+  const [inputsPantones, setInputsPantones] = useState<string[]>(borradorInicial?.inputsPantones ?? []);
+  const [usaTintasDentro, setUsaTintasDentro] = useState(borradorInicial?.usaTintasDentro ?? false);
   const [inputsPantonesDentro, setInputsPantonesDentro] = useState<string[]>(
-    [],
+    borradorInicial?.inputsPantonesDentro ?? [],
   );
   const [cantidadesTexto, setCantidadesTexto] = useState<
     [string, string, string]
-  >(["", "", ""]);
-  const [preciosTexto, setPreciosTexto] = useState<[string, string, string]>([
-    "",
-    "",
-    "",
-  ]);
+  >(borradorInicial?.cantidadesTexto ?? ["", "", ""]);
+  const [preciosTexto, setPreciosTexto] = useState<[string, string, string]>(
+    borradorInicial?.preciosTexto ?? ["", "", ""]
+  );
 
   // ── Herramental ──────────────────────────────────────────────────────────
-  const [herramentalExpandido, setHerramentalExpandido] = useState(false);
-  const [herramentalDescripcion, setHerramentalDescripcion] = useState("");
-  const [herramentalPrecioTexto, setHerramentalPrecioTexto] = useState("");
+  const [herramentalExpandido, setHerramentalExpandido] = useState(borradorInicial?.herramentalExpandido ?? false);
+  const [herramentalDescripcion, setHerramentalDescripcion] = useState(borradorInicial?.herramentalDescripcion ?? "");
+  const [herramentalPrecioTexto, setHerramentalPrecioTexto] = useState(borradorInicial?.herramentalPrecioTexto ?? "");
+
+  useAutoguardarBorrador<BorradorProductoPapel>(claveBorrador, {
+    modoProductoPapel, productoSel, specs, inputsPantones, usaTintasDentro,
+    inputsPantonesDentro, cantidadesTexto, preciosTexto, herramentalExpandido,
+    herramentalDescripcion, herramentalPrecioTexto,
+  }, !productoEditando);
 
   // ── Modal registrar insumo (pantones) ───────────────────────────────────
   // Autocontenido: no depende de onRegistrarPanton del padre.
@@ -452,10 +491,23 @@ export default function FormularioProductoPapel({
       setGrupos(g);
       setAsas(a);
       setLaminados(l);
+
+      const defaults = {
+        lleva_uv: det.acabados?.lleva_uv === true,
+        lleva_alto_relieve: det.acabados?.lleva_alto_relieve === true,
+        lleva_textura: det.acabados?.lleva_textura === true,
+        lleva_hot_stamping: det.acabados?.lleva_hot_stamping === true,
+      };
+      setAcabadosProducto(defaults);
+
       if (aplicarTamanoAsaDefault) {
         setSpecs((prev) => ({
           ...prev,
           tamano_asa: det.tamano_asa_default?.trim() ?? "",
+          uv: defaults.lleva_uv,
+          alto_relieve: defaults.lleva_alto_relieve,
+          idcat_textura: defaults.lleva_textura ? prev.idcat_textura : null,
+          idfoil: defaults.lleva_hot_stamping ? prev.idfoil : null,
         }));
       }
       return g;
@@ -463,6 +515,7 @@ export default function FormularioProductoPapel({
       setGrupos([]);
       setAsas([]);
       setLaminados([]);
+      setAcabadosProducto(null);
       return [];
     }
   };
@@ -800,6 +853,7 @@ export default function FormularioProductoPapel({
     } as any;
 
     onAgregar(producto);
+    if (!productoEditando) limpiarBorrador(claveBorrador);
     resetForm();
   };
 
@@ -1473,62 +1527,70 @@ export default function FormularioProductoPapel({
               </div>
             </div>
 
-            {/* Foil y Textura */}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Foil{" "}
-                  <span className="text-xs text-gray-400 font-normal">
-                    (opcional)
-                  </span>
-                </label>
-                <select
-                  value={specs.idfoil ?? ""}
-                  onChange={(e) =>
-                    setSpecs((prev) => ({
-                      ...prev,
-                      idfoil: e.target.value ? Number(e.target.value) : null,
-                    }))
-                  }
-                  className={selectCls}
-                >
-                  <option value="">Sin foil</option>
-                  {foils.map((f) => (
-                    <option key={f.idfoil} value={f.idfoil}>
-                      {f.colorfoil}
-                      {f.codigofoil ? ` ${f.codigofoil}` : ""}
-                    </option>
-                  ))}
-                </select>
+            {/* Foil y Textura — solo se muestran si el producto los lleva
+                (acabados_papel.lleva_hot_stamping / lleva_textura), definido
+                una sola vez al dar de alta el producto. */}
+            {(acabadosProducto === null || acabadosProducto.lleva_hot_stamping || acabadosProducto.lleva_textura) && (
+              <div className="grid grid-cols-2 gap-4">
+                {(acabadosProducto === null || acabadosProducto.lleva_hot_stamping) && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Foil{" "}
+                      <span className="text-xs text-gray-400 font-normal">
+                        (opcional)
+                      </span>
+                    </label>
+                    <select
+                      value={specs.idfoil ?? ""}
+                      onChange={(e) =>
+                        setSpecs((prev) => ({
+                          ...prev,
+                          idfoil: e.target.value ? Number(e.target.value) : null,
+                        }))
+                      }
+                      className={selectCls}
+                    >
+                      <option value="">Sin foil</option>
+                      {foils.map((f) => (
+                        <option key={f.idfoil} value={f.idfoil}>
+                          {f.colorfoil}
+                          {f.codigofoil ? ` ${f.codigofoil}` : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                {(acabadosProducto === null || acabadosProducto.lleva_textura) && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Texturizado{" "}
+                      <span className="text-xs text-gray-400 font-normal">
+                        (opcional)
+                      </span>
+                    </label>
+                    <select
+                      value={specs.idcat_textura ?? ""}
+                      onChange={(e) =>
+                        setSpecs((prev) => ({
+                          ...prev,
+                          idcat_textura: e.target.value
+                            ? Number(e.target.value)
+                            : null,
+                        }))
+                      }
+                      className={selectCls}
+                    >
+                      <option value="">Sin textura</option>
+                      {texturas.map((t) => (
+                        <option key={t.idcat_textura} value={t.idcat_textura}>
+                          {t.nombre}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Texturizado{" "}
-                  <span className="text-xs text-gray-400 font-normal">
-                    (opcional)
-                  </span>
-                </label>
-                <select
-                  value={specs.idcat_textura ?? ""}
-                  onChange={(e) =>
-                    setSpecs((prev) => ({
-                      ...prev,
-                      idcat_textura: e.target.value
-                        ? Number(e.target.value)
-                        : null,
-                    }))
-                  }
-                  className={selectCls}
-                >
-                  <option value="">Sin textura</option>
-                  {texturas.map((t) => (
-                    <option key={t.idcat_textura} value={t.idcat_textura}>
-                      {t.nombre}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
+            )}
 
             {/* UV, Alto relieve y Armado */}
             <div>

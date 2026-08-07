@@ -17,6 +17,7 @@ import ComboboxInsumo from "../../components/proveedores/ComboboxInsumo";
 import ModalRegistrarInsumo from "../../components/proveedores/ModalRegistrarInsumo";
 import { getTiposInsumo } from "../../services/proveedoresService";
 import type { Insumo } from "../../services/proveedoresService";
+import { leerBorrador, useAutoguardarBorrador, limpiarBorrador } from "../../hooks/useBorradorFormulario";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 interface DetalleEdit {
@@ -714,6 +715,19 @@ export default function EditarPedido() {
   const [prioridad, setPrioridad] = useState(false);
   const [sinIva, setSinIva] = useState(false);
 
+  interface BorradorEditarPedido {
+    monedaSeleccionada: "MXN" | "USD";
+    productos: ProductoRow[];
+    pedidoMixto: boolean;
+    prioridad: boolean;
+    sinIva: boolean;
+  }
+  const claveBorrador = `pedido-editar-${noPedido}`;
+  const borradorAplicado = useRef(false);
+  useAutoguardarBorrador<BorradorEditarPedido>(claveBorrador, {
+    monedaSeleccionada, productos, pedidoMixto, prioridad, sinIva,
+  }, productos.length > 0);
+
   const [suajes, setSuajes] = useState<any[]>([]);
   const [coloresAsa, setColoresAsa] = useState<any[]>([]);
   const [medidasTroquel, setMedidasTroquel] = useState<any[]>([]);
@@ -778,12 +792,26 @@ export default function EditarPedido() {
           return;
         }
 
+        setPedidoOrig(ped);
+
+        if (!borradorAplicado.current) {
+          borradorAplicado.current = true;
+          const borrador = leerBorrador<BorradorEditarPedido>(claveBorrador);
+          if (borrador) {
+            setMonedaSeleccionada(borrador.monedaSeleccionada);
+            setProductos(borrador.productos);
+            setPedidoMixto(borrador.pedidoMixto);
+            setPrioridad(borrador.prioridad);
+            setSinIva(borrador.sinIva);
+            return;
+          }
+        }
+
         setPedidoMixto(tienePapel && tienePlastico);
 
         setPrioridad((ped as any).prioridad ?? false);
         setSinIva((ped as any).sin_iva ?? false);
 
-        setPedidoOrig(ped);
         setMonedaSeleccionada((ped.moneda as "MXN" | "USD") ?? "MXN");
         setProductos((ped.productos as any[])
           .filter(p => p.tipo_material !== "papel" && p.tipoCotizacion !== "papel")
@@ -846,7 +874,7 @@ export default function EditarPedido() {
         setCargando(false);
       }
     })();
-  }, [noPedido]);
+  }, [noPedido, claveBorrador]);
 
   // ── Helpers de estado ──────────────────────────────────────────────────────
   const setProductoField = <K extends keyof ProductoEdit>(pi: number, k: K, v: ProductoEdit[K]) =>
@@ -1116,6 +1144,7 @@ export default function EditarPedido() {
         }
       }
 
+      limpiarBorrador(claveBorrador);
       setExito(true);
       setTimeout(() => navigate("/pedido"), 1500);
     } catch (e: any) {

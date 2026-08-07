@@ -2,6 +2,7 @@ import { useState, useRef } from "react";
 import api from "../../services/api";
 import { subirRevision } from "../../services/diseno/ordenDisenoService";
 import { showAlert } from '../CustomAlert';
+import { leerBorrador, useAutoguardarBorrador, limpiarBorrador } from "../../hooks/useBorradorFormulario";
 
 interface Props {
   idorden:   number;
@@ -27,11 +28,16 @@ const CATEGORIA_LABELS: Record<CategoriaArchivo, string> = {
 export default function SubirRender({
   idorden, noPedido, tipo, onSuccess, onCancel,
 }: Props) {
+  // Los archivos (File[]) no se persisten — no son serializables; si se
+  // pierden hay que volver a seleccionarlos. Solo se guarda el texto.
+  const claveBorrador = `diseno-subir-${tipo}-${idorden}`;
   const [archivos,      setArchivos]      = useState<ArchivoConCategoria[]>([]);
-  const [observaciones, setObservaciones] = useState("");
+  const [observaciones, setObservaciones] = useState(() => leerBorrador<{ observaciones: string }>(claveBorrador)?.observaciones ?? "");
   const [subiendo,      setSubiendo]      = useState(false);
   const [progreso,      setProgreso]      = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  useAutoguardarBorrador(claveBorrador, { observaciones }, true);
 
   const labelTipo = tipo === "render" ? "Render" : "Feedback del cliente";
 
@@ -98,6 +104,7 @@ export default function SubirRender({
       });
 
       setProgreso(100);
+      limpiarBorrador(claveBorrador);
       onSuccess();
     } catch (error: any) {
       console.error("Error al subir:", error);

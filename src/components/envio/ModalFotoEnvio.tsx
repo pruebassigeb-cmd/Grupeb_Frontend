@@ -3,6 +3,7 @@ import { subirArchivo, getFotosEnvio, type Archivo } from "../../services/archiv
 import { updateGuiaEnvio } from "../../services/envio/enviosService";
 import { showAlert } from "./../CustomAlert";
 import type { EnvioPaqueteria, BitacoraRegistro } from "../../types/envio/envios.types";
+import { leerBorrador, useAutoguardarBorrador, limpiarBorrador } from "../../hooks/useBorradorFormulario";
 
 interface PropsBase {
   onClose:      () => void;
@@ -27,8 +28,13 @@ export default function ModalFotoEnvio(props: Props) {
   const cliente    = esPaqueteria ? props.envio.cliente                : props.registro.cliente;
   const guiaActual = esPaqueteria ? props.envio.numero_guia   || ""   : props.registro.envio.numero_guia || "";
 
+  const claveBorrador = `foto-envio-guia-${idenvio}`;
+  const [borradorInicial] = useState(() => leerBorrador<{ numeroGuia: string }>(claveBorrador));
+
   const [paso,          setPaso]          = useState<Paso>("formulario");
-  const [numeroGuia,    setNumeroGuia]    = useState(guiaActual);
+  // La foto (fotoFile/fotoPreview) NO se persiste — es un File, no
+  // serializable; si se pierde hay que volver a seleccionarla.
+  const [numeroGuia,    setNumeroGuia]    = useState(borradorInicial?.numeroGuia ?? guiaActual);
   const [fotoPreview,   setFotoPreview]   = useState<string | null>(null);
   const [fotoFile,      setFotoFile]      = useState<File | null>(null);
   const [fotosExist,    setFotosExist]    = useState<Archivo[]>([]);
@@ -38,6 +44,8 @@ export default function ModalFotoEnvio(props: Props) {
   const [dragging,      setDragging]      = useState(false);
 
   const inputFotoRef = useRef<HTMLInputElement>(null);
+
+  useAutoguardarBorrador(claveBorrador, { numeroGuia }, true);
 
   // Cargar fotos existentes del envío al abrir
   useEffect(() => {
@@ -100,6 +108,7 @@ export default function ModalFotoEnvio(props: Props) {
         // ← Guardar con envio_id para que aparezca en el gestor vinculada al envío
         await subirArchivo(archivoRenombrado, "fotos-envios", undefined, idenvio);
       }
+      limpiarBorrador(claveBorrador);
       setPaso("completado");
     } catch {
       showAlert("Error al guardar. Intenta nuevamente.");

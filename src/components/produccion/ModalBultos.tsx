@@ -11,6 +11,7 @@ import {
 } from "../../services/produccion/seguimientoService";
 import type { Bulto } from "../../services/produccion/seguimientoService";
 import type { PedidoSeguimiento } from "../../types/produccion/seguimiento.types";
+import { leerBorrador, useAutoguardarBorrador, limpiarBorrador } from "../../hooks/useBorradorFormulario";
 
 export default function ModalBultos({
   pedido,
@@ -19,14 +20,19 @@ export default function ModalBultos({
   pedido: PedidoSeguimiento;
   onClose: () => void;
 }) {
+  const claveBorrador = `bulto-produccion-nuevo-${pedido.idproduccion}`;
+  const [borradorInicial] = useState(() => leerBorrador<{ nuevaCantidad: string; repetir: string }>(claveBorrador));
+
   const [bultos,        setBultos]        = useState<Bulto[]>([]);
   const [totalUnidades, setTotalUnidades] = useState(0);
   const [cargando,      setCargando]      = useState(true);
   const [guardando,     setGuardando]     = useState(false);
   const [eliminando,    setEliminando]    = useState<number | null>(null);
-  const [nuevaCantidad, setNuevaCantidad] = useState("");
-  const [repetir,       setRepetir]       = useState("1");
+  const [nuevaCantidad, setNuevaCantidad] = useState(borradorInicial?.nuevaCantidad ?? "");
+  const [repetir,       setRepetir]       = useState(borradorInicial?.repetir ?? "1");
   const [error,         setError]         = useState<string | null>(null);
+
+  useAutoguardarBorrador(claveBorrador, { nuevaCantidad, repetir }, true);
 
   useEffect(() => { cargar(); }, []);
 
@@ -72,6 +78,7 @@ export default function ModalBultos({
         setTotalUnidades(prev => prev + resultado.total_unidades_agregadas);
       }
 
+      limpiarBorrador(claveBorrador);
       setNuevaCantidad("");
       setRepetir("1");
     } catch (e: any) {

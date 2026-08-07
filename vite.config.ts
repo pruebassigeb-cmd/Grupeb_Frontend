@@ -12,9 +12,29 @@ export default defineConfig({
       srcDir: "src",
       filename: "sw.ts",
       injectRegister: false,
+      // "prompt" NO significa que se le pregunte nada al usuario: significa que
+      // el plugin deja el service worker nuevo en "waiting" y le cede al cliente
+      // la decisión de cuándo activarlo. PWAUpdatePrompt.tsx la toma solo, sin
+      // botones — espera a que el usuario cambie de pantalla para no borrarle un
+      // formulario a medio llenar. Con "autoUpdate" esa espera no es posible: el
+      // SW nuevo se activaría de inmediato.
       registerType: "prompt",
       devOptions: {
-        enabled: false,
+        // Con esto `npm run dev` también levanta el service worker, así que el
+        // ciclo completo de actualización automática se puede probar en local
+        // sin tener que hacer `npm run build` + `npm run preview`.
+        enabled: true,
+        // El SW se sirve como módulo ES porque src/sw.ts se entrega sin
+        // bundlear en desarrollo (importa workbox-* con imports normales).
+        type: "module",
+        // Obligatorio con `strategies: "injectManifest"`: en desarrollo el
+        // plugin reemplaza `self.__WB_MANIFEST` por `[{ url: navigateFallback }]`,
+        // y sin esto queda en `[]` — entonces el
+        // `createHandlerBoundToURL("/index.html")` de src/sw.ts truena al
+        // activarse con un error "non-precached-url".
+        navigateFallback: "index.html",
+        // Silencia el aviso de Workbox por no tener globPatterns en dev.
+        suppressWarnings: true,
       },
       injectManifest: {
         // El bundle principal hoy pesa >2 MiB (sin code-splitting) — se sube
@@ -60,6 +80,14 @@ export default defineConfig({
       },
     }),
   ],
+  // `virtual:pwa-register/react` carga workbox-window con un import dinámico,
+  // así que en `npm run dev` Vite lo descubre tarde: reoptimiza dependencias a
+  // media carga, tumba el módulo con un 504 "Outdated Optimize Dep" y el
+  // registro del service worker falla en el primer arranque. Declararlo aquí
+  // hace que se prebundlee desde el principio.
+  optimizeDeps: {
+    include: ["workbox-window"],
+  },
   build: {
     outDir: "dist",
   },

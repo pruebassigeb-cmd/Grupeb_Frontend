@@ -6,6 +6,7 @@ import { generarFormatoCastores } from "../../utils/envio/generarFormatoCastores
 import { preguntarGuardarS3 } from "../../services/pdfS3.service";
 import type { ProductoSat } from "../../types/envio/envios.types";
 import { showAlert } from './../CustomAlert';
+import { leerBorrador, useAutoguardarBorrador, limpiarBorrador } from "../../hooks/useBorradorFormulario";
 
 
 interface BultoForm {
@@ -34,20 +35,41 @@ const METODOS_PAGO = [
   { codigo: "PPD", label: "Pago en parcialidades o diferido" },
 ];
 
+// No incluye bultosForms (se recarga siempre del servidor): son claves SAT
+// por bulto, precargadas de BD, un ajuste puntual de menor riesgo que el
+// resto de los campos si se pierde.
+interface BorradorFormatoCastores {
+  requiereFactura: "si" | "no" | null;
+  formaPago: string;
+  metodoPago: string;
+  pagado: boolean;
+  cobrarOrigen: boolean;
+  cobrarDestino: boolean;
+  observaciones: string;
+  noConvenio: string;
+}
+
 export default function ModalFormatoCastores({ idenvio, onClose }: Props) {
+  const claveBorrador = `formato-castores-${idenvio}`;
+  const [borradorInicial] = useState(() => leerBorrador<BorradorFormatoCastores>(claveBorrador));
+
   const [loading,      setLoading]      = useState(true);
   const [generando,    setGenerando]    = useState(false);
   const [datos,        setDatos]        = useState<any>(null);
   const [productosSat, setProductosSat] = useState<ProductoSat[]>([]);
 
-  const [requiereFactura, setRequiereFactura] = useState<"si" | "no" | null>(null);
-  const [formaPago,       setFormaPago]       = useState("");
-  const [metodoPago,      setMetodoPago]      = useState("");
-  const [pagado,          setPagado]          = useState(false);
-  const [cobrarOrigen,    setCobrarOrigen]    = useState(false);
-  const [cobrarDestino,   setCobrarDestino]   = useState(false);
-  const [observaciones,   setObservaciones]   = useState("");
-  const [noConvenio,      setNoConvenio]      = useState("");
+  const [requiereFactura, setRequiereFactura] = useState<"si" | "no" | null>(borradorInicial?.requiereFactura ?? null);
+  const [formaPago,       setFormaPago]       = useState(borradorInicial?.formaPago ?? "");
+  const [metodoPago,      setMetodoPago]      = useState(borradorInicial?.metodoPago ?? "");
+  const [pagado,          setPagado]          = useState(borradorInicial?.pagado ?? false);
+  const [cobrarOrigen,    setCobrarOrigen]    = useState(borradorInicial?.cobrarOrigen ?? false);
+  const [cobrarDestino,   setCobrarDestino]   = useState(borradorInicial?.cobrarDestino ?? false);
+  const [observaciones,   setObservaciones]   = useState(borradorInicial?.observaciones ?? "");
+  const [noConvenio,      setNoConvenio]      = useState(borradorInicial?.noConvenio ?? "");
+
+  useAutoguardarBorrador<BorradorFormatoCastores>(claveBorrador, {
+    requiereFactura, formaPago, metodoPago, pagado, cobrarOrigen, cobrarDestino, observaciones, noConvenio,
+  }, true);
 
   const [bultosForms, setBultosForms] = useState<BultoForm[]>([]);
 
@@ -105,6 +127,7 @@ export default function ModalFormatoCastores({ idenvio, onClose }: Props) {
         observaciones,
         noConvenio,
       }, guardarS3);
+      limpiarBorrador(claveBorrador);
       onClose();
     } catch (e) {
       console.error("Error generando PDF:", e);

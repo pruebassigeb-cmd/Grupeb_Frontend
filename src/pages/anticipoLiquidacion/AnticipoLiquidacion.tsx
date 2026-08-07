@@ -24,6 +24,8 @@ import { MONEDAS_OPERACION } from "../../constants/moneda.constants";
 import { useTipoCambioActual } from "../../hooks/useTipoCambioActual";
 import { convertirEntreMonedas } from "../../utils/moneda.utils";
 import { formatMoney, type Moneda } from "../../utils/formatMoney";
+import PanelAuditoria from "../../components/auditoria/PanelAuditoria";
+import { leerBorrador, useAutoguardarBorrador, limpiarBorrador } from "../../hooks/useBorradorFormulario";
 
 const ESTADO = { PENDIENTE: 1, EN_PROCESO: 2, PAGADO: 6 } as const;
 const POR_PAGINA = 10;
@@ -479,13 +481,25 @@ export function EditarAntLiqReal({
   onClose:      () => void;
   onActualizar: (v: Venta) => void;
 }) {
+  interface BorradorPago {
+    monto: string;
+    metodoPagoId: number;
+    esAnticipo: boolean;
+    montoEsAnticipo: boolean;
+    observacion: string;
+    fechaPago: string;
+    monedaPago: Moneda;
+  }
+  const claveBorrador = `anticipo-pago-${ventaInicial.idventas}`;
+  const [borradorInicial] = useState(() => leerBorrador<BorradorPago>(claveBorrador));
+
   const [venta,           setVenta]           = useState<Venta>(ventaInicial);
-  const [monto,           setMonto]           = useState("");
-  const [metodoPagoId,    setMetodoPagoId]    = useState<number>(metodos[0]?.idmetodo_pago ?? 1);
-  const [esAnticipo,      setEsAnticipo]      = useState(false);
-  const [montoEsAnticipo, setMontoEsAnticipo] = useState(false);
-  const [observacion,     setObservacion]     = useState("");
-  const [fechaPago,       setFechaPago]       = useState("");
+  const [monto,           setMonto]           = useState(borradorInicial?.monto ?? "");
+  const [metodoPagoId,    setMetodoPagoId]    = useState<number>(borradorInicial?.metodoPagoId ?? metodos[0]?.idmetodo_pago ?? 1);
+  const [esAnticipo,      setEsAnticipo]      = useState(borradorInicial?.esAnticipo ?? false);
+  const [montoEsAnticipo, setMontoEsAnticipo] = useState(borradorInicial?.montoEsAnticipo ?? false);
+  const [observacion,     setObservacion]     = useState(borradorInicial?.observacion ?? "");
+  const [fechaPago,       setFechaPago]       = useState(borradorInicial?.fechaPago ?? "");
   const [guardando,       setGuardando]       = useState(false);
   const [eliminando,      setEliminando]      = useState<number | null>(null);
   const [error,           setError]           = useState<string | null>(null);
@@ -499,7 +513,10 @@ export function EditarAntLiqReal({
   // la moneda contraria, el tipo de cambio NO es editable — siempre es el
   // vigente (sincronizado a diario desde Banxico) ───────────────────────────
   const monedaVenta: Moneda = (venta.moneda as Moneda) ?? "MXN";
-  const [monedaPago, setMonedaPago] = useState<Moneda>(monedaVenta);
+  const [monedaPago, setMonedaPago] = useState<Moneda>(borradorInicial?.monedaPago ?? monedaVenta);
+  useAutoguardarBorrador<BorradorPago>(claveBorrador, {
+    monto, metodoPagoId, esAnticipo, montoEsAnticipo, observacion, fechaPago, monedaPago,
+  }, true);
   const { tipoCambio: tipoCambioActual } = useTipoCambioActual();
   const requiereConversionPago = monedaPago !== monedaVenta;
   const tipoCambioAplicadoNum = requiereConversionPago ? (tipoCambioActual?.valor ?? null) : null;
@@ -583,6 +600,7 @@ export function EditarAntLiqReal({
         tipoCambioAplicado: requiereConversionPago ? tipoCambioAplicadoNum : null,
       });
       await recargar();
+      limpiarBorrador(claveBorrador);
       setMonto(""); setObservacion(""); setFechaPago("");
       setEsAnticipo(false); setMontoEsAnticipo(false);
       setMonedaPago(monedaVenta);
@@ -694,6 +712,13 @@ export function EditarAntLiqReal({
           )}
         </p>
       </div>
+
+      <PanelAuditoria
+        tabla="ventas"
+        id={venta.idventas}
+        titulo={`Auditoría financiera del pedido ${venta.no_pedido}`}
+        limite={25}
+      />
 
       {/* Resumen financiero */}
       <div className="space-y-2">
@@ -852,6 +877,14 @@ export function EditarAntLiqReal({
                     )}
                     <p className="text-xs text-gray-400">{pago.metodo_pago} · {fmtFecha(pago.fecha)}</p>
                     {pago.observacion && <p className="text-xs text-gray-500 italic">{pago.observacion}</p>}
+                    <PanelAuditoria
+                      tabla="venta_pago"
+                      id={pago.idventa_pago}
+                      activo
+                      compacto
+                      limite={8}
+                      className="mt-2 min-w-[260px]"
+                    />
                   </div>
                 </div>
                 <button onClick={() => handleEliminarPago(pago)} disabled={eliminando === pago.idventa_pago}

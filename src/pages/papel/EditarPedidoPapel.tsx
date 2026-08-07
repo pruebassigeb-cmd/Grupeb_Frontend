@@ -42,6 +42,8 @@ import ModalMaquinariaPedidoPapel, {
 import type { MaquinariaProductoPedidoPapel } from "../../types/papel/maquinaria-pedido.types";
 import api from "../../services/api";
 import { coincideBusquedaProductoPapel } from "../../utils/papel/buscarProductoPapel";
+import { limpiarBorrador } from "../../hooks/useBorradorFormulario";
+import { claveBorradorProductoPapel } from "../../utils/clavesBorrador";
 
 // ─── Tipos internos ───────────────────────────────────────────────────────────
 interface DetalleEdit {
@@ -224,6 +226,7 @@ function BuscadorProductoPapel({
         catch { /* no bloquear si falla un archivo */ }
       }
 
+      limpiarBorrador(claveBorradorProductoPapel(null));
       const nombre = form.tipoProductoNombre || "Producto papel";
       const medida = form.medida || "";
       onCreado(nuevoId, nombre, medida);

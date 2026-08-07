@@ -1,5 +1,6 @@
 // src/pages/cotizadorLibre/CotizadorLibre.tsx
 import { useEffect, useMemo, useState } from "react";
+import { useAuth } from "../../context/AuthContext";
 import {
   getTiposCotizadorLibre,
   getMedidasPapelCotizadorLibre,
@@ -8,6 +9,13 @@ import {
   getDetalleProductoPlasticoCotizadorLibre,
 } from "../../services/cotizadorLibre/cotizadorLibreCatalogo.service";
 import { useCalcularPrecioCotizadorLibre } from "../../hooks/cotizadorLibre/useCalcularPrecioCotizadorLibre";
+import { crearCotizacionCotizadorLibre, enviarPdfCotizadorLibre } from "../../services/cotizadorLibre/cotizadorLibreCotizaciones.service";
+import {
+  construirPayloadPdfCotizadorLibreCotizacion,
+  construirPayloadPdfCotizadorLibrePedido,
+} from "../../utils/cotizadorLibre/construirPayloadPdfCotizadorLibre";
+import { generarPdfCotizacion } from "../../utils/generarPdfCotizacion";
+import { generarPdfPedido } from "../../utils/generarPdfPedido";
 import IdentificacionCliente from "../../components/cotizadorLibre/IdentificacionCliente";
 import type {
   CategoriaCotizadorLibre,
@@ -18,8 +26,48 @@ import type {
   DetalleProductoPlasticoResponse,
 } from "../../types/cotizadorLibre/cotizadorLibre.types";
 import type { CalcularPrecioCotizadorLibrePayload } from "../../services/cotizadorLibre/cotizadorLibrePrecio.service";
+import type {
+  ItemCarrito,
+  ProductoGuardadoInput,
+} from "../../types/cotizadorLibre/cotizadorLibreCotizaciones.types";
+import { leerBorrador, useAutoguardarBorrador, limpiarBorrador } from "../../hooks/useBorradorFormulario";
 
 type Vista = "landing" | "wizard";
+type AccionFinal = "cotizacion" | "pedido";
+
+type ClienteIdentificadoCotizadorLibre = {
+  clienteId: number;
+  verificado: boolean;
+  datosContacto: { empresa: string; telefono: string; correoMostrar: string };
+};
+
+// Punto de guardado (ver src/hooks/useBorradorFormulario.ts). Cubre el
+// carrito ya armado, el cliente ya identificado (evita repetir la
+// verificación por código) y la selección en curso — el producto que se
+// está configurando en ESTE momento, antes de darle "Agregar al carrito".
+// Deliberadamente NO incluye catálogos cargados del servidor (tipos,
+// medidas, detallePapel/detallePlastico) ni estado de UI/transiente
+// (loading, errores, panel de identificación abierto, "guardando").
+interface BorradorCotizadorLibre {
+  vista: Vista;
+  categoria: CategoriaCotizadorLibre | null;
+  idTipoSeleccionado: number | null;
+  idMedidaSeleccionada: number | null;
+  idGrupoSeleccionado: number | null;
+  idAsaSeleccionada: number | null;
+  idLaminadoSeleccionado: number | null;
+  idTexturaSeleccionada: number | null;
+  idFoilSeleccionado: number | null;
+  altoRelieve: boolean;
+  uv: boolean;
+  tintasFrente: number;
+  tintasDentro: number;
+  idTintasPlastico: number | null;
+  cantidad: number | null;
+  carrito: ItemCarrito[];
+  clienteIdentificado: ClienteIdentificadoCotizadorLibre | null;
+}
+const CLAVE_BORRADOR_COTIZADOR_LIBRE = "cotizador-libre";
 
 // El cargo por asa solo aplica si el nombre de la opción contiene "listón"
 // — misma regla de negocio ya usada en la herramienta interna
@@ -31,23 +79,45 @@ const esAsaDeListon = (nombre: string | null): boolean =>
     .toLowerCase()
     .includes("liston");
 
+const generarIdLocal = () => `item-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+function blobABase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const resultado = reader.result as string;
+      resolve(resultado.split(",")[1] ?? "");
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
 export default function CotizadorLibre() {
-  const [vista, setVista] = useState<Vista>("landing");
+  const { user, logout } = useAuth();
+  // El cliente externo (cuenta compartida cotizacionlibre@grupoeb.com) solo
+  // puede generar cotizaciones — nunca pedidos directos. Staff interno
+  // usando esta misma pantalla con su propia cuenta sí puede ambos.
+  const esClienteExterno = user?.rol === "CotizadorLibre";
+
+  const [borradorInicial] = useState(() => leerBorrador<BorradorCotizadorLibre>(CLAVE_BORRADOR_COTIZADOR_LIBRE));
+
+  const [vista, setVista] = useState<Vista>(borradorInicial?.vista ?? "landing");
 
   // ---- Paso 1: Categoría ----
-  const [categoria, setCategoria] = useState<CategoriaCotizadorLibre | null>(null);
+  const [categoria, setCategoria] = useState<CategoriaCotizadorLibre | null>(borradorInicial?.categoria ?? null);
 
   // ---- Paso 2: Tipo ----
   const [tipos, setTipos] = useState<TipoCatalogoItem[]>([]);
   const [tiposLoading, setTiposLoading] = useState(false);
   const [tiposError, setTiposError] = useState<string | null>(null);
-  const [idTipoSeleccionado, setIdTipoSeleccionado] = useState<number | null>(null);
+  const [idTipoSeleccionado, setIdTipoSeleccionado] = useState<number | null>(borradorInicial?.idTipoSeleccionado ?? null);
 
   // ---- Paso 3: Medida ----
   const [medidas, setMedidas] = useState<(MedidaPapelItem | MedidaPlasticoItem)[]>([]);
   const [medidasLoading, setMedidasLoading] = useState(false);
   const [medidasError, setMedidasError] = useState<string | null>(null);
-  const [idMedidaSeleccionada, setIdMedidaSeleccionada] = useState<number | null>(null);
+  const [idMedidaSeleccionada, setIdMedidaSeleccionada] = useState<number | null>(borradorInicial?.idMedidaSeleccionada ?? null);
 
   // ---- Paso 4: Detalle + Personalización ----
   const [detallePapel, setDetallePapel] = useState<DetalleProductoPapelResponse | null>(null);
@@ -55,28 +125,47 @@ export default function CotizadorLibre() {
   const [detalleLoading, setDetalleLoading] = useState(false);
   const [detalleError, setDetalleError] = useState<string | null>(null);
 
-  // Personalización — Papel
-  const [idGrupoSeleccionado, setIdGrupoSeleccionado] = useState<number | null>(null);
-  const [idAsaSeleccionada, setIdAsaSeleccionada] = useState<number | null>(null);
-  const [idLaminadoSeleccionado, setIdLaminadoSeleccionado] = useState<number | null>(null);
-  const [idTexturaSeleccionada, setIdTexturaSeleccionada] = useState<number | null>(null);
-  const [idFoilSeleccionado, setIdFoilSeleccionado] = useState<number | null>(null);
-  const [altoRelieve, setAltoRelieve] = useState(false);
-  const [uv, setUv] = useState(false);
-  const [tintasFrente, setTintasFrente] = useState(0);
-  const [tintasDentro, setTintasDentro] = useState(0);
+  const [idGrupoSeleccionado, setIdGrupoSeleccionado] = useState<number | null>(borradorInicial?.idGrupoSeleccionado ?? null);
+  const [idAsaSeleccionada, setIdAsaSeleccionada] = useState<number | null>(borradorInicial?.idAsaSeleccionada ?? null);
+  const [idLaminadoSeleccionado, setIdLaminadoSeleccionado] = useState<number | null>(borradorInicial?.idLaminadoSeleccionado ?? null);
+  const [idTexturaSeleccionada, setIdTexturaSeleccionada] = useState<number | null>(borradorInicial?.idTexturaSeleccionada ?? null);
+  const [idFoilSeleccionado, setIdFoilSeleccionado] = useState<number | null>(borradorInicial?.idFoilSeleccionado ?? null);
+  const [altoRelieve, setAltoRelieve] = useState(borradorInicial?.altoRelieve ?? false);
+  const [uv, setUv] = useState(borradorInicial?.uv ?? false);
+  const [tintasFrente, setTintasFrente] = useState(borradorInicial?.tintasFrente ?? 0);
+  const [tintasDentro, setTintasDentro] = useState(borradorInicial?.tintasDentro ?? 0);
 
-  // Personalización — Plástico
-  const [idTintasPlastico, setIdTintasPlastico] = useState<number | null>(null);
+  const [idTintasPlastico, setIdTintasPlastico] = useState<number | null>(borradorInicial?.idTintasPlastico ?? null);
 
   // ---- Paso 5: Cantidad ----
-  const [cantidad, setCantidad] = useState<number | null>(null);
+  const [cantidad, setCantidad] = useState<number | null>(borradorInicial?.cantidad ?? null);
 
-  // ---- Identificación de cliente (Fase 4.4) ----
+  // ---- Carrito (Fase 4.5) ----
+  const [carrito, setCarrito] = useState<ItemCarrito[]>(borradorInicial?.carrito ?? []);
+
+  // ---- Identificación de cliente ----
   const [panelIdentificacionAbierto, setPanelIdentificacionAbierto] = useState(false);
-  const [clienteIdentificado, setClienteIdentificado] = useState<{
-    clienteId: number;
-    verificado: boolean;
+  const [clienteIdentificado, setClienteIdentificado] = useState<ClienteIdentificadoCotizadorLibre | null>(
+    borradorInicial?.clienteIdentificado ?? null
+  );
+  const [accionPendiente, setAccionPendiente] = useState<AccionFinal | null>(null);
+
+  useAutoguardarBorrador<BorradorCotizadorLibre>(CLAVE_BORRADOR_COTIZADOR_LIBRE, {
+    vista, categoria, idTipoSeleccionado, idMedidaSeleccionada, idGrupoSeleccionado,
+    idAsaSeleccionada, idLaminadoSeleccionado, idTexturaSeleccionada, idFoilSeleccionado,
+    altoRelieve, uv, tintasFrente, tintasDentro, idTintasPlastico, cantidad, carrito,
+    clienteIdentificado,
+  }, true);
+
+  // ---- Guardado final ----
+  const [guardando, setGuardando] = useState(false);
+  const [guardadoError, setGuardadoError] = useState<string | null>(null);
+  const [resultadoGuardado, setResultadoGuardado] = useState<{
+    no_cotizacion: string | null;
+    no_pedido: string | null;
+    estado: string;
+    correoDestino: string | null;
+    correoEnviado: boolean;
   } | null>(null);
 
   // ============================================================
@@ -171,12 +260,38 @@ export default function CotizadorLibre() {
   }, [categoria, idMedidaSeleccionada]);
 
   // ============================================================
-  // Payload de precio — solo se arma cuando ya hay lo mínimo necesario
-  // (grupo/material + cantidad para papel; porKilo + tintas + cantidad
-  // para plástico). Mientras falte algo, es null y el hook no calcula nada.
+  // Payload de precio (Fase 4.3)
   // ============================================================
+  // Mínimos reales — en Plástico no tiene sentido un mínimo fijo de piezas,
+  // porque lo que de verdad limita es el peso total (la tabla de tarifas no
+  // tiene rangos por debajo de 30kg, ver Fase 3). En Papel sí es un mínimo
+  // fijo de piezas.
+  const CANTIDAD_MINIMA_PAPEL = 500;
+  const PESO_MINIMO_KG_PLASTICO = 30;
+
+  const porKiloPlastico = useMemo(() => {
+    if (!detallePlastico) return null;
+    const v = Number(detallePlastico.producto.por_kilo);
+    return Number.isFinite(v) && v > 0 ? v : null;
+  }, [detallePlastico]);
+
+  const cantidadMinimaPlastico = useMemo(() => {
+    if (!porKiloPlastico) return null;
+    const minimoExacto = PESO_MINIMO_KG_PLASTICO * porKiloPlastico;
+    // Redondeado hacia arriba a la centena más cercana — más limpio para
+    // mostrar en botones (3438 → 3500, 7620 → 7700) sin bajar del mínimo
+    // real necesario para que exista tarifa (nunca redondea hacia abajo).
+    return Math.ceil(minimoExacto / 100) * 100;
+  }, [porKiloPlastico]);
+
+  const cantidadMinimaActual =
+    categoria === "plastico" ? cantidadMinimaPlastico : CANTIDAD_MINIMA_PAPEL;
+
+  const cantidadValida =
+    cantidad !== null && cantidadMinimaActual !== null && cantidad >= cantidadMinimaActual;
+
   const payloadPrecio: CalcularPrecioCotizadorLibrePayload | null = useMemo(() => {
-    if (!cantidad || cantidad <= 0) return null;
+    if (!cantidadValida || !cantidad) return null;
 
     if (categoria === "papel") {
       if (!idMedidaSeleccionada || !idGrupoSeleccionado) return null;
@@ -205,17 +320,12 @@ export default function CotizadorLibre() {
     }
 
     if (categoria === "plastico") {
-      if (!detallePlastico || idTintasPlastico === null) return null;
-      const porKilo = Number(detallePlastico.producto.por_kilo);
-      if (!Number.isFinite(porKilo) || porKilo <= 0) return null;
+      if (!detallePlastico || idTintasPlastico === null || !porKiloPlastico) return null;
 
       return {
         categoria: "plastico",
         cantidad,
-        plastico: {
-          porKilo,
-          tintasId: idTintasPlastico,
-        },
+        plastico: { porKilo: porKiloPlastico, tintasId: idTintasPlastico },
       };
     }
 
@@ -236,18 +346,227 @@ export default function CotizadorLibre() {
     detallePapel,
     detallePlastico,
     idTintasPlastico,
+    cantidadValida,
+    porKiloPlastico,
   ]);
 
   const { resultado: precio, loading: precioLoading, error: precioError } =
     useCalcularPrecioCotizadorLibre({ payload: payloadPrecio });
 
+  // ============================================================
+  // Carrito — agregar producto configurado
+  // ============================================================
+  const puedeAgregarAlCarrito =
+    !!payloadPrecio && !!precio?.disponible && precio.precio_unitario !== null && !!cantidad;
+
+  const resetearConfiguracion = () => {
+    setCategoria(null);
+    setIdTipoSeleccionado(null);
+    setIdMedidaSeleccionada(null);
+    setCantidad(null);
+  };
+
+  const handleAgregarAlCarrito = () => {
+    if (!puedeAgregarAlCarrito || !payloadPrecio || !precio?.precio_unitario) return;
+
+    let payload: ProductoGuardadoInput;
+    let descripcion: string;
+
+    if (payloadPrecio.categoria === "papel") {
+      descripcion =
+        [detallePapel?.producto.descripcion_papel, detallePapel?.producto.medida]
+          .filter(Boolean)
+          .join(" - ") || "Producto de papel";
+      payload = {
+        categoria: "papel",
+        idproducto_papel: payloadPrecio.papel.idproducto_papel,
+        idgrupo_papel: payloadPrecio.papel.idgrupo_papel,
+        cantidad: payloadPrecio.cantidad,
+        acabados: {
+          tintas_frente: tintasFrente,
+          tintas_dentro: tintasDentro,
+          idcat_laminado: idLaminadoSeleccionado,
+          idfoil: idFoilSeleccionado,
+          idcat_textura: idTexturaSeleccionada,
+          id_asa: idAsaSeleccionada,
+          alto_relieve: altoRelieve,
+          uv,
+        },
+      };
+    } else {
+      descripcion = detallePlastico?.producto.medida || "Producto de plástico";
+      payload = {
+        categoria: "plastico",
+        idconfiguracion_plastico: idMedidaSeleccionada as number,
+        cantidad: payloadPrecio.cantidad,
+        tintasId: idTintasPlastico as number,
+      };
+    }
+
+    const materialNombre =
+      detallePapel?.grupos.find((g) => g.idgrupo_papel === idGrupoSeleccionado)?.material ??
+      detallePlastico?.producto.material ??
+      null;
+    const asaNombre = detallePapel?.asas.find((a) => a.id === idAsaSeleccionada)?.nombre ?? null;
+    const laminadoNombre = detallePapel?.laminados.find((l) => l.id === idLaminadoSeleccionado)?.nombre ?? null;
+    const texturaNombre = detallePapel?.texturas.find((t) => t.id === idTexturaSeleccionada)?.nombre ?? null;
+    const foilNombre = detallePapel?.foils.find((f) => f.id === idFoilSeleccionado)?.nombre ?? null;
+    const tintasCantidad = detallePlastico?.tintas.find((t) => t.id === idTintasPlastico)?.cantidad ?? null;
+
+    const nuevoItem: ItemCarrito = {
+      idLocal: generarIdLocal(),
+      descripcion,
+      cantidad: cantidad as number,
+      precioUnitario: precio.precio_unitario,
+      payload,
+      materialNombre,
+      asaNombre,
+      laminadoNombre,
+      texturaNombre,
+      foilNombre,
+      tintasCantidad,
+    };
+
+    setCarrito((prev) => [...prev, nuevoItem]);
+    resetearConfiguracion();
+  };
+
+  const quitarDelCarrito = (idLocal: string) => {
+    setCarrito((prev) => prev.filter((item) => item.idLocal !== idLocal));
+  };
+
+  const totalCarrito = carrito.reduce((acc, item) => acc + item.precioUnitario * item.cantidad, 0);
+
+  // ============================================================
+  // Acciones finales — Generar cotización / Convertir a pedido
+  // ============================================================
+  const iniciarAccionFinal = (accion: AccionFinal) => {
+    setGuardadoError(null);
+    if (carrito.length === 0) {
+      setGuardadoError("Agrega al menos un producto a tu cotización antes de continuar.");
+      return;
+    }
+    if (clienteIdentificado) {
+      ejecutarGuardado(accion, clienteIdentificado);
+      return;
+    }
+    setAccionPendiente(accion);
+    setPanelIdentificacionAbierto(true);
+  };
+
+  const ejecutarGuardado = async (
+    accion: AccionFinal,
+    identificacion: {
+      clienteId: number;
+      verificado: boolean;
+      datosContacto: { empresa: string; telefono: string; correoMostrar: string };
+    }
+  ) => {
+    setGuardando(true);
+    setGuardadoError(null);
+
+    // El carrito se limpia al terminar, así que lo guardamos aparte antes
+    // de que eso pase — el PDF se arma con estos mismos productos.
+    const carritoUsado = carrito;
+
+    try {
+      const resultado = await crearCotizacionCotizadorLibre({
+        clienteId: identificacion.clienteId,
+        tipo: accion,
+        verificado: identificacion.verificado,
+        productos: carritoUsado.map((item) => item.payload),
+      });
+
+      setResultadoGuardado({
+        no_cotizacion: resultado.no_cotizacion,
+        no_pedido: resultado.no_pedido,
+        estado: resultado.estado,
+        correoDestino: resultado.cliente?.correo ?? null,
+        correoEnviado: false,
+      });
+      setCarrito([]);
+      limpiarBorrador(CLAVE_BORRADOR_COTIZADOR_LIBRE);
+
+      // ---- Generar PDF (en el navegador) + descargar + enviar por correo ----
+      // Si algo falla aquí, NO se revierte el guardado (ya está hecho y es lo
+      // importante) — solo se avisa que el PDF/correo no se pudo procesar.
+      try {
+        const fechaHoy = new Date().toISOString();
+        const folio = resultado.no_pedido || resultado.no_cotizacion || "";
+        const nombreArchivo =
+          accion === "pedido" ? `Pedido_${folio}.pdf` : `Cotizacion_${folio}.pdf`;
+
+        const blob =
+          accion === "pedido"
+            ? await generarPdfPedido(
+                construirPayloadPdfCotizadorLibrePedido(
+                  carritoUsado,
+                  resultado.no_pedido || "",
+                  resultado.no_cotizacion,
+                  fechaHoy,
+                  resultado.cliente
+                ) as any,
+                true,
+                true
+              )
+            : await generarPdfCotizacion(
+                construirPayloadPdfCotizadorLibreCotizacion(
+                  carritoUsado,
+                  resultado.no_cotizacion || "",
+                  fechaHoy,
+                  resultado.cliente
+                ) as any,
+                true,
+                true
+              );
+
+        const pdfBase64 = await blobABase64(blob);
+
+        await enviarPdfCotizadorLibre(resultado.idsolicitud, {
+          tipo: accion,
+          folio,
+          pdfBase64,
+          nombreArchivo,
+        });
+
+        // Solo se marca como enviado una vez que el backend confirmó que sí
+        // se mandó — nunca de forma optimista.
+        setResultadoGuardado((prev) => (prev ? { ...prev, correoEnviado: true } : prev));
+      } catch (pdfErr) {
+        console.error("Error al generar/enviar el PDF:", pdfErr);
+        // No bloquea el flujo — la cotización/pedido ya se guardó bien.
+        // correoEnviado se queda en false, y la pantalla de confirmación ya
+        // avisa que el correo no se pudo mandar (ver más abajo).
+      }
+    } catch (err: any) {
+      console.error("Error al guardar:", err);
+      setGuardadoError(err?.response?.data?.error || "No se pudo guardar tu cotización. Intenta de nuevo.");
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  const handleIdentificacionCompletada = (resultado: {
+    clienteId: number;
+    verificado: boolean;
+    datosContacto: { empresa: string; telefono: string; correoMostrar: string };
+  }) => {
+    setClienteIdentificado(resultado);
+    if (accionPendiente) {
+      ejecutarGuardado(accionPendiente, resultado);
+      setAccionPendiente(null);
+    }
+  };
+
   const entrarAlCotizador = () => setVista("wizard");
 
   const volverAlInicio = () => {
     setVista("landing");
-    setCategoria(null);
-    setIdTipoSeleccionado(null);
-    setIdMedidaSeleccionada(null);
+    resetearConfiguracion();
+    setCarrito([]);
+    setResultadoGuardado(null);
+    setClienteIdentificado(null);
+    limpiarBorrador(CLAVE_BORRADOR_COTIZADOR_LIBRE);
   };
 
   // ============================================================
@@ -256,7 +575,14 @@ export default function CotizadorLibre() {
   if (vista === "landing") {
     return (
       <div className="min-h-screen bg-[#f7f4ee] flex flex-col">
-        <div className="bg-gradient-to-br from-[#1e3a2b] to-[#2d5540] text-white px-8 py-20 flex-1 flex flex-col items-center justify-center text-center">
+        <div className="bg-gradient-to-br from-[#1e3a2b] to-[#2d5540] text-white px-8 py-20 flex-1 flex flex-col items-center justify-center text-center relative">
+          <button
+            onClick={logout}
+            className="absolute top-4 right-4 text-xs text-white/70 hover:text-white flex items-center gap-1.5"
+            title="Cerrar sesión"
+          >
+            Salir 🚪
+          </button>
           <div className="w-11 h-11 rounded-lg bg-[#e8c99a] text-[#1e3a2b] font-extrabold flex items-center justify-center text-base mb-6">
             EB
           </div>
@@ -281,10 +607,65 @@ export default function CotizadorLibre() {
   }
 
   // ============================================================
+  // CONFIRMACIÓN FINAL (tras guardar exitosamente)
+  // ============================================================
+  if (resultadoGuardado) {
+    return (
+      <div className="min-h-screen bg-[#f7f4ee] flex items-center justify-center px-6">
+        <div className="bg-white border border-[#3f7a52] rounded-2xl p-8 max-w-md text-center flex flex-col gap-4">
+          <div className="text-4xl">✅</div>
+          <h2 className="text-xl font-bold text-[#1e3a2b]">
+            {resultadoGuardado.estado === "en_revision"
+              ? "Tu cotización quedó en revisión"
+              : "¡Todo listo!"}
+          </h2>
+          {resultadoGuardado.no_cotizacion && (
+            <p className="text-sm text-[#6b6f63]">
+              Folio de cotización: <b>{resultadoGuardado.no_cotizacion}</b>
+            </p>
+          )}
+          {resultadoGuardado.no_pedido && (
+            <p className="text-sm text-[#6b6f63]">
+              Folio de pedido: <b>{resultadoGuardado.no_pedido}</b>
+            </p>
+          )}
+          {resultadoGuardado.estado === "en_revision" && (
+            <p className="text-sm text-[#7a5c00] bg-[#fff8e6] border border-[#e8d38a] rounded-lg p-3">
+              Un asesor se pondrá en contacto contigo para confirmar tus datos.
+            </p>
+          )}
+          {resultadoGuardado.correoEnviado && resultadoGuardado.correoDestino && (
+            <p className="text-sm text-[#3f7a52] bg-[#eafaf0] border border-[#3f7a52] rounded-lg p-3">
+              📧 Tu {resultadoGuardado.no_pedido ? "pedido" : "cotización"} fue enviada a{" "}
+              <b>{resultadoGuardado.correoDestino}</b>.
+            </p>
+          )}
+          {!resultadoGuardado.correoEnviado && (
+            <p className="text-xs text-[#6b6f63]">
+              Tu documento ya se descargó en este dispositivo. Si no te llegó por correo, un asesor puede reenviártelo.
+            </p>
+          )}
+          {esClienteExterno && (
+            <p className="text-xs text-[#7a5c00] bg-[#fff8e6] border border-[#e8d38a] rounded-lg p-2.5">
+              ℹ️ Recuerda que esta es una estimación — un asesor te confirmará especificaciones y precio final.
+            </p>
+          )}
+          <button
+            onClick={volverAlInicio}
+            className="bg-[#1e3a2b] text-white rounded-lg py-3 font-semibold mt-2"
+          >
+            Volver al inicio
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ============================================================
   // WIZARD
   // ============================================================
   return (
-    <div className="min-h-screen bg-[#f7f4ee] pb-16">
+    <div className="min-h-screen bg-[#f7f4ee] pb-28">
       <div className="bg-white border-b border-[#e2ddd0] px-6 py-4 flex items-center justify-between">
         <button
           onClick={volverAlInicio}
@@ -292,10 +673,30 @@ export default function CotizadorLibre() {
         >
           ← Volver al inicio
         </button>
-        <span className="text-sm text-[#6b6f63]">
+        <span className="text-sm text-[#6b6f63] flex items-center gap-3">
           Cotizador / <b className="text-[#1e3a2b]">Nueva cotización</b>
+          {carrito.length > 0 && (
+            <span className="bg-[#1e3a2b] text-white text-xs font-bold px-2.5 py-1 rounded-full">
+              🛒 {carrito.length}
+            </span>
+          )}
+          <button
+            onClick={logout}
+            className="text-xs text-[#6b6f63] hover:text-[#1e3a2b]"
+            title="Cerrar sesión"
+          >
+            Salir 🚪
+          </button>
         </span>
       </div>
+
+      {esClienteExterno && (
+        <div className="bg-[#fff8e6] border-b border-[#e8d38a] px-6 py-2.5 text-center">
+          <p className="text-xs text-[#7a5c00]">
+            ℹ️ Esta es una cotización estimada — las especificaciones o el precio final pueden variar ligeramente al confirmarse con un asesor.
+          </p>
+        </div>
+      )}
 
       <div className="max-w-3xl mx-auto px-6 py-8 flex flex-col gap-6">
         {/* Paso 1: Categoría */}
@@ -364,20 +765,30 @@ export default function CotizadorLibre() {
             {medidasError && <p className="text-sm text-red-600">{medidasError}</p>}
             {!medidasLoading && !medidasError && (
               <div className="flex flex-col gap-2">
-                {medidas.map((m) => (
-                  <button
-                    key={m.id}
-                    onClick={() => setIdMedidaSeleccionada(m.id)}
-                    disabled={!m.medida}
-                    className={`border rounded-lg px-4 py-3 text-sm text-left transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
-                      idMedidaSeleccionada === m.id
-                        ? "border-[#b8894a] bg-[#fbf3e8]"
-                        : "border-[#e2ddd0] hover:border-[#b8894a]"
-                    }`}
-                  >
-                    <span className="font-semibold">{m.medida ?? "Medida sin datos"}</span>
-                  </button>
-                ))}
+                {medidas.map((m) => {
+                  // descripcion_papel solo existe en medidas de papel — es lo
+                  // que distingue dos productos que comparten exactamente la
+                  // misma medida (ej. "25+8x28" simple vs "25+8x28 Troquel
+                  // Riñón"), ya que nunca se fusionan entre sí.
+                  const descripcion = "descripcion_papel" in m ? m.descripcion_papel : null;
+                  return (
+                    <button
+                      key={m.id}
+                      onClick={() => setIdMedidaSeleccionada(m.id)}
+                      disabled={!m.medida}
+                      className={`border rounded-lg px-4 py-3 text-sm text-left transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                        idMedidaSeleccionada === m.id
+                          ? "border-[#b8894a] bg-[#fbf3e8]"
+                          : "border-[#e2ddd0] hover:border-[#b8894a]"
+                      }`}
+                    >
+                      <span className="font-semibold">{m.medida ?? "Medida sin datos"}</span>
+                      {descripcion && (
+                        <span className="block text-xs text-[#6b6f63] mt-0.5">{descripcion}</span>
+                      )}
+                    </button>
+                  );
+                })}
                 {medidas.length === 0 && (
                   <p className="text-sm text-[#6b6f63]">
                     No hay medidas disponibles para este tipo todavía.
@@ -396,10 +807,8 @@ export default function CotizadorLibre() {
             {detalleLoading && <p className="text-sm text-[#6b6f63]">Cargando opciones...</p>}
             {detalleError && <p className="text-sm text-red-600">{detalleError}</p>}
 
-            {/* ---- PAPEL ---- */}
             {!detalleLoading && detallePapel && (
               <div className="flex flex-col gap-5">
-                {/* Material */}
                 <div>
                   <span className="text-xs font-bold text-[#6b6f63] uppercase block mb-2">
                     Material
@@ -426,7 +835,6 @@ export default function CotizadorLibre() {
                   </div>
                 </div>
 
-                {/* Asa */}
                 {detallePapel.asas.length > 0 && (
                   <div>
                     <span className="text-xs font-bold text-[#6b6f63] uppercase block mb-2">
@@ -460,7 +868,6 @@ export default function CotizadorLibre() {
                   </div>
                 )}
 
-                {/* Laminado */}
                 {detallePapel.laminados.length > 0 && (
                   <div>
                     <span className="text-xs font-bold text-[#6b6f63] uppercase block mb-2">
@@ -494,7 +901,6 @@ export default function CotizadorLibre() {
                   </div>
                 )}
 
-                {/* Textura */}
                 <div>
                   <span className="text-xs font-bold text-[#6b6f63] uppercase block mb-2">
                     Textura (opcional)
@@ -526,7 +932,6 @@ export default function CotizadorLibre() {
                   </div>
                 </div>
 
-                {/* Foil (hot stamping) */}
                 <div>
                   <span className="text-xs font-bold text-[#6b6f63] uppercase block mb-2">
                     Hot stamping / Foil (opcional)
@@ -558,7 +963,6 @@ export default function CotizadorLibre() {
                   </div>
                 </div>
 
-                {/* UV / Alto relieve */}
                 <div className="flex gap-4">
                   <label className="flex items-center gap-2 text-sm">
                     <input type="checkbox" checked={uv} onChange={(e) => setUv(e.target.checked)} />
@@ -574,7 +978,6 @@ export default function CotizadorLibre() {
                   </label>
                 </div>
 
-                {/* Tintas */}
                 <div className="flex gap-4">
                   <label className="text-sm flex flex-col gap-1">
                     Tintas frente (0-6)
@@ -606,7 +1009,6 @@ export default function CotizadorLibre() {
               </div>
             )}
 
-            {/* ---- PLÁSTICO ---- */}
             {!detalleLoading && detallePlastico && (
               <div>
                 <span className="text-xs font-bold text-[#6b6f63] uppercase block mb-2">
@@ -637,7 +1039,10 @@ export default function CotizadorLibre() {
           <div className="bg-white border border-[#e2ddd0] rounded-xl p-5">
             <h2 className="text-sm font-bold mb-3">5. Selecciona la cantidad</h2>
             <div className="flex gap-2 flex-wrap mb-3">
-              {[500, 1000, 3000, 5000, 10000].map((c) => (
+              {(categoria === "plastico" && cantidadMinimaPlastico
+                ? [0, 500, 1000, 1500, 2000].map((extra) => cantidadMinimaPlastico + extra)
+                : [500, 1000, 3000, 5000, 10000]
+              ).map((c) => (
                 <button
                   key={c}
                   onClick={() => setCantidad(c)}
@@ -653,23 +1058,32 @@ export default function CotizadorLibre() {
             </div>
             <input
               type="number"
-              min={1}
+              min={cantidadMinimaActual ?? 1}
               placeholder="Cantidad personalizada"
               value={cantidad ?? ""}
               onChange={(e) => setCantidad(Number(e.target.value) || null)}
               className="border border-[#e2ddd0] rounded-lg px-4 py-2 text-sm w-56"
             />
+            {categoria === "plastico" && cantidadMinimaPlastico && (
+              <p className="text-xs text-[#6b6f63] mt-2">
+                Este producto requiere un mínimo de {cantidadMinimaPlastico.toLocaleString()} piezas
+                (equivalente a {PESO_MINIMO_KG_PLASTICO} kg) para poder cotizarse.
+              </p>
+            )}
+            {cantidad !== null && !cantidadValida && (
+              <p className="text-xs text-red-600 mt-1">
+                La cantidad mínima para este producto es {cantidadMinimaActual?.toLocaleString()} piezas.
+              </p>
+            )}
           </div>
         )}
 
-        {/* Precio en vivo */}
+        {/* Precio en vivo + Agregar al carrito */}
         {payloadPrecio && (
           <div className="bg-[#1e3a2b] text-white rounded-xl p-5">
             <p className="text-xs uppercase text-[#e8c99a] font-bold mb-1">Precio estimado</p>
             {precioLoading && <p className="text-2xl font-extrabold">Calculando...</p>}
-            {!precioLoading && precioError && (
-              <p className="text-sm text-red-300">{precioError}</p>
-            )}
+            {!precioLoading && precioError && <p className="text-sm text-red-300">{precioError}</p>}
             {!precioLoading && !precioError && precio && (
               <>
                 {precio.disponible && precio.precio_unitario !== null ? (
@@ -679,7 +1093,7 @@ export default function CotizadorLibre() {
                       <span className="text-sm font-medium text-white/70">MXN / pza</span>
                     </p>
                     <button
-                      onClick={() => setPanelIdentificacionAbierto(true)}
+                      onClick={handleAgregarAlCarrito}
                       className="mt-4 bg-[#e8c99a] text-[#1e3a2b] font-bold px-5 py-3 rounded-lg hover:bg-white transition-colors"
                     >
                       + Agregar a cotización
@@ -695,21 +1109,74 @@ export default function CotizadorLibre() {
           </div>
         )}
 
-        {/* Confirmación tras identificación — placeholder hasta Fase 4.5,
-            donde esto se conecta al guardado real de la solicitud. */}
-        {clienteIdentificado && (
-          <div className="bg-white border border-[#3f7a52] rounded-xl p-5 text-sm text-[#1e3a2b]">
-            ✅ Cliente identificado (id: {clienteIdentificado.clienteId}
-            {clienteIdentificado.verificado ? "" : ", pendiente de verificación"}). El
-            guardado de la cotización se conecta en el siguiente paso.
+        {/* Carrito */}
+        {carrito.length > 0 && (
+          <div className="bg-white border border-[#e2ddd0] rounded-xl p-5">
+            <h2 className="text-sm font-bold mb-3">Tu cotización ({carrito.length})</h2>
+            <div className="flex flex-col gap-2">
+              {carrito.map((item) => (
+                <div
+                  key={item.idLocal}
+                  className="flex items-center justify-between border border-[#e2ddd0] rounded-lg px-4 py-3"
+                >
+                  <div>
+                    <p className="text-sm font-semibold">{item.descripcion}</p>
+                    <p className="text-xs text-[#6b6f63]">
+                      {item.cantidad.toLocaleString()} pzas × ${item.precioUnitario.toFixed(2)} = $
+                      {(item.cantidad * item.precioUnitario).toFixed(2)}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => quitarDelCarrito(item.idLocal)}
+                    className="text-red-600 text-sm font-semibold hover:underline"
+                  >
+                    Quitar
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div className="mt-3 text-right text-sm font-bold text-[#1e3a2b]">
+              Total: ${totalCarrito.toFixed(2)} MXN
+            </div>
+          </div>
+        )}
+
+        {guardadoError && (
+          <div className="bg-red-50 border border-red-300 rounded-xl p-4 text-sm text-red-700">
+            {guardadoError}
           </div>
         )}
       </div>
 
+      {/* Barra de acciones finales */}
+      {carrito.length > 0 && (
+        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-[#e2ddd0] px-6 py-4 flex justify-end gap-3">
+          <button
+            onClick={() => iniciarAccionFinal("cotizacion")}
+            disabled={guardando}
+            className="border border-[#1e3a2b] text-[#1e3a2b] font-semibold px-5 py-3 rounded-lg disabled:opacity-50"
+          >
+            {guardando ? "Guardando..." : "Generar cotización"}
+          </button>
+          {!esClienteExterno && (
+            <button
+              onClick={() => iniciarAccionFinal("pedido")}
+              disabled={guardando}
+              className="bg-[#3f7a52] text-white font-semibold px-5 py-3 rounded-lg disabled:opacity-50"
+            >
+              {guardando ? "Guardando..." : "Convertir a pedido"}
+            </button>
+          )}
+        </div>
+      )}
+
       <IdentificacionCliente
         abierto={panelIdentificacionAbierto}
-        onCerrar={() => setPanelIdentificacionAbierto(false)}
-        onCompletado={(resultado) => setClienteIdentificado(resultado)}
+        onCerrar={() => {
+          setPanelIdentificacionAbierto(false);
+          setAccionPendiente(null);
+        }}
+        onCompletado={handleIdentificacionCompletada}
       />
     </div>
   );

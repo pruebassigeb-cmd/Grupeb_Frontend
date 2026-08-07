@@ -10,6 +10,7 @@ import ModalEditarBitacora from "./ModalEditarBitacora";
 import ModalFotoEnvio from "./ModalFotoEnvio";
 import { showAlert } from "../CustomAlert";
 import type { BitacoraRegistro, UpdateBitacoraRequest } from "../../types/envio/envios.types";
+import { leerBorrador, useAutoguardarBorrador, limpiarBorrador } from "../../hooks/useBorradorFormulario";
 
 const toDatetimeLocal = (iso: string) => {
   const d = new Date(iso), pad = (n: number) => String(n).padStart(2, "0");
@@ -100,7 +101,9 @@ export default function BitacoraLocal() {
 
   const abrirEdicion = (r: BitacoraRegistro, marcarLlegada = false) => {
     setEditando(r);
-    setFormEdit({
+    const claveBorrador = `bitacora-local-editar-${r.envio.idenvio}`;
+    const borrador = leerBorrador<UpdateBitacoraRequest & { numero_guia?: string }>(claveBorrador);
+    setFormEdit(borrador ?? {
       hora_salida: r.hora_salida ? toDatetimeLocal(r.hora_salida) : undefined,
       hora_llegada: r.hora_llegada ? toDatetimeLocal(r.hora_llegada) : marcarLlegada ? ahoraDatetimeLocal() : undefined,
       observacion: r.observacion || undefined,
@@ -109,6 +112,12 @@ export default function BitacoraLocal() {
       numero_guia: r.envio.numero_guia || "",
     });
   };
+
+  useAutoguardarBorrador(
+    editando ? `bitacora-local-editar-${editando.envio.idenvio}` : "bitacora-local-sin-editar",
+    formEdit,
+    editando !== null
+  );
 
   const handleGuardar = async (data: UpdateBitacoraRequest & { numero_guia?: string }, foto?: File | null, fotosAEliminar?: string[]) => {
     if (!editando) return;
@@ -121,6 +130,7 @@ export default function BitacoraLocal() {
         const ext = foto.name.match(/\.[^/.]+$/)?.[0] || "";
         await subirArchivo(new File([foto], `envio-${editando.envio.idenvio}-${editando.no_pedido}-${Date.now()}${ext}`, { type: foto.type }), "fotos-envios", undefined, editando.envio.idenvio);
       }
+      limpiarBorrador(`bitacora-local-editar-${editando.envio.idenvio}`);
       setEditando(null); await cargar();
     } catch (err: any) { showAlert(err.response?.data?.error || "Error al guardar"); }
     finally { setGuardando(false); }

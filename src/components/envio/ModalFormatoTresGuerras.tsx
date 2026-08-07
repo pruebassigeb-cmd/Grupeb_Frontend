@@ -7,6 +7,7 @@ import { preguntarGuardarS3 } from "../../services/pdfS3.service";
 import type { ProductoSat } from "../../types/envio/envios.types";
 import api from "../../services/api";
 import { showAlert } from './../CustomAlert';
+import { leerBorrador, useAutoguardarBorrador, limpiarBorrador } from "../../hooks/useBorradorFormulario";
 
 
 interface BultoForm {
@@ -23,26 +24,52 @@ interface Props {
   onClose: () => void;
 }
 
+// No incluye bultosForms — mismo criterio que ModalFormatoCastores.tsx.
+interface BorradorFormatoTresGuerras {
+  condicionPago: "pagado" | "cobrar_destino" | "cobrar_regreso";
+  recoleccion: "si" | "no";
+  tipoEntrega: "ocurre" | "domicilio";
+  docFactura: boolean;
+  docOrdenCompra: boolean;
+  docPedido: boolean;
+  docOtro: boolean;
+  docOtroTexto: string;
+  asegurada: boolean;
+  valorDeclarado: string;
+  matPeligroso: boolean;
+  clavePeligroso: string;
+  claveEmbalajeSat: string;
+  observaciones: string;
+}
+
 export default function ModalFormatoTresGuerras({ idenvio, onClose }: Props) {
+  const claveBorrador = `formato-tres-guerras-${idenvio}`;
+  const [borradorInicial] = useState(() => leerBorrador<BorradorFormatoTresGuerras>(claveBorrador));
+
   const [loading,      setLoading]      = useState(true);
   const [generando,    setGenerando]    = useState(false);
   const [datos,        setDatos]        = useState<any>(null);
   const [productosSat, setProductosSat] = useState<ProductoSat[]>([]);
 
-  const [condicionPago,     setCondicionPago]     = useState<"pagado" | "cobrar_destino" | "cobrar_regreso">("pagado");
-  const [recoleccion,       setRecoleccion]       = useState<"si" | "no">("no");
-  const [tipoEntrega,       setTipoEntrega]       = useState<"ocurre" | "domicilio">("domicilio");
-  const [docFactura,        setDocFactura]        = useState(false);
-  const [docOrdenCompra,    setDocOrdenCompra]    = useState(false);
-  const [docPedido,         setDocPedido]         = useState(false);
-  const [docOtro,           setDocOtro]           = useState(false);
-  const [docOtroTexto,      setDocOtroTexto]      = useState("");
-  const [asegurada,         setAsegurada]         = useState(false);
-  const [valorDeclarado,    setValorDeclarado]    = useState("");
-  const [matPeligroso,      setMatPeligroso]      = useState(false);
-  const [clavePeligroso,    setClavePeligroso]    = useState("");
-  const [claveEmbalajeSat,  setClaveEmbalajeSat]  = useState("");
-  const [observaciones,     setObservaciones]     = useState("");
+  const [condicionPago,     setCondicionPago]     = useState<"pagado" | "cobrar_destino" | "cobrar_regreso">(borradorInicial?.condicionPago ?? "pagado");
+  const [recoleccion,       setRecoleccion]       = useState<"si" | "no">(borradorInicial?.recoleccion ?? "no");
+  const [tipoEntrega,       setTipoEntrega]       = useState<"ocurre" | "domicilio">(borradorInicial?.tipoEntrega ?? "domicilio");
+  const [docFactura,        setDocFactura]        = useState(borradorInicial?.docFactura ?? false);
+  const [docOrdenCompra,    setDocOrdenCompra]    = useState(borradorInicial?.docOrdenCompra ?? false);
+  const [docPedido,         setDocPedido]         = useState(borradorInicial?.docPedido ?? false);
+  const [docOtro,           setDocOtro]           = useState(borradorInicial?.docOtro ?? false);
+  const [docOtroTexto,      setDocOtroTexto]      = useState(borradorInicial?.docOtroTexto ?? "");
+  const [asegurada,         setAsegurada]         = useState(borradorInicial?.asegurada ?? false);
+  const [valorDeclarado,    setValorDeclarado]    = useState(borradorInicial?.valorDeclarado ?? "");
+  const [matPeligroso,      setMatPeligroso]      = useState(borradorInicial?.matPeligroso ?? false);
+  const [clavePeligroso,    setClavePeligroso]    = useState(borradorInicial?.clavePeligroso ?? "");
+  const [claveEmbalajeSat,  setClaveEmbalajeSat]  = useState(borradorInicial?.claveEmbalajeSat ?? "");
+  const [observaciones,     setObservaciones]     = useState(borradorInicial?.observaciones ?? "");
+
+  useAutoguardarBorrador<BorradorFormatoTresGuerras>(claveBorrador, {
+    condicionPago, recoleccion, tipoEntrega, docFactura, docOrdenCompra, docPedido, docOtro,
+    docOtroTexto, asegurada, valorDeclarado, matPeligroso, clavePeligroso, claveEmbalajeSat, observaciones,
+  }, true);
 
   const [bultosForms, setBultosForms] = useState<BultoForm[]>([]);
 
@@ -117,6 +144,7 @@ export default function ModalFormatoTresGuerras({ idenvio, onClose }: Props) {
         claveEmbalajeSat,
         observaciones,
       });
+      limpiarBorrador(claveBorrador);
       onClose();
     } catch (e) {
       console.error("Error generando PDF:", e);

@@ -19,6 +19,9 @@ import type {
 } from "../../components/papel/FormularioProductoPapelAlta";
 import CargaMasivaPapel from "../../components/papel/CargaMasivaPapel";
 import ModalCostosLaminado from "../../components/papel/ModalCostoLaminado";
+import BotonAuditoria from "../../components/auditoria/BotonAuditoria";
+import { limpiarBorrador } from "../../hooks/useBorradorFormulario";
+import { claveBorradorProductoPapel } from "../../utils/clavesBorrador";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TIPOS EXTENDIDOS PARA LA TABLA
@@ -388,6 +391,10 @@ function DetalleProducto({
             {row("Empaque", detalle.acabados.empaque)}
             {row("Pzs / caja", detalle.acabados.pzs_caja)}
             {detalle.acabados.asas?.length > 0 && row("Asas", detalle.acabados.asas.map((a: any) => a.tipo_asa).join(", "))}
+            {detalle.acabados.lleva_uv === true && row("UV", "Sí")}
+            {detalle.acabados.lleva_alto_relieve === true && row("Alto relieve", "Sí")}
+            {detalle.acabados.lleva_textura === true && row("Textura", "Sí")}
+            {detalle.acabados.lleva_hot_stamping === true && row("Hot stamping (Foil)", "Sí")}
           </div>
         </div>
       )}
@@ -529,6 +536,7 @@ function TablaCatalogo({ productos, loading, onNuevo, onEditar, onEliminar }: {
   onEliminar: (id: number) => void;
 }) {
   const [search, setSearch] = useState("");
+  const [origenSeleccionado, setOrigenSeleccionado] = useState<"sistema" | "expo">("sistema");
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [ordenMedida, setOrdenMedida] = useState<"asc" | "desc" | null>(null);
@@ -573,9 +581,19 @@ function TablaCatalogo({ productos, loading, onNuevo, onEditar, onEliminar }: {
     setOrdenMedida(prev => (prev === "asc" ? "desc" : "asc"));
   };
 
-  const filtered = (productos as ProductoPapelListItemEx[])
+  // Separamos los productos del sistema de los creados desde Expo.
+  // Por defecto se muestran solo los del sistema; al seleccionar "Expo"
+  // la misma búsqueda y el mismo orden trabajan únicamente sobre esos registros.
+  const productosExtendidos = productos as ProductoPapelListItemEx[];
+  const totalSistema = productosExtendidos.filter(p => !p.origen_expo).length;
+  const totalExpo = productosExtendidos.filter(p => Boolean(p.origen_expo)).length;
+  const productosPorOrigen = productosExtendidos.filter(p =>
+    origenSeleccionado === "expo" ? Boolean(p.origen_expo) : !p.origen_expo
+  );
+
+  const filtered = productosPorOrigen
     .filter(p =>
-      p.tipo_producto.toLowerCase().includes(search.toLowerCase()) ||
+      (p.tipo_producto ?? "").toLowerCase().includes(search.toLowerCase()) ||
       (p.medida ?? "").toLowerCase().includes(search.toLowerCase()) ||
       ((p as any).descripcion_papel ?? "").toLowerCase().includes(search.toLowerCase()) ||
       (p.primer_tipo_papel ?? "").toLowerCase().includes(search.toLowerCase()) ||
@@ -652,12 +670,39 @@ function TablaCatalogo({ productos, loading, onNuevo, onEditar, onEliminar }: {
           </div>
         )}
 
-        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-          <div style={{ position: "relative", flex: 1 }}>
+        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+          <div style={{ position: "relative", flex: "1 1 420px" }}>
             <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", fontSize: 13, color: "#9CA3AF" }}>&#128269;</span>
             <input type="text" value={search} onChange={e => setSearch(e.target.value)}
               placeholder="Buscar por tipo, descripción, material o tamaño..."
               style={{ width: "100%", height: 36, paddingLeft: 32, paddingRight: 12, border: "1px solid #D1D5DB", borderRadius: 7, fontSize: 12, color: "#111827", background: "#fff", outline: "none", boxSizing: "border-box" }} />
+          </div>
+
+          <div style={{ display: "inline-flex", height: 36, padding: 2, border: "1px solid #D1D5DB", borderRadius: 8, background: "#F9FAFB", flexShrink: 0 }}>
+            <button
+              onClick={() => { setOrigenSeleccionado("sistema"); setExpandedId(null); }}
+              title="Mostrar únicamente productos registrados en el sistema"
+              style={{
+                height: 30, padding: "0 12px", border: "none", borderRadius: 6, cursor: "pointer",
+                fontSize: 11, fontWeight: 700, whiteSpace: "nowrap",
+                background: origenSeleccionado === "sistema" ? "#1D4ED8" : "transparent",
+                color: origenSeleccionado === "sistema" ? "#fff" : "#6B7280",
+              }}
+            >
+              Sistema ({totalSistema})
+            </button>
+            <button
+              onClick={() => { setOrigenSeleccionado("expo"); setExpandedId(null); }}
+              title="Mostrar únicamente productos creados desde Expo"
+              style={{
+                height: 30, padding: "0 12px", border: "none", borderRadius: 6, cursor: "pointer",
+                fontSize: 11, fontWeight: 700, whiteSpace: "nowrap",
+                background: origenSeleccionado === "expo" ? "#F59E0B" : "transparent",
+                color: origenSeleccionado === "expo" ? "#fff" : "#92400E",
+              }}
+            >
+              ⭐ Expo ({totalExpo})
+            </button>
           </div>
 
           <button
@@ -711,7 +756,7 @@ function TablaCatalogo({ productos, loading, onNuevo, onEditar, onEliminar }: {
           <div style={{ padding: "36px 16px", textAlign: "center", color: "#9CA3AF", fontSize: 13 }}>Cargando...</div>
         ) : filtered.length === 0 ? (
           <div style={{ padding: "36px 16px", textAlign: "center", color: "#9CA3AF", fontSize: 13 }}>
-            {search ? "Sin resultados." : "No hay productos registrados."}
+            {search ? "Sin resultados." : origenSeleccionado === "expo" ? "No hay productos de Expo." : "No hay productos del sistema."}
           </div>
         ) : filtered.map((p, idx) => {
           const px = p as ProductoPapelListItemEx;
@@ -776,6 +821,11 @@ function TablaCatalogo({ productos, loading, onNuevo, onEditar, onEliminar }: {
                 <ArchivosMini archivos={px.archivos_preview} />
                 <div style={{ display: "flex", width: "100%", gap: 5, alignItems: "center", justifyContent: "flex-end" }} onClick={e => e.stopPropagation()}>
                   <BadgeCompletitud pct={px.completitud_pct} />
+                  <BotonAuditoria
+                    tabla="producto_papel"
+                    id={p.idproducto_papel}
+                    etiqueta={`Información de auditoría del producto #${p.idproducto_papel}`}
+                  />
                   <button onClick={() => onEditar(p)} style={{ height: 28, padding: "0 10px", background: "#F3F4F6", border: "1px solid #D1D5DB", borderRadius: 5, cursor: "pointer", fontSize: 11, fontWeight: 600, color: "#374151" }}>Editar</button>
                   <button onClick={() => setDeleteId(p.idproducto_papel)} style={{ height: 28, padding: "0 8px", background: "#FEE2E2", border: "none", borderRadius: 5, cursor: "pointer", fontSize: 11, fontWeight: 600, color: "#DC2626" }}>x</button>
                 </div>
@@ -793,7 +843,7 @@ function TablaCatalogo({ productos, loading, onNuevo, onEditar, onEliminar }: {
       </div>
 
       <div style={{ marginTop: 8, textAlign: "right", fontSize: 11, color: "#9CA3AF" }}>
-        {filtered.length} de {productos.length} producto{productos.length !== 1 ? "s" : ""}
+        {filtered.length} de {productosPorOrigen.length} producto{productosPorOrigen.length !== 1 ? "s" : ""} {origenSeleccionado === "expo" ? "de Expo" : "del sistema"}
       </div>
 
       {laminadoAbierto && (
@@ -929,6 +979,10 @@ export default function Papel() {
         form.acabados.pzs_caja = d.acabados.pzs_caja ? String(d.acabados.pzs_caja) : "";
         form.acabados.asas = (d.acabados.asas ?? []).map((a: any) => a.idcat_tipo_asa);
         form.acabados.asasNombres = (d.acabados.asas ?? []).map((a: any) => a.tipo_asa);
+        form.acabados.llevaUv = d.acabados.lleva_uv === true;
+        form.acabados.llevaAltoRelieve = d.acabados.lleva_alto_relieve === true;
+        form.acabados.llevaTextura = d.acabados.lleva_textura === true;
+        form.acabados.llevaHotStamping = d.acabados.lleva_hot_stamping === true;
       }
 
       if (d.maquinaria) {
@@ -979,7 +1033,10 @@ export default function Papel() {
       }
       ok = idNuevo;
     }
-    if (ok) { setVista("tabla"); setEditForm(undefined); setEditId(undefined); }
+    if (ok) {
+      limpiarBorrador(claveBorradorProductoPapel(vista === "editar" ? editId : null));
+      setVista("tabla"); setEditForm(undefined); setEditId(undefined);
+    }
   };
 
   return (

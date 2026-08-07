@@ -6,6 +6,7 @@ import { preguntarGuardarS3 } from "../../services/pdfS3.service";
 import { inputClass, labelClass } from "./../enviosConstants";
 import type { GuiaPaqueteriaGeneral, ProductoSat } from "../../types/envio/envios.types";
 import { showAlert } from './../CustomAlert';
+import { leerBorrador, useAutoguardarBorrador, limpiarBorrador } from "../../hooks/useBorradorFormulario";
 
 
 interface Props {
@@ -30,7 +31,17 @@ const OPCIONES_COBRO: { value: TipoCobro; label: string }[] = [
   { value: "cobrar_al_regreso", label: "Cobrar al regreso" },
 ];
 
+interface BorradorGuiaPaqueteriaGeneral {
+  tipoCobro: TipoCobro;
+  asegurado: boolean;
+  requiereFactura: boolean;
+  tipoEntrega: "domicilio" | "ocurre";
+}
+
 export default function ModalGuiaPaqueteriaGeneral({ idenvio, onClose }: Props) {
+  const claveBorrador = `guia-paqueteria-general-${idenvio}`;
+  const [borradorInicial] = useState(() => leerBorrador<BorradorGuiaPaqueteriaGeneral>(claveBorrador));
+
   const [paso,         setPaso]         = useState<Paso>("cargando");
   const [datos,        setDatos]        = useState<GuiaPaqueteriaGeneral | null>(null);
   const [claves,       setClaves]       = useState<ClavesBulto[]>([]);
@@ -38,10 +49,14 @@ export default function ModalGuiaPaqueteriaGeneral({ idenvio, onClose }: Props) 
   const [error,        setError]        = useState<string | null>(null);
 
   // Solo para el PDF — no se persisten en BD
-  const [tipoCobro,       setTipoCobro]       = useState<TipoCobro>("pagado");
-  const [asegurado,       setAsegurado]       = useState(false);
-  const [requiereFactura, setRequiereFactura] = useState(false);
-  const [tipoEntrega,     setTipoEntrega]     = useState<"domicilio" | "ocurre">("domicilio");
+  const [tipoCobro,       setTipoCobro]       = useState<TipoCobro>(borradorInicial?.tipoCobro ?? "pagado");
+  const [asegurado,       setAsegurado]       = useState(borradorInicial?.asegurado ?? false);
+  const [requiereFactura, setRequiereFactura] = useState(borradorInicial?.requiereFactura ?? false);
+  const [tipoEntrega,     setTipoEntrega]     = useState<"domicilio" | "ocurre">(borradorInicial?.tipoEntrega ?? "domicilio");
+
+  useAutoguardarBorrador<BorradorGuiaPaqueteriaGeneral>(claveBorrador, {
+    tipoCobro, asegurado, requiereFactura, tipoEntrega,
+  }, true);
 
   useEffect(() => {
     const cargar = async () => {
@@ -101,6 +116,7 @@ export default function ModalGuiaPaqueteriaGeneral({ idenvio, onClose }: Props) 
 
       const guardarS3 = await preguntarGuardarS3("guía de paquetería");
       generarGuiaPaqueteriaGeneral(datosConClaves, guardarS3);
+      limpiarBorrador(claveBorrador);
       onClose();
     } catch {
       showAlert("Error al generar la guía. Intenta de nuevo.");

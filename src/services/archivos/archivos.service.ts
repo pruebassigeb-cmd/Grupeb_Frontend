@@ -16,7 +16,7 @@ export interface Archivo {
   created_at: string;
 }
 
-export type CarpetaFrontend = "disenos" | "pdfs" | "fotos-envios" | "backups" | "suaje" | "catalogoproductos";
+export type CarpetaFrontend = "disenos" | "pdfs" | "fotos-envios" | "backups" | "suaje" | "catalogoproductos" | "catalogos-admin";
 
 export type SubcarpetaCatalogo = "papel" | "plastico" | "carton";
 
@@ -40,6 +40,31 @@ export type SubcarpetaPDF =
 
 export type SubcarpetaSuaje = "catalogo" | "imagen" | "rendimiento" | "plastico-producto";
 
+// ✅ NUEVO — una subcarpeta por tipo de catálogo administrado (imágenes de
+// referencia). Los valores coinciden 1:1 con catalogo_key en la tabla
+// archivos — ver catalogoImagen.controller.ts (CATALOGOS_CON_IMAGEN).
+// "color_asa" NO aparece aquí porque ese catálogo no lleva imagen.
+export type SubcarpetaCatalogoAdmin =
+  | "tipo_producto"
+  | "tipo_papel"
+  | "tipo_asa"
+  | "laminado"
+  | "textura"
+  | "foil"
+  | "hs_ar"
+  | "uv";
+
+export const SUBCARPETAS_CATALOGOS_ADMIN: { value: SubcarpetaCatalogoAdmin; label: string }[] = [
+  { value: "tipo_producto", label: "Tipo de producto" },
+  { value: "tipo_papel",    label: "Tipo de papel"    },
+  { value: "tipo_asa",      label: "Tipo de asa"      },
+  { value: "laminado",      label: "Laminado"         },
+  { value: "textura",       label: "Textura"          },
+  { value: "foil",          label: "Foil"             },
+  { value: "hs_ar",         label: "HS y AR"          },
+  { value: "uv",            label: "UV"               },
+];
+
 // NOTA: la carpeta interna se sigue llamando "suaje" (así vive el path en S3
 // y así se filtra en el backend) — solo cambia el nombre que ve el usuario,
 // de "Productos Papel" a "Productos". El valor "suaje" NO se toca para no
@@ -51,6 +76,10 @@ export const CARPETAS_LABELS: Record<CarpetaFrontend, string> = {
   "backups":            "Backups BD",
   "suaje":              "Productos",
   "catalogoproductos":  "Catálogo de Productos",
+  // ✅ NUEVO — imágenes de referencia de catálogos de papel (tipo de
+  // producto, tipo de asa, textura, tipo de papel, laminado, foil, HS/AR,
+  // UV, color de asa). Ver config/multer.ts CARPETAS.catalogos_admin.
+  "catalogos-admin":    "Catálogos de Papel",
 };
 
 export const SUBCARPETAS_PDF: { value: SubcarpetaPDF; label: string }[] = [

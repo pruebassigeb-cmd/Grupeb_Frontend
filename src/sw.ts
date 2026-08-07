@@ -9,6 +9,17 @@ declare const self: ServiceWorkerGlobalScope & {
   __WB_MANIFEST: Array<{ url: string; revision: string | null }>;
 };
 
+// A propósito NO hay un `self.skipWaiting()` suelto aquí. Si lo hubiera, la
+// versión nueva se activaría apenas termina de instalarse y limpiaría del
+// precaché los archivos de la versión vieja — pero la pestaña abierta sigue
+// corriendo el bundle viejo, así que un import diferido posterior (el
+// html2canvas de los PDF) se quedaría sin archivo que cargar.
+//
+// En vez de eso el SW nuevo se queda en "waiting" hasta que el cliente
+// (PWAUpdatePrompt.tsx) decide que es seguro aplicarlo — al cambiar de
+// pantalla, nunca a media captura — y lo despierta con el mensaje SKIP_WAITING
+// que se atiende más abajo. Requiere `registerType: "prompt"` en vite.config.ts.
+
 // Sin esto, un SW recién activado NO controla la pestaña que lo registró
 // hasta la siguiente recarga — las peticiones de esa sesión (incluido el
 // precalentamiento de warmApiCache.ts) pasan de largo sin pasar por el

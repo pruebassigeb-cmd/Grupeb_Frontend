@@ -21,6 +21,8 @@ import type { Tarifa } from "../../types/plastico/tarifas.types";
 import { calcularPorKiloStr, calcularCelofanBopp } from "../../utils/plastico/calcularPorKilo";
 import { formatNumero } from "../../utils/formatNumero";
 import { showAlert } from "../../components/CustomAlert";
+import BotonAuditoria from "../../components/auditoria/BotonAuditoria";
+import { leerBorrador, useAutoguardarBorrador, limpiarBorrador } from "../../hooks/useBorradorFormulario";
 
 // ✅ Hardcodeado temporal para celofán hasta que se construya su tabla en BD
 const COSTOS_CELOFAN: Record<number, number> = {
@@ -78,6 +80,7 @@ function TablaProductosPlastico({
   onEliminar: (id: number) => void;
 }) {
   const [search, setSearch] = useState("");
+  const [origenSeleccionado, setOrigenSeleccionado] = useState<"sistema" | "expo">("sistema");
   const [deleteId, setDeleteId] = useState<number | null>(null);
 
   // Encabezado y filas son grids independientes. La columna final no puede
@@ -89,7 +92,16 @@ function TablaProductosPlastico({
   // un producto "en blanco" de Expo puede llegar sin tipo/material/medida
   // resueltos todavía (LEFT JOIN en vez de INNER JOIN en el backend), hay
   // que blindar cada campo antes de filtrar.
-  const filtered = productos.filter((p) =>
+  // Separamos los productos normales de los creados desde Expo.
+  // La vista inicia en "Sistema" y el selector permite cambiar a "Expo"
+  // sin mezclar ambos orígenes en la misma tabla.
+  const totalSistema = productos.filter((p) => !p.origen_expo).length;
+  const totalExpo = productos.filter((p) => Boolean(p.origen_expo)).length;
+  const productosPorOrigen = productos.filter((p) =>
+    origenSeleccionado === "expo" ? Boolean(p.origen_expo) : !p.origen_expo
+  );
+
+  const filtered = productosPorOrigen.filter((p) =>
     (p.tipo_producto || "").toLowerCase().includes(search.toLowerCase()) ||
     (p.material || "").toLowerCase().includes(search.toLowerCase()) ||
     (p.medida || "").toLowerCase().includes(search.toLowerCase()) ||
@@ -135,15 +147,42 @@ function TablaProductosPlastico({
           </button>
         </div>
 
-        <div className="relative">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">🔍</span>
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar por tipo, material, medida, calibre o descripción..."
-            className="w-full h-10 pl-9 pr-3 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white outline-none focus:ring-2 focus:ring-blue-400"
-          />
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="relative flex-1 min-w-[280px]">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">🔍</span>
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Buscar por tipo, material, medida, calibre o descripción..."
+              className="w-full h-10 pl-9 pr-3 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white outline-none focus:ring-2 focus:ring-blue-400"
+            />
+          </div>
+
+          <div className="inline-flex h-10 items-center gap-0.5 rounded-lg border border-gray-300 bg-gray-50 p-1 shrink-0">
+            <button
+              onClick={() => setOrigenSeleccionado("sistema")}
+              title="Mostrar únicamente productos registrados en el sistema"
+              className={`h-8 px-3 rounded-md text-xs font-bold transition-colors whitespace-nowrap ${
+                origenSeleccionado === "sistema"
+                  ? "bg-blue-600 text-white"
+                  : "bg-transparent text-gray-600 hover:bg-white"
+              }`}
+            >
+              Sistema ({totalSistema})
+            </button>
+            <button
+              onClick={() => setOrigenSeleccionado("expo")}
+              title="Mostrar únicamente productos creados desde Expo"
+              className={`h-8 px-3 rounded-md text-xs font-bold transition-colors whitespace-nowrap ${
+                origenSeleccionado === "expo"
+                  ? "bg-amber-500 text-white"
+                  : "bg-transparent text-amber-800 hover:bg-amber-50"
+              }`}
+            >
+              ⭐ Expo ({totalExpo})
+            </button>
+          </div>
         </div>
       </div>
 
@@ -165,7 +204,7 @@ function TablaProductosPlastico({
           <div className="py-10 text-center text-gray-400 text-sm">Cargando...</div>
         ) : filtered.length === 0 ? (
           <div className="py-10 text-center text-gray-400 text-sm">
-            {search ? "Sin resultados." : "No hay productos registrados."}
+            {search ? "Sin resultados." : origenSeleccionado === "expo" ? "No hay productos de Expo." : "No hay productos del sistema."}
           </div>
         ) : (
           filtered.map((p, idx) => (
@@ -206,6 +245,11 @@ function TablaProductosPlastico({
                 )}
               </div>
               <div className="flex w-full gap-1.5 justify-end">
+                <BotonAuditoria
+                  tabla="configuracion_plastico"
+                  id={p.id}
+                  etiqueta={`Información de auditoría del producto #${p.id}`}
+                />
                 <button onClick={() => onEditar(p)} className="h-7 px-2.5 bg-gray-100 border border-gray-300 rounded text-[11px] font-semibold text-gray-700 hover:bg-gray-200">
                   Editar
                 </button>
@@ -219,7 +263,7 @@ function TablaProductosPlastico({
       </div>
 
       <div className="mt-2 text-right text-xs text-gray-400">
-        {filtered.length} de {productos.length} producto{productos.length !== 1 ? "s" : ""}
+        {filtered.length} de {productosPorOrigen.length} producto{productosPorOrigen.length !== 1 ? "s" : ""} {origenSeleccionado === "expo" ? "de Expo" : "del sistema"}
       </div>
     </div>
   );
@@ -270,12 +314,19 @@ function FormularioProductoPlastico({
     descripcion: d.descripcion ?? "",
   });
 
+  const claveBorrador = productoEditando
+    ? `plastico-producto-editar-${productoEditando.id}`
+    : "plastico-producto-nueva";
+  const [borradorInicial] = useState(() => leerBorrador<DatosProducto>(claveBorrador));
+
   const [datosProducto, setDatosProducto] = useState<DatosProducto>(
-    productoEditando ? datosInicialesDesdeDetalle(productoEditando) : datosProductoVacio
+    borradorInicial ?? (productoEditando ? datosInicialesDesdeDetalle(productoEditando) : datosProductoVacio)
   );
   const [tarifasPlastico, setTarifasPlastico] = useState<Record<number, { precio: number; merma: number }>>({});
   const [errorDuplicado, setErrorDuplicado] = useState<string | null>(null);
   const [pendientes, setPendientes] = useState<ArchivoPendientePlastico[]>([]);
+
+  useAutoguardarBorrador(claveBorrador, datosProducto, true);
 
   useEffect(() => {
     getTarifas().then((tarifas) => {
@@ -407,7 +458,7 @@ function FormularioProductoPlastico({
             catalogos={catalogos}
             onProductoChange={handleProductoChange}
             mostrarFigura
-            datosIniciales={productoEditando ? datosInicialesDesdeDetalle(productoEditando) : null}
+            datosIniciales={productoEditando ? datosInicialesDesdeDetalle(productoEditando) : (borradorInicial ?? null)}
             onAgregarTipoProducto={agregarTipoProducto}
             onAgregarMaterial={agregarMaterial}
             onAgregarCalibre={agregarCalibre}
@@ -571,7 +622,10 @@ export default function Plastico() {
   ) => {
     if (vista === "editar" && productoEditando) {
       const ok = await actualizar(productoEditando.id, payload);
-      if (ok) { setVista("tabla"); setProductoEditando(null); }
+      if (ok) {
+        limpiarBorrador(`plastico-producto-editar-${productoEditando.id}`);
+        setVista("tabla"); setProductoEditando(null);
+      }
       return;
     }
 
@@ -583,6 +637,7 @@ export default function Plastico() {
         );
       }
       showAlert(`✅ Producto creado exitosamente`);
+      limpiarBorrador("plastico-producto-nueva");
       setVista("tabla");
       setProductoEditando(null);
     }

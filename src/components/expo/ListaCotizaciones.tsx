@@ -14,6 +14,8 @@ import { useEnvioDocumentoPdf } from "../../hooks/expo/useEnvioDocumentoPdf";
 import FormularioCliente from "../FormularioCliente";
 import { getClienteById, updateCliente } from "../../services/clientesService";
 import { OperacionEncoladaError, eliminarDeOutbox, encolarPersonalizado } from "../../offline/outbox";
+import { limpiarBorrador } from "../../hooks/useBorradorFormulario";
+import { claveBorradorCliente } from "../../utils/clavesBorrador";
 import type { Cliente, UpdateClienteRequest } from "../../types/clientes.types";
 
 interface Props {
@@ -583,8 +585,13 @@ export default function ListaCotizaciones({
       // se propone por defecto en el modal de confirmación.
       setCorreoAprobarDefault((datos as any).correo || clienteParaEditar?.correo || "");
       setModalCorreoAprobarAbierto(true);
+      limpiarBorrador(claveBorradorCliente(clienteParaEditar));
     } catch (e: any) {
       if (e instanceof OperacionEncoladaError) {
+        // Los datos SÍ quedaron capturados (encolados para sincronizar), así
+        // que el borrador ya cumplió su propósito igual que en el camino de
+        // éxito normal — nada más que reintentar aquí.
+        limpiarBorrador(claveBorradorCliente(clienteParaEditar));
         // Los datos del cliente ya quedaron en la cola y se sincronizan
         // solos, pero aprobar la cotización (el siguiente paso) sí necesita
         // conexión — no tiene caso continuar hacia ahí todavía.
