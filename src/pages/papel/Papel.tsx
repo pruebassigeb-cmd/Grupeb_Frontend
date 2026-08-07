@@ -341,7 +341,6 @@ function DetalleProducto({
                 maximumFractionDigits: 4,
               })
         )}
-        {row("Creado por", detalle.creado_por_nombre)}
         {detalle.origen_expo && row("Origen", "Creado automáticamente desde Expo")}
       </div>
 
@@ -548,7 +547,10 @@ function TablaCatalogo({ productos, loading, onNuevo, onEditar, onEliminar }: {
   // La última columna debe tener ancho fijo. Con "auto", el encabezado la
   // calculaba en 0 px (está vacío), mientras cada fila la hacía crecer por
   // los botones; eso cambiaba el ancho de todas las columnas anteriores.
-  const COLS = "1.1fr 0.85fr 0.65fr 0.65fr 0.85fr 0.55fr 0.6fr 0.8fr 0.8fr 0.75fr 130px 130px";
+  // Se elimina la columna "Creado por" porque esa información ya está disponible en Auditoría.
+  // El espacio liberado se reparte entre Archivos y Acciones para evitar que el % y los botones se encimen.
+  const COLS = "minmax(160px,1.15fr) minmax(135px,0.9fr) minmax(95px,0.7fr) minmax(90px,0.65fr) minmax(120px,0.85fr) minmax(80px,0.55fr) minmax(85px,0.6fr) minmax(105px,0.8fr) minmax(115px,0.8fr) 130px 215px";
+  const TABLE_MIN_WIDTH = 1500;
 
   // El formato de "medida" trae varios números seguidos (p. ej. "A+BxC",
   // "AxB", etc). Para ordenar hay que compararlos como se compara texto
@@ -729,10 +731,11 @@ function TablaCatalogo({ productos, loading, onNuevo, onEditar, onEliminar }: {
         </div>
       </div>
 
-      <div style={{ border: "1px solid #E5E7EB", borderRadius: 9, overflow: "hidden" }}>
-        <div style={{ display: "grid", gridTemplateColumns: COLS, background: "#F9FAFB", borderBottom: "1px solid #E5E7EB", padding: "0 16px" }}>
-          {["Tipo de producto", "Descripción", "Medida", "Tamaño", "Tipo de papel", "Gramaje", "Pliego", "Costo base", "Costo laminado", "Creado por", "Archivos", ""].map((h, i) => {
-            const centrada = [2, 3, 5, 6, 7, 8, 9, 10].includes(i);
+      <div style={{ border: "1px solid #E5E7EB", borderRadius: 9, overflowX: "auto", overflowY: "hidden" }}>
+        <div style={{ minWidth: TABLE_MIN_WIDTH }}>
+          <div style={{ display: "grid", gridTemplateColumns: COLS, background: "#F9FAFB", borderBottom: "1px solid #E5E7EB", padding: "0 16px", boxSizing: "border-box" }}>
+          {["Tipo de producto", "Descripción", "Medida", "Tamaño", "Tipo de papel", "Gramaje", "Pliego", "Costo base", "Costo laminado", "Archivos", ""].map((h, i) => {
+            const centrada = [2, 3, 5, 6, 7, 8, 9].includes(i);
             return (
               <div
                 key={`${h}-${i}`}
@@ -743,7 +746,7 @@ function TablaCatalogo({ productos, loading, onNuevo, onEditar, onEliminar }: {
                   letterSpacing: "0.08em",
                   textTransform: "uppercase",
                   color: "#6B7280",
-                  textAlign: centrada ? "center" : i === 11 ? "right" : "left",
+                  textAlign: centrada ? "center" : i === 10 ? "right" : "left",
                 }}
               >
                 {h}
@@ -765,7 +768,7 @@ function TablaCatalogo({ productos, loading, onNuevo, onEditar, onEliminar }: {
           return (
             <div key={p.idproducto_papel}>
               <div onClick={() => toggleExpanded(p.idproducto_papel)}
-                style={{ display: "grid", gridTemplateColumns: COLS, padding: "0 16px", alignItems: "center", minHeight: 58, background: rowBg, borderBottom: isExpanded ? "none" : "1px solid #F3F4F6", cursor: "pointer", userSelect: "none" }}>
+                style={{ display: "grid", gridTemplateColumns: COLS, padding: "0 16px", alignItems: "center", minHeight: 58, boxSizing: "border-box", background: rowBg, borderBottom: isExpanded ? "none" : "1px solid #F3F4F6", cursor: "pointer", userSelect: "none" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <button onClick={e => { e.stopPropagation(); toggleExpanded(p.idproducto_papel); }}
                     style={{ width: 20, height: 20, borderRadius: 4, background: "#EFF6FF", border: "1px solid #BFDBFE", cursor: "pointer", fontSize: 11, color: "#1D4ED8", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
@@ -817,9 +820,8 @@ function TablaCatalogo({ productos, loading, onNuevo, onEditar, onEliminar }: {
                 <span style={{ fontSize: 12, color: "#374151", textAlign: "center", whiteSpace: "nowrap" }}>
                   {formatoMXN(overridesLaminado[p.idproducto_papel] !== undefined ? overridesLaminado[p.idproducto_papel] : px.costo_laminado, 4)}
                 </span>
-                <span style={{ fontSize: 12, color: "#374151", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textAlign: "center" }}>{p.creado_por || "—"}</span>
                 <ArchivosMini archivos={px.archivos_preview} />
-                <div style={{ display: "flex", width: "100%", gap: 5, alignItems: "center", justifyContent: "flex-end" }} onClick={e => e.stopPropagation()}>
+                <div style={{ display: "flex", width: "100%", gap: 5, alignItems: "center", justifyContent: "flex-end", flexWrap: "nowrap" }} onClick={e => e.stopPropagation()}>
                   <BadgeCompletitud pct={px.completitud_pct} />
                   <BotonAuditoria
                     tabla="producto_papel"
@@ -840,6 +842,7 @@ function TablaCatalogo({ productos, loading, onNuevo, onEditar, onEliminar }: {
             </div>
           );
         })}
+        </div>
       </div>
 
       <div style={{ marginTop: 8, textAlign: "right", fontSize: 11, color: "#9CA3AF" }}>
