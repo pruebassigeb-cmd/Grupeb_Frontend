@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Dashboard from "../../layouts/Sidebar";
 import RequiereConexion from "../../components/pwa/RequiereConexion";
 import { getSeguimiento } from "../../services/produccion/seguimientoService";
@@ -8,7 +8,12 @@ import { generarPdfPedido } from "../../utils/generarPdfPedido";
 import { getEstadoCuenta } from "../../services/anticipoLiquidacion/estadoCuentaService";
 import { preguntarGuardarS3 } from "../../services/pdfS3.service";
 import { getVentaByPedido, getMetodosPago } from "../../services/ventasservice";
-import { getPedidos } from "../../services/pedidosService";
+import {
+  CLAVE_PEDIDO_ACTUALIZADO,
+  EVENTO_PEDIDO_ACTUALIZADO,
+  getPedidos,
+} from "../../services/pedidosService";
+import { invalidarSolicitudesGet } from "../../services/api";
 import type { PedidoSeguimiento } from "../../types/produccion/seguimiento.types";
 import type { Venta, MetodoPago } from "../../types/ventas.types";
 import type { Pedido } from "../../types/cotizaciones.types";
@@ -30,6 +35,7 @@ import type {
 } from "../../services/papel/seguimientoPapelService";
 import type { PedidoSeguimientoPapel, NombreProcesoPapel } from "../../types/papel/seguimientoPapel.types";
 import { NOMBRES_PROCESO_PAPEL } from "../../types/papel/seguimientoPapel.types";
+import { esProductoOrdenPapel } from "../../utils/papel/ordenProduccionPapelPdf.helpers";
 
 
 const diasDesde = (fecha: string | null): number | null => {
@@ -353,13 +359,14 @@ function BotonEstadoCuentaPdf({ noPedido }: { noPedido: string }) {
 
 function BotonPdfDirecto({ pedido }: { pedido: PedidoSeguimiento }) {
   const [descargando, setDescargando] = useState(false);
+  const esPapel = esProductoOrdenPapel(pedido);
 
   const handleDescargar = async () => {
     if (!pedido.no_produccion) return;
 
     setDescargando(true);
     try {
-      const guardarS3 = await preguntarGuardarS3("orden de producción");
+      const guardarS3 = await preguntarGuardarS3("orden de producción con datos");
       await descargarPdfOrdenProduccionUniversal(
         pedido.no_pedido,
         pedido.no_produccion,
@@ -367,11 +374,8 @@ function BotonPdfDirecto({ pedido }: { pedido: PedidoSeguimiento }) {
         {
           idordenDiseno: (pedido as any).idorden_diseno ?? null,
           descripcion: (pedido as any).descripcion ?? null,
-          forzarTipoMaterial: String((pedido as any).tipo_producto ?? "")
-            .toLowerCase()
-            .includes("papel")
-            ? "papel"
-            : null,
+          forzarTipoMaterial: esPapel ? "papel" : null,
+          productoReferencia: pedido,
         }
       );
     } catch (e: any) {
@@ -382,17 +386,20 @@ function BotonPdfDirecto({ pedido }: { pedido: PedidoSeguimiento }) {
   };
 
   return (
-    <div className="flex flex-col items-center gap-0.5">
-      <div className="flex items-center gap-1.5 justify-center">
-        <span className="text-xs font-medium text-gray-700">{pedido.no_produccion}</span>
-        <button onClick={handleDescargar} disabled={descargando}
-          className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white text-xs font-medium rounded transition-colors">
-          {descargando
-            ? <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
-            : <IconoPdf />}
-          PDF
-        </button>
-      </div>
+    <div className="inline-flex flex-col items-center gap-1">
+      <span className="whitespace-nowrap text-xs font-medium text-gray-700">
+        {pedido.no_produccion}
+      </span>
+      <button
+        onClick={handleDescargar}
+        disabled={descargando}
+        title="Descargar PDF con los datos registrados en producción — se va llenando conforme avanzan los procesos"
+        className="inline-flex min-h-7 shrink-0 items-center gap-1 whitespace-nowrap rounded bg-red-600 px-2 py-1 text-[11px] font-medium leading-tight text-white transition-colors hover:bg-red-700 disabled:bg-red-400">
+        {descargando
+          ? <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+          : <IconoPdf />}
+        PDF
+      </button>
       <FechaAprobacion fecha={(pedido as any).op_fecha_aprobacion ?? null} />
     </div>
   );
@@ -541,7 +548,7 @@ const renderThead = (oscuro = false) => (
       {COLUMNAS.map(h => (
         <th key={h}
           title={PROCESOS_PAPEL.find(proceso => proceso.encabezado === h)?.titulo}
-          className={`px-3 py-2 text-xs font-semibold uppercase tracking-wider ${oscuro ? "text-white" : "text-gray-700"
+          className={`px-2 py-2 text-xs font-semibold uppercase tracking-wider ${oscuro ? "text-white" : "text-gray-700"
             } ${COLS_CENTRADAS.has(h) ? "text-center" : "text-left"}`}>
           {h}
         </th>
@@ -563,6 +570,7 @@ export default function Seguimiento() {
 
   const [modalProceso, setModalProceso] = useState<{ pedido: PedidoSeguimiento; nombreProceso: string } | null>(null);
   const [modalAnticipo, setModalAnticipo] = useState<{ venta: Venta; metodos: MetodoPago[] } | null>(null);
+  const modalAnticipoRef = useRef<{ venta: Venta; metodos: MetodoPago[] } | null>(null);
   const [cargandoAnticipo, setCargandoAnticipo] = useState<string | null>(null);
   const [modalDiseno, setModalDiseno] = useState<Pedido | null>(null);
   const [modalEnvio, setModalEnvio] = useState<PedidoSeguimiento | null>(null);
@@ -575,6 +583,7 @@ export default function Seguimiento() {
 
   const [procesosPapel, setProcesosPapel] = useState<Record<number, ProcesosOrdenPapelRespuesta>>({});
   const [erroresProcesosPapel, setErroresProcesosPapel] = useState<Set<number>>(new Set());
+  const cargaActualRef = useRef(0);
   const [modalProcesoPapel, setModalProcesoPapel] = useState<{
     pedido: PedidoSeguimiento;
     nombreProceso: NombreProcesoPapel;
@@ -594,16 +603,61 @@ export default function Seguimiento() {
   const puedePdfPedido = esAccesoTotal || usePermiso("Descargar PDF Pedido");
   const [ordenFecha, setOrdenFecha] = useState<"reciente" | "antiguo">("antiguo");
   useEffect(() => {
+    modalAnticipoRef.current = modalAnticipo;
+  }, [modalAnticipo]);
+
+  useEffect(() => {
     cargar();
-    const onVisible = () => { if (document.visibilityState === "visible") cargar(); };
+
+    let temporizador: number | null = null;
+    const programarRecarga = () => {
+      if (temporizador !== null) window.clearTimeout(temporizador);
+      temporizador = window.setTimeout(() => {
+        invalidarSolicitudesGet();
+        cargar();
+      }, 50);
+    };
+    const onVisible = () => {
+      if (document.visibilityState === "visible") programarRecarga();
+    };
+    const onStorage = (evento: StorageEvent) => {
+      if (evento.key === CLAVE_PEDIDO_ACTUALIZADO) programarRecarga();
+    };
+
+    window.addEventListener("focus", programarRecarga);
+    window.addEventListener(EVENTO_PEDIDO_ACTUALIZADO, programarRecarga);
+    window.addEventListener("storage", onStorage);
     document.addEventListener("visibilitychange", onVisible);
-    return () => document.removeEventListener("visibilitychange", onVisible);
+    return () => {
+      if (temporizador !== null) window.clearTimeout(temporizador);
+      window.removeEventListener("focus", programarRecarga);
+      window.removeEventListener(EVENTO_PEDIDO_ACTUALIZADO, programarRecarga);
+      window.removeEventListener("storage", onStorage);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, []);
   const cargar = async () => {
+    const cargaId = ++cargaActualRef.current;
+    const anticipoAbierto = modalAnticipoRef.current;
     try {
       setCargando(true); setError(null);
-      const data = await getSeguimiento();
+      const [data, ventaModalActualizada] = await Promise.all([
+        getSeguimiento(),
+        anticipoAbierto
+          ? getVentaByPedido(anticipoAbierto.venta.no_pedido).catch(() => null)
+          : Promise.resolve(null),
+      ]);
+      if (cargaId !== cargaActualRef.current) return;
       setPedidos(data);
+      if (
+        ventaModalActualizada
+        && modalAnticipoRef.current?.venta.no_pedido === ventaModalActualizada.no_pedido
+      ) {
+        setModalAnticipo(prev => prev
+          ? { ...prev, venta: ventaModalActualizada }
+          : null
+        );
+      }
       const idsPapel = Array.from(new Set(
         data
           .filter(p =>
@@ -629,10 +683,17 @@ export default function Seguimiento() {
           idsConError.add(idsPapel[index]);
         }
       });
+      if (cargaId !== cargaActualRef.current) return;
       setProcesosPapel(procesosPorOrden);
       setErroresProcesosPapel(idsConError);
-    } catch { setError("No se pudo cargar el seguimiento."); }
-    finally { setCargando(false); }
+    } catch {
+      if (cargaId === cargaActualRef.current) {
+        setError("No se pudo cargar el seguimiento.");
+      }
+    }
+    finally {
+      if (cargaId === cargaActualRef.current) setCargando(false);
+    }
   };
 
   const abrirAnticipo = async (pedido: PedidoSeguimiento) => {
@@ -727,16 +788,20 @@ export default function Seguimiento() {
         norm(p.impresion ?? "").includes(q)
       );
     })
-    // ← AGREGAR: deduplica por no_pedido + no_produccion
-    .filter((p, idx, arr) =>
-      arr.findIndex(x =>
-        x.no_pedido === p.no_pedido &&
+    // El backend entrega una fila agregada por producto. El id estable evita
+    // ocultar por accidente dos productos distintos con el mismo texto.
+    .filter((p, idx, arr) => arr.findIndex(x => {
+      if (p.idsolicitud_producto != null && x.idsolicitud_producto != null) {
+        return x.idsolicitud_producto === p.idsolicitud_producto;
+      }
+
+      // Compatibilidad temporal con respuestas de un backend anterior.
+      return x.no_pedido === p.no_pedido &&
         (x.no_produccion ?? "") === (p.no_produccion ?? "") &&
         (x.nombre_producto ?? "") === (p.nombre_producto ?? "") &&
         (x.medida ?? "") === (p.medida ?? "") &&
-        (x.descripcion ?? "") === (p.descripcion ?? "")
-      ) === idx
-    )
+        (x.descripcion ?? "") === (p.descripcion ?? "");
+    }) === idx)
     .sort((a, b) => {
       const diff = new Date(b.fecha).getTime() - new Date(a.fecha).getTime();
       return ordenFecha === "reciente" ? diff : -diff;
@@ -747,7 +812,7 @@ export default function Seguimiento() {
   const pedidosPagina = pedidosFiltrados;
 
   const renderFila = (pedido: PedidoSeguimiento, grande = false, idx = 0) => {
-    const px = grande ? "px-4 py-3" : "px-3 py-2";
+    const px = grande ? "px-3 py-3" : "px-2 py-2";
     const txt = grande ? "text-sm" : "text-xs";
 
     const estadoAnticipo = pedido.anticipo_cubierto ? "pagado" : "pendiente";
@@ -834,6 +899,7 @@ export default function Seguimiento() {
             ? <BadgeTextoBtn estado={estadoAnticipo} fechaEstado={(pedido as any).anticipo_fecha_estado} cargando={cargandoAnticipo === pedido.no_pedido} onClick={() => abrirAnticipo(pedido)} />
             : <BadgeTexto estado={estadoAnticipo} fechaEstado={(pedido as any).anticipo_fecha_estado} />
           }
+          <FechaAprobacion fecha={(pedido as any).anticipo_fecha_aprobacion ?? null} />
         </td>
 
         {/* OD */}
@@ -869,6 +935,7 @@ export default function Seguimiento() {
             ? <BadgeTextoBtn estado={estadoDiseño} fechaEstado={(pedido as any).diseno_fecha_estado} onClick={() => abrirDiseno(pedido)} />
             : <BadgeTexto estado={estadoDiseño} fechaEstado={(pedido as any).diseno_fecha_estado} />
           }
+          <FechaAprobacion fecha={(pedido as any).diseno_fecha_aprobacion ?? null} />
         </td>
 
         <td className={`${px} text-center`}><RenderOrdenProduccion pedido={pedido} /></td>

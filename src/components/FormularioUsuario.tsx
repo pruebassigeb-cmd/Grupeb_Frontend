@@ -9,6 +9,7 @@ import api from '../services/api';
 import { buscarCodigoPostal } from "../services/codigoPostalService";
 import { leerBorrador, useAutoguardarBorrador } from "../hooks/useBorradorFormulario";
 import { claveBorradorUsuario } from "../utils/clavesBorrador";
+import { PERMISO_ORDEN_DISENO } from "../utils/permisosUsuario";
 
 const ROLES_CON_PRIVILEGIOS_BASE = ["Planta", "Ventas", "Diseño"];
 const TIPOS_SANGRE = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
@@ -659,7 +660,14 @@ else if (!/^\d{4,8}$/.test(datos.codigo)) e.codigo = "El código debe tener entr
                 checked={datos.privilegios?.includes(privilegio.idprivilegios) || false}
                 onChange={() => handlePrivilegioChange(privilegio.idprivilegios)}
                 disabled={tieneAccesoTotal} className="w-4 h-4 text-blue-600 rounded" />
-              <span className="ml-3 text-sm text-gray-700">{privilegio.privilegio}</span>
+              <span className="ml-3">
+                <span className="block text-sm text-gray-700">{privilegio.privilegio}</span>
+                {privilegio.privilegio === PERMISO_ORDEN_DISENO && (
+                  <span className="mt-0.5 block text-xs text-gray-500">
+                    Acceso de consulta a la ficha de diseño, chat y carga de feedback.
+                  </span>
+                )}
+              </span>
             </label>
           ))}
         </div>

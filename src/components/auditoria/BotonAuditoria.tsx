@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import PanelAuditoria from "./PanelAuditoria";
+import { useAuth } from "../../context/AuthContext";
+import { puedeVerAuditoriaUsuario } from "../../utils/permisosUsuario";
 
 interface Props {
   tabla: string;
@@ -18,6 +20,7 @@ export default function BotonAuditoria({
   alineacion = "derecha",
   className = "",
 }: Props) {
+  const { user } = useAuth();
   const [abierto, setAbierto] = useState(false);
 
   useEffect(() => {
@@ -31,7 +34,7 @@ export default function BotonAuditoria({
     return () => document.removeEventListener("keydown", cerrarEscape);
   }, [abierto]);
 
-  if (!id) return null;
+  if (!puedeVerAuditoriaUsuario(user) || !id) return null;
 
   const contenido = abierto && typeof document !== "undefined"
     ? createPortal(

@@ -1,5 +1,7 @@
 import { useAuditoria } from "../../hooks/useAuditoria";
 import SelloAuditoria from "./SelloAuditoria";
+import { useAuth } from "../../context/AuthContext";
+import { puedeVerAuditoriaUsuario } from "../../utils/permisosUsuario";
 import {
   colorAccion,
   expandirCambios,
@@ -28,9 +30,16 @@ export default function PanelAuditoria({
   limite = 50,
   className = "",
 }: Props) {
-  const { auditoria, cargando, error } = useAuditoria(tabla, id, activo, limite);
+  const { user } = useAuth();
+  const puedeVerAuditoria = puedeVerAuditoriaUsuario(user);
+  const { auditoria, cargando, error } = useAuditoria(
+    tabla,
+    id,
+    activo && puedeVerAuditoria,
+    limite
+  );
 
-  if (!id) return null;
+  if (!puedeVerAuditoria || !id) return null;
   if (cargando) return <div className={`py-3 text-xs text-gray-400 ${className}`}>Cargando historial…</div>;
   if (error) return <div className={`py-3 text-xs text-red-600 ${className}`}>{error}</div>;
   if (!auditoria) return null;

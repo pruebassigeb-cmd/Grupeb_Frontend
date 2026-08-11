@@ -18,7 +18,7 @@ import ModalRepetirPedido from "../components/plastico/ModalRepetirPedido";
 import { buildPayloadDesdePedido } from "../utils/plastico/buildPayloadDesdePedido";
 import { getHistorialPedidosPorCliente } from "../services/pedidosService";
 import BotonAuditoria from "../components/auditoria/BotonAuditoria";
-import PanelAuditoria from "../components/auditoria/PanelAuditoria";
+import AuditoriaDesplegable from "../components/auditoria/AuditoriaDesplegable";
 
 const ITEMS_POR_PAGINA = 7;
 
@@ -679,12 +679,12 @@ export default function Pedidos() {
                     <tr key={`det-${ped.no_pedido}`} className="bg-blue-50 border-t border-blue-100">
                       <td colSpan={8} className="px-8 py-4">
                         <div className="space-y-3">
-                          <PanelAuditoria
+                          <AuditoriaDesplegable
                             tabla="solicitud"
                             id={ped.productos[0]?.idsolicitud}
                             titulo={`Auditoría del pedido ${ped.no_pedido}`}
                             limite={20}
-                            className="rounded-lg bg-white p-4 shadow-sm"
+                            className="bg-white"
                           />
                           <div className="grid grid-cols-2 gap-3 mb-2">
                             {ped.correo && <p className="text-xs text-gray-500">📧 {ped.correo}</p>}

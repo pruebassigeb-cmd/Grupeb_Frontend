@@ -75,8 +75,9 @@ registerRoute(
 );
 
 // Catálogos y datos de apoyo (cambian poco): clientes, usuarios,
-// proveedores, productos, precios, catálogos de producción/papel,
-// ventas y el módulo Expo.
+// proveedores, productos, precios, catálogos de producción/papel y Expo.
+// Ventas queda fuera: es información transaccional y nunca debe volver desde
+// una caché antigua después de actualizar un pedido o registrar un pago.
 const PREFIJOS_CATALOGOS = [
   "/api/clientes",
   "/api/usuarios",
@@ -95,7 +96,6 @@ const PREFIJOS_CATALOGOS = [
   "/api/cotizaciones/colores-asa",
   "/api/cotizaciones/medidas-troquel",
   "/api/colores-asa",
-  "/api/ventas",
   "/api/expo",
 ];
 

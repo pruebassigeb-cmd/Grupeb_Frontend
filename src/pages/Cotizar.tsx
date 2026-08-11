@@ -18,7 +18,7 @@ import { showConfirm } from '../components/CustomConfirm';
 import { OperacionEncoladaError } from "../offline/outbox";
 import { useNavigate } from "react-router-dom";
 import BotonAuditoria from "../components/auditoria/BotonAuditoria";
-import PanelAuditoria from "../components/auditoria/PanelAuditoria";
+import AuditoriaDesplegable from "../components/auditoria/AuditoriaDesplegable";
 
 
 
@@ -673,12 +673,12 @@ export default function Cotizaciones() {
                     <tr key={`det-${cot.no_cotizacion}`} className="bg-blue-50 border-t border-blue-100">
                       <td colSpan={8} className="px-8 py-4">
                         <div className="space-y-3">
-                          <PanelAuditoria
+                          <AuditoriaDesplegable
                             tabla="solicitud"
                             id={cot.productos[0]?.idsolicitud}
                             titulo={`Auditoría de la cotización ${cot.no_cotizacion}`}
                             limite={20}
-                            className="rounded-lg bg-white p-4 shadow-sm"
+                            className="bg-white"
                           />
                           {cot.productos.map((p: any, i: number) => {
                             const detallesMostrar = cot.estado === "Aprobada"

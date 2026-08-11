@@ -1,4 +1,5 @@
 import { useAuth } from "../context/AuthContext";
+import { tienePermisoUsuario } from "../utils/permisosUsuario";
 
 // ==========================
 // usePermiso
@@ -7,9 +8,7 @@ import { useAuth } from "../context/AuthContext";
 // ==========================
 export const usePermiso = (permiso: string): boolean => {
   const { user } = useAuth();
-  if (!user) return false;
-  if (user.acceso_total) return true;
-  return user.privilegios.includes(permiso);
+  return tienePermisoUsuario(user, permiso);
 };
 
 // ==========================
@@ -31,13 +30,7 @@ export const usePermisos = <T extends Record<string, string>>(
   const resultado = {} as Record<keyof T, boolean>;
 
   for (const key in permisos) {
-    if (!user) {
-      resultado[key] = false;
-    } else if (user.acceso_total) {
-      resultado[key] = true;
-    } else {
-      resultado[key] = user.privilegios.includes(permisos[key]);
-    }
+    resultado[key] = tienePermisoUsuario(user, permisos[key]);
   }
 
   return resultado;

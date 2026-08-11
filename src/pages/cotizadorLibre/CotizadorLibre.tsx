@@ -30,44 +30,9 @@ import type {
   ItemCarrito,
   ProductoGuardadoInput,
 } from "../../types/cotizadorLibre/cotizadorLibreCotizaciones.types";
-import { leerBorrador, useAutoguardarBorrador, limpiarBorrador } from "../../hooks/useBorradorFormulario";
 
 type Vista = "landing" | "wizard";
 type AccionFinal = "cotizacion" | "pedido";
-
-type ClienteIdentificadoCotizadorLibre = {
-  clienteId: number;
-  verificado: boolean;
-  datosContacto: { empresa: string; telefono: string; correoMostrar: string };
-};
-
-// Punto de guardado (ver src/hooks/useBorradorFormulario.ts). Cubre el
-// carrito ya armado, el cliente ya identificado (evita repetir la
-// verificación por código) y la selección en curso — el producto que se
-// está configurando en ESTE momento, antes de darle "Agregar al carrito".
-// Deliberadamente NO incluye catálogos cargados del servidor (tipos,
-// medidas, detallePapel/detallePlastico) ni estado de UI/transiente
-// (loading, errores, panel de identificación abierto, "guardando").
-interface BorradorCotizadorLibre {
-  vista: Vista;
-  categoria: CategoriaCotizadorLibre | null;
-  idTipoSeleccionado: number | null;
-  idMedidaSeleccionada: number | null;
-  idGrupoSeleccionado: number | null;
-  idAsaSeleccionada: number | null;
-  idLaminadoSeleccionado: number | null;
-  idTexturaSeleccionada: number | null;
-  idFoilSeleccionado: number | null;
-  altoRelieve: boolean;
-  uv: boolean;
-  tintasFrente: number;
-  tintasDentro: number;
-  idTintasPlastico: number | null;
-  cantidad: number | null;
-  carrito: ItemCarrito[];
-  clienteIdentificado: ClienteIdentificadoCotizadorLibre | null;
-}
-const CLAVE_BORRADOR_COTIZADOR_LIBRE = "cotizador-libre";
 
 // El cargo por asa solo aplica si el nombre de la opción contiene "listón"
 // — misma regla de negocio ya usada en la herramienta interna
@@ -100,24 +65,22 @@ export default function CotizadorLibre() {
   // usando esta misma pantalla con su propia cuenta sí puede ambos.
   const esClienteExterno = user?.rol === "CotizadorLibre";
 
-  const [borradorInicial] = useState(() => leerBorrador<BorradorCotizadorLibre>(CLAVE_BORRADOR_COTIZADOR_LIBRE));
-
-  const [vista, setVista] = useState<Vista>(borradorInicial?.vista ?? "landing");
+  const [vista, setVista] = useState<Vista>("landing");
 
   // ---- Paso 1: Categoría ----
-  const [categoria, setCategoria] = useState<CategoriaCotizadorLibre | null>(borradorInicial?.categoria ?? null);
+  const [categoria, setCategoria] = useState<CategoriaCotizadorLibre | null>(null);
 
   // ---- Paso 2: Tipo ----
   const [tipos, setTipos] = useState<TipoCatalogoItem[]>([]);
   const [tiposLoading, setTiposLoading] = useState(false);
   const [tiposError, setTiposError] = useState<string | null>(null);
-  const [idTipoSeleccionado, setIdTipoSeleccionado] = useState<number | null>(borradorInicial?.idTipoSeleccionado ?? null);
+  const [idTipoSeleccionado, setIdTipoSeleccionado] = useState<number | null>(null);
 
   // ---- Paso 3: Medida ----
   const [medidas, setMedidas] = useState<(MedidaPapelItem | MedidaPlasticoItem)[]>([]);
   const [medidasLoading, setMedidasLoading] = useState(false);
   const [medidasError, setMedidasError] = useState<string | null>(null);
-  const [idMedidaSeleccionada, setIdMedidaSeleccionada] = useState<number | null>(borradorInicial?.idMedidaSeleccionada ?? null);
+  const [idMedidaSeleccionada, setIdMedidaSeleccionada] = useState<number | null>(null);
 
   // ---- Paso 4: Detalle + Personalización ----
   const [detallePapel, setDetallePapel] = useState<DetalleProductoPapelResponse | null>(null);
@@ -125,37 +88,32 @@ export default function CotizadorLibre() {
   const [detalleLoading, setDetalleLoading] = useState(false);
   const [detalleError, setDetalleError] = useState<string | null>(null);
 
-  const [idGrupoSeleccionado, setIdGrupoSeleccionado] = useState<number | null>(borradorInicial?.idGrupoSeleccionado ?? null);
-  const [idAsaSeleccionada, setIdAsaSeleccionada] = useState<number | null>(borradorInicial?.idAsaSeleccionada ?? null);
-  const [idLaminadoSeleccionado, setIdLaminadoSeleccionado] = useState<number | null>(borradorInicial?.idLaminadoSeleccionado ?? null);
-  const [idTexturaSeleccionada, setIdTexturaSeleccionada] = useState<number | null>(borradorInicial?.idTexturaSeleccionada ?? null);
-  const [idFoilSeleccionado, setIdFoilSeleccionado] = useState<number | null>(borradorInicial?.idFoilSeleccionado ?? null);
-  const [altoRelieve, setAltoRelieve] = useState(borradorInicial?.altoRelieve ?? false);
-  const [uv, setUv] = useState(borradorInicial?.uv ?? false);
-  const [tintasFrente, setTintasFrente] = useState(borradorInicial?.tintasFrente ?? 0);
-  const [tintasDentro, setTintasDentro] = useState(borradorInicial?.tintasDentro ?? 0);
+  const [idGrupoSeleccionado, setIdGrupoSeleccionado] = useState<number | null>(null);
+  const [idAsaSeleccionada, setIdAsaSeleccionada] = useState<number | null>(null);
+  const [idLaminadoSeleccionado, setIdLaminadoSeleccionado] = useState<number | null>(null);
+  const [idTexturaSeleccionada, setIdTexturaSeleccionada] = useState<number | null>(null);
+  const [idFoilSeleccionado, setIdFoilSeleccionado] = useState<number | null>(null);
+  const [altoRelieve, setAltoRelieve] = useState(false);
+  const [uv, setUv] = useState(false);
+  const [tintasFrente, setTintasFrente] = useState(0);
+  const [tintasDentro, setTintasDentro] = useState(0);
 
-  const [idTintasPlastico, setIdTintasPlastico] = useState<number | null>(borradorInicial?.idTintasPlastico ?? null);
+  const [idTintasPlastico, setIdTintasPlastico] = useState<number | null>(null);
 
   // ---- Paso 5: Cantidad ----
-  const [cantidad, setCantidad] = useState<number | null>(borradorInicial?.cantidad ?? null);
+  const [cantidad, setCantidad] = useState<number | null>(null);
 
   // ---- Carrito (Fase 4.5) ----
-  const [carrito, setCarrito] = useState<ItemCarrito[]>(borradorInicial?.carrito ?? []);
+  const [carrito, setCarrito] = useState<ItemCarrito[]>([]);
 
   // ---- Identificación de cliente ----
   const [panelIdentificacionAbierto, setPanelIdentificacionAbierto] = useState(false);
-  const [clienteIdentificado, setClienteIdentificado] = useState<ClienteIdentificadoCotizadorLibre | null>(
-    borradorInicial?.clienteIdentificado ?? null
-  );
+  const [clienteIdentificado, setClienteIdentificado] = useState<{
+    clienteId: number;
+    verificado: boolean;
+    datosContacto: { empresa: string; telefono: string; correoMostrar: string };
+  } | null>(null);
   const [accionPendiente, setAccionPendiente] = useState<AccionFinal | null>(null);
-
-  useAutoguardarBorrador<BorradorCotizadorLibre>(CLAVE_BORRADOR_COTIZADOR_LIBRE, {
-    vista, categoria, idTipoSeleccionado, idMedidaSeleccionada, idGrupoSeleccionado,
-    idAsaSeleccionada, idLaminadoSeleccionado, idTexturaSeleccionada, idFoilSeleccionado,
-    altoRelieve, uv, tintasFrente, tintasDentro, idTintasPlastico, cantidad, carrito,
-    clienteIdentificado,
-  }, true);
 
   // ---- Guardado final ----
   const [guardando, setGuardando] = useState(false);
@@ -485,7 +443,6 @@ export default function CotizadorLibre() {
         correoEnviado: false,
       });
       setCarrito([]);
-      limpiarBorrador(CLAVE_BORRADOR_COTIZADOR_LIBRE);
 
       // ---- Generar PDF (en el navegador) + descargar + enviar por correo ----
       // Si algo falla aquí, NO se revierte el guardado (ya está hecho y es lo
@@ -566,7 +523,6 @@ export default function CotizadorLibre() {
     setCarrito([]);
     setResultadoGuardado(null);
     setClienteIdentificado(null);
-    limpiarBorrador(CLAVE_BORRADOR_COTIZADOR_LIBRE);
   };
 
   // ============================================================
@@ -665,16 +621,17 @@ export default function CotizadorLibre() {
   // WIZARD
   // ============================================================
   return (
-    <div className="min-h-screen bg-[#f7f4ee] pb-28">
-      <div className="bg-white border-b border-[#e2ddd0] px-6 py-4 flex items-center justify-between">
+    <div className="min-h-screen bg-[#f7f4ee] pb-40 sm:pb-28">
+      <div className="bg-white border-b border-[#e2ddd0] px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between flex-wrap gap-2">
         <button
           onClick={volverAlInicio}
           className="text-sm text-[#6b6f63] hover:text-[#1e3a2b] font-semibold"
         >
           ← Volver al inicio
         </button>
-        <span className="text-sm text-[#6b6f63] flex items-center gap-3">
-          Cotizador / <b className="text-[#1e3a2b]">Nueva cotización</b>
+        <span className="text-xs sm:text-sm text-[#6b6f63] flex items-center flex-wrap gap-2 sm:gap-3">
+          <span className="hidden sm:inline">Cotizador / </span>
+          <b className="text-[#1e3a2b]">Nueva cotización</b>
           {carrito.length > 0 && (
             <span className="bg-[#1e3a2b] text-white text-xs font-bold px-2.5 py-1 rounded-full">
               🛒 {carrito.length}
@@ -691,14 +648,16 @@ export default function CotizadorLibre() {
       </div>
 
       {esClienteExterno && (
-        <div className="bg-[#fff8e6] border-b border-[#e8d38a] px-6 py-2.5 text-center">
+        <div className="bg-[#fff8e6] border-b border-[#e8d38a] px-4 sm:px-6 py-2.5 text-center">
           <p className="text-xs text-[#7a5c00]">
             ℹ️ Esta es una cotización estimada — las especificaciones o el precio final pueden variar ligeramente al confirmarse con un asesor.
           </p>
         </div>
       )}
 
-      <div className="max-w-3xl mx-auto px-6 py-8 flex flex-col gap-6">
+      <div className="w-full px-4 sm:px-6 lg:px-10 xl:px-16 py-6 sm:py-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8 items-start">
+      <div className="flex flex-col gap-6">
         {/* Paso 1: Categoría */}
         <div className="bg-white border border-[#e2ddd0] rounded-xl p-5">
           <h2 className="text-sm font-bold mb-3">1. ¿Qué tipo de producto buscas?</h2>
@@ -733,17 +692,28 @@ export default function CotizadorLibre() {
             {tiposLoading && <p className="text-sm text-[#6b6f63]">Cargando opciones...</p>}
             {tiposError && <p className="text-sm text-red-600">{tiposError}</p>}
             {!tiposLoading && !tiposError && (
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 {tipos.map((tipo) => (
                   <button
                     key={tipo.id}
                     onClick={() => setIdTipoSeleccionado(tipo.id)}
-                    className={`border rounded-lg px-3 py-2.5 text-sm font-medium text-left transition-colors ${
+                    className={`border rounded-lg p-3 text-sm font-medium transition-colors flex flex-col items-center gap-2 text-center ${
                       idTipoSeleccionado === tipo.id
                         ? "border-[#b8894a] bg-[#fbf3e8] text-[#1e3a2b]"
                         : "border-[#e2ddd0] hover:border-[#b8894a]"
                     }`}
                   >
+                    {tipo.imagenUrl ? (
+                      <img
+                        src={tipo.imagenUrl}
+                        alt=""
+                        className="w-20 h-20 rounded-lg object-cover"
+                      />
+                    ) : (
+                      <div className="w-20 h-20 rounded-lg bg-[#eee9db] flex items-center justify-center text-2xl">
+                        📦
+                      </div>
+                    )}
                     {tipo.nombre}
                   </button>
                 ))}
@@ -766,26 +736,36 @@ export default function CotizadorLibre() {
             {!medidasLoading && !medidasError && (
               <div className="flex flex-col gap-2">
                 {medidas.map((m) => {
-                  // descripcion_papel solo existe en medidas de papel — es lo
-                  // que distingue dos productos que comparten exactamente la
-                  // misma medida (ej. "25+8x28" simple vs "25+8x28 Troquel
-                  // Riñón"), ya que nunca se fusionan entre sí.
+                  // descripcion_papel e imagenUrl solo existen en medidas de
+                  // papel — es lo que distingue dos productos que comparten
+                  // exactamente la misma medida (ej. "25+8x28" simple vs
+                  // "25+8x28 Troquel Riñón"), ya que nunca se fusionan entre sí.
                   const descripcion = "descripcion_papel" in m ? m.descripcion_papel : null;
+                  const imagenUrl = "imagenUrl" in m ? m.imagenUrl : null;
                   return (
                     <button
                       key={m.id}
                       onClick={() => setIdMedidaSeleccionada(m.id)}
                       disabled={!m.medida}
-                      className={`border rounded-lg px-4 py-3 text-sm text-left transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                      className={`border rounded-lg px-4 py-3 text-sm text-left transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-3 ${
                         idMedidaSeleccionada === m.id
                           ? "border-[#b8894a] bg-[#fbf3e8]"
                           : "border-[#e2ddd0] hover:border-[#b8894a]"
                       }`}
                     >
-                      <span className="font-semibold">{m.medida ?? "Medida sin datos"}</span>
-                      {descripcion && (
-                        <span className="block text-xs text-[#6b6f63] mt-0.5">{descripcion}</span>
+                      {imagenUrl && (
+                        <img
+                          src={imagenUrl}
+                          alt=""
+                          className="w-16 h-16 rounded-lg object-cover flex-shrink-0"
+                        />
                       )}
+                      <span>
+                        <span className="font-semibold block">{m.medida ?? "Medida sin datos"}</span>
+                        {descripcion && (
+                          <span className="block text-xs text-[#6b6f63] mt-0.5">{descripcion}</span>
+                        )}
+                      </span>
                     </button>
                   );
                 })}
@@ -798,7 +778,74 @@ export default function CotizadorLibre() {
             )}
           </div>
         )}
+      </div>
 
+      {/* Columna 2: Vista previa */}
+      <div className="flex flex-col gap-6">
+        <div className="bg-white border border-[#e2ddd0] rounded-xl p-5 lg:sticky lg:top-24">
+          <h2 className="text-sm font-bold mb-3">Vista previa</h2>
+          {(() => {
+            const medidaSel = medidas.find((m) => m.id === idMedidaSeleccionada);
+            const tipoSel = tipos.find((t) => t.id === idTipoSeleccionado);
+            const imagenMedida = medidaSel && "imagenUrl" in medidaSel ? medidaSel.imagenUrl : null;
+            const descripcionMedida =
+              medidaSel && "descripcion_papel" in medidaSel ? medidaSel.descripcion_papel : null;
+            const imagenMostrar = imagenMedida || tipoSel?.imagenUrl || null;
+
+            if (!idMedidaSeleccionada) {
+              return (
+                <div className="aspect-square bg-[#eee9db] rounded-lg flex flex-col items-center justify-center text-center gap-2 text-[#6b6f63] text-sm p-6">
+                  <span className="text-4xl">🛍️</span>
+                  Selecciona un tipo y una medida para ver la vista previa
+                </div>
+              );
+            }
+
+            return (
+              <div className="flex flex-col gap-4">
+                <div className="aspect-square bg-[#eee9db] rounded-lg overflow-hidden flex items-center justify-center">
+                  {imagenMostrar ? (
+                    <img src={imagenMostrar} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <span className="text-6xl">🛍️</span>
+                  )}
+                </div>
+                <div className="text-center">
+                  <p className="text-xs uppercase text-[#b8894a] font-bold tracking-wide">
+                    Medida seleccionada
+                  </p>
+                  <p className="text-xl font-extrabold text-[#1e3a2b] mt-1">
+                    {medidaSel?.medida ?? "—"}
+                  </p>
+                  {descripcionMedida && (
+                    <p className="text-sm text-[#6b6f63] mt-1">{descripcionMedida}</p>
+                  )}
+                </div>
+                {detallePapel && detallePapel.grupos.length > 0 && (
+                  <div>
+                    <p className="text-xs uppercase text-[#6b6f63] font-bold mb-2 text-center">
+                      Materiales disponibles
+                    </p>
+                    <div className="flex flex-wrap gap-2 justify-center">
+                      {detallePapel.grupos.map((g) => (
+                        <span
+                          key={g.idgrupo_papel}
+                          className="bg-[#eee9db] border border-[#e2ddd0] px-3 py-1.5 rounded-lg text-xs font-semibold"
+                        >
+                          {g.material ?? "Material"}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+        </div>
+      </div>
+
+      {/* Columna 3: Personalización, cantidad y precio */}
+      <div className="flex flex-col gap-6">
         {/* Paso 4: Personalización */}
         {idMedidaSeleccionada && (
           <div className="bg-white border border-[#e2ddd0] rounded-xl p-5">
@@ -818,12 +865,15 @@ export default function CotizadorLibre() {
                       <button
                         key={g.idgrupo_papel}
                         onClick={() => setIdGrupoSeleccionado(g.idgrupo_papel)}
-                        className={`border rounded-lg px-3 py-2 text-sm text-left transition-colors ${
+                        className={`border rounded-lg px-3 py-2 text-sm text-left transition-colors flex items-center gap-2 ${
                           idGrupoSeleccionado === g.idgrupo_papel
                             ? "border-[#b8894a] bg-[#fbf3e8]"
                             : "border-[#e2ddd0] hover:border-[#b8894a]"
                         }`}
                       >
+                        {g.imagenUrl && (
+                          <img src={g.imagenUrl} alt="" className="w-14 h-14 rounded-lg object-cover flex-shrink-0" />
+                        )}
                         {g.material ?? "Material"}
                       </button>
                     ))}
@@ -840,7 +890,7 @@ export default function CotizadorLibre() {
                     <span className="text-xs font-bold text-[#6b6f63] uppercase block mb-2">
                       Tipo de asa
                     </span>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                       <button
                         onClick={() => setIdAsaSeleccionada(null)}
                         className={`border rounded-lg px-3 py-2 text-xs font-semibold text-center transition-colors ${
@@ -855,12 +905,15 @@ export default function CotizadorLibre() {
                         <button
                           key={a.id}
                           onClick={() => setIdAsaSeleccionada(a.id)}
-                          className={`border rounded-lg px-3 py-2 text-xs font-semibold text-center transition-colors ${
+                          className={`border rounded-lg px-3 py-2 text-xs font-semibold text-center transition-colors flex flex-col items-center gap-1 ${
                             idAsaSeleccionada === a.id
                               ? "border-[#b8894a] bg-[#fbf3e8]"
                               : "border-[#e2ddd0] hover:border-[#b8894a]"
                           }`}
                         >
+                          {a.imagenUrl && (
+                            <img src={a.imagenUrl} alt="" className="w-14 h-14 rounded-lg object-cover" />
+                          )}
                           {a.nombre}
                         </button>
                       ))}
@@ -873,7 +926,7 @@ export default function CotizadorLibre() {
                     <span className="text-xs font-bold text-[#6b6f63] uppercase block mb-2">
                       Laminado
                     </span>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                       <button
                         onClick={() => setIdLaminadoSeleccionado(null)}
                         className={`border rounded-lg px-3 py-2 text-xs font-semibold text-center transition-colors ${
@@ -888,12 +941,15 @@ export default function CotizadorLibre() {
                         <button
                           key={l.id}
                           onClick={() => setIdLaminadoSeleccionado(l.id)}
-                          className={`border rounded-lg px-3 py-2 text-xs font-semibold text-center transition-colors ${
+                          className={`border rounded-lg px-3 py-2 text-xs font-semibold text-center transition-colors flex flex-col items-center gap-1 ${
                             idLaminadoSeleccionado === l.id
                               ? "border-[#b8894a] bg-[#fbf3e8]"
                               : "border-[#e2ddd0] hover:border-[#b8894a]"
                           }`}
                         >
+                          {l.imagenUrl && (
+                            <img src={l.imagenUrl} alt="" className="w-14 h-14 rounded-lg object-cover" />
+                          )}
                           {l.nombre}
                         </button>
                       ))}
@@ -901,82 +957,115 @@ export default function CotizadorLibre() {
                   </div>
                 )}
 
-                <div>
-                  <span className="text-xs font-bold text-[#6b6f63] uppercase block mb-2">
-                    Textura (opcional)
-                  </span>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                    <button
-                      onClick={() => setIdTexturaSeleccionada(null)}
-                      className={`border rounded-lg px-3 py-2 text-xs font-semibold text-center transition-colors ${
-                        idTexturaSeleccionada === null
-                          ? "border-[#b8894a] bg-[#fbf3e8]"
-                          : "border-[#e2ddd0] hover:border-[#b8894a]"
-                      }`}
-                    >
-                      Sin textura
-                    </button>
-                    {detallePapel.texturas.map((t) => (
+                {detallePapel.acabadosPermitidos.textura && (
+                  <div>
+                    <span className="text-xs font-bold text-[#6b6f63] uppercase block mb-2">
+                      Textura (opcional)
+                    </span>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                       <button
-                        key={t.id}
-                        onClick={() => setIdTexturaSeleccionada(t.id)}
+                        onClick={() => setIdTexturaSeleccionada(null)}
                         className={`border rounded-lg px-3 py-2 text-xs font-semibold text-center transition-colors ${
-                          idTexturaSeleccionada === t.id
+                          idTexturaSeleccionada === null
                             ? "border-[#b8894a] bg-[#fbf3e8]"
                             : "border-[#e2ddd0] hover:border-[#b8894a]"
                         }`}
                       >
-                        {t.nombre}
+                        Sin textura
                       </button>
-                    ))}
+                      {detallePapel.texturas.map((t) => (
+                        <button
+                          key={t.id}
+                          onClick={() => setIdTexturaSeleccionada(t.id)}
+                          className={`border rounded-lg px-3 py-2 text-xs font-semibold text-center transition-colors flex flex-col items-center gap-1 ${
+                            idTexturaSeleccionada === t.id
+                              ? "border-[#b8894a] bg-[#fbf3e8]"
+                              : "border-[#e2ddd0] hover:border-[#b8894a]"
+                          }`}
+                        >
+                          {t.imagenUrl && (
+                            <img src={t.imagenUrl} alt="" className="w-14 h-14 rounded-lg object-cover" />
+                          )}
+                          {t.nombre}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )}
 
-                <div>
-                  <span className="text-xs font-bold text-[#6b6f63] uppercase block mb-2">
-                    Hot stamping / Foil (opcional)
-                  </span>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                    <button
-                      onClick={() => setIdFoilSeleccionado(null)}
-                      className={`border rounded-lg px-3 py-2 text-xs font-semibold text-center transition-colors ${
-                        idFoilSeleccionado === null
-                          ? "border-[#b8894a] bg-[#fbf3e8]"
-                          : "border-[#e2ddd0] hover:border-[#b8894a]"
-                      }`}
-                    >
-                      Sin foil
-                    </button>
-                    {detallePapel.foils.map((f) => (
+                {detallePapel.acabadosPermitidos.hot_stamping && (
+                  <div>
+                    <span className="text-xs font-bold text-[#6b6f63] uppercase mb-2 flex items-center gap-2">
+                      {detallePapel.imagenesGlobales.hotStamping && (
+                        <img
+                          src={detallePapel.imagenesGlobales.hotStamping}
+                          alt=""
+                          className="w-9 h-9 rounded-lg object-cover"
+                        />
+                      )}
+                      Hot stamping / Foil (opcional)
+                    </span>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                       <button
-                        key={f.id}
-                        onClick={() => setIdFoilSeleccionado(f.id)}
+                        onClick={() => setIdFoilSeleccionado(null)}
                         className={`border rounded-lg px-3 py-2 text-xs font-semibold text-center transition-colors ${
-                          idFoilSeleccionado === f.id
+                          idFoilSeleccionado === null
                             ? "border-[#b8894a] bg-[#fbf3e8]"
                             : "border-[#e2ddd0] hover:border-[#b8894a]"
                         }`}
                       >
-                        {f.nombre}
+                        Sin foil
                       </button>
-                    ))}
+                      {detallePapel.foils.map((f) => (
+                        <button
+                          key={f.id}
+                          onClick={() => setIdFoilSeleccionado(f.id)}
+                          className={`border rounded-lg px-3 py-2 text-xs font-semibold text-center transition-colors flex flex-col items-center gap-1 ${
+                            idFoilSeleccionado === f.id
+                              ? "border-[#b8894a] bg-[#fbf3e8]"
+                              : "border-[#e2ddd0] hover:border-[#b8894a]"
+                          }`}
+                        >
+                          {f.imagenUrl && (
+                            <img src={f.imagenUrl} alt="" className="w-14 h-14 rounded-lg object-cover" />
+                          )}
+                          {f.nombre}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )}
 
-                <div className="flex gap-4">
-                  <label className="flex items-center gap-2 text-sm">
-                    <input type="checkbox" checked={uv} onChange={(e) => setUv(e.target.checked)} />
-                    UV
-                  </label>
-                  <label className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={altoRelieve}
-                      onChange={(e) => setAltoRelieve(e.target.checked)}
-                    />
-                    Alto relieve
-                  </label>
-                </div>
+                {(detallePapel.acabadosPermitidos.uv || detallePapel.acabadosPermitidos.alto_relieve) && (
+                  <div className="flex gap-4">
+                    {detallePapel.acabadosPermitidos.uv && (
+                      <label className="flex items-center gap-2 text-sm">
+                        <input type="checkbox" checked={uv} onChange={(e) => setUv(e.target.checked)} />
+                        {detallePapel.imagenesGlobales.uv && (
+                          <img src={detallePapel.imagenesGlobales.uv} alt="" className="w-9 h-9 rounded-lg object-cover" />
+                        )}
+                        UV
+                      </label>
+                    )}
+                    {detallePapel.acabadosPermitidos.alto_relieve && (
+                      <label className="flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={altoRelieve}
+                          onChange={(e) => setAltoRelieve(e.target.checked)}
+                        />
+                        {detallePapel.imagenesGlobales.altoRelieve && (
+                          <img
+                            src={detallePapel.imagenesGlobales.altoRelieve}
+                            alt=""
+                            className="w-9 h-9 rounded-lg object-cover"
+                          />
+                        )}
+                        Alto relieve
+                      </label>
+                    )}
+                  </div>
+                )}
 
                 <div className="flex gap-4">
                   <label className="text-sm flex flex-col gap-1">
@@ -1108,11 +1197,13 @@ export default function CotizadorLibre() {
             )}
           </div>
         )}
+      </div>
+      </div>
 
-        {/* Carrito */}
-        {carrito.length > 0 && (
-          <div className="bg-white border border-[#e2ddd0] rounded-xl p-5">
-            <h2 className="text-sm font-bold mb-3">Tu cotización ({carrito.length})</h2>
+      {/* Carrito */}
+      {carrito.length > 0 && (
+        <div className="bg-white border border-[#e2ddd0] rounded-xl p-5 mt-6">
+          <h2 className="text-sm font-bold mb-3">Tu cotización ({carrito.length})</h2>
             <div className="flex flex-col gap-2">
               {carrito.map((item) => (
                 <div
@@ -1150,11 +1241,11 @@ export default function CotizadorLibre() {
 
       {/* Barra de acciones finales */}
       {carrito.length > 0 && (
-        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-[#e2ddd0] px-6 py-4 flex justify-end gap-3">
+        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-[#e2ddd0] px-4 sm:px-6 py-3 sm:py-4 flex flex-col sm:flex-row sm:justify-end gap-2 sm:gap-3">
           <button
             onClick={() => iniciarAccionFinal("cotizacion")}
             disabled={guardando}
-            className="border border-[#1e3a2b] text-[#1e3a2b] font-semibold px-5 py-3 rounded-lg disabled:opacity-50"
+            className="w-full sm:w-auto border border-[#1e3a2b] text-[#1e3a2b] font-semibold px-5 py-3 rounded-lg disabled:opacity-50"
           >
             {guardando ? "Guardando..." : "Generar cotización"}
           </button>
@@ -1162,7 +1253,7 @@ export default function CotizadorLibre() {
             <button
               onClick={() => iniciarAccionFinal("pedido")}
               disabled={guardando}
-              className="bg-[#3f7a52] text-white font-semibold px-5 py-3 rounded-lg disabled:opacity-50"
+              className="w-full sm:w-auto bg-[#3f7a52] text-white font-semibold px-5 py-3 rounded-lg disabled:opacity-50"
             >
               {guardando ? "Guardando..." : "Convertir a pedido"}
             </button>

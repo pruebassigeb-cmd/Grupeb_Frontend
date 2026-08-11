@@ -65,13 +65,29 @@ export interface OrdenProduccionData {
   metros_imprimir?: number | null;
   metros_impresos?: number | null;
   imp_maquina?: string | null;
+  imp_repeticion?: string | null;
+  ext_observaciones?: string | null;
+  imp_observaciones?: string | null;
+  bol_observaciones?: string | null;
+  asa_observaciones?: string | null;
+  kilos_bolsear?: number | null;
   kilos_bolseados?: number | null;
   bol_merma?: number | null;
   piezas_bolseadas?: number | null;
   kilos_bolseados2?: number | null;
   bol_piezas_merma?: number | null;
+  asa_kilos_recibidos?: number | null;
   asa_piezas_recibidas?: number | null;
   asa_merma?: number | null;
+  asa_merma_kilos?: number | null;
+  asa_merma_piezas?: number | null;
+  asa_kilos_finales?: number | null;
+  asa_piezas_finales?: number | null;
+  asa_flexible_aplica?: boolean;
+  bultos_total?: number | null;
+  bultos_medidas?: string | null;
+  bultos_peso?: number | string | null;
+  bultos_piezas?: number | null;
   ancho_pelicula?: string | null;
   fuelle_r?: string | null;
   fuelle_f?: string | null;
@@ -95,6 +111,16 @@ const LABEL_SIZE = 7;
 
 const f = (v: any) =>
   v === null || v === undefined || String(v).trim() === "" ? "" : String(v).trim();
+
+const combinarCantidades = (
+  kilos?: number | null,
+  piezas?: number | null,
+): string => {
+  const partes: string[] = [];
+  if (kilos != null) partes.push(`${f(kilos)} kg`);
+  if (piezas != null) partes.push(`${f(piezas)} pzas`);
+  return partes.join(" / ");
+};
 
  const soloColorPigmento = (v: any): string => {
   const texto = f(v);
@@ -305,6 +331,70 @@ function celdaFirma(
   doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);
 }
 
+function lineasTruncadas(
+  doc: jsPDF,
+  value: unknown,
+  maxWidth: number,
+  maxLines: number,
+): string[] {
+  const texto = f(value).replace(/\s+/g, " ");
+  if (!texto || maxLines <= 0) return [];
+
+  const lineas = doc.splitTextToSize(texto, maxWidth) as string[];
+  if (lineas.length <= maxLines) return lineas;
+
+  const visibles = lineas.slice(0, maxLines);
+  const ultimaPosicion = visibles.length - 1;
+  const sufijo = "...";
+  let ultima = visibles[ultimaPosicion].trimEnd();
+
+  while (ultima && doc.getTextWidth(`${ultima}${sufijo}`) > maxWidth) {
+    ultima = ultima.slice(0, -1).trimEnd();
+  }
+
+  visibles[ultimaPosicion] = ultima ? `${ultima}${sufijo}` : sufijo;
+  return visibles;
+}
+
+function celdaTextoAcotado(
+  doc: jsPDF,
+  label: string,
+  value: unknown,
+  x: number, y: number, w: number, h: number,
+  valueSize = 7,
+  maxLines = 2,
+) {
+  doc.setDrawColor(BLACK[0], BLACK[1], BLACK[2]);
+  doc.setLineWidth(0.2);
+  doc.rect(x, y, w, h);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(LABEL_SIZE);
+  doc.setTextColor(GRAY_DARK[0], GRAY_DARK[1], GRAY_DARK[2]);
+  doc.text(label, x + 1.5, y + 4.5);
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(valueSize);
+  doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);
+  const lineas = lineasTruncadas(doc, value, Math.max(w - 3, 1), maxLines);
+  if (lineas.length > 0) {
+    doc.text(lineas, x + w / 2, y + 8, {
+      align: "center",
+      lineHeightFactor: 1.05,
+    });
+  }
+}
+
+function celdaObservacion(
+  doc: jsPDF,
+  value: unknown,
+  x: number, y: number, w: number, h: number,
+) {
+  const valueSize = 6.5;
+  const lineHeightMm = valueSize * 0.3528 * 1.05;
+  const maxLines = Math.max(1, Math.floor((h - 7) / lineHeightMm));
+  celdaTextoAcotado(doc, "Observacion", value, x, y, w, h, valueSize, maxLines);
+}
+
 function bloqueOperativo(
   doc: jsPDF,
   titulo: string,
@@ -314,6 +404,7 @@ function bloqueOperativo(
   f1c4Label: string, f1c4Val: string,
   f2c1Label: string, f2c1Val: string,
   x: number, y: number, w: number, h: number,
+  observacion?: string | null,
 ) {
   const labelH = 6;
   const bodyH = h - labelH;
@@ -331,14 +422,7 @@ function bloqueOperativo(
   const firmaY = dataY + filaH;
   celdaLabel(doc, f2c1Label, f2c1Val, x, firmaY, colW, filaH, LABEL_SIZE, 11, !!f2c1Val);
 
-  doc.setDrawColor(BLACK[0], BLACK[1], BLACK[2]);
-  doc.setLineWidth(0.2);
-  doc.rect(x + colW, firmaY, colW, filaH);
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(LABEL_SIZE);
-  doc.setTextColor(GRAY_DARK[0], GRAY_DARK[1], GRAY_DARK[2]);
-  doc.text("Observacion", x + colW + 1.5, firmaY + 4.5);
-  doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);
+  celdaObservacion(doc, observacion, x + colW, firmaY, colW, filaH);
 
   celdaFirma(doc, "Aut. Calidad", x + colW * 2, firmaY, colW, filaH);
   celdaFirma(doc, "Firma Encargado", x + colW * 3, firmaY, colW, filaH);
@@ -347,13 +431,16 @@ function bloqueOperativo(
 function bloqueBolseo(
   doc: jsPDF,
   x: number, y: number, w: number, h: number,
+  kilosBolsear?: number | null,
+  mermaKilos?: number | null,
+  mermaPiezas?: number | null,
   kilosBolseados?: number | null,
-  merma?: number | null,
-  kilosBolseados2?: number | null,
   piezasBolseadas?: number | null,
+  observacion?: string | null,
 ) {
   const n = (v?: number | null) => v != null ? String(v) : "";
   const b = (v?: number | null) => v != null;
+  const merma = combinarCantidades(mermaKilos, mermaPiezas);
 
   const labelH = 6;
   const bodyH = h - labelH;
@@ -363,45 +450,57 @@ function bloqueBolseo(
   celdaHeader(doc, "BOLSEO", x, y, w, labelH, 9);
   const dataY = y + labelH;
 
-  celdaLabel(doc, "Kilos Bolseados", n(kilosBolseados), x, dataY, colW, filaH, LABEL_SIZE, 11, b(kilosBolseados));
-  celdaLabel(doc, "Merma", n(merma), x + colW, dataY, colW, filaH, LABEL_SIZE, 11, b(merma));
-  celdaLabel(doc, "Kilos Bolseados", n(kilosBolseados2), x + colW * 2, dataY, colW, filaH, LABEL_SIZE, 11, b(kilosBolseados2));
+  celdaLabel(doc, "Kilos a Bolsear", n(kilosBolsear), x, dataY, colW, filaH, LABEL_SIZE, 11, b(kilosBolsear));
+  celdaLabel(doc, "Merma", merma, x + colW, dataY, colW, filaH, LABEL_SIZE, 9, !!merma);
+  celdaLabel(doc, "Kilos Bolseados", n(kilosBolseados), x + colW * 2, dataY, colW, filaH, LABEL_SIZE, 11, b(kilosBolseados));
   celdaLabel(doc, "Piezas Bolseadas", n(piezasBolseadas), x + colW * 3, dataY, colW, filaH, LABEL_SIZE, 11, b(piezasBolseadas));
 
   const firmaY = dataY + filaH;
   const obsW = colW * 2;
 
-  doc.setDrawColor(BLACK[0], BLACK[1], BLACK[2]);
-  doc.setLineWidth(0.2);
-  doc.rect(x, firmaY, obsW, filaH);
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(LABEL_SIZE);
-  doc.setTextColor(GRAY_DARK[0], GRAY_DARK[1], GRAY_DARK[2]);
-  doc.text("Observacion", x + 1.5, firmaY + 4.5);
-  doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);
+  celdaObservacion(doc, observacion, x, firmaY, obsW, filaH);
 
   celdaFirma(doc, "Aut. Calidad", x + obsW, firmaY, colW, filaH);
   celdaFirma(doc, "Firma Encargado", x + obsW + colW, firmaY, colW, filaH);
 }
 
-function bloqueOtroProceso(
+// Solo se llama cuando el producto de verdad lleva asa flexible (ver
+// asaFlexibleAplica en el llamador) — si no aplica, el llamador ni siquiera
+// dibuja este bloque, así que aquí no hay que contemplar el caso contrario.
+function bloqueAsaFlexible(
   doc: jsPDF,
   x: number, y: number, w: number, h: number,
+  datos: {
+    kilosRecibidos?: number | null;
+    piezasRecibidas?: number | null;
+    mermaKilos?: number | null;
+    mermaPiezas?: number | null;
+    kilosFinales?: number | null;
+    piezasFinales?: number | null;
+    observacion?: string | null;
+  },
 ) {
+  const valor = (v?: number | null) => v != null ? String(v) : "";
+  const merma = combinarCantidades(datos.mermaKilos, datos.mermaPiezas);
   bloqueOperativo(
-    doc, "OTRO PROCESO",
-    "Kilos", "",
-    "Piezas", "",
-    "Merma", "",
-    "Kilos Finales", "",
-    "Piezas Finales", "",
+    doc, "ASA FLEXIBLE",
+    "Kilos", valor(datos.kilosRecibidos),
+    "Piezas", valor(datos.piezasRecibidas),
+    "Merma", merma,
+    "Kilos Finales", valor(datos.kilosFinales),
+    "Piezas Finales", valor(datos.piezasFinales),
     x, y, w, h,
+    datos.observacion,
   );
 }
 
 function bloqueBultosAlmacen(
   doc: jsPDF,
   x: number, y: number, w: number, h: number,
+  total?: number | null,
+  medidas?: string | null,
+  peso?: number | string | null,
+  piezas?: number | null,
 ) {
   const labelH = 5;
   const bultosW = w / 2;
@@ -412,17 +511,14 @@ function bloqueBultosAlmacen(
   const bultosDataY = y + labelH;
   const bultosDataH = h - labelH;
 
-  doc.setDrawColor(BLACK[0], BLACK[1], BLACK[2]);
-  doc.setLineWidth(0.2);
-  doc.rect(x, bultosDataY, bultosW, bultosDataH);
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(LABEL_SIZE);
-  doc.setTextColor(GRAY_DARK[0], GRAY_DARK[1], GRAY_DARK[2]);
   const colW3 = bultosW / 3;
-  doc.text("Bultos", x + colW3 * 0 + 1.5, bultosDataY + 4.5);
-  doc.text("Medidas", x + colW3 * 1 + 1.5, bultosDataY + 4.5);
-  doc.text("Peso", x + colW3 * 2 + 1.5, bultosDataY + 4.5);
-  doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);
+  const pesoTexto = f(peso);
+  const pesoConUnidad = pesoTexto && !/[a-z]/i.test(pesoTexto)
+    ? `${pesoTexto} kg`
+    : pesoTexto;
+  celdaTextoAcotado(doc, "Bultos", total, x, bultosDataY, colW3, bultosDataH, 10, 2);
+  celdaTextoAcotado(doc, "Medidas", medidas, x + colW3, bultosDataY, colW3, bultosDataH, 7, 4);
+  celdaTextoAcotado(doc, "Peso", pesoConUnidad, x + colW3 * 2, bultosDataY, colW3, bultosDataH, 6.5, 4);
 
   celdaHeader(doc, "ALMACEN", almX, y, almW, labelH, 9);
   const almDataY = y + labelH;
@@ -431,7 +527,7 @@ function bloqueBultosAlmacen(
   const almCol1W = almW / 2;
   const almCol2W = almW - almCol1W;
 
-  celdaLabel(doc, "Piezas Recibidas", "", almX, almDataY, almCol1W, almRowH, LABEL_SIZE, 11, false);
+  celdaLabel(doc, "Piezas Recibidas", f(piezas), almX, almDataY, almCol1W, almRowH, LABEL_SIZE, 11, piezas != null);
   celdaLabel(doc, "Ubicacion", "", almX + almCol1W, almDataY, almCol2W, almRowH, LABEL_SIZE, 11, false);
 
   doc.setDrawColor(BLACK[0], BLACK[1], BLACK[2]);
@@ -463,7 +559,16 @@ function construirRepeticionStr(data: OrdenProduccionData): string {
   return partes.join("\n");
 }
 
-export async function generarPdfOrdenProduccion(data: OrdenProduccionData, guardarEnS3 = false): Promise<void> {
+export async function generarPdfOrdenProduccion(
+  data: OrdenProduccionData,
+  guardarEnS3 = false,
+): Promise<void> {
+  // Ya no existe una variante "en blanco": el PDF siempre se llena con los
+  // datos reales registrados en planta. Al inicio de la producción esos
+  // campos vienen vacíos de por sí (nada se ha registrado todavía), así que
+  // el mismo documento se ve "en blanco" al arrancar y se va llenando solo
+  // conforme avanza — sin necesidad de generar un artefacto aparte.
+  const datosRuntime = data;
   const logoBase64 = await cargarLogoBase64(logoUrl);
   const repeticionStr = construirRepeticionStr(data);
   const pantStr = parsePantones(data.pantones);
@@ -789,48 +894,92 @@ doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);  celdaLabel(doc, "Cantidad", can
   const colDerX = M + colIzqW;
   const bloqueY = y;
 
+  const asaTieneDatos = !!datosRuntime && [
+    datosRuntime.asa_kilos_recibidos,
+    datosRuntime.asa_piezas_recibidas,
+    datosRuntime.asa_merma_kilos,
+    datosRuntime.asa_merma_piezas,
+    datosRuntime.asa_merma,
+    datosRuntime.asa_kilos_finales,
+    datosRuntime.asa_piezas_finales,
+    datosRuntime.asa_observaciones,
+  ].some((value) => f(value) !== "");
+  const asaFlexibleAplica = !!datosRuntime &&
+    (datosRuntime.asa_flexible_aplica ?? asaTieneDatos);
+
   const espacioTotal = (PH - M - y) * 0.90;
   const bultosRatio = 0.22;
   const bultosH = espacioTotal * bultosRatio;
-  const bloqueH = (espacioTotal - bultosH) / 4;
+  // Extrusión, Impresión y Bolseo siempre van. Asa Flexible solo la lleva
+  // el producto cuyo tipo la incluye (asaFlexibleAplica) — si no aplica, no
+  // se dibuja ningún bloque en su lugar, y las 3 filas restantes se reparten
+  // el espacio que le hubiera tocado para no dejar un hueco en blanco.
+  const cantidadBloques = asaFlexibleAplica ? 4 : 3;
+  const bloqueH = (espacioTotal - bultosH) / cantidadBloques;
 
-  const tituloImpresion = data.imp_maquina
-    ? `IMPRESIÓN — ${String(data.imp_maquina).toUpperCase()}`
+  const valorRuntime = (value: number | string | null | undefined) =>
+    value != null ? String(value) : "";
+  const detallesImpresion = [
+    datosRuntime?.imp_maquina ? String(datosRuntime.imp_maquina).toUpperCase() : "",
+    datosRuntime?.imp_repeticion ? `REP. ${datosRuntime.imp_repeticion}` : "",
+  ].filter(Boolean);
+  const tituloImpresion = detallesImpresion.length > 0
+    ? `IMPRESIÓN - ${detallesImpresion.join(" | ")}`
     : "IMPRESIÓN";
 
   bloqueOperativo(
     doc, "EXTRUSIÓN",
-    "Kilos Extruidos", "",
-    "Metros Extruidos", data.metros_extruidos != null ? String(data.metros_extruidos) : "",
-    "Merma", data.ext_merma != null ? String(data.ext_merma) : "",
-    "Kilos p/ Impresión", data.k_para_impresion != null ? String(data.k_para_impresion) : "",
-    "Metros p/ Impresión", "",
+    "Kilos a Extruir", valorRuntime(datosRuntime?.kilos_extruir),
+    "Metros a Extruir", valorRuntime(datosRuntime?.metros_extruir),
+    "Merma", valorRuntime(datosRuntime?.ext_merma),
+    "Kilos p/ Impresión", valorRuntime(datosRuntime?.k_para_impresion),
+    "Metros p/ Impresión", valorRuntime(datosRuntime?.metros_extruidos),
     M, y, colIzqW, bloqueH,
+    datosRuntime?.ext_observaciones,
   ); y += bloqueH;
 
   bloqueOperativo(
     doc, tituloImpresion,
-    "Kilos Impresos", data.kilos_imprimir != null ? String(data.kilos_imprimir) : "",
-    "Metros Impresos", data.metros_impresos != null ? String(data.metros_impresos) : "",
-    "Merma", data.imp_merma != null ? String(data.imp_merma) : "",
-    "Kilos p/ Bolseo", data.kilos_impresos != null ? String(data.kilos_impresos) : "",
-    "Metros p/ Bolseo", "",
+    "Kilos a Imprimir", valorRuntime(datosRuntime?.kilos_imprimir),
+    "Metros a Imprimir", valorRuntime(datosRuntime?.metros_imprimir),
+    "Merma", valorRuntime(datosRuntime?.imp_merma),
+    "Kilos p/ Bolseo", valorRuntime(datosRuntime?.kilos_impresos),
+    "Metros p/ Bolseo", valorRuntime(datosRuntime?.metros_impresos),
     M, y, colIzqW, bloqueH,
+    datosRuntime?.imp_observaciones,
   ); y += bloqueH;
 
   bloqueBolseo(
     doc,
     M, y, colIzqW, bloqueH,
-    data.kilos_bolseados,
-    data.bol_merma,
-    data.kilos_bolseados,
-    data.piezas_bolseadas,
+    datosRuntime?.kilos_bolsear,
+    datosRuntime?.bol_merma,
+    datosRuntime?.bol_piezas_merma,
+    datosRuntime?.kilos_bolseados ?? datosRuntime?.kilos_bolseados2,
+    datosRuntime?.piezas_bolseadas,
+    datosRuntime?.bol_observaciones,
   ); y += bloqueH;
 
-  bloqueOtroProceso(doc, M, y, colIzqW, bloqueH);
-  y += bloqueH;
+  if (asaFlexibleAplica) {
+    bloqueAsaFlexible(doc, M, y, colIzqW, bloqueH, {
+      kilosRecibidos: datosRuntime?.asa_kilos_recibidos,
+      piezasRecibidas: datosRuntime?.asa_piezas_recibidas,
+      mermaKilos: datosRuntime?.asa_merma_kilos,
+      mermaPiezas: datosRuntime?.asa_merma_piezas ?? datosRuntime?.asa_merma,
+      kilosFinales: datosRuntime?.asa_kilos_finales,
+      piezasFinales: datosRuntime?.asa_piezas_finales,
+      observacion: datosRuntime?.asa_observaciones,
+    });
+    y += bloqueH;
+  }
 
-  bloqueBultosAlmacen(doc, M, y, colIzqW, bultosH);
+  bloqueBultosAlmacen(
+    doc, M, y, colIzqW, bultosH,
+    datosRuntime?.bultos_total,
+    datosRuntime?.bultos_medidas,
+    datosRuntime?.bultos_peso,
+    datosRuntime?.bultos_piezas,
+  );
 
   // ── COLUMNA DERECHA ──
   const autDisenoH = bloqueH;
@@ -959,7 +1108,7 @@ doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);  celdaLabel(doc, "Cantidad", can
     }
   }
 
-  const nombre = `OrdenProduccion_${data.no_produccion ?? data.no_pedido}.pdf`;
+  const nombre = `OrdenProduccion_${data.no_produccion ?? data.no_pedido}_Produccion.pdf`;
 doc.save(nombre);
 if (guardarEnS3) {
   const blob = doc.output("blob");

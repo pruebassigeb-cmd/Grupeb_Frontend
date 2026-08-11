@@ -26,7 +26,7 @@ import { showAlert } from "../CustomAlert";
 import { showConfirm } from "../CustomConfirm";
 import { inputClass, labelClass } from "./../enviosConstants";
 import BotonAuditoria from "../auditoria/BotonAuditoria";
-import PanelAuditoria from "../auditoria/PanelAuditoria";
+import AuditoriaDesplegable from "../auditoria/AuditoriaDesplegable";
 import { leerBorrador, useAutoguardarBorrador, limpiarBorrador } from "../../hooks/useBorradorFormulario";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -341,7 +341,7 @@ function TarjetaEnvio({
       </div>
 
       <div className="border-b border-gray-100 bg-white px-4 py-3">
-        <PanelAuditoria
+        <AuditoriaDesplegable
           tabla="envio"
           id={envio.idenvio}
           titulo={`Auditoría del envío #${envio.idenvio}`}

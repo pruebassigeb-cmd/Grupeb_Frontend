@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from "react";
 import { loginService, logoutService } from "../services/authService";
 import { warmApiCache } from "../utils/pwa/warmApiCache";
+import { tienePermisoUsuario } from "../utils/permisosUsuario";
 
 // ==========================
 // TIPOS
@@ -106,9 +107,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const tienePermiso = (permiso: string): boolean => {
-    if (!user) return false;
-    if (user.acceso_total) return true;
-    return user.privilegios.includes(permiso);
+    return tienePermisoUsuario(user, permiso);
   };
 
   return (

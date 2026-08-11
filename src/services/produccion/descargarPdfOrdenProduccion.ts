@@ -1,4 +1,13 @@
-import { getOrdenProduccion } from "./seguimientoService";
+import {
+  getBultos,
+  getOrdenProduccion,
+  getProcesosOrden,
+} from "./seguimientoService";
+import type {
+  BultosRespuesta,
+  ProcesoRegistro,
+  ProcesosOrdenRespuesta,
+} from "./seguimientoService";
 import { getPedidos } from "../pedidosService";
 import type { OrdenProduccionData } from "../../utils/plastico/generarPdfOrdenProduccion";
 import { generarPdfOrdenProduccion } from "../../utils/plastico/generarPdfOrdenProduccion";
@@ -12,7 +21,7 @@ import type {
 } from "../../types/papel/ordenProduccionPapel.types";
 import { esProductoOrdenPapel, f } from "../../utils/papel/ordenProduccionPapelPdf.helpers";
 
-type OpcionesDescargaOrdenProduccion = {
+export type OpcionesDescargaOrdenProduccion = {
   idordenDiseno?: number | null;
   descripcion?: string | null;
 
@@ -38,6 +47,335 @@ const isObj = (v: unknown): v is Record<string, any> =>
 
 const pick = (...values: unknown[]): any =>
   values.find((v) => f(v) !== "") ?? null;
+
+const numeroONull = (valor: unknown): number | null => {
+  if (valor === null || valor === undefined) return null;
+  if (typeof valor === "string" && valor.trim() === "") return null;
+
+  const numero = typeof valor === "number"
+    ? valor
+    : typeof valor === "string"
+      ? Number(valor.trim())
+      : NaN;
+
+  return Number.isFinite(numero) ? numero : null;
+};
+
+const primerNumero = (...valores: unknown[]): number | null => {
+  for (const valor of valores) {
+    const numero = numeroONull(valor);
+    if (numero !== null) return numero;
+  }
+  return null;
+};
+
+const textoONull = (valor: unknown): string | null => {
+  if (valor === null || valor === undefined) return null;
+  if (isObj(valor)) {
+    return textoONull(valor.nombre ?? valor.label ?? valor.valor);
+  }
+
+  const texto = String(valor).trim();
+  return texto === "" ? null : texto;
+};
+
+const normalizarClaveProceso = (valor: unknown): string =>
+  (textoONull(valor) ?? "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[\s-]+/g, "_");
+
+function buscarProceso(
+  datos: ProcesosOrdenRespuesta,
+  nombre: "extrusion" | "impresion" | "bolseo" | "asa_flexible"
+): ProcesoRegistro | null {
+  return datos.procesos.find((proceso) => {
+    const tabla = normalizarClaveProceso(proceso.tabla);
+    const nombreProceso = normalizarClaveProceso(proceso.nombre_proceso);
+    if (tabla) return tabla === nombre;
+    return nombreProceso === nombre;
+  }) ?? null;
+}
+
+function registroDe(proceso: ProcesoRegistro | null): Record<string, unknown> {
+  return isObj(proceso?.registro) ? proceso.registro : {};
+}
+
+function observacionesDe(proceso: ProcesoRegistro | null): string | null {
+  const registro = registroDe(proceso);
+  const candidatas = [
+    registro.observaciones,
+    proceso?.observaciones,
+    ...(Array.isArray(proceso?.avances)
+      ? proceso.avances.map((avance) => avance.observaciones)
+      : []),
+  ]
+    .map(textoONull)
+    .filter((valor): valor is string => valor !== null);
+
+  return candidatas.length > 0
+    ? Array.from(new Set(candidatas)).join(" | ")
+    : null;
+}
+
+function totalAvancesComoRespaldo(proceso: ProcesoRegistro | null): number | null {
+  if (!proceso) return null;
+
+  const estado = normalizarClaveProceso(proceso.estado);
+  const tieneActividad = (Array.isArray(proceso.avances) && proceso.avances.length > 0)
+    || estado === "terminado"
+    || estado === "finalizado";
+
+  return tieneActividad ? numeroONull(proceso.total_avances) : null;
+}
+
+function maquinaYRepeticionImpresion(
+  proceso: ProcesoRegistro | null,
+  datos: ProcesosOrdenRespuesta
+): { maquina: string | null; repeticion: string | null } {
+  const registro = registroDe(proceso);
+  let maquina = textoONull(registro.maquina);
+  let repeticion = textoONull(registro.repeticion);
+
+  if (maquina?.includes("|")) {
+    const [nombre, repeticionEnMaquina] = maquina.split("|", 2).map((parte) => parte.trim());
+    maquina = textoONull(nombre);
+    repeticion ??= textoONull(repeticionEnMaquina);
+  }
+
+  const claveMaquina = normalizarClaveProceso(maquina);
+  if (!repeticion && claveMaquina.includes("kidder")) {
+    repeticion = textoONull(datos.repeticion_kidder);
+  } else if (!repeticion && claveMaquina.includes("sicosa")) {
+    repeticion = textoONull(datos.repeticion_sicosa);
+  }
+
+  return { maquina, repeticion };
+}
+
+function formatoNumeroCompacto(valor: unknown): string | null {
+  const numero = numeroONull(valor);
+  if (numero === null) return null;
+  return Number.isInteger(numero) ? String(numero) : String(Number(numero.toFixed(2)));
+}
+
+function sumarCampoBultos(
+  bultos: BultosRespuesta["bultos"],
+  campo: "peso_producto" | "peso"
+): number | null {
+  let encontroValor = false;
+  const total = bultos.reduce((acumulado, bulto) => {
+    const valor = numeroONull(bulto[campo]);
+    if (valor === null) return acumulado;
+    encontroValor = true;
+    return acumulado + valor;
+  }, 0);
+
+  return encontroValor ? Number(total.toFixed(2)) : null;
+}
+
+function resumirBultos(bultos: BultosRespuesta | null): Pick<
+  OrdenProduccionData,
+  "bultos_total" | "bultos_medidas" | "bultos_peso" | "bultos_piezas"
+> {
+  if (!bultos || !Array.isArray(bultos.bultos) || bultos.bultos.length === 0) {
+    return {
+      bultos_total: null,
+      bultos_medidas: null,
+      bultos_peso: null,
+      bultos_piezas: null,
+    };
+  }
+
+  const medidas = new Set<string>();
+  for (const bulto of bultos.bultos) {
+    const largo = formatoNumeroCompacto(bulto.largo);
+    const ancho = formatoNumeroCompacto(bulto.ancho);
+    const alto = formatoNumeroCompacto(bulto.alto);
+    if (largo !== null || ancho !== null || alto !== null) {
+      medidas.add(`${largo ?? "-"}x${ancho ?? "-"}x${alto ?? "-"} cm`);
+    }
+  }
+
+  const totalKg = numeroONull(bultos.total_kg);
+  const pesoProducto = primerNumero(
+    sumarCampoBultos(bultos.bultos, "peso_producto"),
+    bultos.modo_cantidad === "kilo" ? totalKg : null
+  );
+  const pesoEmpaquetado = sumarCampoBultos(bultos.bultos, "peso");
+  const unidadesCapturadas = bultos.bultos
+    .map((bulto) => numeroONull(bulto.cantidad_unidades))
+    .filter((unidades): unidades is number => unidades !== null && unidades > 0);
+  const sumaUnidades = unidadesCapturadas.reduce((total, unidades) => total + unidades, 0);
+  const totalUnidadesApi = numeroONull(bultos.total_unidades);
+  const partesPeso: string[] = [];
+  if (pesoProducto !== null) partesPeso.push(`Prod. ${formatoNumeroCompacto(pesoProducto)} kg`);
+  if (pesoEmpaquetado !== null) partesPeso.push(`Emp. ${formatoNumeroCompacto(pesoEmpaquetado)} kg`);
+
+  return {
+    bultos_total: primerNumero(bultos.total_bultos, bultos.bultos.length),
+    bultos_medidas: medidas.size > 0 ? Array.from(medidas).join("; ") : null,
+    bultos_peso: partesPeso.length > 0 ? partesPeso.join(" / ") : null,
+    bultos_piezas: unidadesCapturadas.length > 0
+      ? (totalUnidadesApi !== null && totalUnidadesApi > 0 ? totalUnidadesApi : sumaUnidades)
+      : null,
+  };
+}
+
+function datosProduccionEnBlanco(): Partial<OrdenProduccionData> {
+  return {
+    ext_merma: null,
+    k_para_impresion: null,
+    metros_extruidos: null,
+    kilos_imprimir: null,
+    metros_imprimir: null,
+    imp_merma: null,
+    kilos_impresos: null,
+    metros_impresos: null,
+    imp_maquina: null,
+    imp_repeticion: null,
+    ext_observaciones: null,
+    imp_observaciones: null,
+    bol_observaciones: null,
+    asa_observaciones: null,
+    kilos_bolsear: null,
+    kilos_bolseados: null,
+    kilos_bolseados2: null,
+    bol_merma: null,
+    bol_piezas_merma: null,
+    piezas_bolseadas: null,
+    asa_kilos_recibidos: null,
+    asa_piezas_recibidas: null,
+    asa_merma: null,
+    asa_merma_kilos: null,
+    asa_merma_piezas: null,
+    asa_kilos_finales: null,
+    asa_piezas_finales: null,
+    asa_flexible_aplica: false,
+    bultos_total: null,
+    bultos_medidas: null,
+    bultos_peso: null,
+    bultos_piezas: null,
+  };
+}
+
+function construirDatosProduccionRegistrados(
+  procesos: ProcesosOrdenRespuesta,
+  bultos: BultosRespuesta | null,
+  modoCantidad: unknown
+): Partial<OrdenProduccionData> {
+  const extrusion = buscarProceso(procesos, "extrusion");
+  const impresion = buscarProceso(procesos, "impresion");
+  const bolseo = buscarProceso(procesos, "bolseo");
+  const asaFlexible = buscarProceso(procesos, "asa_flexible");
+
+  const ext = registroDe(extrusion);
+  const imp = registroDe(impresion);
+  const bol = registroDe(bolseo);
+  const asa = registroDe(asaFlexible);
+  const maquinaImpresion = maquinaYRepeticionImpresion(impresion, procesos);
+  const porKilo = normalizarClaveProceso(modoCantidad) === "kilo";
+  const totalExt = totalAvancesComoRespaldo(extrusion);
+  const totalImp = totalAvancesComoRespaldo(impresion);
+  const totalBol = totalAvancesComoRespaldo(bolseo);
+  const totalAsa = totalAvancesComoRespaldo(asaFlexible);
+  const estadoAsa = normalizarClaveProceso(asaFlexible?.estado);
+  const asaAplica = !!asaFlexible
+    && estadoAsa !== "no_aplica";
+
+  const kilosBolseados = primerNumero(
+    bol.kilos_bolseados,
+    porKilo ? totalBol : null
+  );
+  const piezasBolseadas = primerNumero(
+    bol.piezas_bolseadas,
+    porKilo ? null : totalBol
+  );
+
+  return {
+    ...datosProduccionEnBlanco(),
+    kilos_extruir: numeroONull(ext.kilos_extruir),
+    metros_extruir: numeroONull(ext.metros_extruir),
+    ext_merma: numeroONull(ext.merma),
+    k_para_impresion: primerNumero(ext.k_para_impresion, totalExt),
+    metros_extruidos: numeroONull(ext.metros_extruidos),
+    ext_observaciones: observacionesDe(extrusion),
+
+    kilos_imprimir: numeroONull(imp.kilos_imprimir),
+    metros_imprimir: numeroONull(imp.metros_imprimir),
+    imp_merma: numeroONull(imp.merma),
+    kilos_impresos: primerNumero(imp.kilos_impresos, totalImp),
+    metros_impresos: numeroONull(imp.metros_impresos),
+    imp_maquina: maquinaImpresion.maquina,
+    imp_repeticion: maquinaImpresion.repeticion,
+    imp_observaciones: observacionesDe(impresion),
+
+    kilos_bolsear: numeroONull(bol.kilos_bolsear),
+    kilos_bolseados: kilosBolseados,
+    kilos_bolseados2: kilosBolseados,
+    bol_merma: numeroONull(bol.kilos_merma),
+    bol_piezas_merma: numeroONull(bol.piezas_merma),
+    piezas_bolseadas: piezasBolseadas,
+    bol_observaciones: observacionesDe(bolseo),
+
+    asa_kilos_recibidos: numeroONull(asa.kilos_recibidos),
+    asa_piezas_recibidas: numeroONull(asa.piezas_recibidas),
+    asa_merma: numeroONull(asa.merma),
+    asa_merma_kilos: numeroONull(asa.kilos_merma),
+    asa_merma_piezas: numeroONull(asa.merma),
+    asa_kilos_finales: primerNumero(asa.kilos_finales, porKilo ? totalAsa : null),
+    asa_piezas_finales: primerNumero(asa.pzas_finales, porKilo ? null : totalAsa),
+    asa_observaciones: observacionesDe(asaFlexible),
+    asa_flexible_aplica: asaAplica,
+
+    ...resumirBultos(bultos),
+  };
+}
+
+async function cargarDatosProduccionRegistrados(
+  idproduccion: number,
+  noProduccion: string,
+  modoCantidad: unknown
+): Promise<Partial<OrdenProduccionData>> {
+  const [resultadoProcesos, resultadoBultos] = await Promise.allSettled([
+    getProcesosOrden(idproduccion),
+    getBultos(idproduccion),
+  ]);
+
+  if (resultadoProcesos.status === "rejected") {
+    const detalle = resultadoProcesos.reason instanceof Error
+      ? `: ${resultadoProcesos.reason.message}`
+      : "";
+    throw new Error(
+      `No se pudieron cargar los datos registrados de produccion para ${noProduccion}${detalle}`
+    );
+  }
+
+  let bultos: BultosRespuesta | null = null;
+  if (resultadoBultos.status === "fulfilled") {
+    bultos = resultadoBultos.value;
+  } else {
+    const respuesta = isObj(resultadoBultos.reason)
+      ? resultadoBultos.reason.response
+      : null;
+    const status = isObj(respuesta) ? numeroONull(respuesta.status) : null;
+
+    // Una orden aún sin bultos puede responder 404. Cualquier otro fallo
+    // impediría garantizar que la versión "con datos" esté completa.
+    if (status !== 404) {
+      throw new Error(
+        `No se pudieron cargar los bultos registrados para ${noProduccion}.`
+      );
+    }
+  }
+
+  return construirDatosProduccionRegistrados(
+    resultadoProcesos.value,
+    bultos,
+    modoCantidad
+  );
+}
 
 function parseJsonSeguro<T>(valor: unknown, fallback: T): T {
   if (typeof valor !== "string") return (valor as T) ?? fallback;
@@ -209,7 +547,8 @@ function construirDataPlastico(
   cabecera: any,
   producto: any,
   opciones: OpcionesDescargaOrdenProduccion,
-  imagenes: ImagenesDisenoPdf
+  imagenes: ImagenesDisenoPdf,
+  datosProduccion: Partial<OrdenProduccionData> = datosProduccionEnBlanco()
 ): OrdenProduccionData {
   return {
     no_pedido: cabecera.no_pedido,
@@ -272,6 +611,7 @@ function construirDataPlastico(
     // cuenta, lo que puede fallar por CORS. Se deja solo como respaldo.
     url_render: producto.url_render ?? imagenes.url_render ?? null,
     url_master: producto.url_master ?? imagenes.url_master ?? null,
+    ...datosProduccion,
   };
 }
 
@@ -487,8 +827,67 @@ export async function descargarPdfOrdenProduccionUniversal(
     return;
   }
 
+  // La orden de producción SIEMPRE se genera con los datos reales
+  // registrados en planta (avances de extrusión/impresión/bolseo/asa
+  // flexible). Ya no existe la variante "en blanco" — antes de que
+  // arranque cualquier proceso, cargarDatosProduccionRegistrados()
+  // simplemente devuelve el mismo formato con los campos vacíos, así que
+  // el PDF sale igual de "en blanco" al inicio y se va llenando solo
+  // conforme avanza la producción, sin necesitar un artefacto aparte.
+  const idproduccion = numeroONull(producto.idproduccion);
+  if (idproduccion === null) {
+    throw new Error(
+      `No se puede generar el PDF de ${noProduccion}: la orden no tiene idproduccion.`
+    );
+  }
+
+  let datosProduccion: Partial<OrdenProduccionData> = await cargarDatosProduccionRegistrados(
+    idproduccion,
+    noProduccion,
+    producto.modo_cantidad
+  );
+
+  // Los campos de entrada son de sólo lectura en la captura. Algunos
+  // backends guardan únicamente la salida final, así que se reconstruyen
+  // con la misma cadena de traspaso usada por el formulario de producción.
+  datosProduccion = {
+    ...datosProduccion,
+    kilos_extruir: primerNumero(
+      datosProduccion.kilos_extruir,
+      producto.kilos_extruir,
+      producto.kilos_merma,
+      producto.kilogramos
+    ),
+    metros_extruir: primerNumero(
+      datosProduccion.metros_extruir,
+      producto.metros_extruir,
+      producto.metros_merma,
+      producto.metros
+    ),
+    kilos_imprimir: primerNumero(
+      datosProduccion.kilos_imprimir,
+      datosProduccion.k_para_impresion
+    ),
+    metros_imprimir: primerNumero(
+      datosProduccion.metros_imprimir,
+      datosProduccion.metros_extruidos
+    ),
+    kilos_bolsear: primerNumero(
+      datosProduccion.kilos_bolsear,
+      datosProduccion.kilos_impresos
+    ),
+    asa_kilos_recibidos: primerNumero(
+      datosProduccion.asa_kilos_recibidos,
+      datosProduccion.kilos_bolseados
+    ),
+    asa_piezas_recibidas: primerNumero(
+      datosProduccion.asa_piezas_recibidas,
+      datosProduccion.piezas_bolseadas
+    ),
+  };
+
   await generarPdfOrdenProduccion(
-    construirDataPlastico(data, productoOrden, opciones, imagenes),
+    construirDataPlastico(data, producto, opciones, imagenes, datosProduccion),
     guardarEnS3
   );
 }

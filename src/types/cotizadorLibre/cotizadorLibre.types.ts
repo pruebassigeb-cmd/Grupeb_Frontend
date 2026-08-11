@@ -5,6 +5,7 @@ export type CategoriaCotizadorLibre = "papel" | "plastico";
 export interface TipoCatalogoItem {
   id: number;
   nombre: string;
+  imagenUrl?: string | null;
 }
 
 export interface MedidaPapelItem {
@@ -14,6 +15,7 @@ export interface MedidaPapelItem {
   fuelle: string | null;
   altura: string | null;
   descripcion_papel: string | null;
+  imagenUrl?: string | null;
 }
 
 export interface MedidaPlasticoItem {
@@ -34,6 +36,20 @@ export interface GrupoPapelItem {
   precio_sugerido: string | null;
   idcat_tipo_papel: number | null;
   material: string | null;
+  imagenUrl?: string | null;
+}
+
+export interface AcabadosPermitidosPapel {
+  uv: boolean;
+  alto_relieve: boolean;
+  textura: boolean;
+  hot_stamping: boolean;
+}
+
+export interface ImagenesGlobalesPapel {
+  hotStamping: string | null;
+  altoRelieve: string | null;
+  uv: string | null;
 }
 
 export interface DetalleProductoPapelResponse {
@@ -52,6 +68,8 @@ export interface DetalleProductoPapelResponse {
   texturas: TipoCatalogoItem[];
   foils: TipoCatalogoItem[];
   linea: null;
+  acabadosPermitidos: AcabadosPermitidosPapel;
+  imagenesGlobales: ImagenesGlobalesPapel;
 }
 
 export interface TintaItem {

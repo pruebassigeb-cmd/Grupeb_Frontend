@@ -115,6 +115,7 @@ export const usePreciosBatch = ({
   enabled = true,
 }: UsePreciosBatchParams) => {
   const [resultados, setResultados] = useState<(ResultadoCalculo | null)[]>([]);
+  const [claveResultados, setClaveResultados] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -127,6 +128,12 @@ export const usePreciosBatch = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [cantidades[0], cantidades[1], cantidades[2]]
   );
+  const claveConsulta = JSON.stringify([
+    cantidadesEstables,
+    toNumeroPositivo(porKilo),
+    Number(tintasId ?? 0),
+    enabled,
+  ]);
 
   useEffect(() => {
     const porKiloNum = toNumeroPositivo(porKilo);
@@ -137,6 +144,7 @@ export const usePreciosBatch = ({
 
     if (!enabled || porKiloNum <= 0 || tintasIdNum <= 0) {
       setResultados([]);
+      setClaveResultados(null);
       setLoading(false);
       setError(null);
       return;
@@ -148,6 +156,7 @@ export const usePreciosBatch = ({
 
     if (cantidadesConIndice.length === 0) {
       setResultados([]);
+      setClaveResultados(null);
       setLoading(false);
       setError(null);
       return;
@@ -156,6 +165,8 @@ export const usePreciosBatch = ({
     const requestId = requestIdRef.current + 1;
     requestIdRef.current = requestId;
 
+    setResultados([]);
+    setClaveResultados(null);
     setLoading(true);
     setError(null);
 
@@ -183,6 +194,7 @@ export const usePreciosBatch = ({
           });
 
           setResultados(resultadosCompletos);
+          setClaveResultados(claveConsulta);
           setError(null);
         }
       } catch (err: any) {
@@ -191,6 +203,7 @@ export const usePreciosBatch = ({
         console.error("Error al calcular precios batch:", err);
         setError(err.response?.data?.error || "Error al calcular precios");
         setResultados([]);
+        setClaveResultados(null);
       } finally {
         if (requestIdRef.current === requestId) setLoading(false);
       }
@@ -200,12 +213,16 @@ export const usePreciosBatch = ({
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
       if (abortControllerRef.current) abortControllerRef.current.abort();
     };
-  }, [cantidadesEstables, porKilo, tintasId, enabled]);
+  }, [cantidadesEstables, porKilo, tintasId, enabled, claveConsulta]);
+
+  const resultadosVigentes = !loading && claveResultados === claveConsulta
+    ? resultados
+    : [];
 
   return {
-    resultados,
+    resultados: resultadosVigentes,
     loading,
     error,
-    preciosUnitarios: resultados.map((r) => r?.precio_unitario ?? 0),
+    preciosUnitarios: resultadosVigentes.map((r) => r?.precio_unitario ?? 0),
   };
 };

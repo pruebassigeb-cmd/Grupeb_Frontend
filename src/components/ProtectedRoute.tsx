@@ -1,5 +1,6 @@
 import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { tienePermisoUsuario } from "../utils/permisosUsuario";
 
 interface ProtectedRouteProps {
   children:   React.ReactNode;
@@ -52,14 +53,14 @@ export default function ProtectedRoute({
 
   // Verificar permiso único
   if (permiso) {
-    if (!user.privilegios.includes(permiso)) {
+    if (!tienePermisoUsuario(user, permiso)) {
       return <Navigate to="/sin-acceso" replace />;
     }
   }
 
   // Verificar permisoOr (cualquiera)
   if (permisoOr && permisoOr.length > 0) {
-    const tieneAlguno = permisoOr.some((p) => user.privilegios.includes(p));
+    const tieneAlguno = permisoOr.some((p) => tienePermisoUsuario(user, p));
     if (!tieneAlguno) {
       return <Navigate to="/sin-acceso" replace />;
     }

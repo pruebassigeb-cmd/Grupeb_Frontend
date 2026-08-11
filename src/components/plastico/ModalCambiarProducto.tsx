@@ -16,6 +16,10 @@ import type {
 // ─── Tipos exportados ────────────────────────────────────────────────────────
 export interface ProductoReemplazo {
   configuracion_plastico_id: number;
+  tipo_producto_id:          number;
+  tipo_producto_nombre:      string;
+  material_id:               number;
+  calibre_id:                number;
   nombre:                    string;
   por_kilo:                  string;
   material:                  string;
@@ -262,6 +266,10 @@ export default function ModalCambiarProducto({
       if (!prodBuscado) { setError("Selecciona un producto de la lista"); return; }
       onConfirmar({
         configuracion_plastico_id: prodBuscado.id,
+        tipo_producto_id:   prodBuscado.tipo_producto_id,
+        tipo_producto_nombre: prodBuscado.tipo_producto,
+        material_id:        prodBuscado.material_id,
+        calibre_id:         prodBuscado.calibre_id,
         nombre:             `${prodBuscado.tipo_producto} ${prodBuscado.medida}`,
         por_kilo:           prodBuscado.por_kilo,
         material:           prodBuscado.material,
@@ -328,7 +336,7 @@ export default function ModalCambiarProducto({
         if (e.response?.status === 409 && e.response?.data?.producto_existente?.id) {
           productoId   = e.response.data.producto_existente.id;
           const lista  = await searchProductosPlastico(datosNuevos.medidasFormateadas);
-          const enc    = lista.find((p: any) => p.id === productoId);
+          const enc    = lista.find(p => p.id === productoId);
           porKiloFinal = enc?.por_kilo ? String(enc.por_kilo) : porKiloCalculado;
         } else {
           throw e;
@@ -337,6 +345,10 @@ export default function ModalCambiarProducto({
 
       onConfirmar({
         configuracion_plastico_id: productoId,
+        tipo_producto_id:   datosNuevos.tipoProductoId,
+        tipo_producto_nombre: datosNuevos.tipoProducto,
+        material_id:        datosNuevos.materialId,
+        calibre_id:         datosNuevos.calibreId,
         nombre:             datosNuevos.nombreCompleto,
         por_kilo:           porKiloFinal,
         material:           datosNuevos.material,

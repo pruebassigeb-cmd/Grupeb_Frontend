@@ -13,7 +13,7 @@ import { usePermisos } from "../../hooks/usePermiso";
 import { showAlert } from "../CustomAlert";
 import Modal from "../Modal";
 import EditarFicha from "./Editarficha";
-import PanelAuditoria from "../auditoria/PanelAuditoria";
+import AuditoriaDesplegable from "../auditoria/AuditoriaDesplegable";
 import BotonAuditoria from "../auditoria/BotonAuditoria";
 
 interface Props {
@@ -229,7 +229,7 @@ export default function FichaDisenoPanel({ idorden_diseno, onCambio }: Props) {
                     disabled={refrescando}
                     className="text-xs font-semibold px-3 py-1 bg-amber-500 text-white rounded-lg hover:bg-amber-600 disabled:opacity-50"
                   >
-                    {refrescando ? "Actualizando..." : "Actualizar ficha"}
+                    {refrescando ? "Actualizando..." : "Actualizar boceto"}
                   </button>
                 )}
               </div>
@@ -289,7 +289,7 @@ export default function FichaDisenoPanel({ idorden_diseno, onCambio }: Props) {
         </div>
       </div>
 
-      <PanelAuditoria
+      <AuditoriaDesplegable
         tabla="orden_diseno_ficha"
         id={ficha.idficha}
         titulo="Auditoría de la ficha de diseño"

@@ -20,6 +20,8 @@ import { showAlert } from '../CustomAlert';
 import FichaDisenoPanel from "./Fichadisenopanel";
 import BotonAuditoria from "../auditoria/BotonAuditoria";
 import PanelAuditoria from "../auditoria/PanelAuditoria";
+import { useAuth } from "../../context/AuthContext";
+import { puedeVerAuditoriaUsuario } from "../../utils/permisosUsuario";
 
 
 const POLLING_MS = 3000;
@@ -130,6 +132,8 @@ interface Props {
 type PanelActivo = "ficha" | "chat" | "historial" | "participantes" | "auditoria";
 
 export default function ChatRevision({ idorden, usuarioId, onClose, onDisenoAprobado }: Props) {
+  const { user } = useAuth();
+  const puedeVerAuditoria = puedeVerAuditoriaUsuario(user);
   const { puedeEditarDiseno, puedeOrdenDiseno } = usePermisos({
     puedeEditarDiseno: "Editar Diseño",
     puedeOrdenDiseno: "Orden de Diseño",
@@ -328,7 +332,9 @@ export default function ChatRevision({ idorden, usuarioId, onClose, onDisenoApro
 
         {/* Tabs */}
         <div className="flex gap-1 mt-3">
-          {(["ficha", "chat", "historial", "participantes", "auditoria"] as PanelActivo[]).map(tab => (
+          {(["ficha", "chat", "historial", "participantes", "auditoria"] as PanelActivo[])
+            .filter((tab) => tab !== "auditoria" || puedeVerAuditoria)
+            .map(tab => (
             <button
               key={tab}
               onClick={() => setPanel(tab)}
@@ -338,7 +344,7 @@ export default function ChatRevision({ idorden, usuarioId, onClose, onDisenoApro
                 }`}
             >
               {tab === "ficha"
-                ? "📋 Ficha"
+                ? "📋 Boceto"
                 : tab === "chat"
                   ? "💬 Chat"
                   : tab === "historial"
@@ -615,7 +621,7 @@ export default function ChatRevision({ idorden, usuarioId, onClose, onDisenoApro
         </div>
       )}
 
-      {panel === "auditoria" && (
+      {panel === "auditoria" && puedeVerAuditoria && (
         <div className="flex-1 overflow-y-auto bg-gray-50 px-4 py-4" style={{ maxHeight: 440 }}>
           <PanelAuditoria
             tabla="orden_diseno"

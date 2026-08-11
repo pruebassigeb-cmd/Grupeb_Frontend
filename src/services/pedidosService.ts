@@ -3,6 +3,22 @@ import type { Pedido } from "../types/cotizaciones.types";
 import api from "./api";
 import type { MaquinariaProductoPedidoPapel } from "../types/papel/maquinaria-pedido.types";
 
+export const EVENTO_PEDIDO_ACTUALIZADO = "grupeb:pedido-actualizado";
+export const CLAVE_PEDIDO_ACTUALIZADO = "grupeb:ultimo-pedido-actualizado";
+
+function notificarPedidoActualizado(noPedido: string): void {
+  if (typeof window === "undefined") return;
+
+  const detalle = { noPedido, actualizadoEn: Date.now() };
+  window.dispatchEvent(new CustomEvent(EVENTO_PEDIDO_ACTUALIZADO, { detail: detalle }));
+
+  try {
+    localStorage.setItem(CLAVE_PEDIDO_ACTUALIZADO, JSON.stringify(detalle));
+  } catch {
+    // La actualizaciÃ³n ya se guardÃ³; el aviso entre pestaÃ±as es secundario.
+  }
+}
+
 export const getPedidos = async (): Promise<Pedido[]> => {
   const response = await api.get("/pedidos");
   return response.data;
@@ -164,6 +180,7 @@ export const actualizarPedido = async (
   payload: ActualizarPedidoPayload
 ): Promise<{ message: string }> => {
   const response = await api.put(`/pedidos/${noPedido}`, payload);
+  notificarPedidoActualizado(noPedido);
   return response.data;
 };
 
@@ -182,6 +199,7 @@ export const cambiarMonedaPedido = async (
   moneda: "MXN" | "USD",
 ): Promise<ResultadoCambioMoneda> => {
   const response = await api.put(`/pedidos/${noPedido}/moneda`, { moneda });
+  notificarPedidoActualizado(noPedido);
   return response.data;
 };
 

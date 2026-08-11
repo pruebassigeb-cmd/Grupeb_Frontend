@@ -17,6 +17,18 @@ const api = axios.create({
   },
 });
 
+const solicitudesEnVuelo = new Map<string, Promise<AxiosResponse>>();
+let versionSolicitudesGet = 0;
+
+/**
+ * Fuerza a que las lecturas posteriores a una escritura abran una peticiÃ³n
+ * nueva, en vez de reutilizar un GET que empezÃ³ antes de guardar los cambios.
+ */
+export function invalidarSolicitudesGet(): void {
+  versionSolicitudesGet += 1;
+  solicitudesEnVuelo.clear();
+}
+
 // Interceptor de request: agregar token en header
 api.interceptors.request.use(
   (config) => {
@@ -40,7 +52,13 @@ const RUTAS_SIN_LOGOUT = [
 
 // Interceptor de response: manejo de errores
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    const metodo = response.config.method?.toLowerCase();
+    if (metodo && metodo !== "get" && metodo !== "head") {
+      invalidarSolicitudesGet();
+    }
+    return response;
+  },
   (error) => {
     const url     = error.config?.url || "";
     const is401   = error.response?.status === 401;
@@ -66,8 +84,6 @@ api.interceptors.response.use(
 // del backend. Se limpia del mapa en cuanto se resuelve (éxito o error), así
 // que no sirve datos viejos: solo evita pedir dos veces lo mismo a la vez.
 // ============================================================
-const solicitudesEnVuelo = new Map<string, Promise<AxiosResponse>>();
-
 function serializarParamsOrdenado(params: unknown): string {
   if (!params || typeof params !== "object") return JSON.stringify(params ?? null);
   const ordenado: Record<string, unknown> = {};
@@ -90,7 +106,7 @@ api.get = (<T = any, R = AxiosResponse<T>>(
     return getOriginal<T, R>(url, config);
   }
 
-  const clave = `GET ${url}?${serializarParamsOrdenado(config?.params)}`;
+  const clave = `${versionSolicitudesGet} GET ${url}?${serializarParamsOrdenado(config?.params)}`;
   const existente = solicitudesEnVuelo.get(clave) as Promise<R> | undefined;
   if (existente) return existente;
 

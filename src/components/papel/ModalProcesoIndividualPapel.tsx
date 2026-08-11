@@ -24,7 +24,7 @@ import { generarPdfEtiquetas } from "../../utils/generarPdfEtiquetas";
 import { preguntarGuardarS3 } from "../../services/pdfS3.service";
 import type { PedidoSeguimientoPapel, NombreProcesoPapel } from "../../types/papel/seguimientoPapel.types";
 import { NOMBRES_PROCESO_PAPEL, ULTIMO_PROCESO_PAPEL } from "../../types/papel/seguimientoPapel.types";
-import PanelAuditoria from "../auditoria/PanelAuditoria";
+import AuditoriaDesplegable from "../auditoria/AuditoriaDesplegable";
 import { leerBorrador, useAutoguardarBorrador, limpiarBorrador } from "../../hooks/useBorradorFormulario";
 
 // ─────────────────────────────────────────────
@@ -1780,7 +1780,7 @@ export default function ModalProcesoIndividualPapel({ pedido, nombreProceso, onC
         )}
       </div>
 
-      <PanelAuditoria
+      <AuditoriaDesplegable
         tabla="orden_produccion"
         id={pedido.idproduccion}
         titulo={`Auditoría de ${pedido.no_produccion ?? "la orden de producción"}`}

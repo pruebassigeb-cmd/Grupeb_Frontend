@@ -9,6 +9,7 @@ export type TipoMaterialSeguimiento = "plastico" | "papel";
 
 export interface PedidoSeguimientoBase {
   idsolicitud: number;
+  idsolicitud_producto?: number;
   no_pedido: string;
   no_cotizacion?: string | null;
   fecha: string;
@@ -47,6 +48,11 @@ export interface PedidoSeguimientoBase {
   od_fecha_estado: string | null;
   /** Fecha real en que se aprobó la orden de diseño (orden_diseno.autorizado_at). */
   od_fecha_aprobacion: string | null;
+  /** Fecha real en que el acumulado de pagos alcanzó el anticipo requerido. */
+  anticipo_fecha_aprobacion: string | null;
+  /** Fecha real de aprobación del diseño de este producto (diseno_producto.fecha_aprobacion),
+   *  o la fecha de aprobación general de la orden si el producto no tiene la suya. */
+  diseno_fecha_aprobacion: string | null;
   /** Fecha en que quedó habilitado el PDF de orden de producción — el mayor
    *  entre (anticipo/pago cubierto) y (diseño aprobado). */
   op_fecha_aprobacion: string | null;

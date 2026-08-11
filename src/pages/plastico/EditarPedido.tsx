@@ -22,15 +22,19 @@ import { leerBorrador, useAutoguardarBorrador, limpiarBorrador } from "../../hoo
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 interface DetalleEdit {
   iddetalle: number | null;
+  _clave: string;
   cantidad: string;
   precio_total: string;
   precio_unitario: string;
   kilogramos: string;
   modo_cantidad: "unidad" | "kilo";
+  _recalcular?: boolean;
+  _precioManual?: boolean;
 }
 
 interface ProductoEdit {
   idsolicitud_producto: number;
+  configuracion_plastico_id: number;
   nombre: string;
   material: string;
   calibre: string;
@@ -84,6 +88,8 @@ const esEntero = (v: string) => /^\d*$/.test(v);
 const fmt = (n: number, d = 2) =>
   n.toLocaleString("es-MX", { minimumFractionDigits: d, maximumFractionDigits: d });
 const parseSafe = (v: string) => { const n = parseFloat(v); return isNaN(n) ? 0 : n; };
+let secuenciaDetalleTemporal = 0;
+const crearClaveDetalle = () => `detalle-${Date.now()}-${++secuenciaDetalleTemporal}`;
 
 const esBopp = (material: string, nombre: string = "") => {
   const m = material.toUpperCase();
@@ -118,7 +124,7 @@ function ProductoEditable({
   pi: number;
   displayIndex: number;
   setProductoField: <K extends keyof ProductoEdit>(pi: number, k: K, v: ProductoEdit[K]) => void;
-  setDetalleField: (pi: number, di: number, k: keyof DetalleEdit, v: string) => void;
+  setDetalleField: <K extends keyof DetalleEdit>(pi: number, di: number, k: K, v: DetalleEdit[K]) => void;
   agregarDetalle: (pi: number) => void;
   eliminarDetalle: (pi: number, di: number) => void;
   suajes: any[];
@@ -139,9 +145,6 @@ function ProductoEditable({
     ? (catalogoTintas.find((t: any) => t.cantidad === prod.tintas)?.id ?? prod.tintasId)
     : prod.tintasId;
 
-  const [preciosEditadosManual, setPreciosEditadosManual] = useState<boolean[]>(
-    prod.detalles.map(() => false)
-  );
   const [preciosTexto, setPreciosTexto] = useState<string[]>(
     prod.detalles.map(d => d.precio_total)
   );
@@ -155,9 +158,6 @@ function ProductoEditable({
     })
   );
 
-  const tintasCambiadasRef = useRef(false);
-  const [tintasCambiadasState, setTintasCambiadasState] = useState(false);
-
   const cantidadesEnBolsas = useMemo(
     () => prod.detalles.map(d => {
       const c = parseSafe(d.cantidad);
@@ -170,8 +170,6 @@ function ProductoEditable({
     [prod.detalles.map(d => `${d.cantidad}|${d.modo_cantidad}`).join(","), prod.por_kilo]
   );
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const _tintasRender = tintasCambiadasState;
   const hookEnabled = cantidadesEnBolsas.some(v => v > 0) && !!prod.por_kilo && !!tintasIdResuelto;
 
   const { resultados, loading: calculando } = usePreciosBatch({
@@ -181,25 +179,21 @@ function ProductoEditable({
     enabled: hookEnabled,
   });
 
-  const primeraVezTintas = useRef(true);
-  useEffect(() => {
-    if (primeraVezTintas.current) { primeraVezTintas.current = false; return; }
-    tintasCambiadasRef.current = true;
-    setTintasCambiadasState(true);
-    setPreciosEditadosManual(prod.detalles.map(() => false));
-    setPreciosTexto(prod.detalles.map(() => ""));
-    setPreciosUnitTexto(prod.detalles.map(() => ""));
-  }, [prod.tintasId, prod.nuevo_configuracion_id]); // ← agregar nuevo_configuracion_id
-
-  
-
-
   const indicesLibres = prod.detalles
     .map((d, i) => {
       const esNuevo = d.iddetalle === null || d.iddetalle === undefined;
-      return esNuevo || tintasCambiadasRef.current ? i : -1;
+      return esNuevo || d._recalcular ? i : -1;
     })
     .filter(i => i !== -1);
+
+  const claveRecalculo = prod.detalles
+    .map(detalle => [
+      detalle._recalcular ? "1" : "0",
+      detalle._precioManual ? "1" : "0",
+      detalle.modo_cantidad,
+      detalle.cantidad,
+    ].join(":"))
+    .join("|");
 
   useEffect(() => {
     if (!resultados.length) return;
@@ -208,15 +202,15 @@ function ProductoEditable({
       const det = prod.detalles[di];
       if (!det) return;
       const esNuevo = det.iddetalle === null || det.iddetalle === undefined;
-      const esLibre = esNuevo || tintasCambiadasRef.current;
+      const esLibre = esNuevo || det._recalcular;
       if (!esLibre) return;
-      if (preciosEditadosManual[di]) return;
+      if (det._precioManual) return;
 
       const pk = parseSafe(prod.por_kilo);
       const pu = r.precio_unitario;
       let precioTotal = 0;
       if (det.modo_cantidad === "kilo") {
-        const kgs = parseSafe(det.kilogramos || det.cantidad);
+        const kgs = parseSafe(det.cantidad);
         precioTotal = Math.round(pu * pk * kgs * 100) / 100;
       } else {
         precioTotal = Math.round(pu * parseSafe(det.cantidad) * 100) / 100;
@@ -225,12 +219,14 @@ function ProductoEditable({
       if (precioTotal > 0) {
         setDetalleField(pi, di, "precio_total", precioTotal.toFixed(2));
         setDetalleField(pi, di, "precio_unitario", pu.toFixed(6));
+        setDetalleField(pi, di, "_precioManual", false);
+        setDetalleField(pi, di, "_recalcular", false);
         setPreciosTexto(prev => { const n = [...prev]; n[di] = precioTotal.toFixed(2); return n; });
         const puMostrado = det.modo_cantidad === "kilo" && pk > 0 ? (pu * pk).toFixed(4) : pu.toFixed(4);
         setPreciosUnitTexto(prev => { const n = [...prev]; n[di] = puMostrado; return n; });
       }
     });
-  }, [resultados]);
+  }, [resultados, claveRecalculo]);
 
 
 
@@ -312,10 +308,20 @@ function ProductoEditable({
             <select value={prod.tintas}
               onChange={e => {
                 const n = Number(e.target.value);
+                if (n === prod.tintas) return;
                 const tintaEncontrada = catalogoTintas.find((t: any) => t.cantidad === n);
                 const nuevoId = tintaEncontrada?.id ?? prod.tintasId;
                 setProductoField(pi, "tintas", n);
                 setProductoField(pi, "tintasId", nuevoId);
+                setProductoField(pi, "detalles", prod.detalles.map(detalle => ({
+                  ...detalle,
+                  precio_total: "",
+                  precio_unitario: "",
+                  _recalcular: true,
+                  _precioManual: false,
+                })));
+                setPreciosTexto(prod.detalles.map(() => ""));
+                setPreciosUnitTexto(prod.detalles.map(() => ""));
               }}
               className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-blue-500">
               {(catalogoTintas.length > 0 ? catalogoTintas : [1, 2, 3, 4, 5, 6].map(n => ({ id: n, cantidad: n }))).map((t: any) => (
@@ -570,21 +576,39 @@ function ProductoEditable({
 
               const puBolsaGuardado = parseSafe(det.precio_unitario);
               const puBolsaHook = r?.precio_unitario ?? 0;
-              const puBolsa = esLibre && !preciosEditadosManual[di] && puBolsaHook > 0
+              const puBolsa = esLibre && !det._precioManual && puBolsaHook > 0
                 ? puBolsaHook
                 : puBolsaGuardado;
               const puMostrar = esModoKilo && pk > 0 ? puBolsa * pk : puBolsa;
 
               return (
-                <div key={di} className="p-3 bg-gray-50 rounded-lg border border-gray-100 space-y-2">
+                <div key={det._clave} className="p-3 bg-gray-50 rounded-lg border border-gray-100 space-y-2">
                   <div className="flex gap-2">
                     {/* Cantidad */}
                     <div className="flex-1">
                       <label className="block text-xs text-gray-400 mb-1">
                         {det.modo_cantidad === "kilo" ? "Cantidad (kg)" : "Cantidad (pzas)"}
                       </label>
-                      <input type="text" inputMode="numeric" value={det.cantidad}
-                        onChange={e => { if (esEntero(e.target.value)) setDetalleField(pi, di, "cantidad", e.target.value); }}
+                      <input type="text" inputMode={esModoKilo ? "decimal" : "numeric"} value={det.cantidad}
+                        onChange={e => {
+                          const valor = e.target.value;
+                          const esValido = esModoKilo ? esDecimal(valor) : esEntero(valor);
+                          if (!esValido) return;
+
+                          setPreciosTexto(prev => {
+                            const siguiente = [...prev];
+                            siguiente[di] = "";
+                            return siguiente;
+                          });
+                          setPreciosUnitTexto(prev => {
+                            const siguiente = [...prev];
+                            siguiente[di] = "";
+                            return siguiente;
+                          });
+                          setDetalleField(pi, di, "cantidad", valor);
+                          setDetalleField(pi, di, "precio_total", "");
+                          setDetalleField(pi, di, "precio_unitario", "");
+                        }}
                         placeholder="0"
                         className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-blue-400" />
                     </div>
@@ -622,8 +646,13 @@ function ProductoEditable({
                             setPreciosUnitTexto(nuevos);
                             const valorIngresado = parseSafe(e.target.value);
                             const puBolsaNuevo = esModoKilo && pk > 0 ? valorIngresado / pk : valorIngresado;
-                            setDetalleField(pi, di, "precio_unitario", puBolsaNuevo.toFixed(6));
-                            const kgs = parseSafe(det.kilogramos || det.cantidad);
+                            setDetalleField(
+                              pi,
+                              di,
+                              "precio_unitario",
+                              e.target.value.trim() === "" ? "" : puBolsaNuevo.toFixed(6)
+                            );
+                            const kgs = parseSafe(det.cantidad);
                             const cant = parseSafe(det.cantidad);
                             let newTotal = 0;
                             if (esModoKilo) {
@@ -636,10 +665,14 @@ function ProductoEditable({
                               nuevosTextos[di] = newTotal.toFixed(2);
                               setPreciosTexto(nuevosTextos);
                               setDetalleField(pi, di, "precio_total", newTotal.toFixed(2));
+                            } else {
+                              const nuevosTextos = [...preciosTexto];
+                              nuevosTextos[di] = "";
+                              setPreciosTexto(nuevosTextos);
+                              setDetalleField(pi, di, "precio_total", "");
                             }
-                            const nuevosEditados = [...preciosEditadosManual];
-                            nuevosEditados[di] = true;
-                            setPreciosEditadosManual(nuevosEditados);
+                            setDetalleField(pi, di, "_precioManual", true);
+                            setDetalleField(pi, di, "_recalcular", false);
                           }}
                           onBlur={() => {
                             const val = parseFloat(preciosUnitTexto[di]);
@@ -660,7 +693,35 @@ function ProductoEditable({
                     {/* Modo + eliminar — alineados al input mediante margin-top manual */}
                     <div className="flex-shrink-0 flex items-start gap-1 mt-5">
                       <select value={det.modo_cantidad}
-                        onChange={e => setDetalleField(pi, di, "modo_cantidad", e.target.value)}
+                        onChange={e => {
+                          const nuevoModo = e.target.value as DetalleEdit["modo_cantidad"];
+                          if (nuevoModo === det.modo_cantidad) return;
+
+                          const detallesConvertidos = prod.detalles.map(detalle => {
+                            if (detalle.modo_cantidad === nuevoModo) return detalle;
+                            const cantidadActual = parseSafe(detalle.cantidad);
+                            const cantidadConvertida = pk > 0 && cantidadActual > 0
+                              ? nuevoModo === "kilo"
+                                ? String(Math.round((cantidadActual / pk) * 1_000_000) / 1_000_000)
+                                : String(Math.round(cantidadActual * pk))
+                              : detalle.cantidad;
+
+                            return {
+                              ...detalle,
+                              modo_cantidad: nuevoModo,
+                              cantidad: cantidadConvertida,
+                              kilogramos: nuevoModo === "kilo" ? cantidadConvertida : "",
+                              precio_total: "",
+                              precio_unitario: "",
+                              _recalcular: true,
+                              _precioManual: false,
+                            };
+                          });
+
+                          setProductoField(pi, "detalles", detallesConvertidos);
+                          setPreciosTexto(prod.detalles.map(() => ""));
+                          setPreciosUnitTexto(prod.detalles.map(() => ""));
+                        }}
                         className="px-2 py-2 border border-gray-200 rounded-lg text-xs text-gray-700 bg-white focus:ring-2 focus:ring-blue-400">
                         <option value="unidad">pz</option>
                         <option value="kilo">kg</option>
@@ -706,6 +767,7 @@ export default function EditarPedido() {
   const [error, setError] = useState<string | null>(null);
   const [errorGuardar, setErrorGuardar] = useState<string | null>(null);
   const [exito, setExito] = useState(false);
+  const [advertenciaExito, setAdvertenciaExito] = useState<string | null>(null);
   const [pedidoOrig, setPedidoOrig] = useState<Pedido | null>(null);
   // Moneda elegida en el selector — solo se aplica al guardar (handleGuardar),
   // igual que cualquier otro campo editado en esta pantalla.
@@ -722,11 +784,13 @@ export default function EditarPedido() {
     prioridad: boolean;
     sinIva: boolean;
   }
-  const claveBorrador = `pedido-editar-${noPedido}`;
+  // v2 descarta borradores legacy que podían recrearse después de un guardado
+  // exitoso y conservar productos nuevos como si aún no existieran en BD.
+  const claveBorrador = `pedido-editar-v2-${noPedido}`;
   const borradorAplicado = useRef(false);
   useAutoguardarBorrador<BorradorEditarPedido>(claveBorrador, {
     monedaSeleccionada, productos, pedidoMixto, prioridad, sinIva,
-  }, productos.length > 0);
+  }, productos.length > 0 && !guardando && !exito);
 
   const [suajes, setSuajes] = useState<any[]>([]);
   const [coloresAsa, setColoresAsa] = useState<any[]>([]);
@@ -799,7 +863,24 @@ export default function EditarPedido() {
           const borrador = leerBorrador<BorradorEditarPedido>(claveBorrador);
           if (borrador) {
             setMonedaSeleccionada(borrador.monedaSeleccionada);
-            setProductos(borrador.productos);
+            setProductos(borrador.productos.map(producto => ({
+              ...producto,
+              configuracion_plastico_id:
+                producto.configuracion_plastico_id ?? producto.nuevo_configuracion_id ?? 0,
+              detalles: producto.detalles.map(detalle => {
+                const precioManual = detalle._precioManual ?? (
+                  detalle._recalcular === true
+                  && parseSafe(detalle.precio_total) > 0
+                  && parseSafe(detalle.precio_unitario) > 0
+                );
+                return {
+                  ...detalle,
+                  _clave: detalle._clave || crearClaveDetalle(),
+                  _recalcular: precioManual ? false : detalle._recalcular,
+                  _precioManual: precioManual,
+                };
+              }),
+            })));
             setPedidoMixto(borrador.pedidoMixto);
             setPrioridad(borrador.prioridad);
             setSinIva(borrador.sinIva);
@@ -817,6 +898,9 @@ export default function EditarPedido() {
           .filter(p => p.tipo_material !== "papel" && p.tipoCotizacion !== "papel")
           .map(p => ({
             idsolicitud_producto: p.idsolicitud_producto ?? p.idcotizacion_producto,
+            configuracion_plastico_id: Number(
+              p.producto_id ?? p.configuracion_plastico_id ?? 0
+            ),
             nombre: p.nombre || "",
             material: p.material || "",
             calibre: p.calibre || "",
@@ -855,6 +939,7 @@ export default function EditarPedido() {
             },
             detalles: (p.detalles || []).map((d: any) => ({
               iddetalle: d.iddetalle ?? null,
+              _clave: d.iddetalle != null ? `db-${d.iddetalle}` : crearClaveDetalle(),
               cantidad: d.modo_cantidad === "kilo" && d.kilogramos != null
                 ? String(d.kilogramos)
                 : String(d.cantidad ?? ""),
@@ -866,6 +951,8 @@ export default function EditarPedido() {
                   : "",
               kilogramos: d.kilogramos != null ? String(d.kilogramos) : "",
               modo_cantidad: d.modo_cantidad || "unidad",
+              _recalcular: false,
+              _precioManual: false,
             })),
           })));
       } catch (e: any) {
@@ -880,10 +967,34 @@ export default function EditarPedido() {
   const setProductoField = <K extends keyof ProductoEdit>(pi: number, k: K, v: ProductoEdit[K]) =>
     setProductos(prev => prev.map((p, i) => i === pi ? { ...p, [k]: v } : p));
 
-  const setDetalleField = (pi: number, di: number, k: keyof DetalleEdit, v: string) =>
+  const setDetalleField = <K extends keyof DetalleEdit>(
+    pi: number,
+    di: number,
+    k: K,
+    v: DetalleEdit[K]
+  ) =>
     setProductos(prev => prev.map((p, i) => {
       if (i !== pi) return p;
-      return { ...p, detalles: p.detalles.map((d, j) => j === di ? { ...d, [k]: v } : d) };
+      return {
+        ...p,
+        detalles: p.detalles.map((d, j) => {
+          if (j !== di) return d;
+
+          const actualizado = { ...d, [k]: v } as DetalleEdit;
+
+          if (k === "cantidad") {
+            actualizado.kilogramos = d.modo_cantidad === "kilo" ? String(v) : "";
+            actualizado._recalcular = true;
+            actualizado._precioManual = false;
+          } else if (k === "modo_cantidad") {
+            actualizado.kilogramos = v === "kilo" ? d.cantidad : "";
+            actualizado._recalcular = true;
+            actualizado._precioManual = false;
+          }
+
+          return actualizado;
+        }),
+      };
     }));
 
   const agregarDetalle = (pi: number) =>
@@ -891,7 +1002,17 @@ export default function EditarPedido() {
       ...p,
       detalles: [
         ...p.detalles,
-        { iddetalle: null, cantidad: "", precio_total: "", precio_unitario: "", kilogramos: "", modo_cantidad: "unidad" as const },
+        {
+          iddetalle: null,
+          _clave: crearClaveDetalle(),
+          cantidad: "",
+          precio_total: "",
+          precio_unitario: "",
+          kilogramos: "",
+          modo_cantidad: p.detalles[0]?.modo_cantidad ?? "unidad",
+          _recalcular: true,
+          _precioManual: false,
+        },
       ],
     }));
 
@@ -938,6 +1059,7 @@ export default function EditarPedido() {
 
     return {
       idsolicitud_producto: tempId,
+      configuracion_plastico_id: reemplazo.configuracion_plastico_id,
       nombre: reemplazo.nombre,
       material: reemplazo.material,
       calibre: reemplazo.calibre,
@@ -956,11 +1078,14 @@ export default function EditarPedido() {
       herramental_aprobado: null,
       detalles: [{
         iddetalle: null,
+        _clave: crearClaveDetalle(),
         cantidad: "",
         precio_total: "",
         precio_unitario: "",
         kilogramos: "",
         modo_cantidad: "unidad" as const,
+        _recalcular: true,
+        _precioManual: false,
       }],
       _eliminado: false,
       _esNuevo: true,
@@ -973,13 +1098,11 @@ export default function EditarPedido() {
       color_asa_nombre: null,
       id_medidatro: null,
       medida_troquel: null,
-      // IDs de catálogo — importantes si luego el usuario quiere "cambiar" este producto de nuevo.
-      // Si ProductoReemplazo no expone estos campos, quedan en 0 y el modal de
-      // "cambiar producto" para este ítem abrirá en blanco la próxima vez.
-      tipo_producto_id: (reemplazo as any).tipo_producto_id ?? 0,
-      tipo_producto_nombre: (reemplazo as any).tipo_producto_nombre ?? reemplazo.nombre,
-      material_id: (reemplazo as any).material_id ?? 0,
-      calibre_id: (reemplazo as any).calibre_id ?? 0,
+      // IDs de catálogo: permiten volver a abrir el modal con la selección correcta.
+      tipo_producto_id: reemplazo.tipo_producto_id,
+      tipo_producto_nombre: reemplazo.tipo_producto_nombre,
+      material_id: reemplazo.material_id,
+      calibre_id: reemplazo.calibre_id,
       medidas: reemplazo.medidas,
     };
   };
@@ -994,6 +1117,13 @@ export default function EditarPedido() {
     }
 
     const pi = modal.piOrigen;
+    const productoActual = productos[pi];
+    const configuracionActual = productoActual?.nuevo_configuracion_id
+      ?? productoActual?.configuracion_plastico_id;
+    if (configuracionActual === reemplazo.configuracion_plastico_id) {
+      setModal({ abierto: false, piOrigen: -1, modo: "cambiar" });
+      return;
+    }
 
     // En lugar de eliminar el original y crear uno nuevo,
     // actualizamos el producto existente con el nuevo configuracion_plastico_id.
@@ -1009,16 +1139,31 @@ export default function EditarPedido() {
         medidasFormateadas: reemplazo.medidasFormateadas,
         por_kilo: reemplazo.por_kilo,
         medidas: reemplazo.medidas,
+        tipo_producto_id: reemplazo.tipo_producto_id,
+        tipo_producto_nombre: reemplazo.tipo_producto_nombre,
+        material_id: reemplazo.material_id,
+        calibre_id: reemplazo.calibre_id,
         // Marcar que el configuracion_plastico cambió
         _configuracionCambiada: true,
         nuevo_configuracion_id: reemplazo.configuracion_plastico_id,
         // Limpiar pigmentos si el nuevo es BOPP
         pigmentos: esBopp(reemplazo.material, reemplazo.nombre) ? "" : p.pigmentos,
+        perforacion: permitePerforacion(reemplazo.nombre) ? p.perforacion : false,
+        // Los atributos de asa y troquel pertenecen a la configuración anterior.
+        // Se limpian para no arrastrarlos a otro tipo de producto.
+        idsuaje: null,
+        suaje_tipo: null,
+        id_color: null,
+        color_asa_nombre: null,
+        id_medidatro: null,
+        medida_troquel: null,
         // Limpiar precios de los detalles para recalcular con nuevo por_kilo
         detalles: p.detalles.map(d => ({
           ...d,
           precio_total: "",
           precio_unitario: "",
+          _recalcular: true,
+          _precioManual: false,
         })),
       };
     }));
@@ -1035,7 +1180,7 @@ export default function EditarPedido() {
 
   // ── Guardar ────────────────────────────────────────────────────────────────
   const mapearDetalle = (d: DetalleEdit, porKilo: string) => {
-    const kgs = d.kilogramos !== "" ? parseSafe(d.kilogramos) : parseSafe(d.cantidad);
+    const kgs = parseSafe(d.cantidad);
     const pk = parseSafe(porKilo);
     const cantidadParaBackend =
       d.modo_cantidad === "kilo" && pk > 0
@@ -1061,6 +1206,28 @@ export default function EditarPedido() {
   const handleGuardar = async () => {
     if (!pedidoOrig) return;
     setErrorGuardar(null);
+
+    const productoConModosMixtos = productos
+      .filter(p => !p._eliminado)
+      .find(p => new Set(p.detalles.map(d => d.modo_cantidad)).size > 1);
+    if (productoConModosMixtos) {
+      setErrorGuardar(
+        `Todas las cantidades de "${productoConModosMixtos.nombre}" deben usar la misma unidad (piezas o kilos).`
+      );
+      return;
+    }
+
+    const detalleIncompleto = productos
+      .filter(p => !p._eliminado)
+      .flatMap(p => p.detalles)
+      .some(d => parseSafe(d.cantidad) <= 0 || parseSafe(d.precio_total) <= 0);
+
+    if (detalleIncompleto) {
+      setErrorGuardar(
+        "Completa las cantidades y espera a que todos los precios terminen de recalcularse antes de guardar."
+      );
+      return;
+    }
 
     // Un producto nuevo sin configuracion_plastico_id no se puede insertar:
     // el backend no sabría qué producto crear.
@@ -1135,16 +1302,21 @@ export default function EditarPedido() {
         try {
           await cambiarMonedaPedido(pedidoOrig.no_pedido, monedaSeleccionada);
         } catch (errMoneda: any) {
-          setErrorGuardar(
+          const mensajeMoneda =
             "Los demás cambios se guardaron, pero no se pudo cambiar la moneda: " +
-            (errMoneda.response?.data?.error || errMoneda.message)
-          );
-          setGuardando(false);
+            (errMoneda.response?.data?.error || errMoneda.message);
+          // El pedido ya se persistió. Cerramos esta sesión para no volver a
+          // enviar productos nuevos desde un estado local que dejó de ser canónico.
+          limpiarBorrador(claveBorrador);
+          setAdvertenciaExito(mensajeMoneda);
+          setExito(true);
+          setTimeout(() => navigate("/pedido"), 3500);
           return;
         }
       }
 
       limpiarBorrador(claveBorrador);
+      setAdvertenciaExito(null);
       setExito(true);
       setTimeout(() => navigate("/pedido"), 1500);
     } catch (e: any) {
@@ -1199,18 +1371,41 @@ export default function EditarPedido() {
   if (exito) return (
     <Dashboard>
       <div className="flex flex-col items-center justify-center h-64 gap-4">
-        <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center">
-          <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-          </svg>
+        <div className={`w-16 h-16 rounded-full flex items-center justify-center ${advertenciaExito ? "bg-amber-100" : "bg-green-100"}`}>
+          {advertenciaExito ? (
+            <span className="text-3xl font-bold text-amber-600">!</span>
+          ) : (
+            <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+          )}
         </div>
-        <p className="text-green-700 font-semibold text-lg">Pedido actualizado correctamente</p>
+        <p className={`max-w-xl text-center font-semibold text-lg ${advertenciaExito ? "text-amber-700" : "text-green-700"}`}>
+          {advertenciaExito ?? "Pedido actualizado correctamente"}
+        </p>
         <p className="text-gray-400 text-sm">Redirigiendo...</p>
       </div>
     </Dashboard>
   );
 
   const productosActivos = productos.filter(p => !p._eliminado);
+  const hayRecalculosPendientes = productosActivos.some(producto =>
+    producto.detalles.some(detalle => detalle._recalcular)
+  );
+  const hayDetallesIncompletos = productosActivos.some(producto =>
+    producto.detalles.length === 0
+    || producto.detalles.some(detalle =>
+      parseSafe(detalle.cantidad) <= 0 || parseSafe(detalle.precio_total) <= 0
+    )
+  );
+  const hayModosMixtos = productosActivos.some(producto =>
+    new Set(producto.detalles.map(detalle => detalle.modo_cantidad)).size > 1
+  );
+  const guardarDeshabilitado = guardando
+    || hayRecalculosPendientes
+    || hayDetallesIncompletos
+    || hayModosMixtos
+    || productosActivos.length === 0;
   const totalGeneral = calcularTotal();
 
   return (
@@ -1318,7 +1513,7 @@ export default function EditarPedido() {
             const currentIndex = ++activeIndex;
             return (
               <ProductoEditable
-                key={`${prod.idsolicitud_producto}-${pi}`}
+                key={`${prod.idsolicitud_producto}-${pi}-${prod.nuevo_configuracion_id ?? prod.configuracion_plastico_id}-${prod.detalles.map(d => d._clave).join("|")}`}
                 prod={prod} pi={pi}
                 displayIndex={currentIndex}
                 setProductoField={setProductoField}
@@ -1412,13 +1607,17 @@ export default function EditarPedido() {
             Cancelar
           </button>
           <button onClick={handleGuardar}
-            disabled={guardando || productosActivos.length === 0}
+            disabled={guardarDeshabilitado}
             className={`flex items-center gap-2 px-8 py-2.5 rounded-xl font-semibold text-sm transition
-              ${guardando || productosActivos.length === 0
+              ${guardarDeshabilitado
                 ? "bg-gray-300 text-gray-400 cursor-not-allowed"
                 : "bg-blue-600 hover:bg-blue-700 text-white shadow-sm shadow-blue-200"}`}>
             {guardando
               ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Guardando...</>
+              : hayRecalculosPendientes
+                ? <><div className="w-4 h-4 border-2 border-gray-500 border-t-transparent rounded-full animate-spin" /> Calculando precios...</>
+              : hayDetallesIncompletos || hayModosMixtos
+                ? <>Completa cantidades y precios</>
               : <>
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />

@@ -1,7 +1,7 @@
 import Dashboard from "../../layouts/Sidebar";
 import RequiereConexion from "../../components/pwa/RequiereConexion";
 import Modal from "../../components/Modal";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { descargarPdfOrdenProduccionUniversal } from "../../services/produccion/descargarPdfOrdenProduccion";
 import {
   getVentas,
@@ -24,8 +24,13 @@ import { MONEDAS_OPERACION } from "../../constants/moneda.constants";
 import { useTipoCambioActual } from "../../hooks/useTipoCambioActual";
 import { convertirEntreMonedas } from "../../utils/moneda.utils";
 import { formatMoney, type Moneda } from "../../utils/formatMoney";
-import PanelAuditoria from "../../components/auditoria/PanelAuditoria";
+import AuditoriaDesplegable from "../../components/auditoria/AuditoriaDesplegable";
 import { leerBorrador, useAutoguardarBorrador, limpiarBorrador } from "../../hooks/useBorradorFormulario";
+import { invalidarSolicitudesGet } from "../../services/api";
+import {
+  CLAVE_PEDIDO_ACTUALIZADO,
+  EVENTO_PEDIDO_ACTUALIZADO,
+} from "../../services/pedidosService";
 
 const ESTADO = { PENDIENTE: 1, EN_PROCESO: 2, PAGADO: 6 } as const;
 const POR_PAGINA = 10;
@@ -509,6 +514,10 @@ export function EditarAntLiqReal({
     visible: false, folios: [],
   });
 
+  useEffect(() => {
+    setVenta(ventaInicial);
+  }, [ventaInicial]);
+
   // ── Moneda del pago: default = moneda de la venta. Si el cliente paga en
   // la moneda contraria, el tipo de cambio NO es editable — siempre es el
   // vigente (sincronizado a diario desde Banxico) ───────────────────────────
@@ -713,7 +722,7 @@ export function EditarAntLiqReal({
         </p>
       </div>
 
-      <PanelAuditoria
+      <AuditoriaDesplegable
         tabla="ventas"
         id={venta.idventas}
         titulo={`Auditoría financiera del pedido ${venta.no_pedido}`}
@@ -877,11 +886,10 @@ export function EditarAntLiqReal({
                     )}
                     <p className="text-xs text-gray-400">{pago.metodo_pago} · {fmtFecha(pago.fecha)}</p>
                     {pago.observacion && <p className="text-xs text-gray-500 italic">{pago.observacion}</p>}
-                    <PanelAuditoria
+                    <AuditoriaDesplegable
                       tabla="venta_pago"
                       id={pago.idventa_pago}
-                      activo
-                      compacto
+                      titulo="Auditoría del pago"
                       limite={8}
                       className="mt-2 min-w-[260px]"
                     />
@@ -1107,17 +1115,70 @@ export default function AnticipoLiquidacion() {
   const [modalEditarOpen, setModalEditarOpen] = useState(false);
   const [ventaEditando,   setVentaEditando]   = useState<Venta | null>(null);
   const [cargandoDet,     setCargandoDet]     = useState(false);
+  const cargaActualRef = useRef(0);
+  const ventaEditandoRef = useRef<Venta | null>(null);
 
-  useEffect(() => { cargar(); }, []);
+  useEffect(() => {
+    ventaEditandoRef.current = ventaEditando;
+  }, [ventaEditando]);
+
+  useEffect(() => {
+    cargar();
+
+    let temporizador: number | null = null;
+    const programarRecarga = () => {
+      if (temporizador !== null) window.clearTimeout(temporizador);
+      temporizador = window.setTimeout(() => {
+        invalidarSolicitudesGet();
+        cargar();
+      }, 50);
+    };
+    const onVisible = () => {
+      if (document.visibilityState === "visible") programarRecarga();
+    };
+    const onStorage = (evento: StorageEvent) => {
+      if (evento.key === CLAVE_PEDIDO_ACTUALIZADO) programarRecarga();
+    };
+
+    window.addEventListener("focus", programarRecarga);
+    window.addEventListener(EVENTO_PEDIDO_ACTUALIZADO, programarRecarga);
+    window.addEventListener("storage", onStorage);
+    document.addEventListener("visibilitychange", onVisible);
+
+    return () => {
+      if (temporizador !== null) window.clearTimeout(temporizador);
+      window.removeEventListener("focus", programarRecarga);
+      window.removeEventListener(EVENTO_PEDIDO_ACTUALIZADO, programarRecarga);
+      window.removeEventListener("storage", onStorage);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, []);
 
   const cargar = async () => {
+    const cargaId = ++cargaActualRef.current;
+    const modalActual = ventaEditandoRef.current;
     setLoading(true);
     try {
-      const [vs, ms] = await Promise.all([getVentas(), getMetodosPago()]);
+      const [vs, ms, detalleModal] = await Promise.all([
+        getVentas(),
+        getMetodosPago(),
+        modalActual
+          ? getVentaByPedido(modalActual.no_pedido).catch(() => null)
+          : Promise.resolve(null),
+      ]);
+      if (cargaId !== cargaActualRef.current) return;
       setVentas(vs);
       setMetodos(ms);
+      if (
+        detalleModal
+        && ventaEditandoRef.current?.no_pedido === detalleModal.no_pedido
+      ) {
+        setVentaEditando(detalleModal);
+      }
     } catch (e) { console.error(e); }
-    finally { setLoading(false); }
+    finally {
+      if (cargaId === cargaActualRef.current) setLoading(false);
+    }
   };
 
   const handleEditar = async (venta: Venta) => {

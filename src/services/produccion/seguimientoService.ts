@@ -109,7 +109,7 @@ export interface AvanceParcial {
 export interface ProcesoRegistro {
   idproceso_cat: number;
   nombre_proceso: string;
-  tabla: string;
+  tabla: string | null;
   estado: string;
   registro: Record<string, unknown> | null;
   observaciones: string | null;
