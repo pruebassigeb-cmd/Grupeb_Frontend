@@ -1,5 +1,6 @@
 // src/pages/cotizadorLibre/CotizadorLibre.tsx
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import {
   getTiposCotizadorLibre,
@@ -60,10 +61,23 @@ function blobABase64(blob: Blob): Promise<string> {
 
 export default function CotizadorLibre() {
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
   // El cliente externo (cuenta compartida cotizacionlibre@grupoeb.com) solo
   // puede generar cotizaciones — nunca pedidos directos. Staff interno
   // usando esta misma pantalla con su propia cuenta sí puede ambos.
   const esClienteExterno = user?.rol === "CotizadorLibre";
+
+  // Salir del módulo: para el cliente externo (cuenta compartida) es un
+  // cierre de sesión real. Para staff interno usando su propia cuenta,
+  // en cambio, es simplemente volver al home del sistema — no tiene
+  // sentido cerrarle la sesión de todo SIGEB por salir de este módulo.
+  const salirDelCotizador = () => {
+    if (esClienteExterno) {
+      logout();
+    } else {
+      navigate("/home");
+    }
+  };
 
   const [vista, setVista] = useState<Vista>("landing");
 
@@ -533,11 +547,11 @@ export default function CotizadorLibre() {
       <div className="min-h-screen bg-[#f7f4ee] flex flex-col">
         <div className="bg-gradient-to-br from-[#1e3a2b] to-[#2d5540] text-white px-8 py-20 flex-1 flex flex-col items-center justify-center text-center relative">
           <button
-            onClick={logout}
+            onClick={salirDelCotizador}
             className="absolute top-4 right-4 text-xs text-white/70 hover:text-white flex items-center gap-1.5"
-            title="Cerrar sesión"
+            title={esClienteExterno ? "Cerrar sesión" : "Volver al inicio"}
           >
-            Salir 🚪
+            {esClienteExterno ? "Salir 🚪" : "Volver a inicio 🏠"}
           </button>
           <div className="w-11 h-11 rounded-lg bg-[#e8c99a] text-[#1e3a2b] font-extrabold flex items-center justify-center text-base mb-6">
             EB
@@ -638,11 +652,11 @@ export default function CotizadorLibre() {
             </span>
           )}
           <button
-            onClick={logout}
+            onClick={salirDelCotizador}
             className="text-xs text-[#6b6f63] hover:text-[#1e3a2b]"
-            title="Cerrar sesión"
+            title={esClienteExterno ? "Cerrar sesión" : "Volver al inicio"}
           >
-            Salir 🚪
+            {esClienteExterno ? "Salir 🚪" : "Volver a inicio 🏠"}
           </button>
         </span>
       </div>

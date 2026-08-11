@@ -206,14 +206,32 @@ export default function Dashboard({ children }: DashboardProps) {
       accesoTotal: true,
       subItems: [],
     },
+    // ── Cotizador Interactivo ────────────────────────────────────────────────
+    // Sin privilegio propio: solo lo ven los admins (acceso_total) en el menú
+    // normal. El rol dedicado "CotizadorLibre" (cuenta compartida) lo ve por
+    // la excepción esRolExclusivoCotizadorLibre de abajo, sin necesitar que
+    // se le asigne ningún privilegio.
+    {
+      name: "Cotizador Interactivo",
+      icon: "🧮",
+      path: "/cotizador-libre",
+      accesoTotal: true,
+      subItems: [],
+    },
   ];
 
   // Rol exclusivo: mientras Expo siga en desarrollo, este rol solo debe
   // ver la opción de Expo en el sidebar, sin importar qué otros permisos tenga.
   const esRolExclusivoExpo = user?.rol === "Expo";
 
+  // Rol exclusivo: la cuenta compartida del Cotizador Interactivo
+  // (rol "CotizadorLibre") solo debe ver esa opción en el sidebar.
+  const esRolExclusivoCotizadorLibre = user?.rol === "CotizadorLibre";
+
   const menuFiltrado = esRolExclusivoExpo
     ? menuItems.filter((item) => item.name === "Cotizador Expo")
+    : esRolExclusivoCotizadorLibre
+    ? menuItems.filter((item) => item.name === "Cotizador Interactivo")
     : menuItems.filter((item) => {
         if (item.accesoTotal) return user?.acceso_total === true;
         if (!item.permiso && !item.permisoOr) return true;

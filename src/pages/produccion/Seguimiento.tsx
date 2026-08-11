@@ -489,11 +489,14 @@ const contarDiasHabiles = (desde: Date, hasta: Date): number => {
   return dias;
 };
 
-function ContadorDiasHabiles({ pedido }: { pedido: PedidoSeguimiento }) {
+function ContadorDiasHabiles({ pedido, vigente }: { pedido: PedidoSeguimiento; vigente: boolean }) {
   const fechaInicio = pedido.fecha_habilitacion_orden;
 
-  // Solo cuenta si la orden ya está habilitada (anticipo + diseño aprobados)
-  if (!pedido.no_produccion || !fechaInicio) {
+  // Solo cuenta si la orden está habilitada Y esa habilitación sigue vigente
+  // (si el diseño o el anticipo se desaprobaron después de haber estado
+  // aprobados, la orden_produccion ya existe pero el conteo debe volver a
+  // "—" en vez de seguir corriendo desde la fecha de habilitación original).
+  if (!pedido.no_produccion || !fechaInicio || !vigente) {
     return <span className="text-xs text-gray-300">—</span>;
   }
 
@@ -821,6 +824,13 @@ export default function Seguimiento() {
     const estadoPago = pagadoReal ? "pagado" : pedido.anticipo_cubierto ? "proceso" : "pendiente";
 
     const tieneOrden = !!pedido.no_produccion && !!pedido.idproduccion;
+    // La orden puede haberse habilitado en el pasado (anticipo + diseño
+    // aprobados ⇒ se creó orden_produccion) y luego el diseño haberse
+    // desaprobado de nuevo (ej. se rechaza tras haber estado aprobado).
+    // tieneOrden se queda en true para siempre porque la OP ya existe, pero
+    // NO debe seguir contando días ni permitir registrar avances si ya no
+    // están vigentes las condiciones que la habilitaron.
+    const ordenVigente = tieneOrden && pedido.diseno_aprobado && pedido.anticipo_cubierto;
     const esPapel = (pedido.tipo_producto ?? "").toLowerCase() === "papel";
     const extEstado = tieneOrden && !esPapel ? pedido.extrusion_estado : "no-aplica";
     const impEstado = tieneOrden && !esPapel ? pedido.impresion_estado : "no-aplica";
@@ -839,7 +849,7 @@ export default function Seguimiento() {
           : "no-aplica";
 
     const abrirProceso = (nombreProceso: string) => {
-      if (!tieneOrden) return;
+      if (!ordenVigente) return;
       setModalProceso({ pedido, nombreProceso });
     };
 
@@ -940,40 +950,40 @@ export default function Seguimiento() {
 
         <td className={`${px} text-center`}><RenderOrdenProduccion pedido={pedido} /></td>
 
-        <td className={`${px} text-center`}><ContadorDiasHabiles pedido={pedido} /></td>
+        <td className={`${px} text-center`}><ContadorDiasHabiles pedido={pedido} vigente={ordenVigente} /></td>
 
         <td className={`${px} text-center`}>
           <Badge estado={extEstado} fechaEstado={pedido.extrusion_fecha_estado}
-            clickable={tieneOrden && extEstado !== "no-aplica" && (puedeExtrusion || esRolPlanta)}
+            clickable={ordenVigente && extEstado !== "no-aplica" && (puedeExtrusion || esRolPlanta)}
             onClick={() => {
-              if (!tieneOrden) return;
+              if (!ordenVigente) return;
               puedeExtrusion ? abrirProceso("extrusion") : setModalVerificacion({ pedido, proceso: "extrusion" });
             }} />
         </td>
 
         <td className={`${px} text-center`}>
           <Badge estado={impEstado} fechaEstado={pedido.impresion_fecha_estado}
-            clickable={tieneOrden && impEstado !== "no-aplica" && (puedeImpresion || esRolPlanta)}
+            clickable={ordenVigente && impEstado !== "no-aplica" && (puedeImpresion || esRolPlanta)}
             onClick={() => {
-              if (!tieneOrden) return;
+              if (!ordenVigente) return;
               puedeImpresion ? abrirProceso("impresion") : setModalVerificacion({ pedido, proceso: "impresion" });
             }} />
         </td>
 
         <td className={`${px} text-center`}>
           <Badge estado={bolEstado} fechaEstado={pedido.bolseo_estado}
-            clickable={tieneOrden && bolEstado !== "no-aplica" && (puedeBolseo || esRolPlanta)}
+            clickable={ordenVigente && bolEstado !== "no-aplica" && (puedeBolseo || esRolPlanta)}
             onClick={() => {
-              if (!tieneOrden) return;
+              if (!ordenVigente) return;
               puedeBolseo ? abrirProceso("bolseo") : setModalVerificacion({ pedido, proceso: "bolseo" });
             }} />
         </td>
 
         <td className={`${px} text-center`}>
           <Badge estado={asaEstado} fechaEstado={pedido.asa_flexible_fecha_estado}
-            clickable={tieneOrden && asaEstado !== "no-aplica" && (puedeAsaFlexible || esRolPlanta)}
+            clickable={ordenVigente && asaEstado !== "no-aplica" && (puedeAsaFlexible || esRolPlanta)}
             onClick={() => {
-              if (!tieneOrden) return;
+              if (!ordenVigente) return;
               puedeAsaFlexible ? abrirProceso("asa_flexible") : setModalVerificacion({ pedido, proceso: "asa_flexible" });
             }} />
         </td>
@@ -994,9 +1004,9 @@ export default function Seguimiento() {
                 <Badge
                   estado={estado}
                   fechaEstado={fechaProcesoPapel(proceso)}
-                  clickable={esPapel && tieneOrden && !!proceso && estado !== "no-aplica"}
+                  clickable={esPapel && ordenVigente && !!proceso && estado !== "no-aplica"}
                   onClick={() => {
-                    if (!esPapel || !tieneOrden || !proceso) return;
+                    if (!esPapel || !ordenVigente || !proceso) return;
                     setModalProcesoPapel({ pedido, nombreProceso: key });
                   }}
                 />
