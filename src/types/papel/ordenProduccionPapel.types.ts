@@ -184,6 +184,19 @@ export interface OrdenProduccionPapelData {
   pliegos_impresion_estimados?: number | null;
   material_impresion?: string | null;
 
+  // Cantidad real a producir = cantidad pedida + merma congelada de la
+  // orden (orden_produccion_merma.cantidad_a_producir). Ya la calcula e
+  // inyecta el backend (getSeguimiento/getOrdenProduccion, vía
+  // getCantidadesAProducirBatch). Alimenta los cálculos internos de
+  // pliegos/hojeado Y las 3 celdas visibles "con Merma" del PDF (ver
+  // filaMerma en generarPdfOrdenProduccionPapel.ts). La celda "Cantidad"
+  // sigue mostrando `cantidad` sin merma. Todas null si la orden no tiene
+  // snapshot (anteriores al sistema, o aún no congelada).
+  cantidad_produccion?: number | null;
+  cantidad_con_merma?: number | null;
+  cantidad_hojeada_con_merma?: number | null;
+  pliegos_con_merma?: number | null;
+
   bobina_cm?: number | string | null;
   bobina_laminacion_cm?: number | string | null;
   desarrollo_mm?: number | string | null;

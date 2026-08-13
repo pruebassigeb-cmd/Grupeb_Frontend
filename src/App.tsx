@@ -4,6 +4,7 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import Login from "./pages/Login";
 import Home from "./pages/Home";
 import Usuarios from "./pages/Usuarios";
+import Roles from "./pages/Roles";
 import Plastico from "./pages/plastico/Plastico";
 import Cotizar from "./pages/Cotizar";
 import Clientes from "./pages/Clientes";
@@ -23,6 +24,7 @@ import ProveedoresPage from "./pages/proveedores/ProveedoresPage";
 import Papel from "./pages/papel/Papel";
 import Catalogos from "./pages/papel/catalogos.tsx";
 import PreciosAcabadosPapel from "./pages/papel/PreciosAcabadosPapel";
+import MermaPapel from "./pages/papel/MermaPapel";
 import Expo from "./pages/expo/expo.tsx";
 import EditarPedidoPapel from "./pages/papel/EditarPedidoPapel";
 import EditarCotizacionCompleta from "./pages/plastico/EditarCotizacionCompleta.tsx";
@@ -35,27 +37,34 @@ import "./offline/expoOutboxHandlers";
 import ReportesCorreo from "./pages/ReportesCorreo";
 import CotizadorLibre from "./pages/cotizadorLibre/CotizadorLibre";
 
+
+// Fase 6: valores clave, no el texto visible del privilegio — así
+// renombrar la etiqueta desde la pantalla de Roles no rompe ninguna ruta.
 const PERMISOS = {
-  usuarios: "Crear/Editar/Eliminar Usuarios",
-  clientes: "Crear/Editar/Eliminar Clientes",
-  plastico: "Dar de alta productos",
-  cotizar: "Crear/Editar/Aprobar/Rechazar Cotizaciones",
-  pedido: "Crear/Editar/Eliminar Pedidos",
-  diseno: "Editar Diseño",
-  anticipo: "Editar Anticipo y Liquidacion",
-  precios: "Modificar Catalogo de precios",
-  estadoCuenta: "Editar Anticipo y Liquidacion",
-  papel: "Dar de alta productos (Papel)",
-  catalogos: "Gestionar Catálogos",
+  usuarios: "seguridad.usuarios.gestionar",
+  clientes: "clientes.gestionar",
+  plastico: "productos.plastico.gestionar",
+  // Split en la fase 0: crear/editar y aprobar/rechazar quedaron separados.
+  // El acceso a la pantalla se conserva para cualquiera de los dos.
+  cotizar: "cotizacion.crear_editar",
+  cotizarAprobar: "cotizacion.aprobar",
+  pedido: "pedido.crear_editar",
+  pedidoEliminar: "pedido.eliminar",
+  diseno: "diseno.editar",
+  anticipo: "cobranza.anticipo_liquidacion.gestionar",
+  precios: "precios.gestionar",
+  estadoCuenta: "cobranza.anticipo_liquidacion.gestionar",
+  papel: "productos.papel.gestionar",
+  catalogos: "catalogos.gestionar",
 } as const;
 
 const PERMISOS_SEGUIMIENTO = [
-  "Ver Seguimiento",
-  "Acceso Planta",
-  "Operar Extrusión",
-  "Operar Impresión",
-  "Operar Bolseo",
-  "Operar Asa Flexible",
+  "produccion.seguimiento.ver",
+  "produccion.acceso_planta",
+  "produccion.plastico.extrusion.operar",
+  "produccion.plastico.impresion.operar",
+  "produccion.plastico.bolseo.operar",
+  "produccion.plastico.asa_flexible.operar",
 ];
 
 function App() {
@@ -103,6 +112,16 @@ function App() {
             }
           />
 
+          {/* Roles y Privilegios */}
+          <Route
+            path="/roles"
+            element={
+              <ProtectedRoute permisoOr={["seguridad.roles.ver", "seguridad.roles.gestionar", "seguridad.privilegios.gestionar"]}>
+                <Roles />
+              </ProtectedRoute>
+            }
+          />
+
            {/* dentro de <Routes>, junto a la ruta de /usuarios: */}
 <Route
   path="/reportes-correo"
@@ -137,7 +156,7 @@ function App() {
           <Route
             path="/cotizar/:noCotizacion/editar"
             element={
-              <ProtectedRoute permiso={PERMISOS.cotizar}>
+              <ProtectedRoute permisoOr={[PERMISOS.cotizar, PERMISOS.cotizarAprobar]}>
                 <EditarCotizacionCompleta />
               </ProtectedRoute>
             }
@@ -147,7 +166,7 @@ function App() {
           <Route
             path="/cotizar/:noCotizacion/editar-papel"
             element={
-              <ProtectedRoute permiso={PERMISOS.cotizar}>
+              <ProtectedRoute permisoOr={[PERMISOS.cotizar, PERMISOS.cotizarAprobar]}>
                 <EditarCotizacionPapelCompleta />
               </ProtectedRoute>
             }
@@ -157,7 +176,7 @@ function App() {
           <Route
             path="/cotizar"
             element={
-              <ProtectedRoute permiso={PERMISOS.cotizar}>
+              <ProtectedRoute permisoOr={[PERMISOS.cotizar, PERMISOS.cotizarAprobar]}>
                 <Cotizar />
               </ProtectedRoute>
             }
@@ -167,7 +186,7 @@ function App() {
           <Route
             path="/pedido"
             element={
-              <ProtectedRoute permiso={PERMISOS.pedido}>
+              <ProtectedRoute permisoOr={[PERMISOS.pedido, PERMISOS.pedidoEliminar]}>
                 <Pedido />
               </ProtectedRoute>
             }
@@ -177,7 +196,7 @@ function App() {
           <Route
             path="/pedido/:noPedido/editar"
             element={
-              <ProtectedRoute permiso={PERMISOS.pedido}>
+              <ProtectedRoute permisoOr={[PERMISOS.pedido, PERMISOS.pedidoEliminar]}>
                 <EditarPedido />
               </ProtectedRoute>
             }
@@ -187,7 +206,7 @@ function App() {
           <Route
             path="/pedido/:noPedido/editar-papel"
             element={
-              <ProtectedRoute permiso={PERMISOS.pedido}>
+              <ProtectedRoute permisoOr={[PERMISOS.pedido, PERMISOS.pedidoEliminar]}>
                 <EditarPedidoPapel />
               </ProtectedRoute>
             }
@@ -197,7 +216,7 @@ function App() {
           <Route
             path="/diseno"
             element={
-              <ProtectedRoute permisoOr={["Editar Diseño", "Orden de Diseño"]}>
+              <ProtectedRoute permisoOr={["diseno.editar", "diseno.orden"]}>
                 <Diseno />
               </ProtectedRoute>
             }
@@ -233,6 +252,16 @@ function App() {
             }
           />
 
+          {/* Merma de producción — papel */}
+          <Route
+            path="/merma-papel"
+            element={
+              <ProtectedRoute permiso={PERMISOS.precios}>
+                <MermaPapel />
+              </ProtectedRoute>
+            }
+          />
+
           {/* Tipo de cambio USD/MXN */}
           <Route
             path="/tipo-cambio"
@@ -257,7 +286,7 @@ function App() {
           <Route
             path="/envios"
             element={
-              <ProtectedRoute permiso="Gestionar Envios">
+              <ProtectedRoute permiso="envios.gestionar">
                 <Envios />
               </ProtectedRoute>
             }
@@ -328,7 +357,7 @@ function App() {
           <Route
             path="/proveedores"
             element={
-              <ProtectedRoute permiso="Gestionar Proveedores">
+              <ProtectedRoute permiso="proveedores.gestionar">
                 <ProveedoresPage />
               </ProtectedRoute>
             }

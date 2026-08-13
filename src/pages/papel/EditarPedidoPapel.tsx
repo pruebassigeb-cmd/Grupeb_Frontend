@@ -1439,6 +1439,21 @@ export default function EditarPedidoPapel() {
       return;
     }
 
+    // El backend rechaza un producto sin ningún detalle con cantidad > 0
+    // (se valida aquí antes para dar un mensaje entendible con el nombre
+    // del producto, en vez del 400 crudo con el id de solicitud_producto).
+    const productoSinCantidad = productos.find(
+      p => !p._eliminado && !p.detalles.some(d => parseSafe(d.cantidad) > 0)
+    );
+    if (productoSinCantidad) {
+      const pi = productos.indexOf(productoSinCantidad);
+      setErrorGuardar(
+        `Captura una cantidad mayor a 0 para "${productoSinCantidad.nombre}".`
+      );
+      irAProducto(pi);
+      return;
+    }
+
     setGuardando(true);
     try {
       const productosExistentes: ProductoPapelActualizar[] = productos

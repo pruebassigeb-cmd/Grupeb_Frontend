@@ -1,5 +1,8 @@
-export const PERMISO_EDITAR_DISENO = "Editar Diseño";
-export const PERMISO_ORDEN_DISENO = "Orden de Diseño";
+// Fase 6: estos dos ya son clave, no el texto visible — así renombrar la
+// etiqueta desde la pantalla de Roles no rompe nada. Ver
+// docs/roles-privilegios-plan.md.
+export const PERMISO_EDITAR_DISENO = "diseno.editar";
+export const PERMISO_ORDEN_DISENO = "diseno.orden";
 
 interface UsuarioConPermisos {
   rol?: string;
@@ -30,8 +33,11 @@ export const puedeVerAuditoriaUsuario = (
   );
 
 /**
- * Centraliza privilegios individuales y los privilegios base de Ventas y
- * Diseño. El backend aplica exactamente las mismas reglas.
+ * `usuario.privilegios` trae claves (fase 6), no el texto visible del
+ * privilegio. La antigua excepción por nombre de rol para Diseño/Ventas se
+ * quitó: los dos roles ya tienen estos privilegios en su base real desde
+ * antes de la fase 0, era pura redundancia. El backend aplica exactamente
+ * la misma regla (usuarioTienePermiso en auth.middleware.ts).
  */
 export const tienePermisoUsuario = (
   usuario: UsuarioConPermisos | null | undefined,
@@ -39,13 +45,5 @@ export const tienePermisoUsuario = (
 ): boolean => {
   if (!usuario) return false;
   if (usuario.acceso_total) return true;
-  if ((usuario.privilegios ?? []).includes(privilegio)) return true;
-
-  const rol = normalizarRol(usuario.rol);
-
-  if (rol === "diseno") {
-    return privilegio === PERMISO_EDITAR_DISENO || privilegio === PERMISO_ORDEN_DISENO;
-  }
-
-  return rol === "ventas" && privilegio === PERMISO_ORDEN_DISENO;
+  return (usuario.privilegios ?? []).includes(privilegio);
 };

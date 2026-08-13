@@ -1,17 +1,16 @@
 import { useState, useEffect, useRef } from "react";
 import { getRoles, getPrivilegiosByRol } from "../services/rolesService";
-import { getPrivilegios } from "../services/privilegiosService";
+import { getPrivilegios, getModulos } from "../services/privilegiosService";
 import type { Rol } from "../types/rol.types";
-import type { Privilegio } from "../types/privilegio.types";
+import type { Privilegio, PrivilegioModulo } from "../types/privilegio.types";
 import type { CreateUsuarioRequest, UpdateUsuarioRequest, Usuario } from "../types/usuario.types";
 import { showAlert } from './CustomAlert';
 import api from '../services/api';
 import { buscarCodigoPostal } from "../services/codigoPostalService";
 import { leerBorrador, useAutoguardarBorrador } from "../hooks/useBorradorFormulario";
 import { claveBorradorUsuario } from "../utils/clavesBorrador";
-import { PERMISO_ORDEN_DISENO } from "../utils/permisosUsuario";
+import SelectorPrivilegios from "./privilegios/SelectorPrivilegios";
 
-const ROLES_CON_PRIVILEGIOS_BASE = ["Planta", "Ventas", "Diseño"];
 const TIPOS_SANGRE = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 const MAX_FOTOS_INE = 2;
 const ESTADOS_MX = [
@@ -59,6 +58,10 @@ export default function FormularioUsuario({ onSubmit, onCancel, usuarioEditar }:
   const [paso, setPaso]               = useState(borradorInicial?.paso ?? 1);
   const [roles, setRoles]             = useState<Rol[]>([]);
   const [privilegios, setPrivilegios] = useState<Privilegio[]>([]);
+  const [modulos, setModulos]         = useState<PrivilegioModulo[]>([]);
+  // Privilegios base del rol seleccionado — se heredan por referencia, no se
+  // pueden desmarcar. `datos.privilegios` solo guarda los extras editables.
+  const [baseDelRol, setBaseDelRol]   = useState<number[]>([]);
   const [loading, setLoading]         = useState(false);
   const [errores, setErrores]         = useState<Record<string, string>>({});
   const [buscandoCP, setBuscandoCP]   = useState(false);
@@ -117,9 +120,12 @@ export default function FormularioUsuario({ onSubmit, onCancel, usuarioEditar }:
   useEffect(() => {
     (async () => {
       try {
-        const [rolesData, privilegiosData] = await Promise.all([getRoles(), getPrivilegios()]);
+        const [rolesData, privilegiosData, modulosData] = await Promise.all([
+          getRoles(), getPrivilegios(), getModulos(),
+        ]);
         setRoles(rolesData);
         setPrivilegios(privilegiosData);
+        setModulos(modulosData);
       } catch {
         showAlert("Error al cargar roles y privilegios");
       }
@@ -267,33 +273,53 @@ const subirFotosINE = async (idusuario: number) => {
     }
   };
 
-  const cargarPrivilegiosDelRol = async (rolId: number) => {
+  // Trae la base del rol y la guarda por separado — nunca toca
+  // datos.privilegios (esos son los extras, siempre editables). Devuelve la
+  // base para que el llamador decida si hay que depurar extras duplicados.
+  const cargarBaseDelRol = async (rolId: number): Promise<number[]> => {
     try {
       const privilegiosRol = await getPrivilegiosByRol(rolId);
-      if (privilegiosRol.acceso_total) {
-        setDatos(prev => ({ ...prev, roles_idroles: rolId, privilegios: [] }));
-      } else {
-        setDatos(prev => ({ ...prev, roles_idroles: rolId, privilegios: privilegiosRol.privilegios }));
-      }
+      const base = privilegiosRol.acceso_total ? [] : privilegiosRol.base;
+      setBaseDelRol(base);
+      return base;
     } catch {
-      setDatos(prev => ({ ...prev, roles_idroles: rolId }));
+      setBaseDelRol([]);
+      return [];
     }
   };
 
+  // Hidrata la base del rol ya seleccionado al montar (edición de un usuario
+  // existente, o borrador restaurado con un rol ya elegido). datos.privilegios
+  // ya llega como solo-extras desde el backend; se filtra por si acaso, con
+  // el mismo criterio defensivo que el servidor.
+  useEffect(() => {
+    const rolInicial = usuarioEditar?.roles_idroles || borradorInicial?.roles_idroles;
+    if (!rolInicial) return;
+    (async () => {
+      const base = await cargarBaseDelRol(rolInicial);
+      setDatos(prev => ({
+        ...prev,
+        privilegios: (prev.privilegios || []).filter(id => !base.includes(id)),
+      }));
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleRolChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
     const rolId = parseInt(e.target.value);
-    if (rolId === 0) { setDatos(prev => ({ ...prev, roles_idroles: 0, privilegios: [] })); return; }
     if (errores.roles_idroles) setErrores(prev => ({ ...prev, roles_idroles: "" }));
-    await cargarPrivilegiosDelRol(rolId);
-  };
-
-  const handlePrivilegioChange = (idPrivilegio: number) => {
-    const actuales = datos.privilegios || [];
+    if (rolId === 0) {
+      setBaseDelRol([]);
+      setDatos(prev => ({ ...prev, roles_idroles: 0 }));
+      return;
+    }
+    const base = await cargarBaseDelRol(rolId);
     setDatos(prev => ({
       ...prev,
-      privilegios: actuales.includes(idPrivilegio)
-        ? actuales.filter(p => p !== idPrivilegio)
-        : [...actuales, idPrivilegio],
+      roles_idroles: rolId,
+      // Los extras nunca deben duplicar lo que ya llega por la base del rol
+      // nuevo (relevante al cambiar de rol sin perder los extras existentes).
+      privilegios: (prev.privilegios || []).filter(id => !base.includes(id)),
     }));
   };
 
@@ -328,11 +354,9 @@ else if (!/^\d{4,8}$/.test(datos.codigo)) e.codigo = "El código debe tener entr
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const rolSeleccionado = roles.find(r => r.idroles === datos.roles_idroles);
-    const rolNombre       = rolSeleccionado?.nombre ?? "";
-    const tienePrivBase   = ROLES_CON_PRIVILEGIOS_BASE.includes(rolNombre);
     if (
       !rolSeleccionado?.acceso_total &&
-      !tienePrivBase &&
+      baseDelRol.length === 0 &&
       (!datos.privilegios || datos.privilegios.length === 0)
     ) {
       showAlert("Debe seleccionar al menos un privilegio para usuarios sin acceso total");
@@ -416,8 +440,6 @@ else if (!/^\d{4,8}$/.test(datos.codigo)) e.codigo = "El código debe tener entr
 
   const rolSeleccionado  = roles.find(r => r.idroles === datos.roles_idroles);
   const tieneAccesoTotal = rolSeleccionado?.acceso_total || false;
-  const rolNombre        = rolSeleccionado?.nombre ?? "";
-  const esRolConBase     = ROLES_CON_PRIVILEGIOS_BASE.includes(rolNombre);
   const totalINE         = fotosINE.length + archivosINEPendientes.length;
 
   const input = (campo?: string) =>
@@ -643,34 +665,24 @@ else if (!/^\d{4,8}$/.test(datos.codigo)) e.codigo = "El código debe tener entr
             <p className="text-green-800 font-medium">✓ Este rol tiene acceso total al sistema</p>
             <p className="text-green-700 text-sm mt-1">No es necesario asignar privilegios individuales</p>
           </div>
-        ) : esRolConBase && datos.privilegios && datos.privilegios.length > 0 ? (
+        ) : baseDelRol.length > 0 ? (
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-            <p className="text-blue-800 font-medium text-sm">✓ Este rol incluye sus privilegios base automáticamente</p>
-            <p className="text-blue-600 text-xs mt-1">Puedes agregar privilegios adicionales.</p>
+            <p className="text-blue-800 font-medium text-sm">
+              ✓ Este rol incluye {baseDelRol.length} privilegio{baseDelRol.length === 1 ? "" : "s"} base — no se pueden quitar
+            </p>
+            <p className="text-blue-600 text-xs mt-1">Puedes agregar privilegios adicionales abajo.</p>
           </div>
         ) : (
           <p className="text-gray-600 mb-4 text-sm">Selecciona los privilegios que tendrá este usuario</p>
         )}
-        <div className="space-y-2 max-h-72 overflow-y-auto">
-          {privilegios.map(privilegio => (
-            <label key={privilegio.idprivilegios}
-              className={`flex items-center p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer
-                ${tieneAccesoTotal ? "opacity-50 cursor-not-allowed" : ""}`}>
-              <input type="checkbox"
-                checked={datos.privilegios?.includes(privilegio.idprivilegios) || false}
-                onChange={() => handlePrivilegioChange(privilegio.idprivilegios)}
-                disabled={tieneAccesoTotal} className="w-4 h-4 text-blue-600 rounded" />
-              <span className="ml-3">
-                <span className="block text-sm text-gray-700">{privilegio.privilegio}</span>
-                {privilegio.privilegio === PERMISO_ORDEN_DISENO && (
-                  <span className="mt-0.5 block text-xs text-gray-500">
-                    Acceso de consulta a la ficha de diseño, chat y carga de feedback.
-                  </span>
-                )}
-              </span>
-            </label>
-          ))}
-        </div>
+        <SelectorPrivilegios
+          privilegios={privilegios}
+          modulos={modulos}
+          seleccionados={datos.privilegios || []}
+          bloqueados={baseDelRol}
+          deshabilitado={tieneAccesoTotal}
+          onChange={ids => setDatos(prev => ({ ...prev, privilegios: ids }))}
+        />
         <div className="flex justify-end gap-3 mt-6">
           <button type="button" onClick={() => setPaso(1)}
             className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">Atrás</button>

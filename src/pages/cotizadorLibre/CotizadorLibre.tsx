@@ -18,6 +18,7 @@ import {
 import { generarPdfCotizacion } from "../../utils/generarPdfCotizacion";
 import { generarPdfPedido } from "../../utils/generarPdfPedido";
 import IdentificacionCliente from "../../components/cotizadorLibre/IdentificacionCliente";
+import LandingCotizadorLibre from "../../components/cotizadorLibre/LandingCotizadorLibre";
 import type {
   CategoriaCotizadorLibre,
   TipoCatalogoItem,
@@ -544,35 +545,11 @@ export default function CotizadorLibre() {
   // ============================================================
   if (vista === "landing") {
     return (
-      <div className="min-h-screen bg-[#f7f4ee] flex flex-col">
-        <div className="bg-gradient-to-br from-[#1e3a2b] to-[#2d5540] text-white px-8 py-20 flex-1 flex flex-col items-center justify-center text-center relative">
-          <button
-            onClick={salirDelCotizador}
-            className="absolute top-4 right-4 text-xs text-white/70 hover:text-white flex items-center gap-1.5"
-            title={esClienteExterno ? "Cerrar sesión" : "Volver al inicio"}
-          >
-            {esClienteExterno ? "Salir 🚪" : "Volver a inicio 🏠"}
-          </button>
-          <div className="w-11 h-11 rounded-lg bg-[#e8c99a] text-[#1e3a2b] font-extrabold flex items-center justify-center text-base mb-6">
-            EB
-          </div>
-          <h1 className="text-3xl md:text-4xl font-extrabold mb-3 max-w-xl">
-            Diseña el empaque ideal para tu marca
-          </h1>
-          <p className="text-sm text-[#e8c99a] font-semibold mb-2">
-            🌿 En menos de 2 minutos
-          </p>
-          <p className="text-sm text-white/80 mb-8 max-w-sm">
-            Crea, personaliza y cotiza al instante el empaque perfecto para tu negocio.
-          </p>
-          <button
-            onClick={entrarAlCotizador}
-            className="bg-[#e8c99a] text-[#1e3a2b] font-bold px-8 py-4 rounded-xl hover:bg-white transition-colors"
-          >
-            Comenzar →
-          </button>
-        </div>
-      </div>
+      <LandingCotizadorLibre
+        esClienteExterno={esClienteExterno}
+        onComenzar={entrarAlCotizador}
+        onSalir={salirDelCotizador}
+      />
     );
   }
 
@@ -635,11 +612,11 @@ export default function CotizadorLibre() {
   // WIZARD
   // ============================================================
   return (
-    <div className="min-h-screen bg-[#f7f4ee] pb-40 sm:pb-28">
-      <div className="bg-white border-b border-[#e2ddd0] px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between flex-wrap gap-2">
+    <div className="min-h-screen bg-gradient-to-b from-[#faf7f0] to-[#f1ebdd] pb-40 sm:pb-28">
+      <div className="sticky top-0 z-20 bg-white/95 backdrop-blur border-b border-[#e2ddd0] shadow-[0_2px_16px_-6px_rgba(30,58,43,0.12)] px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between flex-wrap gap-2">
         <button
           onClick={volverAlInicio}
-          className="text-sm text-[#6b6f63] hover:text-[#1e3a2b] font-semibold"
+          className="text-sm text-[#1e3a2b] hover:text-[#c98d3d] font-bold flex items-center gap-1 transition-colors"
         >
           ← Volver al inicio
         </button>
@@ -647,13 +624,13 @@ export default function CotizadorLibre() {
           <span className="hidden sm:inline">Cotizador / </span>
           <b className="text-[#1e3a2b]">Nueva cotización</b>
           {carrito.length > 0 && (
-            <span className="bg-[#1e3a2b] text-white text-xs font-bold px-2.5 py-1 rounded-full">
+            <span className="bg-gradient-to-br from-[#1e3a2b] to-[#2d5540] text-[#e8c99a] text-xs font-extrabold px-3 py-1.5 rounded-full shadow-sm">
               🛒 {carrito.length}
             </span>
           )}
           <button
             onClick={salirDelCotizador}
-            className="text-xs text-[#6b6f63] hover:text-[#1e3a2b]"
+            className="text-xs text-[#6b6f63] hover:text-[#c98d3d] font-semibold transition-colors"
             title={esClienteExterno ? "Cerrar sesión" : "Volver al inicio"}
           >
             {esClienteExterno ? "Salir 🚪" : "Volver a inicio 🏠"}
@@ -673,36 +650,62 @@ export default function CotizadorLibre() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8 items-start">
       <div className="flex flex-col gap-6">
         {/* Paso 1: Categoría */}
-        <div className="bg-white border border-[#e2ddd0] rounded-xl p-5">
-          <h2 className="text-sm font-bold mb-3">1. ¿Qué tipo de producto buscas?</h2>
-          <div className="flex gap-3">
+        <div className="bg-white rounded-2xl shadow-[0_1px_2px_rgba(30,58,43,0.06),0_14px_28px_-18px_rgba(30,58,43,0.35)] border border-[#eee9db] p-6">
+          <div className="flex items-center gap-2.5 mb-4">
+            <span className="w-7 h-7 rounded-full bg-[#1e3a2b] text-[#e8c99a] text-xs font-extrabold flex items-center justify-center flex-shrink-0">
+              1
+            </span>
+            <h2 className="text-base font-extrabold text-[#1e3a2b] tracking-tight">
+              ¿Qué tipo de producto buscas?
+            </h2>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
             <button
               onClick={() => setCategoria("papel")}
-              className={`flex-1 border rounded-lg px-4 py-3 text-sm font-semibold transition-colors ${
+              className={`relative rounded-xl px-4 py-5 text-sm font-bold flex flex-col items-center gap-2 transition-all duration-150 ${
                 categoria === "papel"
-                  ? "border-[#b8894a] bg-[#fbf3e8] text-[#1e3a2b]"
-                  : "border-[#e2ddd0] hover:border-[#b8894a]"
+                  ? "bg-gradient-to-br from-[#fff6ea] to-[#fbead2] ring-2 ring-[#c98d3d] shadow-md -translate-y-0.5 text-[#1e3a2b]"
+                  : "bg-[#faf7f0] border border-[#e2ddd0] hover:border-[#c98d3d] hover:shadow-md hover:-translate-y-0.5 text-[#4a4d43]"
               }`}
             >
-              🛍️ Papel
+              {categoria === "papel" && (
+                <span className="absolute top-2 right-2 w-5 h-5 rounded-full bg-[#c98d3d] text-white text-[10px] font-bold flex items-center justify-center shadow">
+                  ✓
+                </span>
+              )}
+              <span className="text-2xl">🛍️</span>
+              Papel
             </button>
             <button
               onClick={() => setCategoria("plastico")}
-              className={`flex-1 border rounded-lg px-4 py-3 text-sm font-semibold transition-colors ${
+              className={`relative rounded-xl px-4 py-5 text-sm font-bold flex flex-col items-center gap-2 transition-all duration-150 ${
                 categoria === "plastico"
-                  ? "border-[#b8894a] bg-[#fbf3e8] text-[#1e3a2b]"
-                  : "border-[#e2ddd0] hover:border-[#b8894a]"
+                  ? "bg-gradient-to-br from-[#fff6ea] to-[#fbead2] ring-2 ring-[#c98d3d] shadow-md -translate-y-0.5 text-[#1e3a2b]"
+                  : "bg-[#faf7f0] border border-[#e2ddd0] hover:border-[#c98d3d] hover:shadow-md hover:-translate-y-0.5 text-[#4a4d43]"
               }`}
             >
-              🧵 Plástico
+              {categoria === "plastico" && (
+                <span className="absolute top-2 right-2 w-5 h-5 rounded-full bg-[#c98d3d] text-white text-[10px] font-bold flex items-center justify-center shadow">
+                  ✓
+                </span>
+              )}
+              <span className="text-2xl">🧵</span>
+              Plástico
             </button>
           </div>
         </div>
 
         {/* Paso 2: Tipo */}
         {categoria && (
-          <div className="bg-white border border-[#e2ddd0] rounded-xl p-5">
-            <h2 className="text-sm font-bold mb-3">2. Selecciona el tipo</h2>
+          <div className="bg-white rounded-2xl shadow-[0_1px_2px_rgba(30,58,43,0.06),0_14px_28px_-18px_rgba(30,58,43,0.35)] border border-[#eee9db] p-6">
+            <div className="flex items-center gap-2.5 mb-4">
+              <span className="w-7 h-7 rounded-full bg-[#1e3a2b] text-[#e8c99a] text-xs font-extrabold flex items-center justify-center flex-shrink-0">
+                2
+              </span>
+              <h2 className="text-base font-extrabold text-[#1e3a2b] tracking-tight">
+                Selecciona el tipo
+              </h2>
+            </div>
             {tiposLoading && <p className="text-sm text-[#6b6f63]">Cargando opciones...</p>}
             {tiposError && <p className="text-sm text-red-600">{tiposError}</p>}
             {!tiposLoading && !tiposError && (
@@ -711,17 +714,22 @@ export default function CotizadorLibre() {
                   <button
                     key={tipo.id}
                     onClick={() => setIdTipoSeleccionado(tipo.id)}
-                    className={`border rounded-lg p-3 text-sm font-medium transition-colors flex flex-col items-center gap-2 text-center ${
+                    className={`relative rounded-xl p-3 text-sm font-bold transition-all duration-150 flex flex-col items-center gap-2 text-center ${
                       idTipoSeleccionado === tipo.id
-                        ? "border-[#b8894a] bg-[#fbf3e8] text-[#1e3a2b]"
-                        : "border-[#e2ddd0] hover:border-[#b8894a]"
+                        ? "bg-gradient-to-br from-[#fff6ea] to-[#fbead2] ring-2 ring-[#c98d3d] shadow-md -translate-y-0.5 text-[#1e3a2b]"
+                        : "bg-[#faf7f0] border border-[#e2ddd0] hover:border-[#c98d3d] hover:shadow-md hover:-translate-y-0.5 text-[#4a4d43]"
                     }`}
                   >
+                    {idTipoSeleccionado === tipo.id && (
+                      <span className="absolute top-1.5 right-1.5 w-5 h-5 rounded-full bg-[#c98d3d] text-white text-[10px] font-bold flex items-center justify-center shadow">
+                        ✓
+                      </span>
+                    )}
                     {tipo.imagenUrl ? (
                       <img
                         src={tipo.imagenUrl}
                         alt=""
-                        className="w-20 h-20 rounded-lg object-cover"
+                        className="w-20 h-20 rounded-lg object-cover shadow-sm"
                       />
                     ) : (
                       <div className="w-20 h-20 rounded-lg bg-[#eee9db] flex items-center justify-center text-2xl">
@@ -743,30 +751,48 @@ export default function CotizadorLibre() {
 
         {/* Paso 3: Medida */}
         {idTipoSeleccionado && (
-          <div className="bg-white border border-[#e2ddd0] rounded-xl p-5">
-            <h2 className="text-sm font-bold mb-3">3. Selecciona la medida</h2>
+          <div className="bg-white rounded-2xl shadow-[0_1px_2px_rgba(30,58,43,0.06),0_14px_28px_-18px_rgba(30,58,43,0.35)] border border-[#eee9db] p-6">
+            <div className="flex items-center gap-2.5 mb-4">
+              <span className="w-7 h-7 rounded-full bg-[#1e3a2b] text-[#e8c99a] text-xs font-extrabold flex items-center justify-center flex-shrink-0">
+                3
+              </span>
+              <h2 className="text-base font-extrabold text-[#1e3a2b] tracking-tight">
+                Selecciona la medida
+              </h2>
+            </div>
             {medidasLoading && <p className="text-sm text-[#6b6f63]">Cargando medidas...</p>}
             {medidasError && <p className="text-sm text-red-600">{medidasError}</p>}
             {!medidasLoading && !medidasError && (
-              <div className="flex flex-col gap-2">
+              <div className="grid grid-cols-2 gap-2">
                 {medidas.map((m) => {
-                  // descripcion_papel e imagenUrl solo existen en medidas de
-                  // papel — es lo que distingue dos productos que comparten
-                  // exactamente la misma medida (ej. "25+8x28" simple vs
-                  // "25+8x28 Troquel Riñón"), ya que nunca se fusionan entre sí.
-                  const descripcion = "descripcion_papel" in m ? m.descripcion_papel : null;
+                  // descripcion_papel (papel) y descripcion (plástico) son
+                  // los mismos datos con distinto nombre de columna — es lo
+                  // que distingue dos productos que comparten exactamente la
+                  // misma medida (ej. "25+8x28" simple vs "25+8x28 Troquel
+                  // Riñón"), ya que nunca se fusionan entre sí.
+                  const descripcion =
+                    "descripcion_papel" in m
+                      ? m.descripcion_papel
+                      : "descripcion" in m
+                      ? (m as any).descripcion
+                      : null;
                   const imagenUrl = "imagenUrl" in m ? m.imagenUrl : null;
                   return (
                     <button
                       key={m.id}
                       onClick={() => setIdMedidaSeleccionada(m.id)}
                       disabled={!m.medida}
-                      className={`border rounded-lg px-4 py-3 text-sm text-left transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-3 ${
+                      className={`relative rounded-xl px-4 py-3 text-sm text-left transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-3 ${
                         idMedidaSeleccionada === m.id
-                          ? "border-[#b8894a] bg-[#fbf3e8]"
-                          : "border-[#e2ddd0] hover:border-[#b8894a]"
+                          ? "bg-gradient-to-br from-[#fff6ea] to-[#fbead2] ring-2 ring-[#c98d3d] shadow-md -translate-y-0.5"
+                          : "bg-[#faf7f0] border border-[#e2ddd0] hover:border-[#c98d3d] hover:shadow-md hover:-translate-y-0.5"
                       }`}
                     >
+                      {idMedidaSeleccionada === m.id && (
+                        <span className="absolute top-1.5 right-1.5 w-5 h-5 rounded-full bg-[#c98d3d] text-white text-[10px] font-bold flex items-center justify-center shadow">
+                          ✓
+                        </span>
+                      )}
                       {imagenUrl && (
                         <img
                           src={imagenUrl}
@@ -796,20 +822,26 @@ export default function CotizadorLibre() {
 
       {/* Columna 2: Vista previa */}
       <div className="flex flex-col gap-6">
-        <div className="bg-white border border-[#e2ddd0] rounded-xl p-5 lg:sticky lg:top-24">
-          <h2 className="text-sm font-bold mb-3">Vista previa</h2>
+        <div className="bg-white rounded-2xl shadow-[0_1px_2px_rgba(30,58,43,0.06),0_14px_28px_-18px_rgba(30,58,43,0.35)] border border-[#eee9db] p-6 lg:sticky lg:top-24">
+          <span className="inline-block text-[10px] font-extrabold tracking-widest uppercase text-[#c98d3d] bg-[#fff3e0] px-2.5 py-1 rounded-full mb-3">
+            👁 Vista previa
+          </span>
           {(() => {
             const medidaSel = medidas.find((m) => m.id === idMedidaSeleccionada);
             const tipoSel = tipos.find((t) => t.id === idTipoSeleccionado);
             const imagenMedida = medidaSel && "imagenUrl" in medidaSel ? medidaSel.imagenUrl : null;
             const descripcionMedida =
-              medidaSel && "descripcion_papel" in medidaSel ? medidaSel.descripcion_papel : null;
+              medidaSel && "descripcion_papel" in medidaSel
+                ? medidaSel.descripcion_papel
+                : medidaSel && "descripcion" in medidaSel
+                ? (medidaSel as any).descripcion
+                : null;
             const imagenMostrar = imagenMedida || tipoSel?.imagenUrl || null;
 
             if (!idMedidaSeleccionada) {
               return (
-                <div className="aspect-square bg-[#eee9db] rounded-lg flex flex-col items-center justify-center text-center gap-2 text-[#6b6f63] text-sm p-6">
-                  <span className="text-4xl">🛍️</span>
+                <div className="aspect-square bg-gradient-to-br from-[#f3ede0] to-[#e9dfc9] rounded-xl flex flex-col items-center justify-center text-center gap-2 text-[#8a8d7f] text-sm p-6">
+                  <span className="text-5xl">🛍️</span>
                   Selecciona un tipo y una medida para ver la vista previa
                 </div>
               );
@@ -817,7 +849,7 @@ export default function CotizadorLibre() {
 
             return (
               <div className="flex flex-col gap-4">
-                <div className="aspect-square bg-[#eee9db] rounded-lg overflow-hidden flex items-center justify-center">
+                <div className="aspect-square bg-gradient-to-br from-[#f3ede0] to-[#e9dfc9] rounded-xl overflow-hidden flex items-center justify-center shadow-inner">
                   {imagenMostrar ? (
                     <img src={imagenMostrar} alt="" className="w-full h-full object-cover" />
                   ) : (
@@ -825,10 +857,10 @@ export default function CotizadorLibre() {
                   )}
                 </div>
                 <div className="text-center">
-                  <p className="text-xs uppercase text-[#b8894a] font-bold tracking-wide">
+                  <p className="text-xs uppercase text-[#c98d3d] font-extrabold tracking-widest">
                     Medida seleccionada
                   </p>
-                  <p className="text-xl font-extrabold text-[#1e3a2b] mt-1">
+                  <p className="text-2xl font-extrabold text-[#1e3a2b] mt-1 tracking-tight">
                     {medidaSel?.medida ?? "—"}
                   </p>
                   {descripcionMedida && (
@@ -837,14 +869,14 @@ export default function CotizadorLibre() {
                 </div>
                 {detallePapel && detallePapel.grupos.length > 0 && (
                   <div>
-                    <p className="text-xs uppercase text-[#6b6f63] font-bold mb-2 text-center">
+                    <p className="text-xs uppercase text-[#6b6f63] font-bold mb-2 text-center tracking-wide">
                       Materiales disponibles
                     </p>
                     <div className="flex flex-wrap gap-2 justify-center">
                       {detallePapel.grupos.map((g) => (
                         <span
                           key={g.idgrupo_papel}
-                          className="bg-[#eee9db] border border-[#e2ddd0] px-3 py-1.5 rounded-lg text-xs font-semibold"
+                          className="bg-white border border-[#e8d9b8] shadow-sm px-3 py-1.5 rounded-full text-xs font-bold text-[#1e3a2b]"
                         >
                           {g.material ?? "Material"}
                         </span>
@@ -862,8 +894,15 @@ export default function CotizadorLibre() {
       <div className="flex flex-col gap-6">
         {/* Paso 4: Personalización */}
         {idMedidaSeleccionada && (
-          <div className="bg-white border border-[#e2ddd0] rounded-xl p-5">
-            <h2 className="text-sm font-bold mb-3">4. Personaliza tu producto</h2>
+          <div className="bg-white rounded-2xl shadow-[0_1px_2px_rgba(30,58,43,0.06),0_14px_28px_-18px_rgba(30,58,43,0.35)] border border-[#eee9db] p-6">
+            <div className="flex items-center gap-2.5 mb-4">
+              <span className="w-7 h-7 rounded-full bg-[#1e3a2b] text-[#e8c99a] text-xs font-extrabold flex items-center justify-center flex-shrink-0">
+                4
+              </span>
+              <h2 className="text-base font-extrabold text-[#1e3a2b] tracking-tight">
+                Personaliza tu producto
+              </h2>
+            </div>
 
             {detalleLoading && <p className="text-sm text-[#6b6f63]">Cargando opciones...</p>}
             {detalleError && <p className="text-sm text-red-600">{detalleError}</p>}
@@ -871,18 +910,18 @@ export default function CotizadorLibre() {
             {!detalleLoading && detallePapel && (
               <div className="flex flex-col gap-5">
                 <div>
-                  <span className="text-xs font-bold text-[#6b6f63] uppercase block mb-2">
+                  <span className="text-[11px] font-extrabold text-[#a8875a] uppercase tracking-widest block mb-2.5">
                     Material
                   </span>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-3 gap-2">
                     {detallePapel.grupos.map((g) => (
                       <button
                         key={g.idgrupo_papel}
                         onClick={() => setIdGrupoSeleccionado(g.idgrupo_papel)}
-                        className={`border rounded-lg px-3 py-2 text-sm text-left transition-colors flex items-center gap-2 ${
+                        className={`border rounded-xl px-3 py-2.5 text-sm font-semibold text-left transition-all duration-150 flex items-center gap-2 ${
                           idGrupoSeleccionado === g.idgrupo_papel
-                            ? "border-[#b8894a] bg-[#fbf3e8]"
-                            : "border-[#e2ddd0] hover:border-[#b8894a]"
+                            ? "border-[#c98d3d] bg-gradient-to-br from-[#fff6ea] to-[#fbead2] text-[#1e3a2b] shadow-md ring-2 ring-[#c98d3d]/30 -translate-y-0.5"
+                            : "border-[#e2ddd0] hover:border-[#c98d3d] hover:shadow-md hover:-translate-y-0.5"
                         }`}
                       >
                         {g.imagenUrl && (
@@ -901,16 +940,16 @@ export default function CotizadorLibre() {
 
                 {detallePapel.asas.length > 0 && (
                   <div>
-                    <span className="text-xs font-bold text-[#6b6f63] uppercase block mb-2">
+                    <span className="text-[11px] font-extrabold text-[#a8875a] uppercase tracking-widest block mb-2.5">
                       Tipo de asa
                     </span>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    <div className="grid grid-cols-4 gap-2">
                       <button
                         onClick={() => setIdAsaSeleccionada(null)}
-                        className={`border rounded-lg px-3 py-2 text-xs font-semibold text-center transition-colors ${
+                        className={`border rounded-xl px-3 py-2.5 text-xs font-bold text-center transition-all duration-150 ${
                           idAsaSeleccionada === null
-                            ? "border-[#b8894a] bg-[#fbf3e8]"
-                            : "border-[#e2ddd0] hover:border-[#b8894a]"
+                            ? "border-[#c98d3d] bg-gradient-to-br from-[#fff6ea] to-[#fbead2] text-[#1e3a2b] shadow-md ring-2 ring-[#c98d3d]/30 -translate-y-0.5"
+                            : "border-[#e2ddd0] hover:border-[#c98d3d] hover:shadow-md hover:-translate-y-0.5"
                         }`}
                       >
                         🚫 Sin asa
@@ -919,10 +958,10 @@ export default function CotizadorLibre() {
                         <button
                           key={a.id}
                           onClick={() => setIdAsaSeleccionada(a.id)}
-                          className={`border rounded-lg px-3 py-2 text-xs font-semibold text-center transition-colors flex flex-col items-center gap-1 ${
+                          className={`border rounded-xl px-3 py-2.5 text-xs font-bold text-center transition-all duration-150 flex flex-col items-center gap-1 ${
                             idAsaSeleccionada === a.id
-                              ? "border-[#b8894a] bg-[#fbf3e8]"
-                              : "border-[#e2ddd0] hover:border-[#b8894a]"
+                              ? "border-[#c98d3d] bg-gradient-to-br from-[#fff6ea] to-[#fbead2] text-[#1e3a2b] shadow-md ring-2 ring-[#c98d3d]/30 -translate-y-0.5"
+                              : "border-[#e2ddd0] hover:border-[#c98d3d] hover:shadow-md hover:-translate-y-0.5"
                           }`}
                         >
                           {a.imagenUrl && (
@@ -937,16 +976,16 @@ export default function CotizadorLibre() {
 
                 {detallePapel.laminados.length > 0 && (
                   <div>
-                    <span className="text-xs font-bold text-[#6b6f63] uppercase block mb-2">
+                    <span className="text-[11px] font-extrabold text-[#a8875a] uppercase tracking-widest block mb-2.5">
                       Laminado
                     </span>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    <div className="grid grid-cols-4 gap-2">
                       <button
                         onClick={() => setIdLaminadoSeleccionado(null)}
-                        className={`border rounded-lg px-3 py-2 text-xs font-semibold text-center transition-colors ${
+                        className={`border rounded-xl px-3 py-2.5 text-xs font-bold text-center transition-all duration-150 ${
                           idLaminadoSeleccionado === null
-                            ? "border-[#b8894a] bg-[#fbf3e8]"
-                            : "border-[#e2ddd0] hover:border-[#b8894a]"
+                            ? "border-[#c98d3d] bg-gradient-to-br from-[#fff6ea] to-[#fbead2] text-[#1e3a2b] shadow-md ring-2 ring-[#c98d3d]/30 -translate-y-0.5"
+                            : "border-[#e2ddd0] hover:border-[#c98d3d] hover:shadow-md hover:-translate-y-0.5"
                         }`}
                       >
                         Sin laminado
@@ -955,10 +994,10 @@ export default function CotizadorLibre() {
                         <button
                           key={l.id}
                           onClick={() => setIdLaminadoSeleccionado(l.id)}
-                          className={`border rounded-lg px-3 py-2 text-xs font-semibold text-center transition-colors flex flex-col items-center gap-1 ${
+                          className={`border rounded-xl px-3 py-2.5 text-xs font-bold text-center transition-all duration-150 flex flex-col items-center gap-1 ${
                             idLaminadoSeleccionado === l.id
-                              ? "border-[#b8894a] bg-[#fbf3e8]"
-                              : "border-[#e2ddd0] hover:border-[#b8894a]"
+                              ? "border-[#c98d3d] bg-gradient-to-br from-[#fff6ea] to-[#fbead2] text-[#1e3a2b] shadow-md ring-2 ring-[#c98d3d]/30 -translate-y-0.5"
+                              : "border-[#e2ddd0] hover:border-[#c98d3d] hover:shadow-md hover:-translate-y-0.5"
                           }`}
                         >
                           {l.imagenUrl && (
@@ -973,16 +1012,16 @@ export default function CotizadorLibre() {
 
                 {detallePapel.acabadosPermitidos.textura && (
                   <div>
-                    <span className="text-xs font-bold text-[#6b6f63] uppercase block mb-2">
+                    <span className="text-[11px] font-extrabold text-[#a8875a] uppercase tracking-widest block mb-2.5">
                       Textura (opcional)
                     </span>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    <div className="grid grid-cols-4 gap-2">
                       <button
                         onClick={() => setIdTexturaSeleccionada(null)}
-                        className={`border rounded-lg px-3 py-2 text-xs font-semibold text-center transition-colors ${
+                        className={`border rounded-xl px-3 py-2.5 text-xs font-bold text-center transition-all duration-150 ${
                           idTexturaSeleccionada === null
-                            ? "border-[#b8894a] bg-[#fbf3e8]"
-                            : "border-[#e2ddd0] hover:border-[#b8894a]"
+                            ? "border-[#c98d3d] bg-gradient-to-br from-[#fff6ea] to-[#fbead2] text-[#1e3a2b] shadow-md ring-2 ring-[#c98d3d]/30 -translate-y-0.5"
+                            : "border-[#e2ddd0] hover:border-[#c98d3d] hover:shadow-md hover:-translate-y-0.5"
                         }`}
                       >
                         Sin textura
@@ -991,10 +1030,10 @@ export default function CotizadorLibre() {
                         <button
                           key={t.id}
                           onClick={() => setIdTexturaSeleccionada(t.id)}
-                          className={`border rounded-lg px-3 py-2 text-xs font-semibold text-center transition-colors flex flex-col items-center gap-1 ${
+                          className={`border rounded-xl px-3 py-2.5 text-xs font-bold text-center transition-all duration-150 flex flex-col items-center gap-1 ${
                             idTexturaSeleccionada === t.id
-                              ? "border-[#b8894a] bg-[#fbf3e8]"
-                              : "border-[#e2ddd0] hover:border-[#b8894a]"
+                              ? "border-[#c98d3d] bg-gradient-to-br from-[#fff6ea] to-[#fbead2] text-[#1e3a2b] shadow-md ring-2 ring-[#c98d3d]/30 -translate-y-0.5"
+                              : "border-[#e2ddd0] hover:border-[#c98d3d] hover:shadow-md hover:-translate-y-0.5"
                           }`}
                         >
                           {t.imagenUrl && (
@@ -1009,7 +1048,7 @@ export default function CotizadorLibre() {
 
                 {detallePapel.acabadosPermitidos.hot_stamping && (
                   <div>
-                    <span className="text-xs font-bold text-[#6b6f63] uppercase mb-2 flex items-center gap-2">
+                    <span className="text-[11px] font-extrabold text-[#a8875a] uppercase tracking-widest mb-2.5 flex items-center gap-2">
                       {detallePapel.imagenesGlobales.hotStamping && (
                         <img
                           src={detallePapel.imagenesGlobales.hotStamping}
@@ -1019,13 +1058,13 @@ export default function CotizadorLibre() {
                       )}
                       Hot stamping / Foil (opcional)
                     </span>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    <div className="grid grid-cols-4 gap-2">
                       <button
                         onClick={() => setIdFoilSeleccionado(null)}
-                        className={`border rounded-lg px-3 py-2 text-xs font-semibold text-center transition-colors ${
+                        className={`border rounded-xl px-3 py-2.5 text-xs font-bold text-center transition-all duration-150 ${
                           idFoilSeleccionado === null
-                            ? "border-[#b8894a] bg-[#fbf3e8]"
-                            : "border-[#e2ddd0] hover:border-[#b8894a]"
+                            ? "border-[#c98d3d] bg-gradient-to-br from-[#fff6ea] to-[#fbead2] text-[#1e3a2b] shadow-md ring-2 ring-[#c98d3d]/30 -translate-y-0.5"
+                            : "border-[#e2ddd0] hover:border-[#c98d3d] hover:shadow-md hover:-translate-y-0.5"
                         }`}
                       >
                         Sin foil
@@ -1034,10 +1073,10 @@ export default function CotizadorLibre() {
                         <button
                           key={f.id}
                           onClick={() => setIdFoilSeleccionado(f.id)}
-                          className={`border rounded-lg px-3 py-2 text-xs font-semibold text-center transition-colors flex flex-col items-center gap-1 ${
+                          className={`border rounded-xl px-3 py-2.5 text-xs font-bold text-center transition-all duration-150 flex flex-col items-center gap-1 ${
                             idFoilSeleccionado === f.id
-                              ? "border-[#b8894a] bg-[#fbf3e8]"
-                              : "border-[#e2ddd0] hover:border-[#b8894a]"
+                              ? "border-[#c98d3d] bg-gradient-to-br from-[#fff6ea] to-[#fbead2] text-[#1e3a2b] shadow-md ring-2 ring-[#c98d3d]/30 -translate-y-0.5"
+                              : "border-[#e2ddd0] hover:border-[#c98d3d] hover:shadow-md hover:-translate-y-0.5"
                           }`}
                         >
                           {f.imagenUrl && (
@@ -1051,10 +1090,10 @@ export default function CotizadorLibre() {
                 )}
 
                 {(detallePapel.acabadosPermitidos.uv || detallePapel.acabadosPermitidos.alto_relieve) && (
-                  <div className="flex gap-4">
+                  <div className="flex gap-3 flex-wrap">
                     {detallePapel.acabadosPermitidos.uv && (
-                      <label className="flex items-center gap-2 text-sm">
-                        <input type="checkbox" checked={uv} onChange={(e) => setUv(e.target.checked)} />
+                      <label className="flex items-center gap-2 text-sm font-semibold border border-[#e2ddd0] rounded-xl px-3 py-2 cursor-pointer hover:border-[#c98d3d] transition-colors has-[:checked]:border-[#c98d3d] has-[:checked]:bg-[#fff6ea]">
+                        <input type="checkbox" checked={uv} onChange={(e) => setUv(e.target.checked)} className="accent-[#c98d3d]" />
                         {detallePapel.imagenesGlobales.uv && (
                           <img src={detallePapel.imagenesGlobales.uv} alt="" className="w-9 h-9 rounded-lg object-cover" />
                         )}
@@ -1062,11 +1101,12 @@ export default function CotizadorLibre() {
                       </label>
                     )}
                     {detallePapel.acabadosPermitidos.alto_relieve && (
-                      <label className="flex items-center gap-2 text-sm">
+                      <label className="flex items-center gap-2 text-sm font-semibold border border-[#e2ddd0] rounded-xl px-3 py-2 cursor-pointer hover:border-[#c98d3d] transition-colors has-[:checked]:border-[#c98d3d] has-[:checked]:bg-[#fff6ea]">
                         <input
                           type="checkbox"
                           checked={altoRelieve}
                           onChange={(e) => setAltoRelieve(e.target.checked)}
+                          className="accent-[#c98d3d]"
                         />
                         {detallePapel.imagenesGlobales.altoRelieve && (
                           <img
@@ -1082,7 +1122,7 @@ export default function CotizadorLibre() {
                 )}
 
                 <div className="flex gap-4">
-                  <label className="text-sm flex flex-col gap-1">
+                  <label className="text-sm font-semibold flex flex-col gap-1.5">
                     Tintas frente (0-6)
                     <input
                       type="number"
@@ -1092,10 +1132,10 @@ export default function CotizadorLibre() {
                       onChange={(e) =>
                         setTintasFrente(Math.min(6, Math.max(0, Number(e.target.value) || 0)))
                       }
-                      className="border border-[#e2ddd0] rounded-lg px-3 py-2 w-28"
+                      className="border border-[#e2ddd0] rounded-xl px-3 py-2 w-28 focus:border-[#c98d3d] focus:ring-2 focus:ring-[#c98d3d]/20 outline-none transition-colors"
                     />
                   </label>
-                  <label className="text-sm flex flex-col gap-1">
+                  <label className="text-sm font-semibold flex flex-col gap-1.5">
                     Tintas dentro (0-6)
                     <input
                       type="number"
@@ -1105,7 +1145,7 @@ export default function CotizadorLibre() {
                       onChange={(e) =>
                         setTintasDentro(Math.min(6, Math.max(0, Number(e.target.value) || 0)))
                       }
-                      className="border border-[#e2ddd0] rounded-lg px-3 py-2 w-28"
+                      className="border border-[#e2ddd0] rounded-xl px-3 py-2 w-28 focus:border-[#c98d3d] focus:ring-2 focus:ring-[#c98d3d]/20 outline-none transition-colors"
                     />
                   </label>
                 </div>
@@ -1114,7 +1154,7 @@ export default function CotizadorLibre() {
 
             {!detalleLoading && detallePlastico && (
               <div>
-                <span className="text-xs font-bold text-[#6b6f63] uppercase block mb-2">
+                <span className="text-[11px] font-extrabold text-[#a8875a] uppercase tracking-widest block mb-2.5">
                   Número de tintas
                 </span>
                 <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
@@ -1122,10 +1162,10 @@ export default function CotizadorLibre() {
                     <button
                       key={t.id}
                       onClick={() => setIdTintasPlastico(t.id)}
-                      className={`border rounded-lg px-3 py-2 text-sm font-semibold text-center transition-colors ${
+                      className={`border rounded-xl px-3 py-2.5 text-sm font-bold text-center transition-all duration-150 ${
                         idTintasPlastico === t.id
-                          ? "border-[#b8894a] bg-[#fbf3e8]"
-                          : "border-[#e2ddd0] hover:border-[#b8894a]"
+                          ? "border-[#c98d3d] bg-gradient-to-br from-[#fff6ea] to-[#fbead2] text-[#1e3a2b] shadow-md ring-2 ring-[#c98d3d]/30 -translate-y-0.5"
+                          : "border-[#e2ddd0] hover:border-[#c98d3d] hover:shadow-md hover:-translate-y-0.5"
                       }`}
                     >
                       {t.cantidad}
@@ -1139,9 +1179,16 @@ export default function CotizadorLibre() {
 
         {/* Paso 5: Cantidad */}
         {idMedidaSeleccionada && (
-          <div className="bg-white border border-[#e2ddd0] rounded-xl p-5">
-            <h2 className="text-sm font-bold mb-3">5. Selecciona la cantidad</h2>
-            <div className="flex gap-2 flex-wrap mb-3">
+          <div className="bg-white rounded-2xl shadow-[0_1px_2px_rgba(30,58,43,0.06),0_14px_28px_-18px_rgba(30,58,43,0.35)] border border-[#eee9db] p-6">
+            <div className="flex items-center gap-2.5 mb-4">
+              <span className="w-7 h-7 rounded-full bg-[#1e3a2b] text-[#e8c99a] text-xs font-extrabold flex items-center justify-center flex-shrink-0">
+                5
+              </span>
+              <h2 className="text-base font-extrabold text-[#1e3a2b] tracking-tight">
+                Selecciona la cantidad
+              </h2>
+            </div>
+            <div className="grid grid-cols-5 gap-2 mb-3">
               {(categoria === "plastico" && cantidadMinimaPlastico
                 ? [0, 500, 1000, 1500, 2000].map((extra) => cantidadMinimaPlastico + extra)
                 : [500, 1000, 3000, 5000, 10000]
@@ -1149,10 +1196,10 @@ export default function CotizadorLibre() {
                 <button
                   key={c}
                   onClick={() => setCantidad(c)}
-                  className={`border rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${
+                  className={`border rounded-xl px-4 py-2.5 text-sm font-bold transition-all duration-150 ${
                     cantidad === c
-                      ? "border-[#b8894a] bg-[#fbf3e8] text-[#1e3a2b]"
-                      : "border-[#e2ddd0] hover:border-[#b8894a]"
+                      ? "border-[#c98d3d] bg-gradient-to-br from-[#fff6ea] to-[#fbead2] text-[#1e3a2b] shadow-md ring-2 ring-[#c98d3d]/30 -translate-y-0.5"
+                      : "border-[#e2ddd0] hover:border-[#c98d3d] hover:shadow-md hover:-translate-y-0.5"
                   }`}
                 >
                   {c.toLocaleString()} pzas
@@ -1165,7 +1212,7 @@ export default function CotizadorLibre() {
               placeholder="Cantidad personalizada"
               value={cantidad ?? ""}
               onChange={(e) => setCantidad(Number(e.target.value) || null)}
-              className="border border-[#e2ddd0] rounded-lg px-4 py-2 text-sm w-56"
+              className="border border-[#e2ddd0] rounded-xl px-4 py-2.5 text-sm w-56 focus:border-[#c98d3d] focus:ring-2 focus:ring-[#c98d3d]/20 outline-none transition-colors"
             />
             {categoria === "plastico" && cantidadMinimaPlastico && (
               <p className="text-xs text-[#6b6f63] mt-2">
@@ -1183,27 +1230,30 @@ export default function CotizadorLibre() {
 
         {/* Precio en vivo + Agregar al carrito */}
         {payloadPrecio && (
-          <div className="bg-[#1e3a2b] text-white rounded-xl p-5">
-            <p className="text-xs uppercase text-[#e8c99a] font-bold mb-1">Precio estimado</p>
-            {precioLoading && <p className="text-2xl font-extrabold">Calculando...</p>}
-            {!precioLoading && precioError && <p className="text-sm text-red-300">{precioError}</p>}
+          <div className="bg-gradient-to-br from-[#1e3a2b] to-[#0f2116] text-white rounded-2xl p-6 shadow-[0_20px_40px_-16px_rgba(30,58,43,0.55)] relative overflow-hidden">
+            <div className="absolute -top-10 -right-10 w-40 h-40 bg-[#e8c99a]/10 rounded-full blur-2xl" />
+            <p className="text-[11px] uppercase text-[#e8c99a] font-extrabold tracking-widest mb-1 relative">
+              💰 Precio estimado
+            </p>
+            {precioLoading && <p className="text-2xl font-extrabold relative">Calculando...</p>}
+            {!precioLoading && precioError && <p className="text-sm text-red-300 relative">{precioError}</p>}
             {!precioLoading && !precioError && precio && (
               <>
                 {precio.disponible && precio.precio_unitario !== null ? (
                   <>
-                    <p className="text-3xl font-extrabold">
+                    <p className="text-4xl font-extrabold relative tracking-tight">
                       ${precio.precio_unitario.toFixed(2)}{" "}
-                      <span className="text-sm font-medium text-white/70">MXN / pza</span>
+                      <span className="text-sm font-medium text-white/60">MXN / pza</span>
                     </p>
-                    <button
+                    {/* <button
                       onClick={handleAgregarAlCarrito}
-                      className="mt-4 bg-[#e8c99a] text-[#1e3a2b] font-bold px-5 py-3 rounded-lg hover:bg-white transition-colors"
+                      className="mt-4 relative w-full sm:w-auto bg-gradient-to-br from-[#f0d9ae] to-[#e8c99a] text-[#1e3a2b] font-extrabold px-6 py-3.5 rounded-xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0 transition-all duration-150"
                     >
                       + Agregar a cotización
-                    </button>
+                    </button> */}
                   </>
                 ) : (
-                  <p className="text-sm text-[#e8c99a]">
+                  <p className="text-sm text-[#e8c99a] relative">
                     {precio.mensaje ?? "Precio no disponible por el momento."}
                   </p>
                 )}
@@ -1216,16 +1266,23 @@ export default function CotizadorLibre() {
 
       {/* Carrito */}
       {carrito.length > 0 && (
-        <div className="bg-white border border-[#e2ddd0] rounded-xl p-5 mt-6">
-          <h2 className="text-sm font-bold mb-3">Tu cotización ({carrito.length})</h2>
+        <div className="bg-white rounded-2xl shadow-[0_1px_2px_rgba(30,58,43,0.06),0_14px_28px_-18px_rgba(30,58,43,0.35)] border border-[#eee9db] p-6 mt-6">
+          <div className="flex items-center gap-2.5 mb-4">
+            <span className="w-7 h-7 rounded-full bg-[#1e3a2b] text-[#e8c99a] text-xs font-extrabold flex items-center justify-center flex-shrink-0">
+              🛒
+            </span>
+            <h2 className="text-base font-extrabold text-[#1e3a2b] tracking-tight">
+              Tu cotización ({carrito.length})
+            </h2>
+          </div>
             <div className="flex flex-col gap-2">
               {carrito.map((item) => (
                 <div
                   key={item.idLocal}
-                  className="flex items-center justify-between border border-[#e2ddd0] rounded-lg px-4 py-3"
+                  className="flex items-center justify-between bg-[#faf7f0] border border-[#e2ddd0] rounded-xl px-4 py-3 hover:border-[#c98d3d] transition-colors"
                 >
                   <div>
-                    <p className="text-sm font-semibold">{item.descripcion}</p>
+                    <p className="text-sm font-bold text-[#1e3a2b]">{item.descripcion}</p>
                     <p className="text-xs text-[#6b6f63]">
                       {item.cantidad.toLocaleString()} pzas × ${item.precioUnitario.toFixed(2)} = $
                       {(item.cantidad * item.precioUnitario).toFixed(2)}
@@ -1233,15 +1290,16 @@ export default function CotizadorLibre() {
                   </div>
                   <button
                     onClick={() => quitarDelCarrito(item.idLocal)}
-                    className="text-red-600 text-sm font-semibold hover:underline"
+                    className="text-red-600 text-sm font-semibold hover:underline flex-shrink-0 ml-3"
                   >
                     Quitar
                   </button>
                 </div>
               ))}
             </div>
-            <div className="mt-3 text-right text-sm font-bold text-[#1e3a2b]">
-              Total: ${totalCarrito.toFixed(2)} MXN
+            <div className="mt-4 pt-3 border-t border-[#eee9db] text-right">
+              <span className="text-sm text-[#6b6f63] font-semibold mr-2">Total:</span>
+              <span className="text-xl font-extrabold text-[#1e3a2b]">${totalCarrito.toFixed(2)} MXN</span>
             </div>
           </div>
         )}
@@ -1255,11 +1313,11 @@ export default function CotizadorLibre() {
 
       {/* Barra de acciones finales */}
       {carrito.length > 0 && (
-        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-[#e2ddd0] px-4 sm:px-6 py-3 sm:py-4 flex flex-col sm:flex-row sm:justify-end gap-2 sm:gap-3">
+        <div className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur border-t border-[#e2ddd0] shadow-[0_-4px_20px_-6px_rgba(30,58,43,0.15)] px-4 sm:px-6 py-3 sm:py-4 flex flex-col sm:flex-row sm:justify-end gap-2 sm:gap-3">
           <button
             onClick={() => iniciarAccionFinal("cotizacion")}
             disabled={guardando}
-            className="w-full sm:w-auto border border-[#1e3a2b] text-[#1e3a2b] font-semibold px-5 py-3 rounded-lg disabled:opacity-50"
+            className="w-full sm:w-auto border-2 border-[#1e3a2b] text-[#1e3a2b] font-bold px-6 py-3 rounded-xl hover:bg-[#1e3a2b] hover:text-white transition-colors disabled:opacity-50"
           >
             {guardando ? "Guardando..." : "Generar cotización"}
           </button>
@@ -1267,7 +1325,7 @@ export default function CotizadorLibre() {
             <button
               onClick={() => iniciarAccionFinal("pedido")}
               disabled={guardando}
-              className="w-full sm:w-auto bg-[#3f7a52] text-white font-semibold px-5 py-3 rounded-lg disabled:opacity-50"
+              className="w-full sm:w-auto bg-gradient-to-br from-[#3f7a52] to-[#2d5c3d] text-white font-bold px-6 py-3 rounded-xl shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all duration-150 disabled:opacity-50"
             >
               {guardando ? "Guardando..." : "Convertir a pedido"}
             </button>

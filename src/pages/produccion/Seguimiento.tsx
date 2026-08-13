@@ -24,8 +24,10 @@ import ChatRevision from "../../components/diseno/ChatRevision";
 import { EditarAntLiqReal } from "../anticipoLiquidacion/AnticipoLiquidacion";
 import { EditarDisenoReal } from "../diseno/Diseno";
 import { useAuth } from "../../context/AuthContext";
-import { usePermiso } from "../../hooks/usePermiso";
+import { usePermiso, usePermisos } from "../../hooks/usePermiso";
 import ModalVerificarOperador from "../../components/produccion/ModalVerificarOperador";
+import { setTokenProceso } from "../../services/procesoTokenStore";
+import type { Proceso as ProcesoVerificacion } from "../../components/produccion/ModalVerificarOperador";
 import { showAlert } from '../../components/CustomAlert';
 import ModalProcesoIndividualPapel from "../../components/papel/ModalProcesoIndividualPapel";
 import { getProcesosOrdenPapel } from "../../services/papel/seguimientoPapelService";
@@ -438,6 +440,22 @@ const PROCESOS_PAPEL: { key: NombreProcesoPapel; encabezado: string; titulo: str
 
 const COLUMNAS_PAPEL = PROCESOS_PAPEL.map(({ encabezado }) => encabezado);
 
+// Un privilegio "Operar X" por proceso, igual que plástico (fase 4 del plan
+// de roles y privilegios) — antes ninguna de estas 11 celdas pedía nada.
+const PRIVILEGIO_PROCESO_PAPEL: Record<NombreProcesoPapel, string> = {
+  hojeado_papel: "produccion.papel.hojeado.operar",
+  guillotina_papel: "produccion.papel.guillotina.operar",
+  impresion_papel: "produccion.papel.impresion.operar",
+  laminacion_papel: "produccion.papel.laminacion.operar",
+  barniz_uv_papel: "produccion.papel.barniz_uv.operar",
+  hot_stamping_papel: "produccion.papel.hot_stamping.operar",
+  texturizado_papel: "produccion.papel.texturizado.operar",
+  alto_relieve_papel: "produccion.papel.alto_relieve.operar",
+  suaje_produccion_papel: "produccion.papel.suaje.operar",
+  armado_papel: "produccion.papel.armado.operar",
+  empaque_papel: "produccion.papel.empaque.operar",
+};
+
 const COLUMNAS = [
   "Fecha", "N° Pedido", "Impresion + Info", "Tipo", "Cantidad",
   "Anticipo", "OD", "Diseno", "Orden", "Días",
@@ -581,7 +599,7 @@ export default function Seguimiento() {
 
   const [modalVerificacion, setModalVerificacion] = useState<{
     pedido: PedidoSeguimiento;
-    proceso: "extrusion" | "impresion" | "bolseo" | "asa_flexible" | "orden_diseno";
+    proceso: ProcesoVerificacion;
   } | null>(null);
 
   const [procesosPapel, setProcesosPapel] = useState<Record<number, ProcesosOrdenPapelRespuesta>>({});
@@ -595,15 +613,16 @@ export default function Seguimiento() {
   const { user } = useAuth();
   const esAccesoTotal = user?.acceso_total ?? false;
 
-  const puedeExtrusion = esAccesoTotal || usePermiso("Operar Extrusión");
-  const puedeImpresion = esAccesoTotal || usePermiso("Operar Impresión");
-  const puedeBolseo = esAccesoTotal || usePermiso("Operar Bolseo");
-  const puedeAsaFlexible = esAccesoTotal || usePermiso("Operar Asa Flexible");
-  const esRolPlanta = usePermiso("Acceso Planta");
-  const puedeVerECta = esAccesoTotal || usePermiso("Editar Anticipo y Liquidacion");
-  const puedeVerEnvio = esAccesoTotal || usePermiso("Gestionar Envios");
-  const puedeVerOD = esAccesoTotal || usePermiso("Orden de Diseño");
-  const puedePdfPedido = esAccesoTotal || usePermiso("Descargar PDF Pedido");
+  const puedeExtrusion = esAccesoTotal || usePermiso("produccion.plastico.extrusion.operar");
+  const puedeImpresion = esAccesoTotal || usePermiso("produccion.plastico.impresion.operar");
+  const puedeBolseo = esAccesoTotal || usePermiso("produccion.plastico.bolseo.operar");
+  const puedeAsaFlexible = esAccesoTotal || usePermiso("produccion.plastico.asa_flexible.operar");
+  const esRolPlanta = usePermiso("produccion.acceso_planta");
+  const puedeVerECta = esAccesoTotal || usePermiso("cobranza.anticipo_liquidacion.gestionar");
+  const puedeVerEnvio = esAccesoTotal || usePermiso("envios.gestionar");
+  const puedeVerOD = esAccesoTotal || usePermiso("diseno.orden");
+  const puedePdfPedido = esAccesoTotal || usePermiso("pedido.pdf.descargar");
+  const permisosProcesoPapel = usePermisos(PRIVILEGIO_PROCESO_PAPEL);
   const [ordenFecha, setOrdenFecha] = useState<"reciente" | "antiguo">("antiguo");
   useEffect(() => {
     modalAnticipoRef.current = modalAnticipo;
@@ -1004,10 +1023,15 @@ export default function Seguimiento() {
                 <Badge
                   estado={estado}
                   fechaEstado={fechaProcesoPapel(proceso)}
-                  clickable={esPapel && ordenVigente && !!proceso && estado !== "no-aplica"}
+                  clickable={
+                    esPapel && ordenVigente && !!proceso && estado !== "no-aplica" &&
+                    (permisosProcesoPapel[key] || esRolPlanta)
+                  }
                   onClick={() => {
                     if (!esPapel || !ordenVigente || !proceso) return;
-                    setModalProcesoPapel({ pedido, nombreProceso: key });
+                    permisosProcesoPapel[key]
+                      ? setModalProcesoPapel({ pedido, nombreProceso: key })
+                      : setModalVerificacion({ pedido, proceso: key });
                   }}
                 />
               )}
@@ -1048,12 +1072,12 @@ export default function Seguimiento() {
   const modales = (
     <>
       {modalProceso && (
-        <Modal isOpen={!!modalProceso} onClose={() => setModalProceso(null)}
+        <Modal isOpen={!!modalProceso} onClose={() => { setModalProceso(null); setTokenProceso(null); }}
           title={`${modalProceso.nombreProceso.replace("_", " ").toUpperCase()} — ${modalProceso.pedido.no_produccion}`}>
           <ModalProcesoIndividual
             pedido={modalProceso.pedido}
             nombreProceso={modalProceso.nombreProceso}
-            onClose={() => setModalProceso(null)}
+            onClose={() => { setModalProceso(null); setTokenProceso(null); }}
             onActualizar={cargar}
           />
         </Modal>
@@ -1085,11 +1109,17 @@ export default function Seguimiento() {
       {modalVerificacion && (
         <ModalVerificarOperador
           proceso={modalVerificacion.proceso}
-          onSuccess={() => {
+          idproduccion={modalVerificacion.pedido.idproduccion}
+          onSuccess={(_operador, tokenProceso) => {
             const { pedido, proceso } = modalVerificacion;
             setModalVerificacion(null);
+            // Token de proceso (fase 5): null para orden_diseno, que queda
+            // fuera de su alcance — ver ModalVerificarOperador.tsx.
+            setTokenProceso(tokenProceso);
             if (proceso === "orden_diseno") {
               setModalOD(pedido);
+            } else if (proceso in NOMBRES_PROCESO_PAPEL) {
+              setModalProcesoPapel({ pedido, nombreProceso: proceso as NombreProcesoPapel });
             } else {
               setModalProceso({ pedido, nombreProceso: proceso });
             }
@@ -1123,13 +1153,13 @@ export default function Seguimiento() {
       {modalProcesoPapel && (
         <Modal
           isOpen={!!modalProcesoPapel}
-          onClose={() => setModalProcesoPapel(null)}
+          onClose={() => { setModalProcesoPapel(null); setTokenProceso(null); }}
           title={`${NOMBRES_PROCESO_PAPEL[modalProcesoPapel.nombreProceso]} — ${modalProcesoPapel.pedido.no_produccion}`}
         >
           <ModalProcesoIndividualPapel
             pedido={modalProcesoPapel.pedido as unknown as PedidoSeguimientoPapel}
             nombreProceso={modalProcesoPapel.nombreProceso}
-            onClose={() => setModalProcesoPapel(null)}
+            onClose={() => { setModalProcesoPapel(null); setTokenProceso(null); }}
             onActualizar={cargar}
           />
         </Modal>

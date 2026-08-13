@@ -14,6 +14,7 @@ import {
   fmtNum,
   n,
   normalizarOrdenProduccionPapelData,
+  obtenerMaquinaProcesoPapel,
   obtenerRegistroProcesoPapel,
   primeraLinea,
   redondear,
@@ -63,6 +64,12 @@ const H = {
   INFO: 13.0,
   PRODUCTO: 13.6,
   ATRIBUTOS: 13.2,
+  // Fila de cantidades "con Merma". Se agrega DESPUÉS de filaAtributos a
+  // propósito, no entre las filas existentes: columnaFirmas() ya posiciona
+  // las etiquetas Ventas/Diseño/Logistica sumando H.INFO+H.PRODUCTO+
+  // H.ATRIBUTOS -- insertarla en medio las hubiera descuadrado sin tocar
+  // esa función.
+  MERMA: 10.0,
 };
 
 const Y_INICIO = M;
@@ -770,18 +777,69 @@ function filaInfo(doc: jsPDF, data: OrdenProduccionPapelData, y: number) {
 // ── Fila de producto (Producto / Cantidad / Medida / Material / Calibre) ──
 function filaProducto(doc: jsPDF, data: OrdenProduccionPapelData, y: number) {
   const w = X_FIRMA_L - X0;
+
+  // grupo_descripcion ya trae cada material emparejado con su propio
+  // calibre ("Kraft 250g + Couché 300g"), separados por " + " -- así se
+  // arma al elegir la opción (mapearOpciones en papelCotizacionService.ts).
+  // Con más de un material no cabe en una sola línea de la celda angosta
+  // de "Material", así que aquí se listan apilados y se fusiona con la
+  // celda "Calibre" (ese dato ya va embebido en cada línea, mostrarlo
+  // aparte solo repetía/desalineaba info de un material distinto).
+  const materiales = f(data.grupo_descripcion)
+    .split(" + ")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .slice(0, 4);
+  const multiMaterial = materiales.length > 1;
+
+  const cols: Array<[string, string, number, number]> = multiMaterial
+    ? [
+        ["Producto", primeraLinea(data.nombre_producto, data.descripcion), 0.385, 12],
+        ["Cantidad", fmtCantidad(data), 0.118, 12],
+        ["Medida", sinDecimalesInnecesarios(f(data.medida)), 0.193, 12],
+        [
+          "Materiales",
+          materiales.join("\n"),
+          0.304,
+          materiales.length === 2 ? 9 : materiales.length === 3 ? 8 : 7,
+        ],
+      ]
+    : [
+        ["Producto", primeraLinea(data.nombre_producto, data.descripcion), 0.385, 12],
+        ["Cantidad", fmtCantidad(data), 0.118, 12],
+        ["Medida", sinDecimalesInnecesarios(f(data.medida)), 0.193, 12],
+        ["Material", primeraLinea(data.material, data.grupo_descripcion), 0.168, 11],
+        ["Calibre", f(data.calibre), 0.136, 11],
+      ];
+
+  let cx = X0;
+  cols.forEach(([label, valor, peso, size]) => {
+    const cw = w * peso;
+    celda(doc, label, valor, cx, y, cw, H.PRODUCTO, {
+      size,
+      maxLines: multiMaterial ? materiales.length : 1,
+    });
+    cx += cw;
+  });
+}
+
+// ── Fila de cantidades con merma ─────────────────────────────────────────
+// Cantidad pedida, cantidad hojeada y pliegos (guillotina), cada una ya con
+// la merma de la orden sumada -- el margen real que se debe producir en
+// cada etapa. "—" cuando la orden no tiene merma congelada todavía (ver
+// getValoresCalculadosPapel).
+function filaMerma(doc: jsPDF, data: OrdenProduccionPapelData, y: number) {
+  const w = X_FIRMA_L - X0;
   const cols: Array<[string, string, number, number]> = [
-    ["Producto", primeraLinea(data.nombre_producto, data.descripcion), 0.385, 12],
-    ["Cantidad", fmtCantidad(data), 0.118, 12],
-    ["Medida", sinDecimalesInnecesarios(f(data.medida)), 0.193, 12],
-    ["Material", primeraLinea(data.material, data.grupo_descripcion), 0.168, 11],
-    ["Calibre", f(data.calibre), 0.136, 11],
+    ["Cantidad c/ Merma", fmtNum(data.cantidad_con_merma) || "—", 0.34, 11],
+    ["Cant. Hojeada c/ Merma", fmtNum(data.cantidad_hojeada_con_merma) || "—", 0.33, 11],
+    ["Pliegos c/ Merma", fmtNum(data.pliegos_con_merma) || "—", 0.33, 11],
   ];
 
   let cx = X0;
   cols.forEach(([label, valor, peso, size]) => {
     const cw = w * peso;
-    celda(doc, label, valor, cx, y, cw, H.PRODUCTO, { size, maxLines: 1 });
+    celda(doc, label, valor, cx, y, cw, H.MERMA, { size, maxLines: 1 });
     cx += cw;
   });
 }
@@ -1244,7 +1302,12 @@ function bloqueArmado(
 
   caja(doc, mainX, y, maquinaW, h);
   etiqueta(doc, "Maquina", mainX, y);
-  txt(doc, primeraLinea((data as any).maquina_armado_pdf, registro?.maquina, "Manual"), mainX + 1.4, y + h / 2 + 3, {
+  // CORREGIDO: leía data.maquina_armado_pdf, un campo que ninguna pantalla
+  // llena realmente y que la normalización siempre rellenaba con "Manual" —
+  // así que la máquina de verdad configurada en maquinaria_seleccionada.armado
+  // nunca se mostraba. Mismo patrón que usa valorMaquina() para los demás
+  // procesos: prioriza lo capturado en vivo, luego lo preconfigurado.
+  txt(doc, primeraLinea(registro?.maquina, obtenerMaquinaProcesoPapel(data, "armado_papel"), "Manual"), mainX + 1.4, y + h / 2 + 3, {
     size: 10, bold: true, maxW: maquinaW - 2.8, maxLines: 1,
   });
 
@@ -1304,7 +1367,11 @@ function bloqueEmpaque(
   const box1W = mainW * 0.26;
   caja(doc, mainX, y, box1W, h);
   etiqueta(doc, "Maquina", mainX, y);
-  txt(doc, primeraLinea((data as any).maquina_armado_pdf, registro?.maquina, "Manual"), mainX + 1.4, y + h - 2, {
+  // CORREGIDO: estaba copiado del bloque de Armado — leía
+  // data.maquina_armado_pdf en vez de la máquina de Empaque
+  // (maquinaria_seleccionada.empaque_maquina), así que Empaque mostraba el
+  // mismo default "Manual" sin importar qué máquina tuviera configurada.
+  txt(doc, primeraLinea(registro?.maquina, obtenerMaquinaProcesoPapel(data, "empaque_papel"), "Manual"), mainX + 1.4, y + h - 2, {
     size: 9.5, bold: true, maxW: box1W - 2.8, maxLines: 1,
   });
 
@@ -1437,6 +1504,8 @@ export async function generarPdfOrdenProduccionPapel(
   y += H.PRODUCTO;
   filaAtributos(doc, data, y);
   y += H.ATRIBUTOS;
+  filaMerma(doc, data, y);
+  y += H.MERMA;
 
   columnaFirmas(doc, yFirmas);
   y += 1.6;

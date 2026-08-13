@@ -11,7 +11,7 @@ const FLAG_ACTUALIZADO = "sigeb-pwa-actualizado";
 // El navegador por su cuenta solo revisa al navegar o cada ~24 h, y en una SPA
 // que se deja abierta todo el día eso nunca pasa: sin este intervalo, un deploy
 // nuevo no lo ve nadie hasta que alguien recargue a mano.
-const INTERVALO_CHEQUEO_MS = 60_000;
+const INTERVALO_CHEQUEO_MS = 5 * 60_000;
 
 // <StrictMode> invoca dos veces el inicializador de useState con el que
 // `useRegisterSW` registra el SW, así que el arranque de los chequeos se

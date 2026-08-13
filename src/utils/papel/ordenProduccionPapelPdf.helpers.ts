@@ -439,9 +439,20 @@ export function refuerzoTexto(data: OrdenProduccionPapelData): string {
 }
 
 export function getValoresCalculadosPapel(data: OrdenProduccionPapelData): Partial<OrdenProduccionPapelData> {
+  // cantidad_produccion (pedido + merma congelada, calculado por el backend
+  // en getSeguimiento/getOrdenProduccion vía getCantidadesAProducirBatch)
+  // es la base real para cortar material -- incluye el margen de merma sin
+  // tocar la cantidad pedida. Si la orden no tiene snapshot de merma
+  // todavía, cae a `data.cantidad` tal cual (comportamiento previo al
+  // sistema de merma). La celda "Cantidad" del PDF sigue mostrando
+  // `data.cantidad` sin modificar -- solo los cálculos internos de pliegos
+  // usan esta base.
+  const cantidadProduccion = n(data.cantidad_produccion);
+  const cantidadParaProduccion = cantidadProduccion ?? n(data.cantidad);
+
   // Pliegos/bolsas se calculan con el rendimiento de HOJEADO (cómo se tiene
   // que cortar el material), no con el rendimiento general del material.
-  const pliegosCalculado = calcularCantidadHojeada(data.cantidad, data.hoj_rendimiento);
+  const pliegosCalculado = calcularCantidadHojeada(cantidadParaProduccion, data.hoj_rendimiento);
   const pliegos = pliegosCalculado ?? n(data.pliegos_impresion_estimados);
 
   // CORREGIDO: `pliegos_guillotina` estaba declarado en el tipo pero nunca
@@ -450,7 +461,7 @@ export function getValoresCalculadosPapel(data: OrdenProduccionPapelData): Parti
   // real ya capturado) o quedaba en blanco/mal, nunca un estimado. Usa el
   // rendimiento GENÉRICO (el de Guillotina), no hoj_rendimiento -- son dos
   // rendimientos distintos, no intercambiables.
-  const pliegosGuillotinaCalculado = calcularCantidadHojeada(data.cantidad, data.rendimiento);
+  const pliegosGuillotinaCalculado = calcularCantidadHojeada(cantidadParaProduccion, data.rendimiento);
 
 
   // El backend ya resuelve desarrollo_laminacion_mm priorizando el valor
@@ -467,10 +478,18 @@ export function getValoresCalculadosPapel(data: OrdenProduccionPapelData): Parti
     calcularMetrosLaminacion(pliegos, desarrollo) ??
     n(data.metros_laminacion_estimados);
 
+  // Celdas explícitas "con Merma" para el PDF: mismos valores que ya
+  // absorbieron el margen arriba (cantidadParaProduccion), pero expuestos
+  // aparte y en null (no en la cantidad pedida sin más) cuando la orden no
+  // tiene snapshot de merma congelada -- así el PDF puede mostrar "—" en
+  // vez de fingir que la merma es 0.
   return {
     cantidad_hojeada_calculada: pliegosCalculado ?? n(data.cantidad_hojeada_calculada) ?? pliegos,
     pliegos_impresion_estimados: pliegos,
     pliegos_guillotina: pliegosGuillotinaCalculado ?? n(data.pliegos_guillotina),
+    cantidad_con_merma: cantidadProduccion,
+    cantidad_hojeada_con_merma: cantidadProduccion != null ? pliegosCalculado : null,
+    pliegos_con_merma: cantidadProduccion != null ? pliegosGuillotinaCalculado : null,
     desarrollo_laminacion_mm: desarrollo,
     desarrollo_mm: n(data.desarrollo_mm) ?? desarrollo,
     ctes_mod_laminacion:
@@ -503,7 +522,6 @@ export function normalizarOrdenProduccionPapelData(
     material_impresion: primeraLinea(data.material_impresion, materialImpresionTexto(data)),
     asa_descripcion: primeraLinea(data.asa_descripcion, asaTexto(data)),
     refuerzo: primeraLinea(data.refuerzo, refuerzoTexto(data)),
-    maquina_armado_pdf: primeraLinea(data.maquina_armado_pdf, "Manual"),
   };
 }
 

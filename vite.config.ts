@@ -23,7 +23,7 @@ export default defineConfig({
         // Con esto `npm run dev` también levanta el service worker, así que el
         // ciclo completo de actualización automática se puede probar en local
         // sin tener que hacer `npm run build` + `npm run preview`.
-        enabled: true,
+        enabled: false,
         // El SW se sirve como módulo ES porque src/sw.ts se entrega sin
         // bundlear en desarrollo (importa workbox-* con imports normales).
         type: "module",

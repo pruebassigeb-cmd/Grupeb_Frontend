@@ -1,4 +1,5 @@
 import axios, { type AxiosRequestConfig, type AxiosResponse } from "axios";
+import { getTokenProceso } from "./procesoTokenStore";
 
 // Detectar entorno automáticamente
 const API_URL = import.meta.env.VITE_API_URL || (
@@ -36,6 +37,16 @@ api.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+
+    // Token de proceso (fase 5) — solo mientras hay uno activo (entre que
+    // ModalVerificarOperador lo emite y el modal de proceso correspondiente
+    // se cierra) y solo hacia los endpoints de procesos/procesos-papel, para
+    // no arrastrarlo a peticiones que no tienen nada que ver.
+    const tokenProceso = getTokenProceso();
+    if (tokenProceso && /\/procesos(-papel)?\b/.test(config.url ?? "")) {
+      config.headers["X-Proceso-Token"] = tokenProceso;
+    }
+
     return config;
   },
   (error) => Promise.reject(error)

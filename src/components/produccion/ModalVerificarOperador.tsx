@@ -1,10 +1,13 @@
 import { useState } from "react";
 import api from "../../services/api";
+import type { NombreProcesoPapel } from "../../types/papel/seguimientoPapel.types";
+import { NOMBRES_PROCESO_PAPEL } from "../../types/papel/seguimientoPapel.types";
 
 // ==========================
 // TIPOS
 // ==========================
-type Proceso = "extrusion" | "impresion" | "bolseo" | "asa_flexible" | "orden_diseno";
+type ProcesoPlastico = "extrusion" | "impresion" | "bolseo" | "asa_flexible";
+export type Proceso = ProcesoPlastico | NombreProcesoPapel | "orden_diseno";
 
 interface Operador {
   id:       number;
@@ -13,9 +16,12 @@ interface Operador {
 }
 
 interface ModalVerificarOperadorProps {
-  proceso:    Proceso;
-  onSuccess:  (operador: Operador) => void;
-  onCancel:   () => void;
+  proceso:      Proceso;
+  // Requerido para todo lo que no sea "orden_diseno" — es lo que acota el
+  // token de proceso a esta orden específica (ver fase 5 del plan).
+  idproduccion?: number | null;
+  onSuccess:    (operador: Operador, tokenProceso: string | null) => void;
+  onCancel:     () => void;
 }
 
 const NOMBRE_PROCESO: Record<Proceso, string> = {
@@ -24,6 +30,7 @@ const NOMBRE_PROCESO: Record<Proceso, string> = {
   bolseo:       "Bolseo",
   asa_flexible: "Asa Flexible",
   orden_diseno: "Orden de Diseño",
+  ...NOMBRES_PROCESO_PAPEL,
 };
 
 // ==========================
@@ -31,6 +38,7 @@ const NOMBRE_PROCESO: Record<Proceso, string> = {
 // ==========================
 export default function ModalVerificarOperador({
   proceso,
+  idproduccion,
   onSuccess,
   onCancel,
 }: ModalVerificarOperadorProps) {
@@ -59,10 +67,11 @@ export default function ModalVerificarOperador({
         correo:  correo.trim().toLowerCase(),
         codigo,
         proceso,
+        idproduccion,
       });
 
       if (response.data.autorizado) {
-        onSuccess(response.data.operador);
+        onSuccess(response.data.operador, response.data.tokenProceso ?? null);
       }
     } catch (err: any) {
       const mensaje =
