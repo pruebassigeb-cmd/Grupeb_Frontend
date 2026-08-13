@@ -101,10 +101,14 @@ const CAMPOS_PROCESO_PAPEL: Record<NombreProcesoPapel, CampoProceso[]> = {
 // ─────────────────────────────────────────────
 // CAMPOS PROPIOS DEL REGISTRO (no son de ficha, no son cascada
 // entrada/merma/salida — son cálculos reales de ESA corrida que sí viven
-// en la tabla del proceso). Confirmado en el DDL corregido: a diferencia
-// de "acabado" en laminación (que SÍ es de ficha), bobina_cm/metros/
-// rollos/desarrollo_mm/ctes_mod son fórmulas pendientes de implementar en
-// el alta de producto, así que por ahora se quedan en el registro.
+// en la tabla del proceso). A diferencia de "acabado" en laminación (que
+// SÍ es de ficha), bobina_cm/metros/rollos/desarrollo_mm/ctes_mod se
+// capturan por corrida porque pueden variar orden a orden -- pero desde
+// 2026-08-13 el modal SÍ muestra una referencia calculada de estos mismos
+// valores (BloqueVisualHojeadoGuillotina, rama laminacion_papel), igual
+// que ya hacía Hojeado/Guillotina con "Pliegos calculados": son estimados
+// de ficha para que el operador no capture a ciegas, no reemplazan lo que
+// se guarda aquí.
 // ─────────────────────────────────────────────
 const CAMPOS_REGISTRO_PROPIO_PAPEL: Record<NombreProcesoPapel, CampoProceso[]> = {
   hojeado_papel: [],
@@ -424,6 +428,50 @@ function BloqueVisualHojeadoGuillotina({
             <span className="text-sm font-bold text-indigo-700">
               {pedido.pliegos_guillotina_calculado.toLocaleString("es-MX")}
             </span>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (nombreProceso === "laminacion_papel") {
+    return (
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+        <p className="text-xs font-semibold text-blue-800 uppercase tracking-wide mb-2">
+          📐 Laminación — bobina y desarrollo
+        </p>
+        <div className="grid grid-cols-3 gap-2 mb-2">
+          <div className="text-center bg-white rounded border border-blue-100 px-2 py-2">
+            <p className="text-[10px] text-blue-400 uppercase tracking-wide mb-0.5">Bobina (cm)</p>
+            <p className="text-sm font-bold text-blue-800">{pedido.bobina_laminacion_cm ?? "—"}</p>
+          </div>
+          <div className="text-center bg-white rounded border border-blue-100 px-2 py-2">
+            <p className="text-[10px] text-blue-400 uppercase tracking-wide mb-0.5">Desarrollo (mm)</p>
+            <p className="text-sm font-bold text-blue-800">{pedido.desarrollo_laminacion_mm ?? "—"}</p>
+          </div>
+          <div className="text-center bg-white rounded border border-blue-100 px-2 py-2">
+            <p className="text-[10px] text-blue-400 uppercase tracking-wide mb-0.5">CTES/Mod</p>
+            <p className="text-sm font-bold text-blue-800">{pedido.ctes_mod_laminacion ?? "—"}</p>
+          </div>
+        </div>
+        {(pedido.metros_laminacion_estimados != null || pedido.rollos_laminacion_estimados != null) && (
+          <div className="grid grid-cols-2 gap-2">
+            {pedido.metros_laminacion_estimados != null && (
+              <div className="flex items-center justify-between bg-indigo-50 border border-indigo-100 rounded px-2 py-1.5">
+                <span className="text-[10px] text-indigo-500 uppercase tracking-wide">Metros (estimado)</span>
+                <span className="text-sm font-bold text-indigo-700">
+                  {pedido.metros_laminacion_estimados.toLocaleString("es-MX")}
+                </span>
+              </div>
+            )}
+            {pedido.rollos_laminacion_estimados != null && (
+              <div className="flex items-center justify-between bg-indigo-50 border border-indigo-100 rounded px-2 py-1.5">
+                <span className="text-[10px] text-indigo-500 uppercase tracking-wide">Rollos (estimado)</span>
+                <span className="text-sm font-bold text-indigo-700">
+                  {pedido.rollos_laminacion_estimados.toLocaleString("es-MX")}
+                </span>
+              </div>
+            )}
           </div>
         )}
       </div>

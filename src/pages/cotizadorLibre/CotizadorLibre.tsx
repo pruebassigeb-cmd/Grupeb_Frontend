@@ -612,8 +612,8 @@ export default function CotizadorLibre() {
   // WIZARD
   // ============================================================
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#faf7f0] to-[#f1ebdd] pb-40 sm:pb-28">
-      <div className="sticky top-0 z-20 bg-white/95 backdrop-blur border-b border-[#e2ddd0] shadow-[0_2px_16px_-6px_rgba(30,58,43,0.12)] px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between flex-wrap gap-2">
+    <div className="min-h-screen bg-gradient-to-b from-[#faf7f0] to-[#f1ebdd] pb-40 sm:pb-28 lg:h-dvh lg:min-h-0 lg:overflow-hidden lg:flex lg:flex-col lg:pb-0">
+      <div className="sticky top-0 z-20 shrink-0 bg-white/95 backdrop-blur border-b border-[#e2ddd0] shadow-[0_2px_16px_-6px_rgba(30,58,43,0.12)] px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between flex-wrap gap-2">
         <button
           onClick={volverAlInicio}
           className="text-sm text-[#1e3a2b] hover:text-[#c98d3d] font-bold flex items-center gap-1 transition-colors"
@@ -639,16 +639,20 @@ export default function CotizadorLibre() {
       </div>
 
       {esClienteExterno && (
-        <div className="bg-[#fff8e6] border-b border-[#e8d38a] px-4 sm:px-6 py-2.5 text-center">
+        <div className="shrink-0 bg-[#fff8e6] border-b border-[#e8d38a] px-4 sm:px-6 py-2.5 text-center">
           <p className="text-xs text-[#7a5c00]">
             ℹ️ Esta es una cotización estimada — las especificaciones o el precio final pueden variar ligeramente al confirmarse con un asesor.
           </p>
         </div>
       )}
 
-      <div className="w-full px-4 sm:px-6 lg:px-10 xl:px-16 py-6 sm:py-8">
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8 items-start">
-      <div className="flex flex-col gap-6">
+      <div
+        className={`w-full px-4 sm:px-6 lg:px-10 xl:px-16 py-6 sm:py-8 lg:flex-1 lg:min-h-0 lg:pt-5 lg:overflow-hidden ${
+          carrito.length > 0 ? "lg:pb-24" : "lg:pb-5"
+        }`}
+      >
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8 items-start lg:items-stretch lg:h-full lg:min-h-0">
+      <div className="flex flex-col gap-6 lg:h-full lg:min-h-0 lg:overflow-y-auto lg:overscroll-contain lg:pb-4 [&>*]:shrink-0 lg:[scrollbar-width:none] lg:[-ms-overflow-style:none] lg:[&::-webkit-scrollbar]:hidden">
         {/* Paso 1: Categoría */}
         <div className="bg-white rounded-2xl shadow-[0_1px_2px_rgba(30,58,43,0.06),0_14px_28px_-18px_rgba(30,58,43,0.35)] border border-[#eee9db] p-6">
           <div className="flex items-center gap-2.5 mb-4">
@@ -821,8 +825,8 @@ export default function CotizadorLibre() {
       </div>
 
       {/* Columna 2: Vista previa */}
-      <div className="flex flex-col gap-6">
-        <div className="bg-white rounded-2xl shadow-[0_1px_2px_rgba(30,58,43,0.06),0_14px_28px_-18px_rgba(30,58,43,0.35)] border border-[#eee9db] p-6 lg:sticky lg:top-24">
+      <div className="flex flex-col gap-6 lg:h-full lg:min-h-0">
+        <div className="bg-white rounded-2xl shadow-[0_1px_2px_rgba(30,58,43,0.06),0_14px_28px_-18px_rgba(30,58,43,0.35)] border border-[#eee9db] p-6 lg:h-full lg:min-h-0 lg:flex lg:flex-col">
           <span className="inline-block text-[10px] font-extrabold tracking-widest uppercase text-[#c98d3d] bg-[#fff3e0] px-2.5 py-1 rounded-full mb-3">
             👁 Vista previa
           </span>
@@ -840,7 +844,7 @@ export default function CotizadorLibre() {
 
             if (!idMedidaSeleccionada) {
               return (
-                <div className="aspect-square bg-gradient-to-br from-[#f3ede0] to-[#e9dfc9] rounded-xl flex flex-col items-center justify-center text-center gap-2 text-[#8a8d7f] text-sm p-6">
+                <div className="aspect-square bg-gradient-to-br from-[#f3ede0] to-[#e9dfc9] rounded-xl flex flex-col items-center justify-center text-center gap-2 text-[#8a8d7f] text-sm p-6 lg:aspect-auto lg:flex-1 lg:min-h-0">
                   <span className="text-5xl">🛍️</span>
                   Selecciona un tipo y una medida para ver la vista previa
                 </div>
@@ -848,8 +852,8 @@ export default function CotizadorLibre() {
             }
 
             return (
-              <div className="flex flex-col gap-4">
-                <div className="aspect-square bg-gradient-to-br from-[#f3ede0] to-[#e9dfc9] rounded-xl overflow-hidden flex items-center justify-center shadow-inner">
+              <div className="flex flex-col gap-4 lg:flex-1 lg:min-h-0">
+                <div className="aspect-square bg-gradient-to-br from-[#f3ede0] to-[#e9dfc9] rounded-xl overflow-hidden flex items-center justify-center shadow-inner lg:aspect-auto lg:flex-1 lg:min-h-0">
                   {imagenMostrar ? (
                     <img src={imagenMostrar} alt="" className="w-full h-full object-cover" />
                   ) : (
@@ -891,7 +895,7 @@ export default function CotizadorLibre() {
       </div>
 
       {/* Columna 3: Personalización, cantidad y precio */}
-      <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-6 lg:h-full lg:min-h-0 lg:overflow-y-auto lg:overscroll-contain lg:pb-4 [&>*]:shrink-0 lg:[scrollbar-width:none] lg:[-ms-overflow-style:none] lg:[&::-webkit-scrollbar]:hidden">
         {/* Paso 4: Personalización */}
         {idMedidaSeleccionada && (
           <div className="bg-white rounded-2xl shadow-[0_1px_2px_rgba(30,58,43,0.06),0_14px_28px_-18px_rgba(30,58,43,0.35)] border border-[#eee9db] p-6">
@@ -1158,7 +1162,7 @@ export default function CotizadorLibre() {
                   Número de tintas
                 </span>
                 <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-                  {detallePlastico.tintas.map((t) => (
+                  {detallePlastico.tintas.filter((t) => t.cantidad !== null && t.cantidad <= 4).map((t) => (
                     <button
                       key={t.id}
                       onClick={() => setIdTintasPlastico(t.id)}
@@ -1230,7 +1234,7 @@ export default function CotizadorLibre() {
 
         {/* Precio en vivo + Agregar al carrito */}
         {payloadPrecio && (
-          <div className="bg-gradient-to-br from-[#1e3a2b] to-[#0f2116] text-white rounded-2xl p-6 shadow-[0_20px_40px_-16px_rgba(30,58,43,0.55)] relative overflow-hidden">
+          <div className="shrink-0 bg-gradient-to-br from-[#1e3a2b] to-[#0f2116] text-white rounded-2xl p-6 shadow-[0_20px_40px_-16px_rgba(30,58,43,0.55)] relative overflow-hidden">
             <div className="absolute -top-10 -right-10 w-40 h-40 bg-[#e8c99a]/10 rounded-full blur-2xl" />
             <p className="text-[11px] uppercase text-[#e8c99a] font-extrabold tracking-widest mb-1 relative">
               💰 Precio estimado
@@ -1241,10 +1245,14 @@ export default function CotizadorLibre() {
               <>
                 {precio.disponible && precio.precio_unitario !== null ? (
                   <>
-                    <p className="text-4xl font-extrabold relative tracking-tight">
-                      ${precio.precio_unitario.toFixed(2)}{" "}
-                      <span className="text-sm font-medium text-white/60">MXN / pza</span>
-                    </p>
+                    <div className="relative flex flex-wrap items-end gap-x-2 gap-y-1 min-w-0">
+                      <p className="text-3xl sm:text-4xl leading-none font-extrabold tracking-tight break-words max-w-full">
+                        ${precio.precio_unitario.toFixed(2)}
+                      </p>
+                      <span className="text-xs sm:text-sm font-medium text-white/60 leading-none pb-1">
+                        MXN / pza
+                      </span>
+                    </div>
                     {/* <button
                       onClick={handleAgregarAlCarrito}
                       className="mt-4 relative w-full sm:w-auto bg-gradient-to-br from-[#f0d9ae] to-[#e8c99a] text-[#1e3a2b] font-extrabold px-6 py-3.5 rounded-xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0 transition-all duration-150"
@@ -1261,12 +1269,10 @@ export default function CotizadorLibre() {
             )}
           </div>
         )}
-      </div>
-      </div>
 
-      {/* Carrito */}
+        {/* Carrito */}
       {carrito.length > 0 && (
-        <div className="bg-white rounded-2xl shadow-[0_1px_2px_rgba(30,58,43,0.06),0_14px_28px_-18px_rgba(30,58,43,0.35)] border border-[#eee9db] p-6 mt-6">
+        <div className="bg-white rounded-2xl shadow-[0_1px_2px_rgba(30,58,43,0.06),0_14px_28px_-18px_rgba(30,58,43,0.35)] border border-[#eee9db] p-6">
           <div className="flex items-center gap-2.5 mb-4">
             <span className="w-7 h-7 rounded-full bg-[#1e3a2b] text-[#e8c99a] text-xs font-extrabold flex items-center justify-center flex-shrink-0">
               🛒
@@ -1310,10 +1316,12 @@ export default function CotizadorLibre() {
           </div>
         )}
       </div>
+      </div>
+      </div>
 
       {/* Barra de acciones finales */}
       {carrito.length > 0 && (
-        <div className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur border-t border-[#e2ddd0] shadow-[0_-4px_20px_-6px_rgba(30,58,43,0.15)] px-4 sm:px-6 py-3 sm:py-4 flex flex-col sm:flex-row sm:justify-end gap-2 sm:gap-3">
+        <div className="fixed bottom-0 left-0 right-0 z-30 bg-white/95 backdrop-blur border-t border-[#e2ddd0] shadow-[0_-4px_20px_-6px_rgba(30,58,43,0.15)] px-4 sm:px-6 py-3 sm:py-4 flex flex-col sm:flex-row sm:justify-end gap-2 sm:gap-3">
           <button
             onClick={() => iniciarAccionFinal("cotizacion")}
             disabled={guardando}

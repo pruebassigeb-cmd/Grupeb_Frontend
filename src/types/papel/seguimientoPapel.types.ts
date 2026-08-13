@@ -99,6 +99,16 @@ export interface PedidoSeguimientoPapel {
   // Laminación — solicitud_producto_papel.idcat_laminado
   laminado_acabado: string | null; // ej "Mate" | "Brillante"
 
+  // Laminación — calculados a partir de detalle_material_papel /
+  // acabados_papel (mismo cálculo que ya usa el PDF en getOrdenProduccion),
+  // agregados aquí para que el modal de Seguimiento los muestre en vez de
+  // dejarlos en blanco. null si al producto le falta algún dato base.
+  bobina_laminacion_cm: number | string | null;
+  desarrollo_laminacion_mm: number | null;
+  ctes_mod_laminacion: string | null;
+  metros_laminacion_estimados: number | null;
+  rollos_laminacion_estimados: number | null;
+
   // Hot Stamping — solicitud_producto_papel.idfoil (FK a foil)
   foil_nombre: string | null; // ej "Oro Bl45"
 

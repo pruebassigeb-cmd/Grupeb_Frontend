@@ -72,13 +72,13 @@ export default function Dashboard({ children }: DashboardProps) {
       permiso: "seguridad.usuarios.gestionar",
       subItems: [],
     },
-    {
-      name: "Roles y Privilegios",
-      icon: "🔐",
-      path: "/roles",
-      permisoOr: ["seguridad.roles.ver", "seguridad.roles.gestionar", "seguridad.privilegios.gestionar"],
-      subItems: [],
-    },
+    // {
+    //   name: "Roles y Privilegios",
+    //   icon: "🔐",
+    //   path: "/roles",
+    //   permisoOr: ["seguridad.roles.ver", "seguridad.roles.gestionar", "seguridad.privilegios.gestionar"],
+    //   subItems: [],
+    // },
     {
       name: "Reportes de Correo",
       icon: "📧",
@@ -147,7 +147,7 @@ export default function Dashboard({ children }: DashboardProps) {
     {
       name: "Anticipo / Liquidación",
       icon: "💰",
-      path: "/anticipolicacion",
+      path: "/anticipoliquidacion",
       permiso: "cobranza.anticipo_liquidacion.gestionar",
       subItems: [],
     },

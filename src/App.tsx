@@ -224,7 +224,7 @@ function App() {
 
           {/* Anticipo y Liquidación */}
           <Route
-            path="/anticipolicacion"
+            path="/anticipoliquidacion"
             element={
               <ProtectedRoute permiso={PERMISOS.anticipo}>
                 <AnticipoLiquidacion />

@@ -193,6 +193,10 @@ export interface OrdenProduccionPapelData {
   // sigue mostrando `cantidad` sin merma. Todas null si la orden no tiene
   // snapshot (anteriores al sistema, o aún no congelada).
   cantidad_produccion?: number | null;
+  // PZS del suaje (alta de producto, sección Suaje) -- paso intermedio
+  // obligatorio antes de dividir entre rendimiento: cortes = cantidad con
+  // merma / piezas_suaje. Ver calcularCortes() en este mismo archivo.
+  piezas_suaje?: number | null;
   cantidad_con_merma?: number | null;
   cantidad_hojeada_con_merma?: number | null;
   pliegos_con_merma?: number | null;

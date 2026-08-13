@@ -219,6 +219,22 @@ export function calcularCantidadHojeada(
   return redondear(cantidadNum / rendimientoNum);
 }
 
+// Paso intermedio confirmado por Jose (2026-08-13): cantidad con merma /
+// PZS del suaje = cortes. De cortes se derivan cantidad hojeada (÷ REND.
+// de Hojeado) y pliegos (÷ REND. de la fila principal) -- mismo cálculo
+// que seguimiento.controller.ts::calcularCortes en el backend.
+export function calcularCortes(
+  cantidad: unknown,
+  piezasSuaje: unknown
+): number | null {
+  const cantidadNum = n(cantidad);
+  const piezasSuajeNum = n(piezasSuaje);
+  if (cantidadNum === null || piezasSuajeNum === null || piezasSuajeNum <= 0) {
+    return null;
+  }
+  return redondear(cantidadNum / piezasSuajeNum);
+}
+
 export function calcularBolsasArmadas(
   pliegos: unknown,
   rendimiento: unknown
@@ -450,9 +466,15 @@ export function getValoresCalculadosPapel(data: OrdenProduccionPapelData): Parti
   const cantidadProduccion = n(data.cantidad_produccion);
   const cantidadParaProduccion = cantidadProduccion ?? n(data.cantidad);
 
+  // Cortes: paso intermedio obligatorio antes de dividir entre rendimiento
+  // -- cantidad con merma / PZS del suaje. Sin esto, cualquier producto con
+  // PZS distinto de 1 salía con hojeado/pliegos mal (ver calcularCortes).
+  const cortes = calcularCortes(cantidadParaProduccion, data.piezas_suaje);
+  const corteBase = cortes ?? cantidadParaProduccion;
+
   // Pliegos/bolsas se calculan con el rendimiento de HOJEADO (cómo se tiene
   // que cortar el material), no con el rendimiento general del material.
-  const pliegosCalculado = calcularCantidadHojeada(cantidadParaProduccion, data.hoj_rendimiento);
+  const pliegosCalculado = calcularCantidadHojeada(corteBase, data.hoj_rendimiento);
   const pliegos = pliegosCalculado ?? n(data.pliegos_impresion_estimados);
 
   // CORREGIDO: `pliegos_guillotina` estaba declarado en el tipo pero nunca
@@ -461,7 +483,7 @@ export function getValoresCalculadosPapel(data: OrdenProduccionPapelData): Parti
   // real ya capturado) o quedaba en blanco/mal, nunca un estimado. Usa el
   // rendimiento GENÉRICO (el de Guillotina), no hoj_rendimiento -- son dos
   // rendimientos distintos, no intercambiables.
-  const pliegosGuillotinaCalculado = calcularCantidadHojeada(cantidadParaProduccion, data.rendimiento);
+  const pliegosGuillotinaCalculado = calcularCantidadHojeada(corteBase, data.rendimiento);
 
 
   // El backend ya resuelve desarrollo_laminacion_mm priorizando el valor
