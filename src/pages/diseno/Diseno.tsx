@@ -10,6 +10,7 @@ import type { Pedido } from "../../types/cotizaciones.types";
 import ChatRevision from "../../components/diseno/ChatRevision";
 import { useAuth } from "../../context/AuthContext";
 import { usePermisos } from "../../hooks/usePermiso";
+import { PERMISO_EDITAR_DISENO, PERMISO_ORDEN_DISENO } from "../../utils/permisosUsuario";
 import { showAlert } from '../../components/CustomAlert';
 import { showConfirm } from '../../components/CustomConfirm';
 import { leerBorrador, useAutoguardarBorrador } from "../../hooks/useBorradorFormulario";
@@ -119,8 +120,8 @@ export function EditarDisenoReal({
 }) {
   const { user } = useAuth();
   const { puedeEditarDiseno, puedeOrdenDiseno } = usePermisos({
-    puedeEditarDiseno: "Editar Diseño",
-    puedeOrdenDiseno:  "Orden de Diseño",
+    puedeEditarDiseno: PERMISO_EDITAR_DISENO,
+    puedeOrdenDiseno:  PERMISO_ORDEN_DISENO,
   });
 
   const soloChat = puedeOrdenDiseno && !puedeEditarDiseno;
@@ -591,7 +592,7 @@ export function EditarDisenoReal({
 
 export default function Diseno() {
   const { puedeEditarDiseno } = usePermisos({
-    puedeEditarDiseno: "Editar Diseño",
+    puedeEditarDiseno: PERMISO_EDITAR_DISENO,
   });
 
   const [pedidos,      setPedidos]      = useState<Pedido[]>([]);

@@ -5,6 +5,12 @@ import { tienePermisoUsuario } from "../utils/permisosUsuario";
 // usePermiso
 // Devuelve true si el usuario tiene el permiso indicado.
 // Acceso total siempre devuelve true.
+//
+// IMPORTANTE (fase 6): `permiso` es la CLAVE del privilegio
+// ("diseno.editar"), NO su texto visible ("Editar Diseño"). El texto se
+// puede renombrar libremente desde la pantalla de Roles, así que compararlo
+// rompe el permiso en silencio -- el usuario simplemente deja de ver el
+// botón, sin ningún error. Ya pasó con todo el módulo de Diseño.
 // ==========================
 export const usePermiso = (permiso: string): boolean => {
   const { user } = useAuth();
@@ -16,10 +22,14 @@ export const usePermiso = (permiso: string): boolean => {
 // Recibe varios permisos y devuelve un objeto con cada uno.
 // Útil cuando un componente necesita verificar múltiples permisos.
 //
+// Igual que usePermiso: se pasan CLAVES, no textos visibles. Cuando exista
+// una constante exportada en utils/permisosUsuario.ts, úsala en vez del
+// string suelto.
+//
 // Ejemplo:
-//   const { puedeCrear, puedeEliminar } = usePermisos({
-//     puedeCrear:   "Crear/Editar/Eliminar Usuarios",
-//     puedeEliminar: "Crear/Editar/Eliminar Usuarios",
+//   const { puedeEditar, puedeVerOrden } = usePermisos({
+//     puedeEditar:   PERMISO_EDITAR_DISENO,   // "diseno.editar"
+//     puedeVerOrden: PERMISO_ORDEN_DISENO,    // "diseno.orden"
 //   });
 // ==========================
 export const usePermisos = <T extends Record<string, string>>(

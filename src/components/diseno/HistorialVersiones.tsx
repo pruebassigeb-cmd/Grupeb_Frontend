@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { RevisionDiseno } from "../../types/diseno/ordenDiseno.types";
 import { usePermisos } from "../../hooks/usePermiso";
+import { PERMISO_EDITAR_DISENO } from "../../utils/permisosUsuario";
 import api from "../../services/api";
 import { showAlert } from '../CustomAlert';
 import { showConfirm } from '../CustomConfirm';
@@ -25,7 +26,7 @@ interface Props {
 
 export default function HistorialVersiones({ revisiones, idorden, onActualizar }: Props) {
   const { puedeEditarDiseno } = usePermisos({
-    puedeEditarDiseno: "Editar Diseño",
+    puedeEditarDiseno: PERMISO_EDITAR_DISENO,
   });
 
   const [marcando, setMarcando] = useState<number | null>(null);

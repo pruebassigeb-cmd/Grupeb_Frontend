@@ -17,6 +17,7 @@ import HistorialVersiones from "./HistorialVersiones";
 import Modal from "../Modal";
 import ModalAprobarDiseno from "./ModalAprobarDiseno";
 import { usePermisos } from "../../hooks/usePermiso";
+import { PERMISO_EDITAR_DISENO, PERMISO_ORDEN_DISENO } from "../../utils/permisosUsuario";
 import FichaDisenoPanel from "./Fichadisenopanel";
 import { showAlert } from "../CustomAlert";
 import {
@@ -214,8 +215,8 @@ interface Props {
 type PanelActivo = "ficha" | "chat" | "historial" | "participantes" | "auditoria";
 export default function ModalOrdenDiseno({ idorden_diseno, pedido, onClose }: Props) {
   const { puedeEditarDiseno, puedeOrdenDiseno } = usePermisos({
-    puedeEditarDiseno: "Editar Diseño",
-    puedeOrdenDiseno: "Orden de Diseño",
+    puedeEditarDiseno: PERMISO_EDITAR_DISENO,
+    puedeOrdenDiseno: PERMISO_ORDEN_DISENO,
   });
 
   const [orden, setOrden] = useState<OrdenDisenoDetalle | null>(null);

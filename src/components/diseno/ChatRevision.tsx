@@ -21,7 +21,11 @@ import FichaDisenoPanel from "./Fichadisenopanel";
 import BotonAuditoria from "../auditoria/BotonAuditoria";
 import PanelAuditoria from "../auditoria/PanelAuditoria";
 import { useAuth } from "../../context/AuthContext";
-import { puedeVerAuditoriaUsuario } from "../../utils/permisosUsuario";
+import {
+  puedeVerAuditoriaUsuario,
+  PERMISO_EDITAR_DISENO,
+  PERMISO_ORDEN_DISENO,
+} from "../../utils/permisosUsuario";
 
 
 const POLLING_MS = 3000;
@@ -135,8 +139,8 @@ export default function ChatRevision({ idorden, usuarioId, onClose, onDisenoApro
   const { user } = useAuth();
   const puedeVerAuditoria = puedeVerAuditoriaUsuario(user);
   const { puedeEditarDiseno, puedeOrdenDiseno } = usePermisos({
-    puedeEditarDiseno: "Editar Diseño",
-    puedeOrdenDiseno: "Orden de Diseño",
+    puedeEditarDiseno: PERMISO_EDITAR_DISENO,
+    puedeOrdenDiseno: PERMISO_ORDEN_DISENO,
   });
 
   const [orden, setOrden] = useState<OrdenDisenoDetalle | null>(null);

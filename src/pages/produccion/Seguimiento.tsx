@@ -605,6 +605,12 @@ export default function Seguimiento() {
   const [procesosPapel, setProcesosPapel] = useState<Record<number, ProcesosOrdenPapelRespuesta>>({});
   const [erroresProcesosPapel, setErroresProcesosPapel] = useState<Set<number>>(new Set());
   const cargaActualRef = useRef(0);
+  // ¿Hay algún modal abierto? Lo lee el listener de "focus"/visibilitychange
+  // de abajo, que corre con dependencias [] y por eso no ve el estado actual.
+  const hayModalAbiertoRef = useRef(false);
+  // Recarga pospuesta porque llegó mientras un modal estaba abierto: se
+  // ejecuta al cerrarlo, así no se pierde el refresco, solo se retrasa.
+  const recargaPendienteRef = useRef(false);
   const [modalProcesoPapel, setModalProcesoPapel] = useState<{
     pedido: PedidoSeguimiento;
     nombreProceso: NombreProcesoPapel;
@@ -628,11 +634,38 @@ export default function Seguimiento() {
     modalAnticipoRef.current = modalAnticipo;
   }, [modalAnticipo]);
 
+  // CORREGIDO: abrir el explorador de archivos (subir imagen en el chat de
+  // Orden de Diseño, por ejemplo) le quita el foco a la ventana; al elegir el
+  // archivo el foco regresa y disparaba `programarRecarga` -> cargar(), que
+  // hace setCargando(true) y remonta la pantalla completa, cerrando el modal
+  // y perdiendo los archivos ya seleccionados. Se veía como "se recargó la
+  // página sola" y solo pasaba desde Seguimiento (Diseño no tiene este
+  // listener). Ahora, si hay un modal abierto, la recarga se POSPONE hasta
+  // cerrarlo en vez de descartarse: el refresco sigue ocurriendo, solo que
+  // sin destruir el trabajo en curso. Sustituye al parche puntual que ya
+  // existía solo para el modal de Anticipo (modalAnticipoRef en cargar()).
+  const hayModalAbierto = Boolean(
+    modalProceso || modalAnticipo || modalDiseno || modalEnvio ||
+    modalOD || modalVerificacion || modalProcesoPapel
+  );
+  useEffect(() => {
+    hayModalAbiertoRef.current = hayModalAbierto;
+    if (!hayModalAbierto && recargaPendienteRef.current) {
+      recargaPendienteRef.current = false;
+      invalidarSolicitudesGet();
+      cargar();
+    }
+  }, [hayModalAbierto]);
+
   useEffect(() => {
     cargar();
 
     let temporizador: number | null = null;
     const programarRecarga = () => {
+      if (hayModalAbiertoRef.current) {
+        recargaPendienteRef.current = true;
+        return;
+      }
       if (temporizador !== null) window.clearTimeout(temporizador);
       temporizador = window.setTimeout(() => {
         invalidarSolicitudesGet();
@@ -659,6 +692,9 @@ export default function Seguimiento() {
     };
   }, []);
   const cargar = async () => {
+    // Una recarga real deja sin efecto la pospuesta: varios onClose de modales
+    // ya llaman a cargar() por su cuenta, y sin esto se disparaba dos veces.
+    recargaPendienteRef.current = false;
     const cargaId = ++cargaActualRef.current;
     const anticipoAbierto = modalAnticipoRef.current;
     try {

@@ -10,6 +10,7 @@ import {
   type CambioSnapshot,
 } from "../../services/diseno/fichaService";
 import { usePermisos } from "../../hooks/usePermiso";
+import { PERMISO_EDITAR_DISENO } from "../../utils/permisosUsuario";
 import { showAlert } from "../CustomAlert";
 import Modal from "../Modal";
 import EditarFicha from "./Editarficha";
@@ -36,7 +37,7 @@ const fmtFecha = (iso: string | null) => {
 
 export default function FichaDisenoPanel({ idorden_diseno, onCambio }: Props) {
   const { puedeEditarDiseno } = usePermisos({
-    puedeEditarDiseno: "Editar Diseño",
+    puedeEditarDiseno: PERMISO_EDITAR_DISENO,
   });
 
   const [ficha, setFicha] = useState<FichaDiseno | null>(null);
