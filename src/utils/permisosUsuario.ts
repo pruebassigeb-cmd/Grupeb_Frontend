@@ -47,3 +47,31 @@ export const tienePermisoUsuario = (
   if (usuario.acceso_total) return true;
   return (usuario.privilegios ?? []).includes(privilegio);
 };
+
+/**
+ * ¿El usuario tiene ALGÚN privilegio de esta pantalla?
+ *
+ * Desde que el catálogo se organiza por pantallas (migración
+ * 2026-08-14_modulos_por_pantalla.sql), cada pantalla agrupa privilegios que
+ * comparten el mismo prefijo de clave: Cotización -> "cotizacion.",
+ * Seguimiento -> "produccion.", etc. Verificado contra la BD: las 13
+ * pantallas con privilegios usan exactamente un prefijo cada una.
+ *
+ * Sirve para que el menú y las rutas se abran solos con CUALQUIER privilegio
+ * de la pantalla, en vez de con una lista quemada que hay que acordarse de
+ * actualizar. Antes esa lista se quedaba corta y el privilegio quedaba
+ * inservible: por ejemplo, quien solo tenía "Ver Cotizaciones" nunca veía la
+ * pantalla, y un operador de papel no veía Seguimiento porque la lista solo
+ * incluía los 4 procesos de plástico.
+ *
+ * Las restricciones dentro de la pantalla no cambian: cada botón sigue
+ * pidiendo su propio privilegio.
+ */
+export const tienePermisoDePantalla = (
+  usuario: UsuarioConPermisos | null | undefined,
+  prefijo: string
+): boolean => {
+  if (!usuario) return false;
+  if (usuario.acceso_total) return true;
+  return (usuario.privilegios ?? []).some(p => p.startsWith(prefijo));
+};

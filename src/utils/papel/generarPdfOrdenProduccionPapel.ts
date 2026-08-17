@@ -750,7 +750,7 @@ function dibujarEncabezado(
   const yFecha = yNo + H.ORDEN_NO;
   const hFecha = H.ENCABEZADO - H.ORDEN_BANDA - H.ORDEN_NO;
   etiqueta(doc, "FECHA", ox, yFecha);
-  txt(doc, fmtFechaCorta(data.fecha), ox + ow * 0.58, yFecha + hFecha - 2.2, {
+  txt(doc, fmtFechaCorta(data. fecha_produccion), ox + ow * 0.58, yFecha + hFecha - 2.2, {
     size: FS.FECHA, align: "center", maxW: ow * 0.8, maxLines: 1,
   });
 }
@@ -758,17 +758,20 @@ function dibujarEncabezado(
 // ── Fila de datos generales (Impresión / Fecha entrega / Prioridad / Pedido)
 function filaInfo(doc: jsPDF, data: OrdenProduccionPapelData, y: number) {
   const w = X_FIRMA_L - X0;
-  const cols: Array<[string, string, number, number]> = [
+  // El 5to valor (maxLines) es opcional; por defecto 1 línea. La celda de
+  // Pedido usa 2 líneas para mostrar la fecha arriba del no. de pedido,
+  // igual que en el formato de Orden de Producción (no-papel).
+  const cols: Array<[string, string, number, number, number?]> = [
     ["Impresión", primeraLinea(data.impresion, data.cliente), 0.385, 12],
     ["Fecha Entrega", fmtFechaCorta(data.fecha_entrega ?? null), 0.311, 12],
     ["Prioridad", data.prioridad ? "URGENTE" : "Normal", 0.168, 10],
-    ["Pedido", f(data.no_pedido), 0.136, 10],
+    ["Pedido", `${fmtFechaCorta(data.fecha ?? null)}\n${f(data.no_pedido)}`, 0.136, 9, 2],
   ];
 
   let cx = X0;
-  cols.forEach(([label, valor, peso, size], i) => {
+  cols.forEach(([label, valor, peso, size, maxLines], i) => {
     const cw = w * peso;
-    celda(doc, label, valor, cx, y, cw, H.INFO, { size, maxLines: 1 });
+    celda(doc, label, valor, cx, y, cw, H.INFO, { size, maxLines: maxLines ?? 1 });
     if (i === 0) caja(doc, cx, y, cw, H.INFO, { lw: LW_MARCO });
     cx += cw;
   });

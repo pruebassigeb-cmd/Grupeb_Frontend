@@ -1,17 +1,23 @@
 import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { tienePermisoUsuario } from "../utils/permisosUsuario";
+import { tienePermisoUsuario, tienePermisoDePantalla } from "../utils/permisosUsuario";
 
 interface ProtectedRouteProps {
   children:   React.ReactNode;
   permiso?:   string;           // Requiere ESTE permiso exacto
   permisoOr?: string[];         // Requiere CUALQUIERA de estos permisos
+  // Prefijo de la pantalla ("cotizacion."): basta CUALQUIER privilegio de
+  // ella. Debe ir a la par de permisoPantalla en Sidebar.tsx — si el menú
+  // muestra la entrada y la ruta usa otra regla, el usuario da clic y cae
+  // en /sin-acceso.
+  permisoPantalla?: string;
 }
 
 export default function ProtectedRoute({
   children,
   permiso,
   permisoOr,
+  permisoPantalla,
 }: ProtectedRouteProps) {
   const { user, loading } = useAuth();
   const location = useLocation();
@@ -48,6 +54,15 @@ export default function ProtectedRoute({
 
   // acceso_total → pasa siempre
   if (user.acceso_total) {
+    return <>{children}</>;
+  }
+
+  // Pantalla completa: cualquier privilegio suyo abre la ruta. Las
+  // restricciones internas las sigue aplicando cada botón.
+  if (permisoPantalla) {
+    if (!tienePermisoDePantalla(user, permisoPantalla)) {
+      return <Navigate to="/sin-acceso" replace />;
+    }
     return <>{children}</>;
   }
 

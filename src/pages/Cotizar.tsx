@@ -19,6 +19,21 @@ import { OperacionEncoladaError } from "../offline/outbox";
 import { useNavigate } from "react-router-dom";
 import BotonAuditoria from "../components/auditoria/BotonAuditoria";
 import AuditoriaDesplegable from "../components/auditoria/AuditoriaDesplegable";
+import api from "../services/api";
+
+// Convierte un Blob (el PDF ya generado en el navegador) a base64 puro,
+// listo para mandarlo en el body JSON de /correos/documento.
+function blobABase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const resultado = reader.result as string;
+      resolve(resultado.split(",")[1] ?? "");
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
 
 
 
@@ -51,6 +66,13 @@ export default function Cotizaciones() {
   const [expandidas, setExpandidas] = useState<Set<string>>(new Set());
   const [paginaActual, setPaginaActual] = useState(1);
   const [filtroMaterial, setFiltroMaterial] = useState<"todos" | "plastico" | "papel">("todos");
+
+  // ── Envío por correo ──────────────────────────────────────────────────
+  const [modalCorreoOpen, setModalCorreoOpen] = useState(false);
+  const [cotizacionParaCorreo, setCotizacionParaCorreo] = useState<Cotizacion | null>(null);
+  const [correoDestino, setCorreoDestino] = useState("");
+  const [enviandoCorreo, setEnviandoCorreo] = useState(false);
+  const [errorCorreo, setErrorCorreo] = useState<string | null>(null);
 
   useEffect(() => { cargarCatalogos(); cargarCotizaciones(); }, []);
   useEffect(() => { setPaginaActual(1); }, [busqueda]);
@@ -409,6 +431,97 @@ export default function Cotizaciones() {
     }, guardarS3);
   };
 
+  // ── Envío por correo ──────────────────────────────────────────────────
+  const handleAbrirModalCorreo = (cot: Cotizacion) => {
+    setCotizacionParaCorreo(cot);
+    setCorreoDestino(cot.correo || "");
+    setErrorCorreo(null);
+    setModalCorreoOpen(true);
+  };
+
+  const handleCerrarModalCorreo = () => {
+    if (enviandoCorreo) return; // no cerrar a medio envío
+    setModalCorreoOpen(false);
+    setCotizacionParaCorreo(null);
+    setCorreoDestino("");
+    setErrorCorreo(null);
+  };
+
+  const handleConfirmarEnvioCorreo = async () => {
+    if (!cotizacionParaCorreo) return;
+    const correo = correoDestino.trim();
+    const correoValido = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo);
+    if (!correoValido) {
+      setErrorCorreo("Ingresa un correo válido");
+      return;
+    }
+
+    const cot = cotizacionParaCorreo;
+    const esPedido = cot.tipo_documento === "pedido";
+    setEnviandoCorreo(true);
+    setErrorCorreo(null);
+    try {
+      const productosParaPdf = buildProductosPdf(
+        cot.productos.map(p => ({
+          ...p,
+          detalles: esPedido ? p.detalles.filter(d => d.aprobado === true) : p.detalles,
+        }))
+      );
+
+      // guardarS3=false, descargar=false: solo necesitamos el Blob en memoria
+      // para adjuntarlo al correo, no bajarlo al equipo ni subirlo a S3.
+      const blob = await generarPdfCotizacion({
+        no_cotizacion: cot.no_cotizacion,
+        fecha: cot.fecha,
+        cliente: cot.cliente,
+        empresa: cot.empresa,
+        telefono: cot.telefono,
+        correo: cot.correo,
+        estado: cot.estado,
+        impresion: cot.impresion ?? null,
+        celular: cot.celular ?? null,
+        razon_social: cot.razon_social ?? null,
+        rfc: cot.rfc ?? null,
+        domicilio: cot.domicilio ?? null,
+        numero: cot.numero ?? null,
+        colonia: cot.colonia ?? null,
+        codigo_postal: cot.codigo_postal ?? null,
+        poblacion: cot.poblacion ?? null,
+        estado_cliente: cot.estado_cliente ?? null,
+        cliente_id: cot.cliente_id ?? null,
+        identificar: cot.identificar ?? null,
+        total: esPedido
+          ? cot.productos.reduce((sum, p) =>
+            sum + p.detalles.filter(d => d.aprobado === true).reduce((s, d) => s + d.precio_total, 0), 0)
+          : cot.total,
+        moneda: cot.moneda ?? "MXN",
+        productos: productosParaPdf,
+      }, false, false);
+
+      const folio = esPedido ? (cot.no_pedido ?? cot.no_cotizacion) : cot.no_cotizacion;
+      const nombreArchivo = `${esPedido ? "Pedido" : "Cotizacion"}_${folio}.pdf`;
+      const pdfBase64 = await blobABase64(blob);
+
+      await api.post("/correos/documento", {
+        tipo: esPedido ? "pedido" : "cotizacion",
+        folio: String(folio),
+        cliente: cot.cliente || "",
+        empresa: cot.empresa || null,
+        destinatario: correo,
+        pdfBase64,
+        nombreArchivo,
+      });
+
+      showAlert("✅ Correo enviado correctamente");
+      handleCerrarModalCorreo();
+    } catch (e: any) {
+      console.error("❌ Error al enviar correo:", e);
+      setErrorCorreo(e.response?.data?.error || "No se pudo enviar el correo");
+    } finally {
+      setEnviandoCorreo(false);
+    }
+  };
+
   const handleEliminar = async (cot: Cotizacion) => {
     if (cot.estado === "Aprobada") return;
     if (!await showConfirm("¿Estás seguro de eliminar esta cotización?")) return;
@@ -658,6 +771,12 @@ export default function Cotizaciones() {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                           </svg>
                         </button>
+                        <button onClick={() => handleAbrirModalCorreo(cot)} title="Enviar por correo"
+                          className="p-1.5 rounded-md text-indigo-500 hover:bg-indigo-50">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                          </svg>
+                        </button>
                         <button onClick={() => puedeEliminar && handleEliminar(cot)}
                           title={puedeEliminar ? "Eliminar" : "No se puede eliminar una cotización aprobada"}
                           disabled={!puedeEliminar}
@@ -834,6 +953,47 @@ export default function Cotizaciones() {
         title={cotizacionEditando ? `${cotizacionEditando.no_cotizacion} — ${cotizacionEditando.cliente || "Sin cliente"}` : "Cotización"}>
         {cotizacionEditando && (
           <EditarCotizacion cotizacion={cotizacionEditando} onSave={handleGuardarEdicion} onCancel={handleCerrarEditar} />
+        )}
+      </Modal>
+
+      <Modal isOpen={modalCorreoOpen} onClose={handleCerrarModalCorreo} title="Enviar por correo">
+        {cotizacionParaCorreo && (
+          <div className="space-y-4">
+            <p className="text-sm text-gray-600">
+              Se enviará el PDF de {cotizacionParaCorreo.tipo_documento === "pedido" ? "pedido" : "cotización"}{" "}
+              <span className="font-semibold text-gray-800">
+                {cotizacionParaCorreo.tipo_documento === "pedido"
+                  ? (cotizacionParaCorreo.no_pedido ?? cotizacionParaCorreo.no_cotizacion)
+                  : cotizacionParaCorreo.no_cotizacion}
+              </span>{" "}
+              a:
+            </p>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Correo del destinatario</label>
+              <input
+                type="email"
+                value={correoDestino}
+                onChange={e => setCorreoDestino(e.target.value)}
+                placeholder="cliente@correo.com"
+                disabled={enviandoCorreo}
+                autoFocus
+                onKeyDown={e => { if (e.key === "Enter") handleConfirmarEnvioCorreo(); }}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100"
+              />
+              {errorCorreo && <p className="mt-1 text-sm text-red-600">{errorCorreo}</p>}
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <button onClick={handleCerrarModalCorreo} disabled={enviandoCorreo}
+                className="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 rounded-lg disabled:opacity-50">
+                Cancelar
+              </button>
+              <button onClick={handleConfirmarEnvioCorreo} disabled={enviandoCorreo}
+                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow disabled:opacity-50 flex items-center gap-2">
+                {enviandoCorreo && <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+                {enviandoCorreo ? "Enviando..." : "Enviar correo"}
+              </button>
+            </div>
+          </div>
         )}
       </Modal>
     </Dashboard>

@@ -1186,12 +1186,23 @@ export default function EditarPedido() {
       d.modo_cantidad === "kilo" && pk > 0
         ? Math.round(kgs * pk)
         : parseSafe(d.cantidad);
+    // En modo "kilo" los kilos son el dato capturado; en modo "unidad" hay que
+    // derivarlos de cantidad / por_kilo — mandar null aquí BORRABA el valor que
+    // la creación del pedido ya había calculado, y de ahí salía la celda
+    // "Kilos" en blanco del PDF de orden de producción (orden_produccion.kilos
+    // se recalcula desde SUM(solicitud_detalle.kilogramos)).
+    const kilogramos =
+      d.modo_cantidad === "kilo"
+        ? kgs
+        : pk > 0
+          ? Number((cantidadParaBackend / pk).toFixed(4))
+          : null;
     return {
       iddetalle: d.iddetalle,
       cantidad: cantidadParaBackend,
       precio_total: parseSafe(d.precio_total),
       precio_unitario: d.precio_unitario !== "" ? parseSafe(d.precio_unitario) : null,
-      kilogramos: d.modo_cantidad === "kilo" ? kgs : null,
+      kilogramos,
       modo_cantidad: d.modo_cantidad,
     };
   };

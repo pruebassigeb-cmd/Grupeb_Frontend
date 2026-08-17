@@ -6,6 +6,7 @@ import { searchClientes, createCliente, getClienteById } from "../../services/cl
 import {
   searchProductosPlastico, crearOObtenerProducto, checkProductoDuplicado,
   createTipoProductoPlastico, createMaterialPlastico, createCalibrePlastico,
+  createTroquelPlastico, createSuajePlastico, createCintaSeguridadPlastico,
 } from "../../services/plastico/productosPlasticoService";
 import { getCatalogosProduccion } from "../../services/plastico/catalogosProduccionService";
 import { usePreciosBatch } from "../../hooks/plastico/usePrecioCalculado";
@@ -14,8 +15,9 @@ import { calcularDesdeInput, esNumeroEnteroValido, esDecimalValido, sanitizarTex
 import type { ClienteBusqueda, CreateClienteRequest } from "../../types/clientes.types";
 import type { ProductoBusqueda, ProductoPlasticoCreate } from "../../types/plastico/productos-plastico.types";
 import type { Cara, Tinta } from "../../types/plastico/catalogos-produccion.types";
-import { getSuajes, getColoresAsa, getMedidasTroquel } from "../../services/suajesService";
-import type { Suaje, ColorAsa, MedidaTroquel } from "../../services/suajesService";
+import { getSuajes, getColoresAsa, getMedidasTroquel, getCintaSeguridad } from "../../services/suajesService";
+import type { Suaje, ColorAsa, MedidaTroquel, CintaSeguridad } from "../../services/suajesService";
+import { AgregarSuajeInline, AgregarTroquelInline, AgregarCintaSeguridadInline } from "./AgregarCatalogoPlasticoInline";
 import { showAlert } from "../CustomAlert";
 import type { Producto, DatosCotizacion, FormularioCotizacionProps } from "../../types/formulario-solicitud.types";
 import { ESTADO_INICIAL_PRODUCTO_MEDIDAS } from "../../constants/formulario-solicitud.constants";
@@ -128,6 +130,7 @@ export default function FormularioSolicitud({
   const [suajes, setSuajes] = useState<Suaje[]>([]);
   const [coloresAsa, setColoresAsa] = useState<ColorAsa[]>([]);
   const [medidasTroquel, setMedidasTroquel] = useState<MedidaTroquel[]>([]);
+  const [cintasSeguridad, setCintasSeguridad] = useState<CintaSeguridad[]>([]);
 
   const [mostrarModalClientes, setMostrarModalClientes] = useState(false);
   const [busquedaCliente, setBusquedaCliente] = useState("");
@@ -151,6 +154,7 @@ export default function FormularioSolicitud({
   const [mostrarDropdownSuaje, setMostrarDropdownSuaje] = useState(false);
   const [mostrarDropdownColorAsa, setMostrarDropdownColorAsa] = useState(false);
   const [mostrarDropdownTroquel, setMostrarDropdownTroquel] = useState(false);
+  const [mostrarDropdownCinta, setMostrarDropdownCinta] = useState(false);
 
   const [preciosEditadosManualmente, setPreciosEditadosManualmente] = useState<[boolean, boolean, boolean]>(borradorInicial?.preciosEditadosManualmente ?? [false, false, false]);
   const [preciosTexto, setPreciosTexto] = useState<[string, string, string]>(borradorInicial?.preciosTexto ?? ["", "", ""]);
@@ -188,6 +192,7 @@ export default function FormularioSolicitud({
     medidasFormateadas: "",
     idsuaje: null, suajeTipo: null, colorAsaId: null, colorAsaNombre: null,
     idMedidaTroquel: null, medidaTroquelTexto: null,
+    idCintaSeguridad: null, cintaSeguridadTexto: null,
     observacion: "", descripcion: null,
     perforacion: false,
     pantones: null, pigmentos: null,
@@ -389,14 +394,15 @@ export default function FormularioSolicitud({
 
   const cargarCatalogos = async () => {
     try {
-      const [catalogosData, suajesData, coloresAsaData, medidasTroquelData] = await Promise.all([
-        getCatalogosProduccion(), getSuajes(), getColoresAsa(), getMedidasTroquel(),
+      const [catalogosData, suajesData, coloresAsaData, medidasTroquelData, cintaSeguridadData] = await Promise.all([
+        getCatalogosProduccion(), getSuajes(), getColoresAsa(), getMedidasTroquel(), getCintaSeguridad(),
       ]);
       setCaras(catalogosData.caras);
       setTintas(catalogosData.tintas);
       setSuajes(suajesData);
       setColoresAsa(coloresAsaData);
       setMedidasTroquel(medidasTroquelData);
+      setCintasSeguridad(cintaSeguridadData);
     } catch (error) {
       console.error("❌ Error al cargar catálogos:", error);
     }
@@ -727,6 +733,37 @@ export default function FormularioSolicitud({
     return nuevo;
   };
 
+  // ✅ NUEVO — mismo criterio: registro inline sin salir del formulario,
+  // reflejado de inmediato en el dropdown correspondiente (suajes,
+  // medidasTroquel, cintasSeguridad viven aparte de catalogosLocal porque
+  // ya eran arreglos top-level propios, no parte del catálogo de
+  // ConfigurarProducto).
+  const handleAgregarTroquelInline = async (nombre: string) => {
+    const nuevo = await createTroquelPlastico(nombre);
+    setMedidasTroquel(prev => [...prev, { id_medidatro: nuevo.id, medida: nuevo.nombre }]);
+    // Se autoselecciona de una vez — evita un segundo clic para elegirlo
+    // del dropdown justo después de registrarlo.
+    setProductoActual(p => ({ ...p, idMedidaTroquel: nuevo.id, medidaTroquelTexto: nuevo.nombre }));
+    setMostrarDropdownTroquel(false);
+    return nuevo;
+  };
+
+  const handleAgregarSuajeInline = async (nombre: string) => {
+    const nuevo = await createSuajePlastico(nombre);
+    setSuajes(prev => [...prev, { idsuaje: nuevo.id, tipo: nuevo.nombre, idproductos: 1, tipo_producto: "Plástico" }]);
+    setProductoActual(p => ({ ...p, idsuaje: nuevo.id, suajeTipo: nuevo.nombre, colorAsaId: null, colorAsaNombre: null }));
+    setMostrarDropdownSuaje(false);
+    return nuevo;
+  };
+
+  const handleAgregarCintaSeguridadInline = async (nombre: string, medida?: string | null) => {
+    const nuevo = await createCintaSeguridadPlastico(nombre, medida);
+    setCintasSeguridad(prev => [...prev, { id: nuevo.id, nombre: nuevo.nombre, medida: nuevo.medida }]);
+    setProductoActual(p => ({ ...p, idCintaSeguridad: nuevo.id, cintaSeguridadTexto: nuevo.nombre }));
+    setMostrarDropdownCinta(false);
+    return nuevo;
+  };
+
   const getEsAsaFlexible = (): boolean => {
     const tipo = modoProducto === "nuevo" ? datosProductoNuevo.tipoProducto : productoActual.nombre;
     return (tipo || "").toLowerCase().includes("asa flexible");
@@ -882,6 +919,7 @@ export default function FormularioSolicitud({
     setPreciosTexto(["", "", ""]); setCantidadesTexto(["", "", ""]);
     setModoCantidad("unidad");
     setMostrarDropdownSuaje(false); setMostrarDropdownColorAsa(false); setMostrarDropdownTroquel(false);
+    setMostrarDropdownCinta(false);
     setModoColor("pantones"); setInputsPantones(Array(tintaPlasticoDefault?.cantidad || 1).fill(""));
     setAdvertenciaDuplicado(null);
     setHerramentalExpandido(false); setHerramentalDescripcion(""); setHerramentalPrecioTexto("");
@@ -1523,6 +1561,7 @@ export default function FormularioSolicitud({
                               {s.tipo}
                             </li>
                           ))}
+                          <AgregarSuajeInline onAgregar={handleAgregarSuajeInline} />
                         </ul>
                       )}
                       {productoActual.idsuaje && esAsaFlexible && <p className="mt-1 text-xs text-blue-600 font-medium">✓ {productoActual.suajeTipo}</p>}
@@ -1584,9 +1623,43 @@ export default function FormularioSolicitud({
                             {m.medida}
                           </li>
                         ))}
+                        <AgregarTroquelInline onAgregar={handleAgregarTroquelInline} />
                       </ul>
                     )}
                     {productoActual.idMedidaTroquel && <p className="mt-1 text-xs text-violet-600 font-medium">✓ {productoActual.medidaTroquelTexto}</p>}
+                  </div>
+                )}
+
+                {/* Cinta de seguridad (tipo de bolsa de envío) */}
+                {esBolsaEnvio(modoProducto === "nuevo" ? datosProductoNuevo.tipoProducto : productoActual.nombre) && (
+                  <div className="relative">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Cinta de seguridad <span className="ml-2 text-xs text-gray-400 font-normal">(opcional)</span></label>
+                    <div className="flex gap-2">
+                      <input type="text" value={productoActual.cintaSeguridadTexto || "Seleccionar cinta..."} readOnly
+                        className={`flex-1 px-4 py-2 border rounded-lg cursor-pointer text-gray-900 bg-white ${productoActual.idCintaSeguridad ? "border-amber-400 bg-amber-50" : "border-gray-300"}`}
+                        onClick={() => setMostrarDropdownCinta(!mostrarDropdownCinta)} />
+                      <button type="button" onClick={() => setMostrarDropdownCinta(!mostrarDropdownCinta)} className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700">
+                        <svg className={`w-5 h-5 transition-transform ${mostrarDropdownCinta ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                      </button>
+                      {productoActual.idCintaSeguridad && (
+                        <button type="button" onClick={() => setProductoActual(p => ({ ...p, idCintaSeguridad: null, cintaSeguridadTexto: null }))}
+                          className="px-3 py-2 bg-gray-200 text-gray-600 rounded-lg hover:bg-red-100 hover:text-red-600 text-sm font-bold">✕</button>
+                      )}
+                    </div>
+                    {mostrarDropdownCinta && (
+                      <ul className="absolute w-full bg-white border border-gray-300 mt-1 rounded-lg shadow-lg z-20 max-h-48 overflow-y-auto">
+                        <li onClick={() => { setProductoActual(p => ({ ...p, idCintaSeguridad: null, cintaSeguridadTexto: null })); setMostrarDropdownCinta(false); }}
+                          className="px-4 py-2 hover:bg-gray-100 cursor-pointer text-gray-400 italic border-b border-gray-200 text-sm">Sin cinta</li>
+                        {cintasSeguridad.map(c => (
+                          <li key={c.id} onClick={() => { setProductoActual(p => ({ ...p, idCintaSeguridad: c.id, cintaSeguridadTexto: c.nombre })); setMostrarDropdownCinta(false); }}
+                            className={`px-4 py-2 hover:bg-amber-100 cursor-pointer text-gray-900 ${productoActual.idCintaSeguridad === c.id ? "bg-amber-50 font-semibold text-amber-700" : ""}`}>
+                            {c.nombre}{c.medida ? ` — ${c.medida}` : ""}
+                          </li>
+                        ))}
+                        <AgregarCintaSeguridadInline onAgregar={handleAgregarCintaSeguridadInline} />
+                      </ul>
+                    )}
+                    {productoActual.idCintaSeguridad && <p className="mt-1 text-xs text-amber-600 font-medium">✓ {productoActual.cintaSeguridadTexto}</p>}
                   </div>
                 )}
 

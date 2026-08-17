@@ -3,6 +3,9 @@ import type {
   TipoProductoAdminItem,
   MaterialAdminItem,
   CalibreAdminItem,
+  TroquelAdminItem,
+  SuajeAdminItem,
+  CintaSeguridadAdminItem,
 } from "../../types/plastico/productos-plastico.types";
 
 const inputCls =
@@ -405,6 +408,201 @@ export function AgregarCalibreInline({
       <BotonesGuardarCancelar
         onGuardar={handleGuardar}
         onCancelar={limpiar}
+        saving={saving}
+      />
+    </li>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TIPO DE TROQUEL (medida como nombre libre, mismo shape que TipoProducto)
+// ═══════════════════════════════════════════════════════════════════════════
+export function AgregarTroquelInline({
+  onAgregar,
+}: {
+  onAgregar: (nombre: string) => Promise<TroquelAdminItem>;
+}) {
+  const [abierto, setAbierto] = useState(false);
+  const [nombre, setNombre] = useState("");
+  const [saving, setSaving] = useState(false);
+  const ref = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (abierto) ref.current?.focus();
+  }, [abierto]);
+
+  const handleGuardar = async () => {
+    const t = nombre.trim();
+    if (!t) return;
+    setSaving(true);
+    try {
+      await onAgregar(t);
+      setNombre("");
+      setAbierto(false);
+    } catch (e: any) {
+      alert(e.response?.data?.error ?? "Error al agregar el tipo de troquel");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!abierto) {
+    return (
+      <li onClick={() => setAbierto(true)} className={triggerCls}>
+        + Agregar nuevo tipo de troquel...
+      </li>
+    );
+  }
+
+  return (
+    <li className="p-3 border-t border-gray-100 bg-violet-50/40" onClick={(e) => e.stopPropagation()}>
+      <label className="block text-xs font-medium text-gray-600 mb-1">Medida del troquel</label>
+      <input
+        ref={ref}
+        type="text"
+        value={nombre}
+        onChange={(e) => setNombre(e.target.value)}
+        onKeyDown={(e) => e.key === "Enter" && handleGuardar()}
+        placeholder="Ej. 10x15 cm"
+        className={inputCls}
+      />
+      <BotonesGuardarCancelar
+        onGuardar={handleGuardar}
+        onCancelar={() => { setAbierto(false); setNombre(""); }}
+        saving={saving}
+      />
+    </li>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ASA / SUAJE (mismo shape que TipoProducto)
+// ═══════════════════════════════════════════════════════════════════════════
+export function AgregarSuajeInline({
+  onAgregar,
+}: {
+  onAgregar: (nombre: string) => Promise<SuajeAdminItem>;
+}) {
+  const [abierto, setAbierto] = useState(false);
+  const [nombre, setNombre] = useState("");
+  const [saving, setSaving] = useState(false);
+  const ref = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (abierto) ref.current?.focus();
+  }, [abierto]);
+
+  const handleGuardar = async () => {
+    const t = nombre.trim();
+    if (!t) return;
+    setSaving(true);
+    try {
+      await onAgregar(t);
+      setNombre("");
+      setAbierto(false);
+    } catch (e: any) {
+      alert(e.response?.data?.error ?? "Error al agregar el asa/suaje");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!abierto) {
+    return (
+      <li onClick={() => setAbierto(true)} className={triggerCls}>
+        + Agregar nueva asa/suaje...
+      </li>
+    );
+  }
+
+  return (
+    <li className="p-3 border-t border-gray-100 bg-blue-50/40" onClick={(e) => e.stopPropagation()}>
+      <label className="block text-xs font-medium text-gray-600 mb-1">Nombre del asa/suaje</label>
+      <input
+        ref={ref}
+        type="text"
+        value={nombre}
+        onChange={(e) => setNombre(e.target.value)}
+        onKeyDown={(e) => e.key === "Enter" && handleGuardar()}
+        placeholder="Ej. Asa flexible chica"
+        className={inputCls}
+      />
+      <BotonesGuardarCancelar
+        onGuardar={handleGuardar}
+        onCancelar={() => { setAbierto(false); setNombre(""); }}
+        saving={saving}
+      />
+    </li>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CINTA DE SEGURIDAD (nombre + medida por separado — tipo de bolsa de envío)
+// ═══════════════════════════════════════════════════════════════════════════
+export function AgregarCintaSeguridadInline({
+  onAgregar,
+}: {
+  onAgregar: (nombre: string, medida?: string | null) => Promise<CintaSeguridadAdminItem>;
+}) {
+  const [abierto, setAbierto] = useState(false);
+  const [nombre, setNombre] = useState("");
+  const [medida, setMedida] = useState("");
+  const [saving, setSaving] = useState(false);
+  const ref = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (abierto) ref.current?.focus();
+  }, [abierto]);
+
+  const handleGuardar = async () => {
+    const t = nombre.trim();
+    if (!t) return;
+    setSaving(true);
+    try {
+      await onAgregar(t, medida.trim() || null);
+      setNombre("");
+      setMedida("");
+      setAbierto(false);
+    } catch (e: any) {
+      alert(e.response?.data?.error ?? "Error al agregar la cinta de seguridad");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!abierto) {
+    return (
+      <li onClick={() => setAbierto(true)} className={triggerCls}>
+        + Agregar nueva cinta de seguridad...
+      </li>
+    );
+  }
+
+  return (
+    <li className="p-3 border-t border-gray-100 bg-amber-50/40" onClick={(e) => e.stopPropagation()}>
+      <label className="block text-xs font-medium text-gray-600 mb-1">Nombre</label>
+      <input
+        ref={ref}
+        type="text"
+        value={nombre}
+        onChange={(e) => setNombre(e.target.value)}
+        placeholder="Ej. Cinta roja"
+        className={inputCls}
+      />
+      <label className="block text-xs font-medium text-gray-600 mb-1 mt-2">
+        Medida <span className="text-gray-400 font-normal">(opcional)</span>
+      </label>
+      <input
+        type="text"
+        value={medida}
+        onChange={(e) => setMedida(e.target.value)}
+        onKeyDown={(e) => e.key === "Enter" && handleGuardar()}
+        placeholder="Ej. 5 cm"
+        className={inputCls}
+      />
+      <BotonesGuardarCancelar
+        onGuardar={handleGuardar}
+        onCancelar={() => { setAbierto(false); setNombre(""); setMedida(""); }}
         saving={saving}
       />
     </li>

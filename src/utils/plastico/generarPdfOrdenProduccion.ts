@@ -273,7 +273,8 @@ function celdaLabel(
   x: number, y: number, w: number, h: number,
   labelSize = LABEL_SIZE,
   valueSize = 15,
-  bold = false
+  bold = false,
+  value2?: string
 ) {
   doc.setDrawColor(BLACK[0], BLACK[1], BLACK[2]);
   doc.setLineWidth(0.2);
@@ -283,22 +284,41 @@ function celdaLabel(
   doc.setTextColor(GRAY_DARK[0], GRAY_DARK[1], GRAY_DARK[2]);
   doc.text(label, x + 1.5, y + 4.5);
 
-  const texto = f(value);
   doc.setFont("helvetica", bold ? "bold" : "normal");
+  doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);
 
   // Auto-ajuste: si el texto no cabe en el ancho de la celda con el
   // tamaño solicitado, se reduce progresivamente (mínimo 6pt) para que
   // nunca se encime con las celdas vecinas.
-  let tamanoFinal = valueSize;
   const anchoDisponible = w - 3; // padding aprox. 1.5mm por lado
-  doc.setFontSize(tamanoFinal);
-  while (tamanoFinal > 6 && doc.getTextWidth(texto) > anchoDisponible) {
-    tamanoFinal -= 0.5;
-    doc.setFontSize(tamanoFinal);
-  }
+  const ajustarTamano = (texto: string, tamanoInicial: number) => {
+    let tamano = tamanoInicial;
+    doc.setFontSize(tamano);
+    while (tamano > 6 && doc.getTextWidth(texto) > anchoDisponible) {
+      tamano -= 0.5;
+      doc.setFontSize(tamano);
+    }
+    return tamano;
+  };
 
-  doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);
-  doc.text(texto, x + w / 2, y + h - 3, { align: "center" });
+  if (value2) {
+    // Dos líneas de valor dentro de la misma celda (p. ej. fecha + no. de pedido)
+    const texto1 = f(value);
+    const texto2 = f(value2);
+    const tamanoMax = Math.min(valueSize, 8.5); // 2 líneas necesitan fuente más chica para no encimarse
+    const tamano1 = ajustarTamano(texto1, tamanoMax);
+    const tamano2 = ajustarTamano(texto2, tamanoMax);
+    const tamanoFinal = Math.min(tamano1, tamano2);
+
+    doc.setFontSize(tamanoFinal);
+    doc.text(texto1, x + w / 2, y + h * 0.62, { align: "center" });
+    doc.text(texto2, x + w / 2, y + h - 1.5, { align: "center" });
+  } else {
+    const texto = f(value);
+    const tamanoFinal = ajustarTamano(texto, valueSize);
+    doc.setFontSize(tamanoFinal);
+    doc.text(texto, x + w / 2, y + h - 3, { align: "center" });
+  }
 }
 
 function celdaHeader(
@@ -659,7 +679,7 @@ console.log("🎨 masterImg:", masterImg ? `OK (${masterImg.format})` : "null");
   doc.text("FECHA", ordenX + 2, y + 20);
   doc.setFontSize(13);
   doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);
-  doc.text(formatFecha(data.fecha), ordenX + ordenW / 2, y + 23.5, { align: "center" });
+  doc.text(formatFecha(data.fecha_produccion), ordenX + ordenW / 2, y + 23.5, { align: "center" });
   y += fila2H;
 
   // ── FILA 2 — Impresión | Fecha Entrega | Prioridad | Pedido ──
@@ -689,8 +709,9 @@ console.log("🎨 masterImg:", masterImg ? `OK (${masterImg.format})` : "null");
   doc.text(data.prioridad ? "URGENTE" : "Normal", M + impW + entW + priW / 2, y + fila3H - 3, { align: "center" });
   doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);
 
-  celdaLabel(doc, "Pedido", data.no_pedido ? data.no_pedido.trim() : "—",
-    M + impW + entW + priW, y, pedW, fila3H, LABEL_SIZE, 11, true);
+  celdaLabel(doc, "Pedido", formatFecha(data.fecha),
+    M + impW + entW + priW, y, pedW, fila3H, LABEL_SIZE, 11, true,
+    data.no_pedido ? data.no_pedido.trim() : "—");
   y += fila3H;
 
   // ── FILA 3 — Producto | Cantidad | Medida | Kilos/mts/Bolsas ──

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, type ReactNode } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { tienePermisoDePantalla } from "../utils/permisosUsuario";
 import logo from "../assets/grupeblanco.png";
 import InstallButton from "../components/pwa/InstallButton";
 
@@ -14,8 +15,13 @@ interface MenuItem {
   path?: string;
   permiso?: string;
   permisoOr?: string[];
+  // Prefijo de clave de la pantalla ("cotizacion.", "produccion.", ...): la
+  // entrada aparece con CUALQUIER privilegio de esa pantalla. Sustituye a las
+  // listas quemadas, que se quedaban cortas cada vez que se agregaba un
+  // privilegio nuevo. Ver tienePermisoDePantalla en utils/permisosUsuario.ts.
+  permisoPantalla?: string;
   accesoTotal?: boolean;
-  subItems: { name: string; path: string; permiso?: string }[];
+  subItems: { name: string; path: string; permiso?: string; permisoPantalla?: string }[];
 }
 
 interface FlyoutState {
@@ -69,7 +75,7 @@ export default function Dashboard({ children }: DashboardProps) {
       name: "Usuarios",
       icon: "👥",
       path: "/usuarios",
-      permiso: "seguridad.usuarios.gestionar",
+      permisoPantalla: "seguridad.usuarios.",
       subItems: [],
     },
     // {
@@ -90,100 +96,93 @@ export default function Dashboard({ children }: DashboardProps) {
       name: "Clientes",
       icon: "🏢",
       path: "/clientes",
-      permiso: "clientes.gestionar",
+      permisoPantalla: "clientes.",
       subItems: [],
     },
     {
       name: "Dar alta productos",
       icon: "📦",
-      permisoOr: ["productos.plastico.gestionar", "productos.papel.gestionar"],
+      permisoPantalla: "productos.",
       subItems: [
-        { name: "Plástico", path: "/plastico", permiso: "productos.plastico.gestionar" },
-        { name: "Papel",    path: "/papel",    permiso: "productos.papel.gestionar" },
+        { name: "Plástico", path: "/plastico", permisoPantalla: "productos.plastico." },
+        { name: "Papel",    path: "/papel",    permisoPantalla: "productos.papel." },
       ],
     },
     {
       name: "Cotización",
       icon: "📋",
       path: "/cotizar",
-      permisoOr: ["cotizacion.crear_editar", "cotizacion.aprobar"],
+      permisoPantalla: "cotizacion.",
       subItems: [],
     },
     {
       name: "Pedido",
       icon: "🛒",
       path: "/pedido",
-      permisoOr: ["pedido.crear_editar", "pedido.eliminar"],
+      permisoPantalla: "pedido.",
       subItems: [],
     },
     {
       name: "Diseño",
       icon: "🎨",
       path: "/diseno",
-      permisoOr: ["diseno.editar", "diseno.orden"],
+      permisoPantalla: "diseno.",
       subItems: [],
     },
     {
       name: "Seguimiento",
       icon: "📊",
       path: "/seguimiento",
-      permisoOr: [
-        "produccion.seguimiento.ver",
-        "produccion.acceso_planta",
-        "produccion.plastico.extrusion.operar",
-        "produccion.plastico.impresion.operar",
-        "produccion.plastico.bolseo.operar",
-        "produccion.plastico.asa_flexible.operar",
-      ],
+      permisoPantalla: "produccion.",
       subItems: [],
     },
     {
       name: "Envíos / Entregas",
       icon: "🚚",
       path: "/envios",
-      permiso: "envios.gestionar",
+      permisoPantalla: "envios.",
       subItems: [],
     },
     {
       name: "Anticipo / Liquidación",
       icon: "💰",
       path: "/anticipoliquidacion",
-      permiso: "cobranza.anticipo_liquidacion.gestionar",
+      permisoPantalla: "cobranza.",
       subItems: [],
     },
     {
       name: "Precios productos",
       icon: "🏷️",
-      permiso: "precios.gestionar",
+      permisoPantalla: "precios.",
       subItems: [
         {
           name: "Plástico",
           path: "/precioplastico",
-          permiso: "precios.gestionar",
+          permisoPantalla: "precios.",
         },
         {
           name: "Papel",
           path: "/precios-acabados-papel",
-          permiso: "precios.gestionar",
+          permisoPantalla: "precios.",
         },
         {
           name: "Merma de producción (Papel)",
           path: "/merma-papel",
-          permiso: "precios.gestionar",
+          permisoPantalla: "precios.",
         },
         {
           name: "Tipo de cambio",
           path: "/tipo-cambio",
-          permiso: "precios.gestionar",
+          permisoPantalla: "precios.",
         },
       ],
     },
     {
       name: "Catálogos",
       icon: "📚",
-      permiso: "catalogos.gestionar",
+      permisoPantalla: "catalogos.",
       subItems: [
-        { name: "Gestión de catálogos", path: "/catalogos", permiso: "catalogos.gestionar" },
+        { name: "Gestión de catálogos", path: "/catalogos", permisoPantalla: "catalogos." },
       ],
     },
     {
@@ -204,30 +203,41 @@ export default function Dashboard({ children }: DashboardProps) {
       name: "Gestor proveedores",
       icon: "🤝",
       path: "/proveedores",
-      permiso: "proveedores.gestionar",
+      permisoPantalla: "proveedores.",
       subItems: [],
     },
     // ── Cotizador Expo ───────────────────────────────────────────────────────
-    // Sin privilegio propio: solo lo ven los admins (acceso_total) en el menú
-    // normal. El rol "Expo" lo ve por la excepción esRolExclusivoExpo de abajo,
-    // sin necesitar que se le asigne ningún privilegio.
+    // CORREGIDO (2026-08-14): va por privilegio, no por accesoTotal. El rol
+    // "Expo" ya trae `externos.expo.gestionar` en su base (ver
+    // migrations/2026-08-14_expo_por_privilegio.sql), así que se le puede dar
+    // acceso a alguien más sin convertirlo en administrador; acceso_total
+    // sigue entrando. La excepción esRolExclusivoExpo de abajo no cambia:
+    // esa encierra a la cuenta de Expo en su pantalla, cosa distinta de
+    // quién puede verla.
     {
       name: "Cotizador Expo",
       icon: "🎪",
       path: "/expo",
-      accesoTotal: true,
+      permisoPantalla: "externos.expo.",
       subItems: [],
     },
     // ── Cotizador Interactivo ────────────────────────────────────────────────
-    // Sin privilegio propio: solo lo ven los admins (acceso_total) en el menú
-    // normal. El rol dedicado "CotizadorLibre" (cuenta compartida) lo ve por
-    // la excepción esRolExclusivoCotizadorLibre de abajo, sin necesitar que
-    // se le asigne ningún privilegio.
+    // CORREGIDO (2026-08-14): estaba en accesoTotal, así que los 5 privilegios
+    // "Cotizador Libre - ..." se ofrecían en el catálogo pero asignarlos no
+    // servía de nada — la pantalla seguía sin aparecer salvo para admins.
+    // Ahora va por privilegio: cualquiera de los 5 la muestra, y acceso_total
+    // sigue entrando (tienePermisoDePantalla lo contempla). Así se puede
+    // delegar sin convertir a nadie en administrador.
+    //
+    // La cuenta compartida del kiosco (rol "CotizadorLibre") ya trae esos 5
+    // privilegios en su base, así que sigue viéndolo igual; y su candado
+    // esRolExclusivoCotizadorLibre de abajo no cambia — ese la encierra en
+    // esta pantalla, que es otra cosa distinta a quién puede verla.
     {
       name: "Cotizador Interactivo",
       icon: "🧮",
       path: "/cotizador-libre",
-      accesoTotal: true,
+      permisoPantalla: "externos.cotizador_libre.",
       subItems: [],
     },
   ];
@@ -246,8 +256,9 @@ export default function Dashboard({ children }: DashboardProps) {
     ? menuItems.filter((item) => item.name === "Cotizador Interactivo")
     : menuItems.filter((item) => {
         if (item.accesoTotal) return user?.acceso_total === true;
-        if (!item.permiso && !item.permisoOr) return true;
+        if (!item.permiso && !item.permisoOr && !item.permisoPantalla) return true;
         if (user?.acceso_total) return true;
+        if (item.permisoPantalla && tienePermisoDePantalla(user, item.permisoPantalla)) return true;
         if (item.permiso && tienePermiso(item.permiso)) return true;
         if (item.permisoOr) return item.permisoOr.some((p) => tienePermiso(p));
         return false;
@@ -282,6 +293,7 @@ export default function Dashboard({ children }: DashboardProps) {
       item.subItems.some((s) => isActive(s.path));
 
     const subItemsFiltrados = item.subItems.filter((sub) => {
+      if (sub.permisoPantalla) return tienePermisoDePantalla(user, sub.permisoPantalla);
       if (!sub.permiso) return true;
       return tienePermiso(sub.permiso);
     });

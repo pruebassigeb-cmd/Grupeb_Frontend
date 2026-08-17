@@ -52,7 +52,11 @@ export type SubcarpetaCatalogoAdmin =
   | "textura"
   | "foil"
   | "hs_ar"
-  | "uv";
+  | "uv"
+  | "tipo_producto_plastico"
+  | "medidas_troquel"
+  | "asa_suaje"
+  | "cinta_seguridad";
 
 export const SUBCARPETAS_CATALOGOS_ADMIN: { value: SubcarpetaCatalogoAdmin; label: string }[] = [
   { value: "tipo_producto", label: "Tipo de producto" },
@@ -63,6 +67,10 @@ export const SUBCARPETAS_CATALOGOS_ADMIN: { value: SubcarpetaCatalogoAdmin; labe
   { value: "foil",          label: "Foil"             },
   { value: "hs_ar",         label: "HS y AR"          },
   { value: "uv",            label: "UV"               },
+  { value: "tipo_producto_plastico", label: "Tipo de producto (plástico)" },
+  { value: "medidas_troquel",        label: "Tipo de troquel"            },
+  { value: "asa_suaje",              label: "Asa / Suaje"                },
+  { value: "cinta_seguridad",        label: "Cinta de seguridad"         },
 ];
 
 // NOTA: la carpeta interna se sigue llamando "suaje" (así vive el path en S3

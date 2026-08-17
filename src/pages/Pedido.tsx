@@ -19,6 +19,21 @@ import { buildPayloadDesdePedido } from "../utils/plastico/buildPayloadDesdePedi
 import { getHistorialPedidosPorCliente } from "../services/pedidosService";
 import BotonAuditoria from "../components/auditoria/BotonAuditoria";
 import AuditoriaDesplegable from "../components/auditoria/AuditoriaDesplegable";
+import api from "../services/api";
+
+// Convierte un Blob (el PDF ya generado en el navegador) a base64 puro,
+// listo para mandarlo en el body JSON de /correos/documento.
+function blobABase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const resultado = reader.result as string;
+      resolve(resultado.split(",")[1] ?? "");
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
 
 const ITEMS_POR_PAGINA = 7;
 
@@ -43,6 +58,13 @@ export default function Pedidos() {
   const [modalRepetirOpen, setModalRepetirOpen] = useState(false);
   const [menuPdfAbierto, setMenuPdfAbierto] = useState<string | null>(null);
   const [descargandoPdf, setDescargandoPdf] = useState<string | null>(null);
+
+  // ── Envío por correo ──────────────────────────────────────────────────
+  const [modalCorreoOpen, setModalCorreoOpen] = useState(false);
+  const [pedidoParaCorreo, setPedidoParaCorreo] = useState<Pedido | null>(null);
+  const [correoDestino, setCorreoDestino] = useState("");
+  const [enviandoCorreo, setEnviandoCorreo] = useState(false);
+  const [errorCorreo, setErrorCorreo] = useState<string | null>(null);
 
   useEffect(() => { cargarCatalogos(); cargarPedidos(); }, []);
   useEffect(() => { setPaginaActual(1); }, [busqueda, filtroMaterial]);
@@ -387,6 +409,92 @@ export default function Pedidos() {
     }
   };
 
+  // ── Envío por correo ──────────────────────────────────────────────────
+  const handleAbrirModalCorreo = (ped: Pedido) => {
+    setPedidoParaCorreo(ped);
+    setCorreoDestino(ped.correo || "");
+    setErrorCorreo(null);
+    setModalCorreoOpen(true);
+  };
+
+  const handleCerrarModalCorreo = () => {
+    if (enviandoCorreo) return; // no cerrar a medio envío
+    setModalCorreoOpen(false);
+    setPedidoParaCorreo(null);
+    setCorreoDestino("");
+    setErrorCorreo(null);
+  };
+
+  const handleConfirmarEnvioCorreo = async () => {
+    if (!pedidoParaCorreo) return;
+    const correo = correoDestino.trim();
+    const correoValido = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo);
+    if (!correoValido) {
+      setErrorCorreo("Ingresa un correo válido");
+      return;
+    }
+
+    const ped = pedidoParaCorreo;
+    setEnviandoCorreo(true);
+    setErrorCorreo(null);
+    try {
+      const venta = await getVentaByPedido(ped.no_pedido);
+
+      // guardarS3=false, descargar=false: solo necesitamos el Blob en memoria
+      // para adjuntarlo al correo, no bajarlo al equipo ni subirlo a S3.
+      const blob = await generarPdfPedido({
+        no_pedido: ped.no_pedido,
+        no_cotizacion: ped.no_cotizacion ?? null,
+        fecha: ped.fecha,
+        cliente: ped.cliente,
+        empresa: ped.empresa,
+        telefono: ped.telefono,
+        correo: ped.correo,
+        impresion: ped.impresion ?? null,
+        celular: ped.celular ?? null,
+        razon_social: ped.razon_social ?? null,
+        rfc: ped.rfc ?? null,
+        domicilio: ped.domicilio ?? null,
+        numero: ped.numero ?? null,
+        colonia: ped.colonia ?? null,
+        codigo_postal: ped.codigo_postal ?? null,
+        poblacion: ped.poblacion ?? null,
+        estado_cliente: ped.estado_cliente ?? null,
+        cliente_id: ped.cliente_id ?? null,
+        identificar: ped.identificar ?? null,
+        sin_iva: ped.sin_iva ?? false,
+        subtotal: Number(venta.subtotal),
+        iva: Number(venta.iva),
+        total: Number(venta.total),
+        anticipo: Number(venta.anticipo),
+        saldo: Number(venta.saldo),
+        moneda: (venta as any).moneda ?? "MXN",
+        productos: buildProductosPdf(ped.productos),
+      }, false, false, "carta");
+
+      const nombreArchivo = `Pedido_${ped.no_pedido}.pdf`;
+      const pdfBase64 = await blobABase64(blob);
+
+      await api.post("/correos/documento", {
+        tipo: "pedido",
+        folio: String(ped.no_pedido),
+        cliente: ped.cliente || "",
+        empresa: ped.empresa || null,
+        destinatario: correo,
+        pdfBase64,
+        nombreArchivo,
+      });
+
+      showAlert("✅ Correo enviado correctamente");
+      handleCerrarModalCorreo();
+    } catch (e: any) {
+      console.error("❌ Error al enviar correo:", e);
+      setErrorCorreo(e.response?.data?.error || "No se pudo enviar el correo");
+    } finally {
+      setEnviandoCorreo(false);
+    }
+  };
+
   const handleEliminar = async (ped: Pedido) => {
     const confirmar = await showConfirm(
       `⚠️ ELIMINAR PEDIDO ${ped.no_pedido}\n\n` +
@@ -665,6 +773,13 @@ export default function Pedidos() {
                           )}
                         </div>
 
+                        <button onClick={() => handleAbrirModalCorreo(ped)} title="Enviar por correo"
+                          className="p-1.5 rounded-md text-indigo-500 hover:bg-indigo-50 transition-colors">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                          </svg>
+                        </button>
+
                         <button onClick={() => handleEliminar(ped)} title="Cancelar pedido"
                           className="p-1.5 rounded-md text-red-500 hover:bg-red-50 transition-colors">
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -848,6 +963,42 @@ export default function Pedidos() {
           onClose={() => setModalRepetirOpen(false)}
         />
       )}
+
+      <Modal isOpen={modalCorreoOpen} onClose={handleCerrarModalCorreo} title="Enviar por correo">
+        {pedidoParaCorreo && (
+          <div className="space-y-4">
+            <p className="text-sm text-gray-600">
+              Se enviará el PDF del pedido{" "}
+              <span className="font-semibold text-gray-800">{pedidoParaCorreo.no_pedido}</span> a:
+            </p>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Correo del destinatario</label>
+              <input
+                type="email"
+                value={correoDestino}
+                onChange={e => setCorreoDestino(e.target.value)}
+                placeholder="cliente@correo.com"
+                disabled={enviandoCorreo}
+                autoFocus
+                onKeyDown={e => { if (e.key === "Enter") handleConfirmarEnvioCorreo(); }}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100"
+              />
+              {errorCorreo && <p className="mt-1 text-sm text-red-600">{errorCorreo}</p>}
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <button onClick={handleCerrarModalCorreo} disabled={enviandoCorreo}
+                className="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 rounded-lg disabled:opacity-50">
+                Cancelar
+              </button>
+              <button onClick={handleConfirmarEnvioCorreo} disabled={enviandoCorreo}
+                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow disabled:opacity-50 flex items-center gap-2">
+                {enviandoCorreo && <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+                {enviandoCorreo ? "Enviando..." : "Enviar correo"}
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
     </Dashboard>
   );
 }

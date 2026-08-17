@@ -1220,8 +1220,7 @@ export default function CotizadorLibre() {
             />
             {categoria === "plastico" && cantidadMinimaPlastico && (
               <p className="text-xs text-[#6b6f63] mt-2">
-                Este producto requiere un mínimo de {cantidadMinimaPlastico.toLocaleString()} piezas
-                (equivalente a {PESO_MINIMO_KG_PLASTICO} kg) para poder cotizarse.
+                Este producto requiere un mínimo de {cantidadMinimaPlastico.toLocaleString()} piezas para poder cotizarse.
               </p>
             )}
             {cantidad !== null && !cantidadValida && (

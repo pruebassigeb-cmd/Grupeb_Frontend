@@ -13,6 +13,9 @@ import type {
   TipoProductoAdminItem,
   MaterialAdminItem,
   CalibreAdminItem,
+  TroquelAdminItem,
+  SuajeAdminItem,
+  CintaSeguridadAdminItem,
 } from "../../types/plastico/productos-plastico.types";
 
 // ========================
@@ -262,6 +265,50 @@ export const createCalibrePlastico = async (
     return response.data;
   } catch (error: any) {
     console.error("❌ Error al crear calibre:", error);
+    throw error;
+  }
+};
+
+// ✅ NUEVO — Tipo de troquel, Asa/Suaje y Cinta de seguridad, mismo patrón
+// que los 3 de arriba (registro inline desde FormularioSolicitud.tsx).
+export const createTroquelPlastico = async (nombre: string): Promise<TroquelAdminItem> => {
+  try {
+    const response = await api.post<TroquelAdminItem>(
+      "/catalogos-productos/plastico/admin/troqueles",
+      { nombre }
+    );
+    return response.data;
+  } catch (error: any) {
+    console.error("❌ Error al crear tipo de troquel:", error);
+    throw error;
+  }
+};
+
+export const createSuajePlastico = async (nombre: string): Promise<SuajeAdminItem> => {
+  try {
+    const response = await api.post<SuajeAdminItem>(
+      "/catalogos-productos/plastico/admin/asa-suaje",
+      { nombre }
+    );
+    return response.data;
+  } catch (error: any) {
+    console.error("❌ Error al crear asa/suaje:", error);
+    throw error;
+  }
+};
+
+export const createCintaSeguridadPlastico = async (
+  nombre: string,
+  medida?: string | null
+): Promise<CintaSeguridadAdminItem> => {
+  try {
+    const response = await api.post<CintaSeguridadAdminItem>(
+      "/catalogos-productos/plastico/admin/cinta-seguridad",
+      { nombre, medida: medida ?? null }
+    );
+    return response.data;
+  } catch (error: any) {
+    console.error("❌ Error al crear cinta de seguridad:", error);
     throw error;
   }
 };

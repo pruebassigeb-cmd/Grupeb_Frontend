@@ -38,34 +38,15 @@ import ReportesCorreo from "./pages/ReportesCorreo";
 import CotizadorLibre from "./pages/cotizadorLibre/CotizadorLibre";
 
 
-// Fase 6: valores clave, no el texto visible del privilegio — así
-// renombrar la etiqueta desde la pantalla de Roles no rompe ninguna ruta.
-const PERMISOS = {
-  usuarios: "seguridad.usuarios.gestionar",
-  clientes: "clientes.gestionar",
-  plastico: "productos.plastico.gestionar",
-  // Split en la fase 0: crear/editar y aprobar/rechazar quedaron separados.
-  // El acceso a la pantalla se conserva para cualquiera de los dos.
-  cotizar: "cotizacion.crear_editar",
-  cotizarAprobar: "cotizacion.aprobar",
-  pedido: "pedido.crear_editar",
-  pedidoEliminar: "pedido.eliminar",
-  diseno: "diseno.editar",
-  anticipo: "cobranza.anticipo_liquidacion.gestionar",
-  precios: "precios.gestionar",
-  estadoCuenta: "cobranza.anticipo_liquidacion.gestionar",
-  papel: "productos.papel.gestionar",
-  catalogos: "catalogos.gestionar",
-} as const;
-
-const PERMISOS_SEGUIMIENTO = [
-  "produccion.seguimiento.ver",
-  "produccion.acceso_planta",
-  "produccion.plastico.extrusion.operar",
-  "produccion.plastico.impresion.operar",
-  "produccion.plastico.bolseo.operar",
-  "produccion.plastico.asa_flexible.operar",
-];
+// Las rutas ya no listan privilegio por privilegio: usan `permisoPantalla`
+// con el prefijo de la pantalla, así que CUALQUIER privilegio de esa pantalla
+// la abre y no hay que actualizar nada al agregar uno nuevo. Las listas que
+// vivían aquí se quedaban cortas — p. ej. Seguimiento solo nombraba los 4
+// procesos de plástico, así que un operador de papel no podía entrar.
+//
+// Única excepción: Reportes de Correo, que a propósito sigue pidiendo el
+// privilegio de administrar usuarios (decisión de Jose, 2026-08-14).
+const PERMISO_REPORTES_CORREO = "seguridad.usuarios.gestionar";
 
 function App() {
   return (
@@ -96,7 +77,7 @@ function App() {
           <Route
             path="/seguimiento"
             element={
-              <ProtectedRoute permisoOr={PERMISOS_SEGUIMIENTO}>
+              <ProtectedRoute permisoPantalla="produccion.">
                 <Seguimiento />
               </ProtectedRoute>
             }
@@ -106,7 +87,7 @@ function App() {
           <Route
             path="/usuarios"
             element={
-              <ProtectedRoute permiso={PERMISOS.usuarios}>
+              <ProtectedRoute permisoPantalla="seguridad.usuarios.">
                 <Usuarios />
               </ProtectedRoute>
             }
@@ -126,7 +107,7 @@ function App() {
 <Route
   path="/reportes-correo"
   element={
-    <ProtectedRoute permiso={PERMISOS.usuarios}>
+    <ProtectedRoute permiso={PERMISO_REPORTES_CORREO}>
       <ReportesCorreo />
     </ProtectedRoute>
   }
@@ -136,7 +117,7 @@ function App() {
           <Route
             path="/clientes"
             element={
-              <ProtectedRoute permiso={PERMISOS.clientes}>
+              <ProtectedRoute permisoPantalla="clientes.">
                 <Clientes />
               </ProtectedRoute>
             }
@@ -146,7 +127,7 @@ function App() {
           <Route
             path="/plastico"
             element={
-              <ProtectedRoute permiso={PERMISOS.plastico}>
+              <ProtectedRoute permisoPantalla="productos.plastico.">
                 <Plastico />
               </ProtectedRoute>
             }
@@ -156,7 +137,7 @@ function App() {
           <Route
             path="/cotizar/:noCotizacion/editar"
             element={
-              <ProtectedRoute permisoOr={[PERMISOS.cotizar, PERMISOS.cotizarAprobar]}>
+              <ProtectedRoute permisoPantalla="cotizacion.">
                 <EditarCotizacionCompleta />
               </ProtectedRoute>
             }
@@ -166,7 +147,7 @@ function App() {
           <Route
             path="/cotizar/:noCotizacion/editar-papel"
             element={
-              <ProtectedRoute permisoOr={[PERMISOS.cotizar, PERMISOS.cotizarAprobar]}>
+              <ProtectedRoute permisoPantalla="cotizacion.">
                 <EditarCotizacionPapelCompleta />
               </ProtectedRoute>
             }
@@ -176,7 +157,7 @@ function App() {
           <Route
             path="/cotizar"
             element={
-              <ProtectedRoute permisoOr={[PERMISOS.cotizar, PERMISOS.cotizarAprobar]}>
+              <ProtectedRoute permisoPantalla="cotizacion.">
                 <Cotizar />
               </ProtectedRoute>
             }
@@ -186,7 +167,7 @@ function App() {
           <Route
             path="/pedido"
             element={
-              <ProtectedRoute permisoOr={[PERMISOS.pedido, PERMISOS.pedidoEliminar]}>
+              <ProtectedRoute permisoPantalla="pedido.">
                 <Pedido />
               </ProtectedRoute>
             }
@@ -196,7 +177,7 @@ function App() {
           <Route
             path="/pedido/:noPedido/editar"
             element={
-              <ProtectedRoute permisoOr={[PERMISOS.pedido, PERMISOS.pedidoEliminar]}>
+              <ProtectedRoute permisoPantalla="pedido.">
                 <EditarPedido />
               </ProtectedRoute>
             }
@@ -206,7 +187,7 @@ function App() {
           <Route
             path="/pedido/:noPedido/editar-papel"
             element={
-              <ProtectedRoute permisoOr={[PERMISOS.pedido, PERMISOS.pedidoEliminar]}>
+              <ProtectedRoute permisoPantalla="pedido.">
                 <EditarPedidoPapel />
               </ProtectedRoute>
             }
@@ -216,7 +197,7 @@ function App() {
           <Route
             path="/diseno"
             element={
-              <ProtectedRoute permisoOr={["diseno.editar", "diseno.orden"]}>
+              <ProtectedRoute permisoPantalla="diseno.">
                 <Diseno />
               </ProtectedRoute>
             }
@@ -226,7 +207,7 @@ function App() {
           <Route
             path="/anticipoliquidacion"
             element={
-              <ProtectedRoute permiso={PERMISOS.anticipo}>
+              <ProtectedRoute permisoPantalla="cobranza.">
                 <AnticipoLiquidacion />
               </ProtectedRoute>
             }
@@ -236,7 +217,7 @@ function App() {
           <Route
             path="/precioplastico"
             element={
-              <ProtectedRoute permiso={PERMISOS.precios}>
+              <ProtectedRoute permisoPantalla="precios.">
                 <PrecioPlastico />
               </ProtectedRoute>
             }
@@ -246,7 +227,7 @@ function App() {
           <Route
             path="/precios-acabados-papel"
             element={
-              <ProtectedRoute permiso={PERMISOS.precios}>
+              <ProtectedRoute permisoPantalla="precios.">
                 <PreciosAcabadosPapel />
               </ProtectedRoute>
             }
@@ -256,7 +237,7 @@ function App() {
           <Route
             path="/merma-papel"
             element={
-              <ProtectedRoute permiso={PERMISOS.precios}>
+              <ProtectedRoute permisoPantalla="precios.">
                 <MermaPapel />
               </ProtectedRoute>
             }
@@ -266,7 +247,7 @@ function App() {
           <Route
             path="/tipo-cambio"
             element={
-              <ProtectedRoute permiso={PERMISOS.precios}>
+              <ProtectedRoute permisoPantalla="precios.">
                 <TipoCambio />
               </ProtectedRoute>
             }
@@ -276,7 +257,7 @@ function App() {
           <Route
             path="/estadocuenta"
             element={
-              <ProtectedRoute permiso={PERMISOS.estadoCuenta}>
+              <ProtectedRoute permisoPantalla="cobranza.">
                 <EstadoCuenta />
               </ProtectedRoute>
             }
@@ -286,7 +267,7 @@ function App() {
           <Route
             path="/envios"
             element={
-              <ProtectedRoute permiso="envios.gestionar">
+              <ProtectedRoute permisoPantalla="envios.">
                 <Envios />
               </ProtectedRoute>
             }
@@ -316,16 +297,19 @@ function App() {
           <Route
             path="/papel"
             element={
-              <ProtectedRoute permiso={PERMISOS.papel}>
+              <ProtectedRoute permisoPantalla="productos.papel.">
                 <Papel />
               </ProtectedRoute>
             }
           />
 
+          {/* Cotizador Expo — igual que /cotizador-libre: la ruta no pedía
+              ningún permiso, así que cualquiera con sesión entraba por URL.
+              Ahora exige el privilegio de la pantalla, en línea con el menú. */}
           <Route
             path="/expo"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute permisoPantalla="externos.expo.">
                 <Expo />
               </ProtectedRoute>
             }
@@ -333,12 +317,17 @@ function App() {
 
           {/* Cotizador Interactivo — página pública/cliente, sin Dashboard/sidebar
               (mismo patrón que /expo: la decisión de layout vive dentro del
-              componente de página, no aquí). Usa el rol dedicado
-              "CotizadorLibre" o el acceso de staff normal. */}
+              componente de página, no aquí).
+
+              CORREGIDO (2026-08-14): la ruta no pedía NINGÚN permiso, así que
+              cualquiera con sesión entraba escribiendo la URL — solo el menú
+              la escondía. Ahora exige privilegio de la pantalla, igual que el
+              Sidebar, para que menú y acceso digan lo mismo. La cuenta
+              compartida del kiosco pasa por sus 5 privilegios de base. */}
           <Route
             path="/cotizador-libre"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute permisoPantalla="externos.cotizador_libre.">
                 <CotizadorLibre />
               </ProtectedRoute>
             }
@@ -347,7 +336,7 @@ function App() {
           <Route
             path="/catalogos"
             element={
-              <ProtectedRoute permiso={PERMISOS.catalogos}>
+              <ProtectedRoute permisoPantalla="catalogos.">
                 <Catalogos />
               </ProtectedRoute>
             }
@@ -357,7 +346,7 @@ function App() {
           <Route
             path="/proveedores"
             element={
-              <ProtectedRoute permiso="proveedores.gestionar">
+              <ProtectedRoute permisoPantalla="proveedores.">
                 <ProveedoresPage />
               </ProtectedRoute>
             }

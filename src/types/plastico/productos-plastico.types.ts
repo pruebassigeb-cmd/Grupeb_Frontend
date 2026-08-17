@@ -53,6 +53,19 @@ export interface CalibreAdminItem {
   activo: boolean;
 }
 
+// ✅ NUEVO — Tipo de troquel (medidas_troquel) y Asa/Suaje (asa_suaje):
+// mismo shape simple que TipoProductoAdminItem (nombre + activo).
+export type TroquelAdminItem = TipoProductoAdminItem;
+export type SuajeAdminItem = TipoProductoAdminItem;
+
+// ✅ NUEVO — Cinta de seguridad: nombre + medida por separado.
+export interface CintaSeguridadAdminItem {
+  id: number;
+  nombre: string;
+  medida: string | null;
+  activo: boolean;
+}
+
 // ========================
 // ARCHIVOS DE PRODUCTO PLÁSTICO (imagen / render / master)
 // ========================

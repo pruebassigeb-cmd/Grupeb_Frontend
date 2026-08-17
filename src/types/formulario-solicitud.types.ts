@@ -28,6 +28,8 @@ export interface Producto {
   colorAsaNombre?: string | null;
   idMedidaTroquel?: number | null;
   medidaTroquelTexto?: string | null;
+  idCintaSeguridad?: number | null;
+  cintaSeguridadTexto?: string | null;
   observacion?: string | null;
   descripcion?: string | null;
   perforacion?: boolean;

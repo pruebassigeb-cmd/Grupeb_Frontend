@@ -13,6 +13,9 @@ import { useState, useEffect, useCallback } from "react";
     getTiposProductoAdmin,
     getMaterialesAdmin,
     getCalibresAdmin,
+    getTroquelesAdmin,
+    getSuajesAdmin,
+    getCintaSeguridadAdmin,
   } from "../../services/plastico/catalogosPlasticoAdminService";
   import { getCatalogoInsumo, type CatKeySincronizado } from "../../services/papel/catalogoPapelInsumoService";
   import { fetchFoils } from "../../services/papel/foil.service";
@@ -52,7 +55,7 @@ import { useState, useEffect, useCallback } from "react";
   ) => Promise<unknown>;
 
   interface TabConfig {
-    key: CatKey | "refuerzoBase" | "foil" | "plastico_tipoProducto" | "plastico_material" | "plastico_calibre";
+    key: CatKey | "refuerzoBase" | "foil" | "plastico_tipoProducto" | "plastico_material" | "plastico_calibre" | "plastico_troquel" | "plastico_asaSuaje" | "plastico_cintaSeguridad";
     label: string;
     hasMedida: boolean;
     tieneNumMaquina?: boolean;
@@ -80,7 +83,7 @@ import { useState, useEffect, useCallback } from "react";
     // proveedores; cada uno es su propio renglón (mismo formato que el resto)
     // y se renderiza con CatalogoPlasticoPanel indicándole cuál mostrar.
     esPlastico?: boolean;
-    plasticoTipo?: "tipoProducto" | "material" | "calibre";
+    plasticoTipo?: "tipoProducto" | "material" | "calibre" | "troquel" | "asaSuaje" | "cintaSeguridad";
   }
 
   interface TabGroup { groupLabel: string; tabs: TabConfig[]; }
@@ -96,7 +99,7 @@ import { useState, useEffect, useCallback } from "react";
         { key: "tipo_pegado", label: "Tipo de pegado", hasMedida: false, icon: "🔧" },
         // ✅ Unificado con insumos
         { key: "pegamento", label: "Pegamento", hasMedida: false, icon: "🧴", esInsumo: true, tipoInsumoNombre: "Pegamento" },
-        { key: "tipo_asa", label: "Tipo de asa", hasMedida: false, icon: "🪢", conImagen: true },
+        { key: "tipo_asa", label: "Asa (Papel)", hasMedida: false, icon: "🪢", conImagen: true },
         // ✅ Unificado con insumos
         { key: "laminado", label: "Laminado", hasMedida: false, icon: "✨", esInsumo: true, tipoInsumoNombre: "Laminado", conImagen: true },
         { key: "textura", label: "Textura", hasMedida: false, icon: "🟫", conImagen: true },
@@ -144,6 +147,10 @@ import { useState, useEffect, useCallback } from "react";
         { key: "plastico_tipoProducto", label: "Tipo de producto", hasMedida: false, icon: "🥡", esPlastico: true, plasticoTipo: "tipoProducto" },
         { key: "plastico_material", label: "Material", hasMedida: false, icon: "🧪", esPlastico: true, plasticoTipo: "material" },
         { key: "plastico_calibre", label: "Calibre", hasMedida: false, icon: "📏", esPlastico: true, plasticoTipo: "calibre" },
+        // ✅ NUEVO — mismo mecanismo (CatalogoPlasticoPanel + plasticoTipo).
+        { key: "plastico_troquel", label: "Tipo de troquel", hasMedida: false, icon: "🔲", esPlastico: true, plasticoTipo: "troquel" },
+        { key: "plastico_asaSuaje", label: "Asa (Plástico)", hasMedida: false, icon: "🪢", esPlastico: true, plasticoTipo: "asaSuaje" },
+        { key: "plastico_cintaSeguridad", label: "Cinta de seguridad", hasMedida: false, icon: "🎗️", esPlastico: true, plasticoTipo: "cintaSeguridad" },
       ],
     },
   ];
@@ -929,7 +936,7 @@ import { useState, useEffect, useCallback } from "react";
     } = useCatalogosPapel();
 
     const [verInactivos, setVerInactivos] = useState(false);
-    const [activeTab, setActiveTab] = useState<CatKey | "refuerzoBase" | "foil" | "plastico_tipoProducto" | "plastico_material" | "plastico_calibre">("tipo_producto");
+    const [activeTab, setActiveTab] = useState<CatKey | "refuerzoBase" | "foil" | "plastico_tipoProducto" | "plastico_material" | "plastico_calibre" | "plastico_troquel" | "plastico_asaSuaje" | "plastico_cintaSeguridad">("tipo_producto");
     const activeCatalogs = (verInactivos ? catalogsInactivos : catalogs) as CatalogMap;
     // ✅ NUEVO — imágenes de referencia de catálogo, compartidas entre todas
     // las pestañas (una sola carga para toda la pantalla).
@@ -945,7 +952,10 @@ import { useState, useEffect, useCallback } from "react";
     // (mismo criterio que insumoCounts/foilCount: se precargan al montar,
     // para que el badge aparezca aunque el usuario nunca haya visitado esa
     // pestaña; CatalogoPlasticoPanel los mantiene sincronizados después).
-    const [plasticoCounts, setPlasticoCounts] = useState<{ tipoProducto: number | null; material: number | null; calibre: number | null }>({ tipoProducto: null, material: null, calibre: null });
+    const [plasticoCounts, setPlasticoCounts] = useState<{
+      tipoProducto: number | null; material: number | null; calibre: number | null;
+      troquel: number | null; asaSuaje: number | null; cintaSeguridad: number | null;
+    }>({ tipoProducto: null, material: null, calibre: null, troquel: null, asaSuaje: null, cintaSeguridad: null });
 
     const tabsInsumo = ALL_TABS.filter((t) => t.esInsumo);
 
@@ -964,6 +974,9 @@ import { useState, useEffect, useCallback } from "react";
       getTiposProductoAdmin(true).then((rows) => setPlasticoCounts((prev) => ({ ...prev, tipoProducto: rows.length }))).catch(() => {});
       getMaterialesAdmin(true).then((rows) => setPlasticoCounts((prev) => ({ ...prev, material: rows.length }))).catch(() => {});
       getCalibresAdmin(true).then((rows) => setPlasticoCounts((prev) => ({ ...prev, calibre: rows.length }))).catch(() => {});
+      getTroquelesAdmin(true).then((rows) => setPlasticoCounts((prev) => ({ ...prev, troquel: rows.length }))).catch(() => {});
+      getSuajesAdmin(true).then((rows) => setPlasticoCounts((prev) => ({ ...prev, asaSuaje: rows.length }))).catch(() => {});
+      getCintaSeguridadAdmin(true).then((rows) => setPlasticoCounts((prev) => ({ ...prev, cintaSeguridad: rows.length }))).catch(() => {});
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
@@ -1052,6 +1065,7 @@ import { useState, useEffect, useCallback } from "react";
                 <CatalogoPlasticoPanel
                   tipo={activeTabConfig.plasticoTipo!}
                   onCambio={(counts) => setPlasticoCounts(counts)}
+                  imgApi={imagenesApi}
                 />
               ) : esInsumoTab && activeTabConfig ? (
                 // ✅ NUEVO — panel unificado con Proveedores/Insumos (estilo Foil)

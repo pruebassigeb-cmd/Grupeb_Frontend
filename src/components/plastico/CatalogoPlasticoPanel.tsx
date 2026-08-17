@@ -5,7 +5,12 @@ import type {
   TipoProductoAdminItem,
   MaterialAdminItem,
   CalibreAdminItem,
+  TroquelAdminItem,
+  SuajeAdminItem,
+  CintaSeguridadAdminItem,
 } from "../../types/plastico/productos-plastico.types";
+import ImagenCatalogo, { SelectorImagenPendiente } from "../papel/ImagenCatalogo";
+import type { UseImagenesCatalogo } from "../../hooks/papel/useImagenesCatalogo";
 
 // ═══════════════════════════════════════════════════════════════════════
 // Catálogos propios de plástico: tipo de producto, material y calibre.
@@ -181,19 +186,21 @@ const cajaInactivos = (loadingInactivos?: boolean) => (
 // ═══════════════════════════════════════════════════════════════════════
 function TipoProductoPanel({
   items, itemsInactivos, verInactivos, loadingInactivos,
-  onAdd, onEdit, onDesactivar, onReactivar,
+  onAdd, onEdit, onDesactivar, onReactivar, imgApi,
 }: {
   items: TipoProductoAdminItem[];
   itemsInactivos: TipoProductoAdminItem[];
   verInactivos: boolean;
   loadingInactivos: boolean;
-  onAdd: (nombre: string) => Promise<unknown>;
+  onAdd: (nombre: string) => Promise<{ id: number } | unknown>;
   onEdit: (id: number, nombre: string) => Promise<unknown>;
   onDesactivar: (id: number) => Promise<unknown>;
   onReactivar: (id: number) => Promise<unknown>;
+  imgApi: UseImagenesCatalogo;
 }) {
   const [search, setSearch] = useState("");
   const [newNombre, setNewNombre] = useState("");
+  const [newImagenFile, setNewImagenFile] = useState<File | null>(null);
   const [editId, setEditId] = useState<number | null>(null);
   const [editNombre, setEditNombre] = useState("");
   const [deleteId, setDeleteId] = useState<number | null>(null);
@@ -206,8 +213,16 @@ function TipoProductoPanel({
     if (!newNombre.trim()) return;
     setSaving(true);
     try {
-      await onAdd(newNombre.trim());
+      const creado = await onAdd(newNombre.trim());
+      if (newImagenFile) {
+        const id = (creado as { id?: number } | undefined)?.id;
+        if (id != null) {
+          try { await imgApi.subir("tipo_producto_plastico", id, newImagenFile); }
+          catch { /* la imagen se puede volver a subir después desde el renglón */ }
+        }
+      }
       setNewNombre("");
+      setNewImagenFile(null);
     } catch (e: any) {
       alert(e.response?.data?.error ?? "Error al agregar el tipo de producto");
     } finally {
@@ -249,7 +264,10 @@ function TipoProductoPanel({
           <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#6B7280", margin: "0 0 12px" }}>Agregar nuevo</p>
           <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "0 10px", alignItems: "end" }}>
             <div><label style={labelStyle}>Nombre</label><Inp placeholder="Ej. Bolsa camiseta" value={newNombre} onChange={setNewNombre} /></div>
-            <Btn variant="primary" onClick={handleAdd} disabled={saving}>{saving ? "…" : "+ Agregar"}</Btn>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <SelectorImagenPendiente file={newImagenFile} onChange={setNewImagenFile} size={38} />
+              <Btn variant="primary" onClick={handleAdd} disabled={saving}>{saving ? "…" : "+ Agregar"}</Btn>
+            </div>
           </div>
         </div>
       )}
@@ -258,11 +276,14 @@ function TipoProductoPanel({
 
       <SearchBox value={search} onChange={setSearch} />
       <div style={{ border: "1px solid #E5E7EB", borderRadius: 9, overflow: "hidden" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "40px 1fr auto", background: "#F9FAFB", borderBottom: "1px solid #E5E7EB", padding: "0 16px" }}>
-          {["#", "Nombre", ""].map((h, i) => <HeaderCell key={i}>{h}</HeaderCell>)}
+        <div style={{ display: "grid", gridTemplateColumns: "48px 40px 1fr auto", background: "#F9FAFB", borderBottom: "1px solid #E5E7EB", padding: "0 16px" }}>
+          {["", "#", "Nombre", ""].map((h, i) => <HeaderCell key={i}>{h}</HeaderCell>)}
         </div>
         {filtered.length === 0 ? <EmptyRows search={search} /> : filtered.map((item, idx) => (
-          <div key={item.id} style={{ display: "grid", gridTemplateColumns: "40px 1fr auto", padding: "0 16px", borderBottom: idx < filtered.length - 1 ? "1px solid #F3F4F6" : "none", background: editId === item.id ? "#FFFBEB" : idx % 2 === 0 ? "#fff" : "#FAFAFA", alignItems: "center", minHeight: 48 }}>
+          <div key={item.id} style={{ display: "grid", gridTemplateColumns: "48px 40px 1fr auto", padding: "0 16px", borderBottom: idx < filtered.length - 1 ? "1px solid #F3F4F6" : "none", background: editId === item.id ? "#FFFBEB" : idx % 2 === 0 ? "#fff" : "#FAFAFA", alignItems: "center", minHeight: 48 }}>
+            <div style={{ alignSelf: "center" }}>
+              <ImagenCatalogo api={imgApi} catalogoKey="tipo_producto_plastico" catalogoId={item.id} size={32} />
+            </div>
             <span style={{ fontSize: 12, color: "#9CA3AF" }}>{idx + 1}</span>
             {editId === item.id
               ? <div style={{ paddingRight: 8 }}><Inp value={editNombre} onChange={setEditNombre} /></div>
@@ -272,6 +293,381 @@ function TipoProductoPanel({
               onReactivar={() => onReactivar(item.id)} onGuardar={handleEdit}
               onCancelar={() => setEditId(null)}
               onEditar={() => { setEditId(item.id); setEditNombre(item.nombre); }}
+              onEliminar={() => setDeleteId(item.id)}
+            />
+          </div>
+        ))}
+      </div>
+      <Counter filtered={filtered.length} total={lista.length} />
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// TIPO DE TROQUEL (medidas_troquel — mismo shape simple que TipoProducto)
+// ═══════════════════════════════════════════════════════════════════════
+function TroquelPanel({
+  items, itemsInactivos, verInactivos, loadingInactivos,
+  onAdd, onEdit, onDesactivar, onReactivar, imgApi,
+}: {
+  items: TroquelAdminItem[];
+  itemsInactivos: TroquelAdminItem[];
+  verInactivos: boolean;
+  loadingInactivos: boolean;
+  onAdd: (nombre: string) => Promise<{ id: number } | unknown>;
+  onEdit: (id: number, nombre: string) => Promise<unknown>;
+  onDesactivar: (id: number) => Promise<unknown>;
+  onReactivar: (id: number) => Promise<unknown>;
+  imgApi: UseImagenesCatalogo;
+}) {
+  const [search, setSearch] = useState("");
+  const [newNombre, setNewNombre] = useState("");
+  const [newImagenFile, setNewImagenFile] = useState<File | null>(null);
+  const [editId, setEditId] = useState<number | null>(null);
+  const [editNombre, setEditNombre] = useState("");
+  const [deleteId, setDeleteId] = useState<number | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const lista = verInactivos ? itemsInactivos : items;
+  const filtered = lista.filter((it) => it.nombre.toLowerCase().includes(search.toLowerCase()));
+
+  const handleAdd = async () => {
+    if (!newNombre.trim()) return;
+    setSaving(true);
+    try {
+      const creado = await onAdd(newNombre.trim());
+      if (newImagenFile) {
+        const id = (creado as { id?: number } | undefined)?.id;
+        if (id != null) {
+          try { await imgApi.subir("medidas_troquel", id, newImagenFile); }
+          catch { /* la imagen se puede volver a subir después desde el renglón */ }
+        }
+      }
+      setNewNombre("");
+      setNewImagenFile(null);
+    } catch (e: any) {
+      alert(e.response?.data?.error ?? "Error al agregar el tipo de troquel");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleEdit = async () => {
+    if (editId === null || !editNombre.trim()) return;
+    setSaving(true);
+    try {
+      await onEdit(editId, editNombre.trim());
+      setEditId(null);
+    } catch (e: any) {
+      alert(e.response?.data?.error ?? "Error al editar el tipo de troquel");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (deleteId === null) return;
+    try {
+      await onDesactivar(deleteId);
+    } catch (e: any) {
+      alert(e.response?.data?.error ?? "Error al desactivar");
+    }
+    setDeleteId(null);
+  };
+
+  return (
+    <div>
+      {deleteId !== null && (
+        <ConfirmModal message="¿Desactivar este tipo de troquel?" onConfirm={handleDelete} onCancel={() => setDeleteId(null)} />
+      )}
+
+      {!verInactivos && (
+        <div style={{ background: "#F9FAFB", border: "1px dashed #D1D5DB", borderRadius: 9, padding: "16px 18px", marginBottom: 20 }}>
+          <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#6B7280", margin: "0 0 12px" }}>Agregar nuevo</p>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "0 10px", alignItems: "end" }}>
+            <div><label style={labelStyle}>Medida</label><Inp placeholder="Ej. 10x15 cm" value={newNombre} onChange={setNewNombre} /></div>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <SelectorImagenPendiente file={newImagenFile} onChange={setNewImagenFile} size={38} />
+              <Btn variant="primary" onClick={handleAdd} disabled={saving}>{saving ? "…" : "+ Agregar"}</Btn>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {verInactivos && cajaInactivos(loadingInactivos)}
+
+      <SearchBox value={search} onChange={setSearch} />
+      <div style={{ border: "1px solid #E5E7EB", borderRadius: 9, overflow: "hidden" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "48px 40px 1fr auto", background: "#F9FAFB", borderBottom: "1px solid #E5E7EB", padding: "0 16px" }}>
+          {["", "#", "Medida", ""].map((h, i) => <HeaderCell key={i}>{h}</HeaderCell>)}
+        </div>
+        {filtered.length === 0 ? <EmptyRows search={search} /> : filtered.map((item, idx) => (
+          <div key={item.id} style={{ display: "grid", gridTemplateColumns: "48px 40px 1fr auto", padding: "0 16px", borderBottom: idx < filtered.length - 1 ? "1px solid #F3F4F6" : "none", background: editId === item.id ? "#FFFBEB" : idx % 2 === 0 ? "#fff" : "#FAFAFA", alignItems: "center", minHeight: 48 }}>
+            <div style={{ alignSelf: "center" }}>
+              <ImagenCatalogo api={imgApi} catalogoKey="medidas_troquel" catalogoId={item.id} size={32} />
+            </div>
+            <span style={{ fontSize: 12, color: "#9CA3AF" }}>{idx + 1}</span>
+            {editId === item.id
+              ? <div style={{ paddingRight: 8 }}><Inp value={editNombre} onChange={setEditNombre} /></div>
+              : <span style={{ fontSize: 13, color: "#111827" }}>{item.nombre}</span>}
+            <Actions
+              verInactivos={verInactivos} editando={editId === item.id} saving={saving}
+              onReactivar={() => onReactivar(item.id)} onGuardar={handleEdit}
+              onCancelar={() => setEditId(null)}
+              onEditar={() => { setEditId(item.id); setEditNombre(item.nombre); }}
+              onEliminar={() => setDeleteId(item.id)}
+            />
+          </div>
+        ))}
+      </div>
+      <Counter filtered={filtered.length} total={lista.length} />
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// ASA / SUAJE (asa_suaje — mismo shape simple que TipoProducto)
+// ═══════════════════════════════════════════════════════════════════════
+function SuajePanel({
+  items, itemsInactivos, verInactivos, loadingInactivos,
+  onAdd, onEdit, onDesactivar, onReactivar, imgApi,
+}: {
+  items: SuajeAdminItem[];
+  itemsInactivos: SuajeAdminItem[];
+  verInactivos: boolean;
+  loadingInactivos: boolean;
+  onAdd: (nombre: string) => Promise<{ id: number } | unknown>;
+  onEdit: (id: number, nombre: string) => Promise<unknown>;
+  onDesactivar: (id: number) => Promise<unknown>;
+  onReactivar: (id: number) => Promise<unknown>;
+  imgApi: UseImagenesCatalogo;
+}) {
+  const [search, setSearch] = useState("");
+  const [newNombre, setNewNombre] = useState("");
+  const [newImagenFile, setNewImagenFile] = useState<File | null>(null);
+  const [editId, setEditId] = useState<number | null>(null);
+  const [editNombre, setEditNombre] = useState("");
+  const [deleteId, setDeleteId] = useState<number | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const lista = verInactivos ? itemsInactivos : items;
+  const filtered = lista.filter((it) => it.nombre.toLowerCase().includes(search.toLowerCase()));
+
+  const handleAdd = async () => {
+    if (!newNombre.trim()) return;
+    setSaving(true);
+    try {
+      const creado = await onAdd(newNombre.trim());
+      if (newImagenFile) {
+        const id = (creado as { id?: number } | undefined)?.id;
+        if (id != null) {
+          try { await imgApi.subir("asa_suaje", id, newImagenFile); }
+          catch { /* la imagen se puede volver a subir después desde el renglón */ }
+        }
+      }
+      setNewNombre("");
+      setNewImagenFile(null);
+    } catch (e: any) {
+      alert(e.response?.data?.error ?? "Error al agregar el asa/suaje");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleEdit = async () => {
+    if (editId === null || !editNombre.trim()) return;
+    setSaving(true);
+    try {
+      await onEdit(editId, editNombre.trim());
+      setEditId(null);
+    } catch (e: any) {
+      alert(e.response?.data?.error ?? "Error al editar el asa/suaje");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (deleteId === null) return;
+    try {
+      await onDesactivar(deleteId);
+    } catch (e: any) {
+      alert(e.response?.data?.error ?? "Error al desactivar");
+    }
+    setDeleteId(null);
+  };
+
+  return (
+    <div>
+      {deleteId !== null && (
+        <ConfirmModal message="¿Desactivar este asa/suaje?" onConfirm={handleDelete} onCancel={() => setDeleteId(null)} />
+      )}
+
+      {!verInactivos && (
+        <div style={{ background: "#F9FAFB", border: "1px dashed #D1D5DB", borderRadius: 9, padding: "16px 18px", marginBottom: 20 }}>
+          <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#6B7280", margin: "0 0 12px" }}>Agregar nuevo</p>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "0 10px", alignItems: "end" }}>
+            <div><label style={labelStyle}>Nombre</label><Inp placeholder="Ej. Asa flexible chica" value={newNombre} onChange={setNewNombre} /></div>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <SelectorImagenPendiente file={newImagenFile} onChange={setNewImagenFile} size={38} />
+              <Btn variant="primary" onClick={handleAdd} disabled={saving}>{saving ? "…" : "+ Agregar"}</Btn>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {verInactivos && cajaInactivos(loadingInactivos)}
+
+      <SearchBox value={search} onChange={setSearch} />
+      <div style={{ border: "1px solid #E5E7EB", borderRadius: 9, overflow: "hidden" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "48px 40px 1fr auto", background: "#F9FAFB", borderBottom: "1px solid #E5E7EB", padding: "0 16px" }}>
+          {["", "#", "Nombre", ""].map((h, i) => <HeaderCell key={i}>{h}</HeaderCell>)}
+        </div>
+        {filtered.length === 0 ? <EmptyRows search={search} /> : filtered.map((item, idx) => (
+          <div key={item.id} style={{ display: "grid", gridTemplateColumns: "48px 40px 1fr auto", padding: "0 16px", borderBottom: idx < filtered.length - 1 ? "1px solid #F3F4F6" : "none", background: editId === item.id ? "#FFFBEB" : idx % 2 === 0 ? "#fff" : "#FAFAFA", alignItems: "center", minHeight: 48 }}>
+            <div style={{ alignSelf: "center" }}>
+              <ImagenCatalogo api={imgApi} catalogoKey="asa_suaje" catalogoId={item.id} size={32} />
+            </div>
+            <span style={{ fontSize: 12, color: "#9CA3AF" }}>{idx + 1}</span>
+            {editId === item.id
+              ? <div style={{ paddingRight: 8 }}><Inp value={editNombre} onChange={setEditNombre} /></div>
+              : <span style={{ fontSize: 13, color: "#111827" }}>{item.nombre}</span>}
+            <Actions
+              verInactivos={verInactivos} editando={editId === item.id} saving={saving}
+              onReactivar={() => onReactivar(item.id)} onGuardar={handleEdit}
+              onCancelar={() => setEditId(null)}
+              onEditar={() => { setEditId(item.id); setEditNombre(item.nombre); }}
+              onEliminar={() => setDeleteId(item.id)}
+            />
+          </div>
+        ))}
+      </div>
+      <Counter filtered={filtered.length} total={lista.length} />
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// CINTA DE SEGURIDAD (nombre + medida separados)
+// ═══════════════════════════════════════════════════════════════════════
+function CintaSeguridadPanel({
+  items, itemsInactivos, verInactivos, loadingInactivos,
+  onAdd, onEdit, onDesactivar, onReactivar, imgApi,
+}: {
+  items: CintaSeguridadAdminItem[];
+  itemsInactivos: CintaSeguridadAdminItem[];
+  verInactivos: boolean;
+  loadingInactivos: boolean;
+  onAdd: (nombre: string, medida?: string | null) => Promise<{ id: number } | unknown>;
+  onEdit: (id: number, nombre: string, medida?: string | null) => Promise<unknown>;
+  onDesactivar: (id: number) => Promise<unknown>;
+  onReactivar: (id: number) => Promise<unknown>;
+  imgApi: UseImagenesCatalogo;
+}) {
+  const [search, setSearch] = useState("");
+  const [newNombre, setNewNombre] = useState("");
+  const [newMedida, setNewMedida] = useState("");
+  const [newImagenFile, setNewImagenFile] = useState<File | null>(null);
+  const [editId, setEditId] = useState<number | null>(null);
+  const [editNombre, setEditNombre] = useState("");
+  const [editMedida, setEditMedida] = useState("");
+  const [deleteId, setDeleteId] = useState<number | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const lista = verInactivos ? itemsInactivos : items;
+  const filtered = lista.filter((it) =>
+    it.nombre.toLowerCase().includes(search.toLowerCase()) ||
+    (it.medida ?? "").toLowerCase().includes(search.toLowerCase())
+  );
+
+  const handleAdd = async () => {
+    if (!newNombre.trim()) return;
+    setSaving(true);
+    try {
+      const creado = await onAdd(newNombre.trim(), newMedida.trim() || null);
+      if (newImagenFile) {
+        const id = (creado as { id?: number } | undefined)?.id;
+        if (id != null) {
+          try { await imgApi.subir("cinta_seguridad", id, newImagenFile); }
+          catch { /* la imagen se puede volver a subir después desde el renglón */ }
+        }
+      }
+      setNewNombre(""); setNewMedida("");
+      setNewImagenFile(null);
+    } catch (e: any) {
+      alert(e.response?.data?.error ?? "Error al agregar la cinta de seguridad");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleEdit = async () => {
+    if (editId === null || !editNombre.trim()) return;
+    setSaving(true);
+    try {
+      await onEdit(editId, editNombre.trim(), editMedida.trim() || null);
+      setEditId(null);
+    } catch (e: any) {
+      alert(e.response?.data?.error ?? "Error al editar la cinta de seguridad");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (deleteId === null) return;
+    try {
+      await onDesactivar(deleteId);
+    } catch (e: any) {
+      alert(e.response?.data?.error ?? "Error al desactivar");
+    }
+    setDeleteId(null);
+  };
+
+  return (
+    <div>
+      {deleteId !== null && (
+        <ConfirmModal message="¿Desactivar esta cinta de seguridad?" onConfirm={handleDelete} onCancel={() => setDeleteId(null)} />
+      )}
+
+      {!verInactivos && (
+        <div style={{ background: "#F9FAFB", border: "1px dashed #D1D5DB", borderRadius: 9, padding: "16px 18px", marginBottom: 20 }}>
+          <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#6B7280", margin: "0 0 12px" }}>Agregar nuevo</p>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: "0 10px", alignItems: "end" }}>
+            <div><label style={labelStyle}>Nombre</label><Inp placeholder="Ej. Cinta roja" value={newNombre} onChange={setNewNombre} /></div>
+            <div><label style={labelStyle}>Medida</label><Inp placeholder="Ej. 5 cm" value={newMedida} onChange={setNewMedida} /></div>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <SelectorImagenPendiente file={newImagenFile} onChange={setNewImagenFile} size={38} />
+              <Btn variant="primary" onClick={handleAdd} disabled={saving}>{saving ? "…" : "+ Agregar"}</Btn>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {verInactivos && cajaInactivos(loadingInactivos)}
+
+      <SearchBox value={search} onChange={setSearch} />
+      <div style={{ border: "1px solid #E5E7EB", borderRadius: 9, overflow: "hidden" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "48px 40px 1fr 1fr auto", background: "#F9FAFB", borderBottom: "1px solid #E5E7EB", padding: "0 16px" }}>
+          {["", "#", "Nombre", "Medida", ""].map((h, i) => <HeaderCell key={i}>{h}</HeaderCell>)}
+        </div>
+        {filtered.length === 0 ? <EmptyRows search={search} /> : filtered.map((item, idx) => (
+          <div key={item.id} style={{ display: "grid", gridTemplateColumns: "48px 40px 1fr 1fr auto", padding: "0 16px", borderBottom: idx < filtered.length - 1 ? "1px solid #F3F4F6" : "none", background: editId === item.id ? "#FFFBEB" : idx % 2 === 0 ? "#fff" : "#FAFAFA", alignItems: "center", minHeight: 48 }}>
+            <div style={{ alignSelf: "center" }}>
+              <ImagenCatalogo api={imgApi} catalogoKey="cinta_seguridad" catalogoId={item.id} size={32} />
+            </div>
+            <span style={{ fontSize: 12, color: "#9CA3AF" }}>{idx + 1}</span>
+            {editId === item.id
+              ? <div style={{ paddingRight: 8 }}><Inp value={editNombre} onChange={setEditNombre} /></div>
+              : <span style={{ fontSize: 13, color: "#111827" }}>{item.nombre}</span>}
+            {editId === item.id
+              ? <div style={{ paddingRight: 8 }}><Inp value={editMedida} onChange={setEditMedida} /></div>
+              : <span style={{ fontSize: 13, color: "#6B7280" }}>{item.medida ?? "—"}</span>}
+            <Actions
+              verInactivos={verInactivos} editando={editId === item.id} saving={saving}
+              onReactivar={() => onReactivar(item.id)} onGuardar={handleEdit}
+              onCancelar={() => setEditId(null)}
+              onEditar={() => { setEditId(item.id); setEditNombre(item.nombre); setEditMedida(item.medida ?? ""); }}
               onEliminar={() => setDeleteId(item.id)}
             />
           </div>
@@ -633,42 +1029,50 @@ function CalibrePanel({
 // PANEL PRINCIPAL — switcher de 3 secciones, igual patrón que
 // RefuerzoBasePanel (medidas/material) pero para plástico.
 // ═══════════════════════════════════════════════════════════════════════
-export type PlasticoCatalogoTipo = "tipoProducto" | "material" | "calibre";
+export type PlasticoCatalogoTipo = "tipoProducto" | "material" | "calibre" | "troquel" | "asaSuaje" | "cintaSeguridad";
 
 export default function CatalogoPlasticoPanel({
   tipo,
   onCambio,
+  imgApi,
 }: {
-  /** Cuál de los 3 sub-catálogos mostrar — ahora cada uno es su propio
-   * renglón en el sidebar (igual formato que el resto), no un switcher
-   * interno. */
+  /** Cuál de los 6 sub-catálogos mostrar — cada uno es su propio renglón en
+   * el sidebar (igual formato que el resto), no un switcher interno. */
   tipo: PlasticoCatalogoTipo;
-  /** Notifica los 3 conteos cada vez que cambian, para los 3 badges del
-   * sidebar en catalogos.tsx (los 3 se mantienen sincronizados aunque solo
-   * uno esté visible, porque el hook ya trae los 3 juntos). */
-  onCambio?: (counts: { tipoProducto: number; material: number; calibre: number }) => void;
+  /** Notifica los 6 conteos cada vez que cambian, para los badges del
+   * sidebar en catalogos.tsx (se mantienen sincronizados aunque solo uno
+   * esté visible, porque el hook ya trae todos juntos). */
+  onCambio?: (counts: { tipoProducto: number; material: number; calibre: number; troquel: number; asaSuaje: number; cintaSeguridad: number }) => void;
+  imgApi: UseImagenesCatalogo;
 }) {
   const {
-    tiposProducto, materiales, calibres,
+    tiposProducto, materiales, calibres, troqueles, suajes, cintaSeguridad,
     tiposProductoInactivos, materialesInactivos, calibresInactivos,
+    troquelesInactivos, suajesInactivos, cintaSeguridadInactivos,
     loading, loadingInactivos, loadInactivos,
     agregarTipoProducto, editarTipoProducto, desactivarTipoProducto, reactivarTipoProducto,
     agregarMaterial, editarMaterial, desactivarMaterial, reactivarMaterial,
     agregarCalibre, editarCalibre, desactivarCalibre, reactivarCalibre,
+    agregarTroquel, editarTroquel, desactivarTroquel, reactivarTroquel,
+    agregarSuaje, editarSuaje, desactivarSuaje, reactivarSuaje,
+    agregarCintaSeguridad, editarCintaSeguridad, desactivarCintaSeguridad, reactivarCintaSeguridad,
   } = useCatalogosPlastico();
 
   const [verInactivos, setVerInactivos] = useState(false);
 
-  // Al cambiar de sub-catálogo (Tipo de producto → Material → Calibre) se
-  // resetea "ver inactivos" — cada uno es ahora una pestaña independiente.
+  // Al cambiar de sub-catálogo se resetea "ver inactivos" — cada uno es una
+  // pestaña independiente.
   useEffect(() => {
     setVerInactivos(false);
   }, [tipo]);
 
   useEffect(() => {
-    onCambio?.({ tipoProducto: tiposProducto.length, material: materiales.length, calibre: calibres.length });
+    onCambio?.({
+      tipoProducto: tiposProducto.length, material: materiales.length, calibre: calibres.length,
+      troquel: troqueles.length, asaSuaje: suajes.length, cintaSeguridad: cintaSeguridad.length,
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tiposProducto.length, materiales.length, calibres.length]);
+  }, [tiposProducto.length, materiales.length, calibres.length, troqueles.length, suajes.length, cintaSeguridad.length]);
 
   const handleToggleInactivos = () => {
     if (!verInactivos) loadInactivos();
@@ -698,6 +1102,7 @@ export default function CatalogoPlasticoPanel({
           verInactivos={verInactivos} loadingInactivos={loadingInactivos}
           onAdd={agregarTipoProducto} onEdit={editarTipoProducto}
           onDesactivar={desactivarTipoProducto} onReactivar={reactivarTipoProducto}
+          imgApi={imgApi}
         />
       )}
       {tipo === "material" && (
@@ -714,6 +1119,33 @@ export default function CatalogoPlasticoPanel({
           verInactivos={verInactivos} loadingInactivos={loadingInactivos}
           onAdd={agregarCalibre} onEdit={editarCalibre}
           onDesactivar={desactivarCalibre} onReactivar={reactivarCalibre}
+        />
+      )}
+      {tipo === "troquel" && (
+        <TroquelPanel
+          items={troqueles} itemsInactivos={troquelesInactivos}
+          verInactivos={verInactivos} loadingInactivos={loadingInactivos}
+          onAdd={agregarTroquel} onEdit={editarTroquel}
+          onDesactivar={desactivarTroquel} onReactivar={reactivarTroquel}
+          imgApi={imgApi}
+        />
+      )}
+      {tipo === "asaSuaje" && (
+        <SuajePanel
+          items={suajes} itemsInactivos={suajesInactivos}
+          verInactivos={verInactivos} loadingInactivos={loadingInactivos}
+          onAdd={agregarSuaje} onEdit={editarSuaje}
+          onDesactivar={desactivarSuaje} onReactivar={reactivarSuaje}
+          imgApi={imgApi}
+        />
+      )}
+      {tipo === "cintaSeguridad" && (
+        <CintaSeguridadPanel
+          items={cintaSeguridad} itemsInactivos={cintaSeguridadInactivos}
+          verInactivos={verInactivos} loadingInactivos={loadingInactivos}
+          onAdd={agregarCintaSeguridad} onEdit={editarCintaSeguridad}
+          onDesactivar={desactivarCintaSeguridad} onReactivar={reactivarCintaSeguridad}
+          imgApi={imgApi}
         />
       )}
     </div>

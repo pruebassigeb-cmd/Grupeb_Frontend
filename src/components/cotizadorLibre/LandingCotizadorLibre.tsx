@@ -85,7 +85,10 @@ export default function LandingCotizadorLibre({
   );
 
   return (
-    <div className="min-h-dvh lg:h-dvh bg-[#f5f1e9] text-[#122b1e] overflow-x-hidden lg:overflow-hidden">
+    <div
+      onClick={esClienteExterno ? onComenzar : undefined}
+      className="min-h-dvh lg:h-dvh bg-[#f5f1e9] text-[#122b1e] overflow-x-hidden lg:overflow-hidden"
+    >
       {/* Marco general. El max-width evita que todo se vuelva gigantesco en TV/4K. */}
       <div className="w-full max-w-[1920px] mx-auto bg-[#f5f1e9] lg:h-full lg:grid lg:grid-rows-[auto_minmax(0,1fr)_auto_auto]">
         {/* ================================================================
@@ -122,13 +125,17 @@ export default function LandingCotizadorLibre({
             <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
               <a
                 href="tel:+523339999999"
+                onClick={(e) => e.stopPropagation()}
                 className="hidden lg:flex items-center gap-2 rounded-full bg-[#102d20] px-[clamp(12px,1.1vw,20px)] py-[clamp(7px,0.7vw,11px)] text-[clamp(9px,0.72vw,12px)] font-extrabold uppercase tracking-wide text-[#e5bd70] shadow-sm hover:bg-[#19432f] transition-colors"
               >
                 <span className="text-[1.2em]">◉</span>
                 ¿Necesitas ayuda? Llamar a un asesor
               </a>
               <button
-                onClick={onSalir}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSalir();
+                }}
                 className="rounded-full border border-[#d8d1c5] bg-white/70 px-3 py-2 text-[11px] sm:text-xs font-bold text-[#5e655f] hover:border-[#b78336] hover:text-[#9a6c2d] transition-colors"
               >
                 {esClienteExterno ? "Salir" : "Inicio"}

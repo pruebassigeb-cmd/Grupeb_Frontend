@@ -6,6 +6,13 @@ import type {
   EditarPrivilegioRequest,
 } from "../types/privilegio.types";
 
+// NOTA (2026-08-14): aquí vivía una lista quemada de módulos a ocultar.
+// Se quitó al reorganizar el catálogo por pantallas: ahora lo que decide si
+// un privilegio se ofrece o no es su columna `activo` en la BD, que se
+// prende y apaga desde Roles > Privilegios sin tocar código ni redesplegar.
+// Los 7 privilegios sin pantalla (WhatsApp, push, auditoría, etc.) quedaron
+// inactivos ahí. Ver migrations/2026-08-14_modulos_por_pantalla.sql.
+
 export const getPrivilegios = async (): Promise<Privilegio[]> => {
   const response = await api.get<Privilegio[]>("/privilegios");
   return response.data;
