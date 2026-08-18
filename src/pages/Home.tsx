@@ -6,11 +6,33 @@ export default function Home() {
 
   return (
     <Dashboard>
+      <style>{`
+        @keyframes avatarBounceIn {
+          0%   { transform: scale(0);    opacity: 0; }
+          50%  { transform: scale(1.15); opacity: 1; }
+          70%  { transform: scale(0.95); }
+          85%  { transform: scale(1.05); }
+          100% { transform: scale(1); }
+        }
+        .avatar-bounce-in {
+          animation: avatarBounceIn 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+        }
+      `}</style>
+
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-4">
-        <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center">
-          <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-          </svg>
+        <div className="avatar-bounce-in w-[210px] h-[210px] rounded-full overflow-hidden bg-blue-100 border-4 border-white shadow-lg flex items-center justify-center flex-shrink-0">
+          {user?.foto_url ? (
+            <img
+              src={user.foto_url}
+              alt={`${user?.nombre ?? ""} ${user?.apellido ?? ""}`}
+              className="w-full h-full object-cover"
+              onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+            />
+          ) : (
+            <span className="text-[45px] font-bold text-blue-600">
+              {user?.nombre?.[0]?.toUpperCase()}{user?.apellido?.[0]?.toUpperCase()}
+            </span>
+          )}
         </div>
 
         <div className="space-y-2">
