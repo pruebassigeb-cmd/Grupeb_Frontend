@@ -57,6 +57,23 @@ const FechaAprobacion = ({ fecha }: { fecha: string | null }) => {
   return <div className="text-[10px] text-gray-400 leading-tight mt-0.5 whitespace-nowrap">✓ {texto}</div>;
 };
 
+// Fecha corta (día/mes en números, ej. "17/08") que se muestra debajo de los
+// botones de proceso cuando ya fueron finalizados.
+const formatearFechaCorta = (fecha: string | null): string | null => {
+  if (!fecha) return null;
+  const d = new Date(fecha);
+  if (isNaN(d.getTime())) return null;
+  const dia = String(d.getDate()).padStart(2, "0");
+  const mes = String(d.getMonth() + 1).padStart(2, "0");
+  return `${dia}/${mes}`;
+};
+
+const FechaCorta = ({ fecha }: { fecha: string | null }) => {
+  const texto = formatearFechaCorta(fecha);
+  if (!texto) return null;
+  return <div className="text-[10px] text-gray-400 leading-tight mt-0.5 text-center whitespace-nowrap">{texto}</div>;
+};
+
 const obtenerColorEstadoProceso = (estado: string, fechaEstado: string | null): string => {
   if (estado === "finalizado" || estado === "no-aplica" || estado === "aprobado" || estado === "pagado") {
     return obtenerColorEstado(estado);
@@ -948,7 +965,9 @@ export default function Seguimiento() {
 
         {/* TIPO ← FALTABA ESTE */}
         <td className={`${px}`}>
-          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800 capitalize">
+          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium capitalize ${
+            esPapel ? "bg-yellow-100 text-yellow-800" : "bg-indigo-100 text-indigo-800"
+          }`}>
             {pedido.tipo_producto || "—"}
           </span>
         </td>
@@ -1014,6 +1033,7 @@ export default function Seguimiento() {
               if (!ordenVigente) return;
               puedeExtrusion ? abrirProceso("extrusion") : setModalVerificacion({ pedido, proceso: "extrusion" });
             }} />
+          {extEstado === "finalizado" && <FechaCorta fecha={pedido.extrusion_fecha_estado} />}
         </td>
 
         <td className={`${px} text-center`}>
@@ -1023,15 +1043,17 @@ export default function Seguimiento() {
               if (!ordenVigente) return;
               puedeImpresion ? abrirProceso("impresion") : setModalVerificacion({ pedido, proceso: "impresion" });
             }} />
+          {impEstado === "finalizado" && <FechaCorta fecha={pedido.impresion_fecha_estado} />}
         </td>
 
         <td className={`${px} text-center`}>
-          <Badge estado={bolEstado} fechaEstado={pedido.bolseo_estado}
+          <Badge estado={bolEstado} fechaEstado={pedido.bolseo_fecha_estado}
             clickable={ordenVigente && bolEstado !== "no-aplica" && (puedeBolseo || esRolPlanta)}
             onClick={() => {
               if (!ordenVigente) return;
               puedeBolseo ? abrirProceso("bolseo") : setModalVerificacion({ pedido, proceso: "bolseo" });
             }} />
+          {bolEstado === "finalizado" && <FechaCorta fecha={pedido.bolseo_fecha_estado} />}
         </td>
 
         <td className={`${px} text-center`}>
@@ -1041,6 +1063,7 @@ export default function Seguimiento() {
               if (!ordenVigente) return;
               puedeAsaFlexible ? abrirProceso("asa_flexible") : setModalVerificacion({ pedido, proceso: "asa_flexible" });
             }} />
+          {asaEstado === "finalizado" && <FechaCorta fecha={pedido.asa_flexible_fecha_estado} />}
         </td>
 
         {PROCESOS_PAPEL.map(({ key }) => {
@@ -1056,20 +1079,23 @@ export default function Seguimiento() {
                   !
                 </span>
               ) : (
-                <Badge
-                  estado={estado}
-                  fechaEstado={fechaProcesoPapel(proceso)}
-                  clickable={
-                    esPapel && ordenVigente && !!proceso && estado !== "no-aplica" &&
-                    (permisosProcesoPapel[key] || esRolPlanta)
-                  }
-                  onClick={() => {
-                    if (!esPapel || !ordenVigente || !proceso) return;
-                    permisosProcesoPapel[key]
-                      ? setModalProcesoPapel({ pedido, nombreProceso: key })
-                      : setModalVerificacion({ pedido, proceso: key });
-                  }}
-                />
+                <>
+                  <Badge
+                    estado={estado}
+                    fechaEstado={fechaProcesoPapel(proceso)}
+                    clickable={
+                      esPapel && ordenVigente && !!proceso && estado !== "no-aplica" &&
+                      (permisosProcesoPapel[key] || esRolPlanta)
+                    }
+                    onClick={() => {
+                      if (!esPapel || !ordenVigente || !proceso) return;
+                      permisosProcesoPapel[key]
+                        ? setModalProcesoPapel({ pedido, nombreProceso: key })
+                        : setModalVerificacion({ pedido, proceso: key });
+                    }}
+                  />
+                  {estado === "finalizado" && <FechaCorta fecha={fechaProcesoPapel(proceso)} />}
+                </>
               )}
             </td>
           );

@@ -477,9 +477,9 @@ export default function FormularioProductoPapel({
     if (mostrarModal && productosTodos.length === 0) cargarProductos();
   }, [mostrarModal]);
 
-  const productos = productosTodos.filter((p) =>
-    coincideBusquedaProductoPapel(p, busqueda),
-  );
+const productos = productosTodos
+  .filter((p) => p.origen_expo !== true)
+  .filter((p) => coincideBusquedaProductoPapel(p, busqueda));
 
   const cargarDetalleProducto = async (
     id: number,

@@ -185,6 +185,7 @@ export interface ProductoBusqueda {
   tipo_producto_id: number;
   material_id: number;
   calibre_id: number;
+  origen_expo?: boolean;
 }
 
 export interface VerificarProductoResponse {

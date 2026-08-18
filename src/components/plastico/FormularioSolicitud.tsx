@@ -459,12 +459,24 @@ export default function FormularioSolicitud({
     }
   };
 
-  const cargarProductos = async (query?: string) => {
-    setLoadingProductos(true); setErrorProductos(null);
-    try { setProductosCargados(await searchProductosPlastico(query)); }
-    catch (error: any) { setErrorProductos(error.response?.data?.error || "Error al cargar productos"); }
-    finally { setLoadingProductos(false); }
-  };
+const cargarProductos = async (query?: string) => {
+  setLoadingProductos(true);
+  setErrorProductos(null);
+
+  try {
+    const productos = await searchProductosPlastico(query);
+
+    setProductosCargados(
+      productos.filter((p) => p.origen_expo !== true)
+    );
+  } catch (error: any) {
+    setErrorProductos(
+      error.response?.data?.error || "Error al cargar productos"
+    );
+  } finally {
+    setLoadingProductos(false);
+  }
+};
 
   const seleccionarProducto = (producto: ProductoBusqueda) => {
     const medidasMapeadas: Record<MedidaKey, string> = {

@@ -6,6 +6,7 @@ export interface ProductoPapelBusqueda {
   tamano_asa_default?: string | null;
   primer_tipo_papel?: string | null;
   primer_calibre?: string | null;
+  origen_expo?: boolean;
 }
 
 export interface GrupoOpcion {
