@@ -79,27 +79,20 @@ const fmtFechaHora = (v?: string | null) =>
 // ─────────────────────────────────────────────────────────────────────────────
 // SUBCOMPONENTE — DETALLE COMPLETO (desglosable)
 // ─────────────────────────────────────────────────────────────────────────────
-function DetalleCompletoEnvio({ envio }: { envio: EnvioDetallado }) {
+// Las fotos ya se cargan en TarjetaEnvio (para poder mostrar la miniatura de
+// trazabilidad en la cabecera sin esperar a que se despliegue este detalle),
+// así que aquí solo se reciben por props — nada de fetch propio.
+function DetalleCompletoEnvio({
+  envio, fotos, cargandoFotos, onVerFoto,
+}: {
+  envio: EnvioDetallado;
+  fotos: Archivo[] | null;
+  cargandoFotos: boolean;
+  onVerFoto: (url: string) => void;
+}) {
   const [expandido, setExpandido] = useState(false);
-  const [fotos, setFotos] = useState<Archivo[] | null>(null);
-  const [fotoAmpliada, setFotoAmpliada] = useState<string | null>(null);
-  const [cargandoFotos, setCargandoFotos] = useState(false);
 
-  const toggle = async () => {
-    const next = !expandido;
-    setExpandido(next);
-    if (next && fotos === null) {
-      setCargandoFotos(true);
-      try {
-        const f = await getFotosEnvio(envio.idenvio);
-        setFotos(f);
-      } catch {
-        setFotos([]);
-      } finally {
-        setCargandoFotos(false);
-      }
-    }
-  };
+  const toggle = () => setExpandido(prev => !prev);
 
   return (
     <div className="border-t border-gray-100">
@@ -211,7 +204,7 @@ function DetalleCompletoEnvio({ envio }: { envio: EnvioDetallado }) {
                   <button
                     key={f.id_archivo}
                     type="button"
-                    onClick={() => setFotoAmpliada(f.url)}
+                    onClick={() => onVerFoto(f.url)}
                     className="cursor-zoom-in transition-transform hover:scale-105">
                     <img src={f.url} alt="Foto de entrega"
                       className="w-16 h-16 object-cover rounded-lg border border-gray-200" />
@@ -222,26 +215,6 @@ function DetalleCompletoEnvio({ envio }: { envio: EnvioDetallado }) {
               <p className="text-gray-400 italic">Sin fotos registradas.</p>
             )}
           </div>
-        </div>
-      )}
-
-      {/* ── Lightbox de foto ampliada ── */}
-      {fotoAmpliada && (
-        <div
-          onClick={() => setFotoAmpliada(null)}
-          className="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center p-6 cursor-zoom-out">
-          <button
-            type="button"
-            onClick={() => setFotoAmpliada(null)}
-            className="absolute top-4 right-4 text-white bg-white/10 hover:bg-white/20 rounded-full w-9 h-9 flex items-center justify-center text-lg transition-colors">
-            ✕
-          </button>
-          <img
-            src={fotoAmpliada}
-            alt="Foto de entrega ampliada"
-            onClick={(e) => e.stopPropagation()}
-            className="max-w-full max-h-full object-contain rounded-lg shadow-2xl cursor-default"
-          />
         </div>
       )}
     </div>
@@ -266,6 +239,29 @@ function TarjetaEnvio({
   onGenerarNota:   (id: number) => Promise<void>;
 }) {
   const bultosDelEnvio = todosBultos.filter(b => envio.bultos_ids.includes(b.idbulto));
+
+  // ── Trazabilidad: foto de la nota/comprobante + número de guía ──
+  // Se carga apenas se pinta la tarjeta (no hasta abrir el desglosable) para
+  // que la miniatura de comprobante sea visible de un vistazo en la cabecera.
+  const [fotos, setFotos] = useState<Archivo[] | null>(null);
+  const [cargandoFotos, setCargandoFotos] = useState(true);
+  const [fotoAmpliada, setFotoAmpliada] = useState<string | null>(null);
+
+  useEffect(() => {
+    let vivo = true;
+    setCargandoFotos(true);
+    getFotosEnvio(envio.idenvio)
+      .then(f => { if (vivo) setFotos(f); })
+      .catch(() => { if (vivo) setFotos([]); })
+      .finally(() => { if (vivo) setCargandoFotos(false); });
+    return () => { vivo = false; };
+  }, [envio.idenvio]);
+
+  const primeraFoto = fotos && fotos.length > 0 ? fotos[0] : null;
+  const tieneGuia = Boolean(envio.numero_guia);
+  // Traza obligatoria: al menos una de las dos (foto o guía) debe existir;
+  // si ninguna está cargada se resalta para que no pase desapercibido.
+  const sinTrazabilidad = !cargandoFotos && !primeraFoto && !tieneGuia;
 
   return (
     <div className="border border-gray-200 rounded-xl overflow-hidden">
@@ -297,7 +293,7 @@ function TarjetaEnvio({
             {envio.tipo === "local"
               ? `${envio.chofer?.nombre ?? "—"}  ·  ${envio.unidad?.nombre ?? "—"}`
               : envio.tipo === "paqueteria"
-                ? `${envio.paqueteria?.nombre ?? "—"}${envio.numero_guia ? `  ·  Guía: ${envio.numero_guia}` : ""}`
+                ? `${envio.paqueteria?.nombre ?? "—"}`
                 : `${envio.recoleccion_datos?.nombre_quien_recogio ?? "Recolección en planta"}`
             }
           </span>
@@ -305,6 +301,36 @@ function TarjetaEnvio({
           <span className="text-xs text-gray-400">
             {new Date(envio.fecha_envio).toLocaleDateString("es-MX")}
           </span>
+
+          {/* ── Trazabilidad: número de guía y/o foto de la nota ── */}
+          {tieneGuia && (
+            <span
+              title="Número de guía registrado"
+              className="px-2 py-0.5 rounded-full text-xs font-mono font-medium bg-indigo-100 text-indigo-700 border border-indigo-200">
+              Guía: {envio.numero_guia}
+            </span>
+          )}
+
+          {cargandoFotos ? (
+            <div className="w-3 h-3 border-2 border-gray-300 border-t-transparent rounded-full animate-spin" />
+          ) : primeraFoto ? (
+            <button
+              type="button"
+              onClick={() => setFotoAmpliada(primeraFoto.url)}
+              title="Ver nota / comprobante de entrega"
+              className="cursor-zoom-in transition-transform hover:scale-105 shrink-0">
+              <img src={primeraFoto.url} alt="Nota / comprobante de entrega"
+                className="w-8 h-8 object-cover rounded-md border border-gray-300" />
+            </button>
+          ) : null}
+
+          {sinTrazabilidad && (
+            <span
+              title="Este envío no tiene foto de comprobante ni número de guía registrados"
+              className="px-2 py-0.5 rounded-full text-xs font-medium bg-red-50 text-red-600 border border-red-200">
+              ⚠ Sin comprobante
+            </span>
+          )}
         </div>
 
         {/* Acciones */}
@@ -387,7 +413,32 @@ function TarjetaEnvio({
       )}
 
       {/* ── Desglosable de detalle completo ── */}
-      <DetalleCompletoEnvio envio={envio} />
+      <DetalleCompletoEnvio
+        envio={envio}
+        fotos={fotos}
+        cargandoFotos={cargandoFotos}
+        onVerFoto={setFotoAmpliada}
+      />
+
+      {/* ── Lightbox de foto ampliada (miniatura de cabecera o detalle) ── */}
+      {fotoAmpliada && (
+        <div
+          onClick={() => setFotoAmpliada(null)}
+          className="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center p-6 cursor-zoom-out">
+          <button
+            type="button"
+            onClick={() => setFotoAmpliada(null)}
+            className="absolute top-4 right-4 text-white bg-white/10 hover:bg-white/20 rounded-full w-9 h-9 flex items-center justify-center text-lg transition-colors">
+            ✕
+          </button>
+          <img
+            src={fotoAmpliada}
+            alt="Foto de entrega ampliada"
+            onClick={(e) => e.stopPropagation()}
+            className="max-w-full max-h-full object-contain rounded-lg shadow-2xl cursor-default"
+          />
+        </div>
+      )}
     </div>
   );
 }

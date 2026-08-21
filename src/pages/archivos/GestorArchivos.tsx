@@ -19,6 +19,7 @@ const CARPETAS_OPTIONS: { value: CarpetaFrontend; label: string }[] = [
   { value: "suaje", label: "Productos" },
   { value: "catalogoproductos", label: "Catálogo de Productos" },
   { value: "catalogos-admin", label: "Catálogos de Papel" },
+  { value: "tickets", label: "Tickets" },
 ];
 
 const CARPETAS_PROTEGIDAS: CarpetaFrontend[] = ["backups"];
@@ -577,6 +578,7 @@ const colores: Record<CarpetaFrontend, string> = {
       "suaje": "text-purple-400",
       "catalogoproductos": "text-amber-400",
       "catalogos-admin": "text-teal-400",
+      "tickets": "text-yellow-400"
     };
     return (
       <svg className={`w-16 h-16 ${colores[carpeta]}`} fill="currentColor" viewBox="0 0 24 24">

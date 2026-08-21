@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, type ReactNode } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { tienePermisoDePantalla } from "../utils/permisosUsuario";
+import { getContadorTickets } from "../services/tickets/tickets.service";
 import logo from "../assets/grupeblanco.png";
 import InstallButton from "../components/pwa/InstallButton";
 
@@ -37,6 +38,11 @@ export default function Dashboard({ children }: DashboardProps) {
   const [flyout, setFlyout]         = useState<FlyoutState | null>(null);
   const flyoutRef                   = useRef<HTMLDivElement>(null);
 
+  // 🎫 Contador de tickets activos (Pendiente + En proceso) para el badge
+  // del menú. Se pide al montar y se refresca al cambiar de pantalla —
+  // sin polling constante para no generar tráfico de más.
+  const [contadorTickets, setContadorTickets] = useState<number | null>(null);
+
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout, tienePermiso } = useAuth();
@@ -70,7 +76,23 @@ export default function Dashboard({ children }: DashboardProps) {
 
   useEffect(() => { setFlyout(null); }, [location.pathname]);
 
+  // Carga el contador al montar y cada vez que cambia de pantalla (para
+  // reflejar cambios que se acaban de hacer en /tickets). Si el usuario no
+  // tiene acceso al módulo, el endpoint regresa 403 y simplemente se ignora.
+  useEffect(() => {
+    getContadorTickets()
+      .then(setContadorTickets)
+      .catch(() => setContadorTickets(null));
+  }, [location.pathname]);
+
   const menuItems: MenuItem[] = [
+    {
+      name: "Tickets",
+      icon: "🎫",
+      path: "/tickets",
+      permisoPantalla: "tickets.",
+      subItems: [],
+    },
     {
       name: "Usuarios",
       icon: "👥",
@@ -285,6 +307,13 @@ export default function Dashboard({ children }: DashboardProps) {
   const isActive = (path?: string) =>
     path && location.pathname.startsWith(path);
 
+  // Badge rojo con el número — mismo pill en colapsado y expandido.
+  const Badge = ({ n }: { n: number }) => (
+    <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold leading-none">
+      {n > 99 ? "99+" : n}
+    </span>
+  );
+
   const renderMenuItem = (item: MenuItem) => {
     const hasSub       = item.subItems.length > 0;
     const expanded     = expandedMenus.includes(item.name);
@@ -297,6 +326,8 @@ export default function Dashboard({ children }: DashboardProps) {
       if (!sub.permiso) return true;
       return tienePermiso(sub.permiso);
     });
+
+    const badgeCount = item.name === "Tickets" ? contadorTickets : null;
 
     // ── COLAPSADO ─────────────────────────────────────────────────────────────
     if (collapsed) {
@@ -320,7 +351,7 @@ export default function Dashboard({ children }: DashboardProps) {
               }
             }}
             className={`
-              w-full flex items-center justify-center py-2 rounded transition-colors
+              relative w-full flex items-center justify-center py-2 rounded transition-colors
               ${activeParent || isFlyoutActive
                 ? "bg-slate-700 text-white"
                 : "text-slate-300 hover:bg-slate-700 hover:text-white"
@@ -328,6 +359,11 @@ export default function Dashboard({ children }: DashboardProps) {
             `}
           >
             <span className="text-lg leading-none">{item.icon}</span>
+            {!!badgeCount && (
+              <span className="absolute top-0.5 right-1.5">
+                <Badge n={badgeCount} />
+              </span>
+            )}
           </button>
         </div>
       );
@@ -344,16 +380,19 @@ export default function Dashboard({ children }: DashboardProps) {
               if (isMobile) setOpen(false);
             }
           }}
-          className={`w-full text-left px-3 py-2 rounded transition flex justify-between
+          className={`w-full text-left px-3 py-2 rounded transition flex justify-between items-center
             ${activeParent
               ? "bg-slate-700 text-white font-semibold"
               : "text-slate-300 hover:bg-slate-700"
             }`}
         >
           <span>{item.name}</span>
-          {hasSub && (
-            <span className={`transition-transform ${expanded ? "rotate-180" : ""}`}>▼</span>
-          )}
+          <span className="flex items-center gap-1.5">
+            {!!badgeCount && <Badge n={badgeCount} />}
+            {hasSub && (
+              <span className={`transition-transform ${expanded ? "rotate-180" : ""}`}>▼</span>
+            )}
+          </span>
         </button>
 
         {hasSub && expanded && (

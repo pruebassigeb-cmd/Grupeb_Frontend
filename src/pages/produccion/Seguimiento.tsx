@@ -1,7 +1,11 @@
 import { useState, useEffect, useRef } from "react";
 import Dashboard from "../../layouts/Sidebar";
 import RequiereConexion from "../../components/pwa/RequiereConexion";
-import { getSeguimiento } from "../../services/produccion/seguimientoService";
+import { getSeguimiento, getCuentasPorCobrar } from "../../services/produccion/seguimientoService";
+import type { CuentaPorCobrar } from "../../services/produccion/seguimientoService";
+// ── NUEVO: días hábiles compartido (antes vivía declarado inline aquí abajo) ──
+import { contarDiasHabiles } from "../../utils/diasHabiles";
+import { marcarDescargaIniciada, marcarDescargaFinalizada, hayDescargaEnCurso } from "../../utils/descargasActivas";
 import { descargarPdfOrdenProduccionUniversal } from "../../services/produccion/descargarPdfOrdenProduccion";
 import { generarPdfEstadoCuentaSimple } from "../../utils/generarPdfEstadoCuentaSimple";
 import { generarPdfPedido } from "../../utils/generarPdfPedido";
@@ -40,6 +44,12 @@ import { NOMBRES_PROCESO_PAPEL } from "../../types/papel/seguimientoPapel.types"
 import { esProductoOrdenPapel } from "../../utils/papel/ordenProduccionPapelPdf.helpers";
 
 
+// Margen mínimo entre recargas automáticas disparadas por foco/visibilidad.
+// Volver a la ventana (tras un diálogo de archivos, una descarga de PDF o un
+// cambio de pestaña) no debe relanzar el seguimiento completo si acabamos de
+// traerlo: el evento se ignora dentro de esa ventana de tiempo.
+const MS_MINIMO_ENTRE_RECARGAS = 15_000;
+
 const diasDesde = (fecha: string | null): number | null => {
   if (!fecha) return null;
   const diff = Date.now() - new Date(fecha).getTime();
@@ -74,14 +84,36 @@ const FechaCorta = ({ fecha }: { fecha: string | null }) => {
   return <div className="text-[10px] text-gray-400 leading-tight mt-0.5 text-center whitespace-nowrap">{texto}</div>;
 };
 
-const obtenerColorEstadoProceso = (estado: string, fechaEstado: string | null): string => {
-  if (estado === "finalizado" || estado === "no-aplica" || estado === "aprobado" || estado === "pagado") {
+// ✅ NUEVO: pseudo-estado exclusivo del badge "OD" — la orden de diseño
+// está aprobada administrativamente (od.estado = 'aprobado') pero nadie ha
+// subido todavía ningún archivo real (render/master/feedback) a esa orden.
+// El texto sigue diciendo "Aprobado" (mismo mapa de textos), pero el color
+// se pinta como "pendiente" (naranja) para que no se lea como que el
+// diseño ya está listo de verdad. Se agrega a la lista de estados
+// "terminales" de abajo para que NO le apliquen los colores de
+// envejecimiento (gris/rojo por días sin cambio) — ese cómputo es solo
+// para procesos que de verdad siguen pendientes de arrancar.
+const obtenerColorEstadoProceso = (
+  estado: string,
+  fechaEstado: string | null,
+  intensificado: boolean = false,
+): string => {
+  if (estado === "finalizado" || estado === "no-aplica" || estado === "aprobado"
+    || estado === "pagado" || estado === "aprobado_sin_archivos") {
     return obtenerColorEstado(estado);
   }
   if (estado === "resagado") return "bg-gray-800 text-white border-gray-700";
   const dias = diasDesde(fechaEstado);
   if (dias !== null && dias >= 10) return "bg-gray-600 text-white border-gray-500";
   if (dias !== null && dias >= 7) return "bg-red-600 text-white border-red-700";
+  // ✅ NUEVO: "le toca arrancar" — el proceso inmediatamente anterior en el
+  // pipeline (Ext→Imp→Bol/Asa para plástico, o el cascade dinámico de
+  // papel) ya quedó finalizado, así que este ya está listo para empezar.
+  // Mismo naranja de "pendiente" pero 2 tonos más intenso, para que salte
+  // a la vista sin inventar un color nuevo que rompa el código de colores.
+  if (intensificado && estado === "pendiente") {
+    return "bg-orange-300 text-orange-900 border-orange-500";
+  }
   return obtenerColorEstado(estado);
 };
 
@@ -94,6 +126,9 @@ const obtenerColorEstado = (estado: string) => {
     case "detenido":
       return "bg-red-100 text-red-800 border-red-300";
     case "pendiente":
+      return "bg-orange-100 text-orange-800 border-orange-300";
+    // ✅ NUEVO: ver comentario arriba de obtenerColorEstadoProceso.
+    case "aprobado_sin_archivos":
       return "bg-orange-100 text-orange-800 border-orange-300";
     case "resagado":
       return "bg-gray-800 text-white border-gray-700";
@@ -108,17 +143,22 @@ const obtenerTextoEstado = (estado: string) => {
   const mapa: Record<string, string> = {
     finalizado: "✓", proceso: "⚙", pendiente: "–",
     detenido: "!", resagado: "!", "no-aplica": "N/A", aprobado: "✓", pagado: "✓",
+    aprobado_sin_archivos: "✓",
   };
   return mapa[estado] ?? "–";
 };
 
 const Badge = ({
-  estado, fechaEstado = null, clickable = false, onClick,
+  estado, fechaEstado = null, clickable = false, onClick, intensificado = false,
 }: {
   estado: string; fechaEstado?: string | null; clickable?: boolean; onClick?: () => void;
+  // ✅ NUEVO: true cuando este proceso es el que sigue justo después de uno
+  // recién finalizado — sube el tono del naranja de "pendiente" para
+  // marcar visualmente "ya te toca". Ver calcularProcesoSiguiente().
+  intensificado?: boolean;
 }) => {
   const dias = diasDesde(fechaEstado);
-  const color = obtenerColorEstadoProceso(estado, fechaEstado);
+  const color = obtenerColorEstadoProceso(estado, fechaEstado, intensificado);
   const titulo = dias !== null && (estado === "pendiente" || estado === "proceso")
     ? `${estado} · ${dias} día${dias !== 1 ? "s" : ""} sin cambio`
     : estado;
@@ -136,6 +176,9 @@ const BadgeTexto = ({ estado, fechaEstado = null }: { estado: string; fechaEstad
   const textos: Record<string, string> = {
     finalizado: "Finalizado", proceso: "En Proceso", pendiente: "Pendiente",
     resagado: "Resagado", "no-aplica": "N/A", aprobado: "Aprobado", pagado: "Pagado ✓",
+    // ✅ NUEVO: mismo texto "Aprobado" — solo cambia el color (ver
+    // obtenerColorEstado), para el caso "aprobado pero sin archivos".
+    aprobado_sin_archivos: "Aprobado",
   };
   const color = obtenerColorEstadoProceso(estado, fechaEstado);
   const dias = diasDesde(fechaEstado);
@@ -153,6 +196,9 @@ const BadgeTextoBtn = ({ estado, fechaEstado = null, onClick, cargando = false }
   const textos: Record<string, string> = {
     finalizado: "Finalizado", proceso: "En Proceso", pendiente: "Pendiente",
     resagado: "Resagado", "no-aplica": "N/A", aprobado: "Aprobado", pagado: "Pagado ✓",
+    // ✅ NUEVO: mismo texto "Aprobado" — solo cambia el color (ver
+    // obtenerColorEstado), para el caso "aprobado pero sin archivos".
+    aprobado_sin_archivos: "Aprobado",
   };
   const color = obtenerColorEstadoProceso(estado, fechaEstado);
   const dias = diasDesde(fechaEstado);
@@ -167,6 +213,26 @@ const BadgeTextoBtn = ({ estado, fechaEstado = null, onClick, cargando = false }
     </button>
   );
 };
+
+// ✅ NUEVO: dado el pipeline de procesos de una fila (en orden — Ext→Imp→
+// Bol/Asa para plástico, o el cascade de 11 pasos de papel), regresa la
+// key del proceso que "sigue": el primero en "pendiente" cuyo predecesor
+// inmediato (ignorando los que no aplican a este producto) ya quedó
+// "finalizado". Solo puede haber uno por fila — es al que le toca
+// arrancar — y se usa para intensificar su color (ver Badge/
+// obtenerColorEstadoProceso). Si no hay ninguno así (nada finalizado
+// todavía, o ya se finalizó todo), regresa null y ningún badge se resalta.
+function calcularProcesoSiguiente<K extends string>(
+  pasos: { key: K; estado: string }[]
+): K | null {
+  const aplican = pasos.filter(p => p.estado !== "no-aplica");
+  for (let i = 1; i < aplican.length; i++) {
+    if (aplican[i].estado === "pendiente" && aplican[i - 1].estado === "finalizado") {
+      return aplican[i].key;
+    }
+  }
+  return null;
+}
 
 const IconoPdf = () => (
   <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -286,6 +352,7 @@ function BotonPdfPedido({ pedido, puedePdf }: { pedido: PedidoSeguimiento; puede
 
   const handleDescargar = async () => {
     setDescargando(true);
+    marcarDescargaIniciada();
     try {
       const [todos, venta] = await Promise.all([getPedidos(), getVentaByPedido(pedido.no_pedido)]);
       const ped: Pedido | undefined = (todos as Pedido[]).find(p => p.no_pedido === pedido.no_pedido);
@@ -322,7 +389,7 @@ function BotonPdfPedido({ pedido, puedePdf }: { pedido: PedidoSeguimiento; puede
       }, guardarS3);
     } catch {
       showAlert("No se pudo generar el PDF del pedido.");
-    } finally { setDescargando(false); }
+    } finally { setDescargando(false); marcarDescargaFinalizada(); }
   };
 
   if (!puedePdf) {
@@ -347,10 +414,41 @@ function BotonPdfPedido({ pedido, puedePdf }: { pedido: PedidoSeguimiento; puede
   );
 }
 
-function BotonEstadoCuentaPdf({ noPedido }: { noPedido: string }) {
+// fecha corta reutilizando el mismo formato que FechaAprobacion / FechaCorta
+// (día/mes/año) — se muestra debajo del botón cuando ya hay snapshot.
+const formatearFechaGeneracion = (fecha: string | null): string | null => {
+  if (!fecha) return null;
+  return new Date(fecha).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" });
+};
+
+function BotonEstadoCuentaPdf({
+  noPedido, generado, fechaGeneracion,
+}: {
+  noPedido: string;
+  // ── NUEVO: si el estado de cuenta aún no se generó (producción
+  // incompleta), el botón se deshabilita de una vez en vez de dejar que
+  // el usuario le dé clic y reciba una alerta genérica después de esperar
+  // la respuesta del servidor.
+  generado?: boolean;
+  fechaGeneracion?: string | null;
+}) {
   const [descargando, setDescargando] = useState(false);
+
+  if (generado === false) {
+    return (
+      <div className="flex flex-col items-center gap-0.5">
+        <span
+          title="El estado de cuenta se genera automáticamente cuando termina toda la producción del pedido."
+          className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-gray-200 text-gray-400 text-xs rounded cursor-not-allowed">
+          <IconoPdf /> PDF
+        </span>
+      </div>
+    );
+  }
+
   const handleDescargar = async () => {
     setDescargando(true);
+    marcarDescargaIniciada();
     try {
       const datos = await getEstadoCuenta(noPedido);
       const guardarS3 = await preguntarGuardarS3("estado de cuenta");
@@ -361,10 +459,13 @@ function BotonEstadoCuentaPdf({ noPedido }: { noPedido: string }) {
         ? `Estado de cuenta no disponible:\n${msg}`
         : "El estado de cuenta aun no esta disponible. Verifica que todos los procesos hayan finalizado."
       );
-    } finally { setDescargando(false); }
+    } finally { setDescargando(false); marcarDescargaFinalizada(); }
   };
+
+  const fechaTexto = formatearFechaGeneracion(fechaGeneracion ?? null);
+
   return (
-    <div className="flex items-center justify-center">
+    <div className="flex flex-col items-center gap-0.5">
       <button onClick={handleDescargar} disabled={descargando} title="Descargar estado de cuenta cliente"
         className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white text-xs font-medium rounded transition-colors">
         {descargando
@@ -372,6 +473,11 @@ function BotonEstadoCuentaPdf({ noPedido }: { noPedido: string }) {
           : <IconoPdf />}
         {descargando ? "..." : "PDF"}
       </button>
+      {fechaTexto && (
+        <span className="text-[10px] text-gray-400 leading-tight whitespace-nowrap" title="Fecha en que se generó el estado de cuenta">
+          {fechaTexto}
+        </span>
+      )}
     </div>
   );
 }
@@ -384,6 +490,7 @@ function BotonPdfDirecto({ pedido }: { pedido: PedidoSeguimiento }) {
     if (!pedido.no_produccion) return;
 
     setDescargando(true);
+    marcarDescargaIniciada();
     try {
       const guardarS3 = await preguntarGuardarS3("orden de producción con datos");
       await descargarPdfOrdenProduccionUniversal(
@@ -401,6 +508,7 @@ function BotonPdfDirecto({ pedido }: { pedido: PedidoSeguimiento }) {
       showAlert(e?.message || "No se pudo generar el PDF.");
     } finally {
       setDescargando(false);
+      marcarDescargaFinalizada();
     }
   };
 
@@ -507,23 +615,9 @@ const fechaProcesoPapel = (proceso?: ProcesoRegistroPapel): string | null => {
 // ─────────────────────────────────────────────
 // Contador de días hábiles desde que se habilita la orden
 // (anticipo cubierto + diseño aprobado ⇒ se crea la orden_produccion)
+// contarDiasHabiles ahora vive en utils/diasHabiles.ts — la usa tanto
+// este badge como el filtro/badge de "Cuentas por cobrar" más abajo.
 // ─────────────────────────────────────────────
-const contarDiasHabiles = (desde: Date, hasta: Date): number => {
-  // Normaliza a medianoche para no arrastrar horas/minutos
-  const inicio = new Date(desde.getFullYear(), desde.getMonth(), desde.getDate());
-  const fin = new Date(hasta.getFullYear(), hasta.getMonth(), hasta.getDate());
-  if (fin <= inicio) return 0;
-
-  let dias = 0;
-  const cursor = new Date(inicio);
-  while (cursor < fin) {
-    cursor.setDate(cursor.getDate() + 1);
-    const diaSemana = cursor.getDay(); // 0 = domingo, 6 = sábado
-    if (diaSemana !== 0 && diaSemana !== 6) dias++;
-  }
-  return dias;
-};
-
 function ContadorDiasHabiles({ pedido, vigente }: { pedido: PedidoSeguimiento; vigente: boolean }) {
   const fechaInicio = pedido.fecha_habilitacion_orden;
 
@@ -598,13 +692,112 @@ const renderThead = (oscuro = false) => (
 const norm = (t: string) =>
   (t ?? "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
 
+// ── NUEVO: badge de días vencidos, mismos cortes de color que pidió Jose:
+// 5-9 amarillo, 10-19 naranja, 20+ rojo. (El filtro del backend ya
+// garantiza que aquí nunca llega nada por debajo de 5.)
+function BadgeDiasVencidos({ dias }: { dias: number }) {
+  const estilos = dias >= 20
+    ? "bg-red-100 text-red-700 border-red-300"
+    : dias >= 10
+      ? "bg-orange-100 text-orange-700 border-orange-300"
+      : "bg-yellow-100 text-yellow-700 border-yellow-300";
+  return (
+    <span className={`inline-flex items-center justify-center min-w-[2.5rem] px-2 py-0.5 rounded text-xs font-semibold border ${estilos}`}>
+      {dias} día{dias !== 1 ? "s" : ""}
+    </span>
+  );
+}
+
+function ModalCuentasPorCobrar({
+  cuentas, cargando, onVerLiquidar,
+}: {
+  cuentas: CuentaPorCobrar[];
+  cargando: boolean;
+  onVerLiquidar: (noPedido: string) => void;
+}) {
+  const ordenadas = [...cuentas].sort(
+    (a, b) => b.dias_habiles_desde_generacion - a.dias_habiles_desde_generacion,
+  );
+
+  // El spinner solo sustituye al contenido si aún no hay filas: un refresco
+  // (al registrar un pago, por ejemplo) ya no vacía el modal a medio uso.
+  if (cargando && ordenadas.length === 0) {
+    return (
+      <div className="flex items-center justify-center py-10">
+        <div className="w-8 h-8 border-4 border-amber-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (ordenadas.length === 0) {
+    return (
+      <p className="text-center text-gray-500 py-10">
+        No hay cuentas por cobrar vencidas — todos los estados de cuenta generados hace 5+ días hábiles ya están liquidados. 🎉
+      </p>
+    );
+  }
+
+  return (
+    <div className="overflow-x-auto max-h-[70vh]">
+      <table className="min-w-full divide-y divide-gray-200 text-sm">
+        <thead className="bg-gray-50 sticky top-0">
+          <tr>
+            {["Pedido", "Cliente", "Generado", "Vencido", "Total real", "Saldo", ""].map(h => (
+              <th key={h} className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-gray-200">
+          {ordenadas.map(c => (
+            <tr key={c.no_pedido} className="hover:bg-amber-50">
+              <td className="px-3 py-2 font-medium text-gray-900 whitespace-nowrap">{c.no_pedido}</td>
+              <td className="px-3 py-2 text-gray-700">{c.cliente || c.empresa || "—"}</td>
+              <td className="px-3 py-2 text-gray-500 whitespace-nowrap">
+                {new Date(c.fecha_generacion).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" })}
+              </td>
+              <td className="px-3 py-2"><BadgeDiasVencidos dias={c.dias_habiles_desde_generacion} /></td>
+              <td className="px-3 py-2 text-gray-700 whitespace-nowrap">
+                ${Number(c.total_real ?? c.total).toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+              </td>
+              <td className="px-3 py-2 font-semibold text-red-600 whitespace-nowrap">
+                ${Number(c.saldo).toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+              </td>
+              <td className="px-3 py-2">
+                <button
+                  onClick={() => onVerLiquidar(c.no_pedido)}
+                  className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded transition-colors"
+                >
+                  Ver / Liquidar
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export default function Seguimiento() {
   const [pedidos, setPedidos] = useState<PedidoSeguimiento[]>([]);
+  // `cargando` = hay una petición en vuelo; solo pinta el spinner del botón
+  // "Actualizar". `cargaInicial` = todavía no hay NADA que mostrar, y es lo
+  // único que justifica reemplazar la pantalla por el spinner grande.
+  // Antes ambos casos eran la misma bandera, así que cada cargar() —y
+  // cargar() se llama al cerrar casi cualquier modal, al recuperar el foco y
+  // al finalizar un proceso— desmontaba la tabla completa: se veía como si
+  // la página se recargara sola y se perdían scroll, filtros y paginación.
   const [cargando, setCargando] = useState(true);
+  const [cargaInicial, setCargaInicial] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filtroTipo, setFiltroTipo] = useState("todos");
   const [busqueda, setBusqueda] = useState("");
   const [pantallaCompleta, setPantallaCompleta] = useState(false);
+  // ── NUEVO: botón discreto para volver a ver órdenes ya finalizadas por
+  // completo (producción + envío + pago). Por defecto siguen ocultas —
+  // igual que antes — pero con esto activo no dependen de tener que
+  // escribir algo en el buscador para reaparecer.
+  const [mostrarFinalizados, setMostrarFinalizados] = useState(false);
 
   const [modalProceso, setModalProceso] = useState<{ pedido: PedidoSeguimiento; nombreProceso: string } | null>(null);
   const [modalAnticipo, setModalAnticipo] = useState<{ venta: Venta; metodos: MetodoPago[] } | null>(null);
@@ -622,6 +815,9 @@ export default function Seguimiento() {
   const [procesosPapel, setProcesosPapel] = useState<Record<number, ProcesosOrdenPapelRespuesta>>({});
   const [erroresProcesosPapel, setErroresProcesosPapel] = useState<Set<number>>(new Set());
   const cargaActualRef = useRef(0);
+  // Momento (ms) en que terminó la última carga con datos; lo consulta el
+  // margen de las recargas automáticas por foco/visibilidad.
+  const ultimaCargaRef = useRef(0);
   // ¿Hay algún modal abierto? Lo lee el listener de "focus"/visibilitychange
   // de abajo, que corre con dependencias [] y por eso no ve el estado actual.
   const hayModalAbiertoRef = useRef(false);
@@ -632,6 +828,11 @@ export default function Seguimiento() {
     pedido: PedidoSeguimiento;
     nombreProceso: NombreProcesoPapel;
   } | null>(null);
+
+  // ── NUEVO: Cuentas por cobrar (modal) ─────────────────────────────────
+  const [modalCuentasPorCobrar, setModalCuentasPorCobrar] = useState(false);
+  const [cuentasPorCobrar, setCuentasPorCobrar] = useState<CuentaPorCobrar[]>([]);
+  const [cargandoCPC, setCargandoCPC] = useState(false);
 
   const { user } = useAuth();
   const esAccesoTotal = user?.acceso_total ?? false;
@@ -663,7 +864,7 @@ export default function Seguimiento() {
   // existía solo para el modal de Anticipo (modalAnticipoRef en cargar()).
   const hayModalAbierto = Boolean(
     modalProceso || modalAnticipo || modalDiseno || modalEnvio ||
-    modalOD || modalVerificacion || modalProcesoPapel
+    modalOD || modalVerificacion || modalProcesoPapel || modalCuentasPorCobrar
   );
   useEffect(() => {
     hayModalAbiertoRef.current = hayModalAbierto;
@@ -678,36 +879,95 @@ export default function Seguimiento() {
     cargar();
 
     let temporizador: number | null = null;
-    const programarRecarga = () => {
+    // `forzar` distingue las señales de que los datos SÍ cambiaron (evento de
+    // pedido actualizado, aquí o en otra pestaña) de las que solo indican que
+    // el usuario volvió a la ventana. Las segundas se ignoran si acabamos de
+    // cargar, o si hay una descarga de PDF en curso (el diálogo nativo de
+    // "guardar como" también dispara blur+focus): recuperar el foco es
+    // constante (descargar un PDF, elegir un archivo, cambiar de pestaña) y
+    // cada una relanzaba el seguimiento completo más una petición por cada
+    // orden de papel.
+    const programarRecarga = (forzar = false) => {
       if (hayModalAbiertoRef.current) {
         recargaPendienteRef.current = true;
         return;
       }
+      if (!forzar && hayDescargaEnCurso()) return;
+      if (!forzar && Date.now() - ultimaCargaRef.current < MS_MINIMO_ENTRE_RECARGAS) return;
       if (temporizador !== null) window.clearTimeout(temporizador);
       temporizador = window.setTimeout(() => {
         invalidarSolicitudesGet();
         cargar();
       }, 50);
     };
+    const onFoco = () => programarRecarga();
+    const onPedidoActualizado = () => programarRecarga(true);
     const onVisible = () => {
       if (document.visibilityState === "visible") programarRecarga();
     };
     const onStorage = (evento: StorageEvent) => {
-      if (evento.key === CLAVE_PEDIDO_ACTUALIZADO) programarRecarga();
+      if (evento.key === CLAVE_PEDIDO_ACTUALIZADO) programarRecarga(true);
     };
 
-    window.addEventListener("focus", programarRecarga);
-    window.addEventListener(EVENTO_PEDIDO_ACTUALIZADO, programarRecarga);
+    window.addEventListener("focus", onFoco);
+    window.addEventListener(EVENTO_PEDIDO_ACTUALIZADO, onPedidoActualizado);
     window.addEventListener("storage", onStorage);
     document.addEventListener("visibilitychange", onVisible);
     return () => {
       if (temporizador !== null) window.clearTimeout(temporizador);
-      window.removeEventListener("focus", programarRecarga);
-      window.removeEventListener(EVENTO_PEDIDO_ACTUALIZADO, programarRecarga);
+      window.removeEventListener("focus", onFoco);
+      window.removeEventListener(EVENTO_PEDIDO_ACTUALIZADO, onPedidoActualizado);
       window.removeEventListener("storage", onStorage);
       document.removeEventListener("visibilitychange", onVisible);
     };
   }, []);
+  // Los procesos de papel son N peticiones, una por orden. Antes se esperaban
+  // dentro de cargar(), así que la pantalla seguía en "Cargando seguimiento..."
+  // hasta que respondían todas: de ahí que el refresco se sintiera lento
+  // aunque la lista de pedidos ya hubiera llegado. Ahora se piden aparte y las
+  // celdas de papel se rellenan cuando lleguen, sin bloquear al resto.
+  const cargarProcesosPapel = async (
+    data: PedidoSeguimiento[],
+    cargaId: number,
+  ) => {
+    const idsPapel = Array.from(new Set(
+      data
+        .filter(p =>
+          (p.tipo_producto ?? "").toLowerCase() === "papel" &&
+          p.idproduccion != null
+        )
+        .map(p => Number(p.idproduccion))
+    ));
+
+    if (idsPapel.length === 0) {
+      if (cargaId === cargaActualRef.current) {
+        setProcesosPapel({});
+        setErroresProcesosPapel(new Set());
+      }
+      return;
+    }
+
+    const resultados = await Promise.allSettled(
+      idsPapel.map(async idproduccion => ({
+        idproduccion,
+        datos: await getProcesosOrdenPapel(idproduccion),
+      }))
+    );
+
+    const procesosPorOrden: Record<number, ProcesosOrdenPapelRespuesta> = {};
+    const idsConError = new Set<number>();
+    resultados.forEach((resultado, index) => {
+      if (resultado.status === "fulfilled") {
+        procesosPorOrden[resultado.value.idproduccion] = resultado.value.datos;
+      } else {
+        idsConError.add(idsPapel[index]);
+      }
+    });
+    if (cargaId !== cargaActualRef.current) return;
+    setProcesosPapel(procesosPorOrden);
+    setErroresProcesosPapel(idsConError);
+  };
+
   const cargar = async () => {
     // Una recarga real deja sin efecto la pospuesta: varios onClose de modales
     // ya llaman a cargar() por su cuenta, y sin esto se disparaba dos veces.
@@ -724,6 +984,7 @@ export default function Seguimiento() {
       ]);
       if (cargaId !== cargaActualRef.current) return;
       setPedidos(data);
+      ultimaCargaRef.current = Date.now();
       if (
         ventaModalActualizada
         && modalAnticipoRef.current?.venta.no_pedido === ventaModalActualizada.no_pedido
@@ -733,41 +994,17 @@ export default function Seguimiento() {
           : null
         );
       }
-      const idsPapel = Array.from(new Set(
-        data
-          .filter(p =>
-            (p.tipo_producto ?? "").toLowerCase() === "papel" &&
-            p.idproduccion != null
-          )
-          .map(p => Number(p.idproduccion))
-      ));
-
-      const resultados = await Promise.allSettled(
-        idsPapel.map(async idproduccion => ({
-          idproduccion,
-          datos: await getProcesosOrdenPapel(idproduccion),
-        }))
-      );
-
-      const procesosPorOrden: Record<number, ProcesosOrdenPapelRespuesta> = {};
-      const idsConError = new Set<number>();
-      resultados.forEach((resultado, index) => {
-        if (resultado.status === "fulfilled") {
-          procesosPorOrden[resultado.value.idproduccion] = resultado.value.datos;
-        } else {
-          idsConError.add(idsPapel[index]);
-        }
-      });
-      if (cargaId !== cargaActualRef.current) return;
-      setProcesosPapel(procesosPorOrden);
-      setErroresProcesosPapel(idsConError);
+      void cargarProcesosPapel(data, cargaId);
     } catch {
       if (cargaId === cargaActualRef.current) {
         setError("No se pudo cargar el seguimiento.");
       }
     }
     finally {
-      if (cargaId === cargaActualRef.current) setCargando(false);
+      if (cargaId === cargaActualRef.current) {
+        setCargando(false);
+        setCargaInicial(false);
+      }
     }
   };
 
@@ -782,6 +1019,25 @@ export default function Seguimiento() {
     } finally { setCargandoAnticipo(null); }
   };
 
+  // ── NUEVO: Cuentas por cobrar — pedidos con estado de cuenta generado
+  // hace 5+ días hábiles y saldo pendiente (filtro ya resuelto en el
+  // backend, ver GET /api/seguimiento/cuentas-por-cobrar). Se carga al
+  // montar (para el contador del botón) y se refresca cada vez que se
+  // abre el modal o se registra un pago desde dentro de él.
+  const cargarCuentasPorCobrar = async () => {
+    setCargandoCPC(true);
+    try {
+      const datos = await getCuentasPorCobrar();
+      setCuentasPorCobrar(datos);
+    } catch {
+      // silencioso: el botón simplemente no muestra contador si falla
+    } finally {
+      setCargandoCPC(false);
+    }
+  };
+
+  useEffect(() => { cargarCuentasPorCobrar(); }, []);
+
   const abrirDiseno = (pedido: PedidoSeguimiento) => {
     setModalDiseno({
       no_pedido: pedido.no_pedido,
@@ -795,6 +1051,14 @@ export default function Seguimiento() {
     } as any);
   };
 
+  // Un pedido está pagado por completo cuando su saldo real llegó a 0 (o,
+  // si el backend todavía no manda saldo_venta, cuando el flag legado
+  // pago_completo lo dice). Misma cuenta que usa renderFila para pintar el
+  // badge de Pago — vive aquí, arriba, para que esProductoFinalizadoPorCompleto
+  // también pueda usarla sin duplicar la fórmula.
+  const estaPagadoPorCompleto = (p: PedidoSeguimiento): boolean =>
+    p.saldo_venta != null ? p.saldo_venta <= 0.01 : Boolean(p.pago_completo);
+
   // ── Pedidos terminados por completo ──────────────────────────────────
   // Un producto se considera terminado del todo cuando:
   //  - ya tiene orden de producción (idproduccion), si no, ni siquiera ha
@@ -804,9 +1068,20 @@ export default function Seguimiento() {
   //  - todos sus procesos aplicables (los que no son "no-aplica") están
   //    en "finalizado" — en papel se usa el único estado_resumen_papel
   //    que ya calcula el backend, porque ahí no hay columnas por proceso;
-  //  - el envío está "finalizado" (o "no-aplica", que es el valor que hoy
-  //    siempre trae papel porque los bultos aún no se ligan a sus
-  //    procesos — ver nota en seguimiento.controller.ts).
+  //  - el envío está "finalizado" (o "no-aplica" — OJO: para papel hoy
+  //    ese es el valor que SIEMPRE trae el backend, porque los bultos aún
+  //    no se ligan a sus procesos allá — ver nota en
+  //    seguimiento.controller.ts. Eso hace que una orden de papel se
+  //    pueda dar por "enviada" sin haberse enviado de verdad; hay que
+  //    corregirlo del lado del backend cuando se ligue bultos↔procesos
+  //    de papel, este filtro no lo puede distinguir);
+  //  - ✅ NUEVO: el pedido ya está pagado por completo (saldo en 0). Antes
+  //    esta función no revisaba el pago, así que un pedido con producción
+  //    y envío terminados pero CON SALDO PENDIENTE desaparecía de
+  //    Seguimiento de todas formas — la única forma de verlo era el modal
+  //    de Cuentas por Cobrar (y ese solo lista adeudos de 5+ días hábiles).
+  //    Ahora un pedido se sigue mostrando aquí mientras falte pagar o
+  //    falte enviar, que es justo lo que se necesita vigilar día a día.
   // Un pedido completo (no_pedido) se oculta solo si TODOS sus productos
   // cumplen lo anterior — basta con que uno quede pendiente para que el
   // pedido entero se siga mostrando.
@@ -827,6 +1102,7 @@ export default function Seguimiento() {
     }
 
     if (!okOProcesoNoAplica((p as any).estado_envio)) return false;
+    if (!estaPagadoPorCompleto(p)) return false;
 
     return true;
   };
@@ -850,7 +1126,7 @@ export default function Seguimiento() {
   const hayBusquedaActiva = busqueda.trim().length > 0;
 
   const pedidosFiltrados = pedidos
-    .filter(p => hayBusquedaActiva || !pedidosTerminadosPorCompleto.has(p.no_pedido))
+    .filter(p => hayBusquedaActiva || mostrarFinalizados || !pedidosTerminadosPorCompleto.has(p.no_pedido))
     .filter(p => {
       const pasaTipo = filtroTipo === "todos"
         || norm(p.tipo_producto ?? "").includes(norm(filtroTipo));
@@ -892,7 +1168,7 @@ export default function Seguimiento() {
 
     const estadoAnticipo = pedido.anticipo_cubierto ? "pagado" : "pendiente";
     const estadoDiseño = pedido.diseno_aprobado ? "aprobado" : "pendiente";
-    const pagadoReal = pedido.saldo_venta != null ? pedido.saldo_venta <= 0.01 : pedido.pago_completo;
+    const pagadoReal = estaPagadoPorCompleto(pedido);
     const estadoPago = pagadoReal ? "pagado" : pedido.anticipo_cubierto ? "proceso" : "pendiente";
 
     const tieneOrden = !!pedido.no_produccion && !!pedido.idproduccion;
@@ -912,8 +1188,12 @@ export default function Seguimiento() {
 
     const odEstadoRaw = (pedido as any).od_estado as string | null;
     const odId = (pedido as any).idorden_diseno as number | null;
+    // ✅ NUEVO: aprobado administrativamente pero sin ningún archivo subido
+    // todavía (od_tiene_archivos) ⇒ pseudo-estado "aprobado_sin_archivos",
+    // mismo texto "Aprobado" pero en naranja (ver obtenerColorEstado).
+    const odTieneArchivos = Boolean((pedido as any).od_tiene_archivos);
     const estadoOD = odEstadoRaw === "aprobado"
-      ? "aprobado"
+      ? (odTieneArchivos ? "aprobado" : "aprobado_sin_archivos")
       : odEstadoRaw === "en_revision"
         ? "proceso"
         : odEstadoRaw === "rechazado"
@@ -934,6 +1214,24 @@ export default function Seguimiento() {
     const procesosPapelPorNombre = new Map<NombreProcesoPapel, ProcesoRegistroPapel>(
       procesosDeLaOrden.map(proceso => [proceso.tabla, proceso] as const)
     );
+
+    // ✅ NUEVO: "próximo proceso" a resaltar — ver calcularProcesoSiguiente.
+    // Plástico sigue el pipeline fijo Ext→Imp→Bol→Asa (mismo orden que las
+    // columnas y que ORDEN_PROCESOS en el backend). Papel usa el cascade
+    // de 11 pasos ya ordenado en PROCESOS_PAPEL.
+    const siguienteProcesoPlastico = calcularProcesoSiguiente([
+      { key: "extrusion", estado: extEstado },
+      { key: "impresion", estado: impEstado },
+      { key: "bolseo", estado: bolEstado },
+      { key: "asa_flexible", estado: asaEstado },
+    ]);
+    const estadosPapelDeLaFila = esPapel
+      ? PROCESOS_PAPEL.map(({ key }) => ({
+          key,
+          estado: estadoProcesoPapelATabla(procesosPapelPorNombre.get(key)?.estado),
+        }))
+      : [];
+    const siguienteProcesoPapel = esPapel ? calcularProcesoSiguiente(estadosPapelDeLaFila) : null;
 
     return (
       <tr key={`${pedido.no_pedido}-${pedido.no_produccion ?? "sin-op"}-${idx}`}
@@ -1028,6 +1326,7 @@ export default function Seguimiento() {
 
         <td className={`${px} text-center`}>
           <Badge estado={extEstado} fechaEstado={pedido.extrusion_fecha_estado}
+            intensificado={siguienteProcesoPlastico === "extrusion"}
             clickable={ordenVigente && extEstado !== "no-aplica" && (puedeExtrusion || esRolPlanta)}
             onClick={() => {
               if (!ordenVigente) return;
@@ -1038,6 +1337,7 @@ export default function Seguimiento() {
 
         <td className={`${px} text-center`}>
           <Badge estado={impEstado} fechaEstado={pedido.impresion_fecha_estado}
+            intensificado={siguienteProcesoPlastico === "impresion"}
             clickable={ordenVigente && impEstado !== "no-aplica" && (puedeImpresion || esRolPlanta)}
             onClick={() => {
               if (!ordenVigente) return;
@@ -1048,6 +1348,7 @@ export default function Seguimiento() {
 
         <td className={`${px} text-center`}>
           <Badge estado={bolEstado} fechaEstado={pedido.bolseo_fecha_estado}
+            intensificado={siguienteProcesoPlastico === "bolseo"}
             clickable={ordenVigente && bolEstado !== "no-aplica" && (puedeBolseo || esRolPlanta)}
             onClick={() => {
               if (!ordenVigente) return;
@@ -1058,6 +1359,7 @@ export default function Seguimiento() {
 
         <td className={`${px} text-center`}>
           <Badge estado={asaEstado} fechaEstado={pedido.asa_flexible_fecha_estado}
+            intensificado={siguienteProcesoPlastico === "asa_flexible"}
             clickable={ordenVigente && asaEstado !== "no-aplica" && (puedeAsaFlexible || esRolPlanta)}
             onClick={() => {
               if (!ordenVigente) return;
@@ -1066,9 +1368,9 @@ export default function Seguimiento() {
           {asaEstado === "finalizado" && <FechaCorta fecha={pedido.asa_flexible_fecha_estado} />}
         </td>
 
-        {PROCESOS_PAPEL.map(({ key }) => {
+        {PROCESOS_PAPEL.map(({ key }, idxPapel) => {
           const proceso = esPapel ? procesosPapelPorNombre.get(key) : undefined;
-          const estado = estadoProcesoPapelATabla(proceso?.estado);
+          const estado = esPapel ? estadosPapelDeLaFila[idxPapel].estado : estadoProcesoPapelATabla(proceso?.estado);
           return (
             <td key={key} className={`${px} text-center`}>
               {errorCargaProcesosPapel ? (
@@ -1083,6 +1385,7 @@ export default function Seguimiento() {
                   <Badge
                     estado={estado}
                     fechaEstado={fechaProcesoPapel(proceso)}
+                    intensificado={esPapel && key === siguienteProcesoPapel}
                     clickable={
                       esPapel && ordenVigente && !!proceso && estado !== "no-aplica" &&
                       (permisosProcesoPapel[key] || esRolPlanta)
@@ -1103,7 +1406,11 @@ export default function Seguimiento() {
 
         <td className={`${px} text-center`}>
           {puedeVerECta
-            ? <BotonEstadoCuentaPdf noPedido={pedido.no_pedido} />
+            ? <BotonEstadoCuentaPdf
+                noPedido={pedido.no_pedido}
+                generado={(pedido as any).estado_cuenta_generado}
+                fechaGeneracion={(pedido as any).estado_cuenta_fecha ?? null}
+              />
             : <span className="text-gray-300 text-xs">—</span>
           }
         </td>
@@ -1113,6 +1420,22 @@ export default function Seguimiento() {
             ? <BadgeTextoBtn estado={estadoPago} fechaEstado={(pedido as any).pago_fecha_estado} cargando={cargandoAnticipo === pedido.no_pedido} onClick={() => abrirAnticipo(pedido)} />
             : <BadgeTexto estado={estadoPago} fechaEstado={(pedido as any).pago_fecha_estado} />
           }
+          {/* Fecha en que se liquidó por completo la deuda del pedido.
+              La columna real en BD es ventas.fecha_liquidacion — si el
+              backend de /seguimiento aún no la manda con ese nombre, no
+              hay fecha que mostrar (por eso el fallback a null final, en
+              vez de apoyarse solo en pago_fecha_estado que no refleja la
+              liquidación). Pide que se agregue pago_fecha_liquidacion
+              (alias de ventas.fecha_liquidacion) a esa respuesta. */}
+          {estadoPago === "pagado" && (
+            <FechaAprobacion fecha={
+              (pedido as any).pago_fecha_liquidacion ??
+              (pedido as any).venta_fecha_liquidacion ??
+              (pedido as any).fecha_liquidacion ??
+              (pedido as any).pago_fecha_estado ??
+              null
+            } />
+          )}
         </td>
 
         {/* ENVÍO */}
@@ -1126,6 +1449,8 @@ export default function Seguimiento() {
           ) : (
             <BadgeTexto estado="no-aplica" />
           )}
+          {/* Fecha en que se terminó de enviar todo lo de esta orden */}
+          {estadoEnvio === "finalizado" && <FechaAprobacion fecha={(pedido as any).envio_fecha_estado ?? null} />}
         </td>
       </tr>
     );
@@ -1146,13 +1471,31 @@ export default function Seguimiento() {
       )}
 
       {modalAnticipo && (
-        <Modal isOpen={!!modalAnticipo} onClose={() => { setModalAnticipo(null); cargar(); }} title="Anticipo y Liquidacion">
+        <Modal isOpen={!!modalAnticipo} onClose={() => { setModalAnticipo(null); cargar(); cargarCuentasPorCobrar(); }} title="Anticipo y Liquidacion">
           <EditarAntLiqReal
             venta={modalAnticipo.venta}
             metodos={modalAnticipo.metodos}
-            onClose={() => { setModalAnticipo(null); cargar(); }}
+            onClose={() => { setModalAnticipo(null); cargar(); cargarCuentasPorCobrar(); }}
             onActualizar={(ventaActualizada) => {
               setModalAnticipo(prev => prev ? { ...prev, venta: ventaActualizada } : null);
+              cargarCuentasPorCobrar();
+            }}
+          />
+        </Modal>
+      )}
+
+      {modalCuentasPorCobrar && (
+        <Modal
+          isOpen={modalCuentasPorCobrar}
+          onClose={() => setModalCuentasPorCobrar(false)}
+          title="Cuentas por cobrar"
+        >
+          <ModalCuentasPorCobrar
+            cuentas={cuentasPorCobrar}
+            cargando={cargandoCPC}
+            onVerLiquidar={(noPedido) => {
+              setModalCuentasPorCobrar(false);
+              abrirAnticipo({ no_pedido: noPedido } as unknown as PedidoSeguimiento);
             }}
           />
         </Modal>
@@ -1229,7 +1572,7 @@ export default function Seguimiento() {
     </>
   );
 
-  if (cargando) return (
+  if (cargaInicial) return (
     <Dashboard>
       <RequiereConexion>
       <div className="flex items-center justify-center h-64">
@@ -1242,7 +1585,7 @@ export default function Seguimiento() {
     </Dashboard>
   );
 
-  if (error) return (
+  if (error && pedidos.length === 0) return (
     <Dashboard>
       <RequiereConexion>
       <div className="flex items-center justify-center h-64">
@@ -1281,9 +1624,34 @@ export default function Seguimiento() {
   return (
     <Dashboard>
       <RequiereConexion>
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Seguimiento de Pedidos</h1>
-        <p className="text-gray-600">Monitorea el estado de todos los pedidos en tiempo real</p>
+      {error && (
+        <div className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-2">
+          <p className="text-sm text-red-700">{error} Se muestran los últimos datos cargados.</p>
+          <button onClick={cargar} disabled={cargando}
+            className="px-3 py-1 text-sm bg-red-600 text-white rounded-md disabled:opacity-50">
+            Reintentar
+          </button>
+        </div>
+      )}
+      <div className="mb-6 flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Seguimiento de Pedidos</h1>
+          <p className="text-gray-600">Monitorea el estado de todos los pedidos en tiempo real</p>
+        </div>
+        {puedeVerECta && (
+          <button
+            onClick={() => { setModalCuentasPorCobrar(true); cargarCuentasPorCobrar(); }}
+            title="Pedidos con estado de cuenta generado hace 5 o más días hábiles y saldo pendiente"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-amber-100 text-amber-800 hover:bg-amber-200 border border-amber-300 transition-colors"
+          >
+          Cuentas por cobrar
+            {cuentasPorCobrar.length > 0 && (
+              <span className="inline-flex items-center justify-center min-w-[1.5rem] h-5 px-1 rounded-full bg-amber-600 text-white text-xs font-bold">
+                {cuentasPorCobrar.length}
+              </span>
+            )}
+          </button>
+        )}
       </div>
 
       {/* ── Filtros y búsqueda ── */}
@@ -1338,7 +1706,34 @@ export default function Seguimiento() {
               <option value="reciente">Más reciente</option>
             </select>
           </div>
-          {(busqueda || filtroTipo !== "todos") && (
+
+          {/* ── NUEVO: botón discreto — sin este toggle, una orden ya
+              pagada+enviada solo reaparece si se busca por nombre/folio.
+              Aquí se puede volver a ver el listado completo con un click. */}
+          <button
+            type="button"
+            onClick={() => setMostrarFinalizados(prev => !prev)}
+            title={mostrarFinalizados
+              ? "Ocultar de nuevo las órdenes ya finalizadas por completo"
+              : "Mostrar también las órdenes ya finalizadas por completo (producción + envío + pago)"}
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium border transition-colors ${
+              mostrarFinalizados
+                ? "bg-gray-700 text-white border-gray-700 hover:bg-gray-800"
+                : "text-gray-400 border-transparent hover:text-gray-600 hover:bg-gray-100"
+            }`}>
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              {mostrarFinalizados ? (
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              ) : (
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.774 3.162 10.066 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" />
+              )}
+            </svg>
+            {mostrarFinalizados ? "Viendo todas" : "Ver finalizadas"}
+          </button>
+
+          {(busqueda || filtroTipo !== "todos" || mostrarFinalizados) && (
             <span className="text-sm text-gray-500 ml-auto">
               {pedidosFiltrados.length} resultado{pedidosFiltrados.length !== 1 ? "s" : ""}
             </span>
@@ -1353,6 +1748,7 @@ export default function Seguimiento() {
             { color: "bg-green-500", label: "Finalizado / Aprobado / Pagado" },
             { color: "bg-yellow-400", label: "En Proceso" },
             { color: "bg-orange-400", label: "Pendiente" },
+            { color: "bg-orange-600", label: "Listo para arrancar (el proceso anterior ya terminó)" },
             { color: "bg-red-700", label: "Detenido +7 días (crítico)" },
             { color: "bg-gray-600", label: "Resagado / +10 días sin cambio" },
             { color: "bg-gray-300", label: "No Aplica" },

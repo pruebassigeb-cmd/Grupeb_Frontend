@@ -36,7 +36,7 @@ import ConnectivityToast from "./components/pwa/ConnectivityToast";
 import "./offline/expoOutboxHandlers";
 import ReportesCorreo from "./pages/ReportesCorreo";
 import CotizadorLibre from "./pages/cotizadorLibre/CotizadorLibre";
-
+import Tickets from "./pages/tickets/Tickets";
 
 // Las rutas ya no listan privilegio por privilegio: usan `permisoPantalla`
 // con el prefijo de la pantalla, así que CUALQUIER privilegio de esa pantalla
@@ -72,6 +72,15 @@ function App() {
               </ProtectedRoute>
             }
           />
+
+          <Route
+  path="/tickets"
+  element={
+    <ProtectedRoute permisoPantalla="tickets.">
+      <Tickets />
+    </ProtectedRoute>
+  }
+/>
 
           {/* Seguimiento */}
           <Route

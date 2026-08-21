@@ -1112,6 +1112,9 @@ export default function AnticipoLiquidacion() {
   const [loading,         setLoading]         = useState(false);
   const [busqueda,        setBusqueda]        = useState("");
   const [pagina,          setPagina]          = useState(1);
+  // ── NUEVO: orden por fecha del estado de cuenta (más antiguo primero por
+  // default = prioriza cobranza) y ocultar liquidadas salvo búsqueda activa.
+  const [orden,           setOrden]           = useState<"antiguo" | "reciente">("antiguo");
   const [modalEditarOpen, setModalEditarOpen] = useState(false);
   const [ventaEditando,   setVentaEditando]   = useState<Venta | null>(null);
   const [cargandoDet,     setCargandoDet]     = useState(false);
@@ -1206,7 +1209,7 @@ export default function AnticipoLiquidacion() {
   const normalizarTexto = (t: string) =>
     t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[.,\-]/g, "").trim();
 
-  const ventasFiltradas = ventas.filter(v => {
+  const coincideBusqueda = (v: Venta): boolean => {
     if (!busqueda) return true;
     const t = normalizarTexto(busqueda);
     return (
@@ -1217,9 +1220,29 @@ export default function AnticipoLiquidacion() {
       normalizarTexto(v.impresion ?? "").includes(t) ||
       (v.no_cotizacion?.toString() ?? "").includes(t)
     );
-  });
+  };
 
-  useEffect(() => { setPagina(1); }, [busqueda]);
+  // Una cuenta liquidada (saldo <= 0.01, mismo umbral que ya usaba la tabla
+  // para pintar el saldo en verde) desaparece de la vista por default en
+  // cuanto se liquida — pero sigue siendo encontrable a propósito: en
+  // cuanto hay texto en la búsqueda, deja de filtrarse por saldo.
+  const ventasFiltradas = ventas
+    .filter(v => (busqueda ? true : Number(v.saldo) > 0.01))
+    .filter(coincideBusqueda)
+    .sort((a, b) => {
+      // Fecha de referencia para "antiguo/reciente": la del estado de
+      // cuenta cuando ya existe (prioriza lo que lleva más tiempo esperando
+      // cobro), y si el pedido todavía no genera uno (producción sin
+      // terminar) cae de vuelta a la fecha del pedido, para que no
+      // desaparezca del ordenamiento ni quede siempre al final.
+      const fechaA = (a as any).estado_cuenta_fecha ?? a.fecha_pedido;
+      const fechaB = (b as any).estado_cuenta_fecha ?? b.fecha_pedido;
+      const tA = fechaA ? new Date(fechaA).getTime() : 0;
+      const tB = fechaB ? new Date(fechaB).getTime() : 0;
+      return orden === "antiguo" ? tA - tB : tB - tA;
+    });
+
+  useEffect(() => { setPagina(1); }, [busqueda, orden]);
 
   const ventasPaginadas = ventasFiltradas.slice((pagina - 1) * POR_PAGINA, pagina * POR_PAGINA);
 
@@ -1276,18 +1299,35 @@ export default function AnticipoLiquidacion() {
         {busqueda && <p className="mt-2 text-sm text-gray-600">{ventasFiltradas.length} resultado(s)</p>}
       </div>
 
+      <div className="mb-4 flex items-center gap-3 flex-wrap">
+        <label className="text-sm font-medium text-gray-700">Orden:</label>
+        <select
+          value={orden}
+          onChange={e => setOrden(e.target.value as "antiguo" | "reciente")}
+          className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-700 bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+        >
+          <option value="antiguo">Más antiguo</option>
+          <option value="reciente">Más reciente</option>
+        </select>
+        {!busqueda && (
+          <span className="text-xs text-gray-400">
+            Las cuentas liquidadas no se muestran aquí — búscalas por N° de pedido, cliente o empresa si necesitas encontrar una.
+          </span>
+        )}
+      </div>
+
       <div className="overflow-x-auto bg-white rounded-lg shadow">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              {["N° Pedido", "Fecha", "Impresión", "Empresa", "Total", "Pagado", "Saldo", "Estado", "Acciones"].map(h => (
+              {["N° Pedido", "Fecha", "Impresión", "Empresa", "Total", "Pagado", "Saldo", "E. Cta", "Estado", "Acciones"].map(h => (
                 <th key={h} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
             {loading ? (
-              <tr><td colSpan={9} className="px-6 py-12 text-center">
+              <tr><td colSpan={10} className="px-6 py-12 text-center">
                 <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-blue-500 border-t-transparent" />
                 <p className="mt-3 text-gray-500">Cargando...</p>
               </td></tr>
@@ -1303,9 +1343,23 @@ export default function AnticipoLiquidacion() {
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-green-700">${fmt(v.total)}</td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-blue-700">${fmt(v.abono)}</td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold">
-                  <span className={Number(v.saldo) > 0.01 ? "text-red-600" : "text-emerald-600"}>
-                    ${Number(v.saldo) > 0.01 ? fmt(v.saldo) : "0.00"}
-                  </span>
+                  {/* Defecto E: un saldo negativo es dinero a favor del cliente
+                      (salió menos producción de la cotizada y ya había liquidado)
+                      — antes esto se aplanaba a "$0.00" y la deuda desaparecía. */}
+                  {Number(v.saldo) > 0.01 ? (
+                    <span className="text-red-600">${fmt(v.saldo)}</span>
+                  ) : Number(v.saldo) < -0.01 ? (
+                    <span className="text-blue-600" title="Salió menos producción de la cotizada; se le debe al cliente">
+                      A favor del cliente ${fmt(Math.abs(Number(v.saldo)))}
+                    </span>
+                  ) : (
+                    <span className="text-emerald-600">$0.00</span>
+                  )}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                  {(v as any).estado_cuenta_fecha
+                    ? fmtFecha((v as any).estado_cuenta_fecha)
+                    : <span className="text-gray-300">—</span>}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm">{getEstadoBadge(v)}</td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
@@ -1316,7 +1370,7 @@ export default function AnticipoLiquidacion() {
                 </td>
               </tr>
             )) : (
-              <tr><td colSpan={9} className="px-6 py-8 text-center text-gray-500">
+              <tr><td colSpan={10} className="px-6 py-8 text-center text-gray-500">
                 {busqueda ? `No se encontraron resultados para "${busqueda}"` : "No hay ventas registradas"}
               </td></tr>
             )}

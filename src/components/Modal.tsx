@@ -8,9 +8,15 @@ interface ModalProps {
 }
 
 export default function Modal({ isOpen, onClose, title, children }: ModalProps) {
-  if (!isOpen) return null;
-
+  // El hook va ANTES de cualquier return condicional — regla de los Hooks.
+  // Antes, `useRef` estaba después de `if (!isOpen) return null`, así que
+  // al cerrar el modal (isOpen: true -> false) React pasaba de ejecutar 1
+  // hook a ejecutar 0 en la misma instancia del componente, y eso dispara
+  // "Rendered fewer hooks than expected" — el crash que terminaba
+  // viéndose como una recarga completa de la página.
   const mouseDownTarget = useRef<EventTarget | null>(null);
+
+  if (!isOpen) return null;
 
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     mouseDownTarget.current = e.target;

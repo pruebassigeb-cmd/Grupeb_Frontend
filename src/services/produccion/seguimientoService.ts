@@ -357,3 +357,35 @@ export const marcarBultosParcialidad = async (
     idbultos,
   });
 };
+
+
+export interface CuentaPorCobrar {
+  no_pedido: string;
+  no_cotizacion: string | null;
+  fecha: string;
+  cliente: string | null;
+  empresa: string | null;
+  telefono: string | null;
+  correo: string | null;
+  idventas: number;
+  moneda: string;
+  total: number;
+  total_real: number | null;
+  abono: number;
+  saldo: number;
+  fecha_generacion: string;
+  version: number;
+  motivo: string;
+  dias_habiles_desde_generacion: number;
+}
+
+// GET /api/seguimiento/cuentas-por-cobrar — ver
+// seguimiento.controller.ts::getCuentasPorCobrar (Fase 3 del plan).
+export async function getCuentasPorCobrar(): Promise<CuentaPorCobrar[]> {
+  const { data } = await api.get<CuentaPorCobrar[]>("/seguimiento/cuentas-por-cobrar");
+  return data;
+}
+
+// NOTA: si el archivo original usa un nombre distinto para el cliente
+// HTTP (no `api`), ajusta esa línea al mismo patrón que usa getSeguimiento()
+// unas líneas arriba en el archivo real.

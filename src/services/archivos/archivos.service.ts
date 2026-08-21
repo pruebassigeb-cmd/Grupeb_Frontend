@@ -16,7 +16,7 @@ export interface Archivo {
   created_at: string;
 }
 
-export type CarpetaFrontend = "disenos" | "pdfs" | "fotos-envios" | "backups" | "suaje" | "catalogoproductos" | "catalogos-admin";
+export type CarpetaFrontend = "disenos" | "pdfs" | "fotos-envios" | "backups" | "suaje" | "catalogoproductos" | "catalogos-admin" | "tickets";
 
 export type SubcarpetaCatalogo = "papel" | "plastico" | "carton";
 
@@ -88,6 +88,7 @@ export const CARPETAS_LABELS: Record<CarpetaFrontend, string> = {
   // producto, tipo de asa, textura, tipo de papel, laminado, foil, HS/AR,
   // UV, color de asa). Ver config/multer.ts CARPETAS.catalogos_admin.
   "catalogos-admin":    "Catálogos de Papel",
+  "tickets":            "Tickets",
 };
 
 export const SUBCARPETAS_PDF: { value: SubcarpetaPDF; label: string }[] = [
@@ -119,13 +120,17 @@ export const subirArchivo = async (
   subcarpeta?: SubcarpetaPDF | SubcarpetaSuaje | SubcarpetaCatalogo,
   envio_id?: number,
   nota_id?: number,
+  ticket_id?: number,
+  ticket_comentario_id?: number,
 ): Promise<Archivo> => {
   const formData = new FormData();
   formData.append("archivo", file);
   formData.append("carpeta", carpeta);
-  if (subcarpeta != null)  formData.append("subcarpeta", subcarpeta);
-  if (envio_id != null)    formData.append("envio_id",   String(envio_id));
-  if (nota_id  != null)    formData.append("nota_id",    String(nota_id));
+  if (subcarpeta != null)           formData.append("subcarpeta", subcarpeta);
+  if (envio_id != null)             formData.append("envio_id",   String(envio_id));
+  if (nota_id  != null)             formData.append("nota_id",    String(nota_id));
+  if (ticket_id != null)            formData.append("ticket_id",  String(ticket_id));
+  if (ticket_comentario_id != null) formData.append("ticket_comentario_id", String(ticket_comentario_id));
 
   const { data } = await api.post<Archivo>("/archivos/upload", formData, {
     headers: { "Content-Type": "multipart/form-data" },
@@ -133,7 +138,6 @@ export const subirArchivo = async (
 
   return data;
 };
-
 // Obtener fotos de un envío específico
 export const getFotosEnvio = async (idenvio: number): Promise<Archivo[]> => {
   const { data } = await api.get<Archivo[]>(`/archivos/envio/${idenvio}`);
