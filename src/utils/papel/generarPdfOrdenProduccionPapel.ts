@@ -103,6 +103,12 @@ const FS = {
   VALOR_GRANDE: 13,
   TEXTO: 7.5,
   SPEC: 6.2,
+  // ── Celda "Pedido" de filaInfo: no. de pedido más grande que la fecha
+  // debajo (antes las dos líneas compartían un solo tamaño, 9 — ver
+  // celdaPedido()). Subido de 9 a 12; la fecha se achicó a 7 para dejarle
+  // aire arriba sin desbordar la celda (H.INFO = 13mm).
+  PEDIDO_NO: 12,
+  PEDIDO_FECHA: 7,
 };
 
 const LW = 0.22;        // grosor de línea interior
@@ -400,12 +406,15 @@ function fmtCantidad(data: OrdenProduccionPapelData): string {
   return cant !== null ? fmtNum(cant) : "";
 }
 
-// "Pliego Hojeado" no es un campo único: bobina (ancho) y hojeado (corte)
-// se guardan separados y aquí se unen ("61x45").
+// "Pliego Hojeado" es el corte del hojeado tal cual se dio de alta.
+// CORREGIDO (2026-08-21): antes se le anteponía la bobina (`${bobina}x${hojeado}`),
+// lo que producía cadenas de tres medidas como "45x71x125" cuando el corte
+// ya venía con sus dos medidas ("71x125"). La bobina ya tiene su propia
+// celda en la fila de Hojeado, así que aquí sobraba. Solo se usa como
+// último recurso si no hay corte capturado.
 function pliegoHojeadoTexto(data: OrdenProduccionPapelData): string {
   const bobina = primeraLinea(data.hoj_bobina, data.bobina_cm);
   const hojeado = primeraLinea(data.pliego_hojeado, data.hoj_corte, data.pliego);
-  if (bobina && hojeado) return `${bobina}x${hojeado}`;
   return primeraLinea(hojeado, bobina);
 }
 
@@ -755,23 +764,61 @@ function dibujarEncabezado(
   });
 }
 
+/**
+ * Celda especial de "Pedido" (dentro de filaInfo): dos líneas con tamaños
+ * DISTINTOS — no. de pedido más grande arriba, fecha más chica abajo. La
+ * celda() genérica no sirve aquí porque aplica un solo doc.setFontSize()
+ * a las dos líneas juntas (ver su implementación arriba); esta función
+ * replica el mismo criterio visual ("valor apoyado en la parte baja de la
+ * celda, etiqueta arriba a la izquierda") pero dibujando cada línea por
+ * separado, cada una con su propio tamaño.
+ */
+function celdaPedido(doc: jsPDF, data: OrdenProduccionPapelData, x: number, y: number, w: number, h: number) {
+  caja(doc, x, y, w, h);
+  etiqueta(doc, "Pedido", x, y);
+
+  const vx = x + w / 2;
+  const maxW = w - 2.6;
+
+  // La fecha va pegada al fondo de la celda (igual que el valor de una
+  // celda() normal de 1 línea); el no. de pedido se apoya justo arriba,
+  // con un espacio calculado sobre SU PROPIO tamaño (el más grande),
+  // porque es el que determina cuánto alto ocupa esa línea.
+  const baseFecha = y + h - 1.6;
+  const gap = FS.PEDIDO_NO * 0.352778 * 1.05;
+  const baseNo = baseFecha - gap;
+
+  txt(doc, f(data.no_pedido), vx, baseNo, {
+    size: FS.PEDIDO_NO, bold: true, align: "center", maxW, maxLines: 1,
+  });
+  txt(doc, fmtFechaCorta(data.fecha ?? null), vx, baseFecha, {
+    size: FS.PEDIDO_FECHA, align: "center", maxW, maxLines: 1,
+  });
+}
+
 // ── Fila de datos generales (Impresión / Fecha entrega / Prioridad / Pedido)
 function filaInfo(doc: jsPDF, data: OrdenProduccionPapelData, y: number) {
   const w = X_FIRMA_L - X0;
   // El 5to valor (maxLines) es opcional; por defecto 1 línea. La celda de
-  // Pedido usa 2 líneas para mostrar la fecha arriba del no. de pedido,
-  // igual que en el formato de Orden de Producción (no-papel).
+  // Pedido se dibuja aparte (ver celdaPedido) porque necesita dos tamaños
+  // distintos: no. de pedido arriba y más grande, fecha abajo y más chica
+  // (invertido y con tamaños diferenciados a petición de Jose — antes las
+  // dos líneas iban al mismo tamaño y con la fecha arriba).
   const cols: Array<[string, string, number, number, number?]> = [
     ["Impresión", primeraLinea(data.impresion, data.cliente), 0.385, 12],
     ["Fecha Entrega", fmtFechaCorta(data.fecha_entrega ?? null), 0.311, 12],
     ["Prioridad", data.prioridad ? "URGENTE" : "Normal", 0.168, 10],
-    ["Pedido", `${fmtFechaCorta(data.fecha ?? null)}\n${f(data.no_pedido)}`, 0.136, 9, 2],
+    ["Pedido", "", 0.136, 9, 2],
   ];
 
   let cx = X0;
   cols.forEach(([label, valor, peso, size, maxLines], i) => {
     const cw = w * peso;
-    celda(doc, label, valor, cx, y, cw, H.INFO, { size, maxLines: maxLines ?? 1 });
+    if (label === "Pedido") {
+      celdaPedido(doc, data, cx, y, cw, H.INFO);
+    } else {
+      celda(doc, label, valor, cx, y, cw, H.INFO, { size, maxLines: maxLines ?? 1 });
+    }
     if (i === 0) caja(doc, cx, y, cw, H.INFO, { lw: LW_MARCO });
     cx += cw;
   });
@@ -860,7 +907,12 @@ function filaAtributos(doc: jsPDF, data: OrdenProduccionPapelData, y: number) {
     ["Pegamento", f(data.pegamento), 0.127, 8],
     ["Tipo pegue", primeraLinea(data.tipo_pegue, data.tipo_pegado), 0.106, 9],
     ["Suaje", primeraLinea(data.numero_suaje, data.suaje_nombre, data.suaje), 0.075, 10],
-    ["Rendimiento", primeraLinea(data.rendimiento, data.hoj_rendimiento), 0.176, 10],
+    // Partido a la mitad (Jose, 2026-08-21): antes "Rendimiento" ocupaba la
+    // celda completa (0.176). Ahora la mitad izquierda lleva las PZS del
+    // suaje -- el dato con el que se calculan los cortes -- y la derecha el
+    // rendimiento que ya iba ahí.
+    ["PZS Suaje", sinDecimalesInnecesarios(primeraLinea(data.piezas_suaje)), 0.088, 10],
+    ["Rendimiento", primeraLinea(data.rendimiento, data.hoj_rendimiento), 0.088, 10],
   ];
 
   let cx = X0;
@@ -1059,8 +1111,10 @@ function bloqueGuillotina(
   // Pliego / Pliegos (dos renglones etiqueta-valor apilados).
   const c1 = restante * 0.34;
   caja(doc, cx, y, c1, h);
-  etiquetaValor(doc, "Pliego", primeraLinea(data.pliego, reg.pliego), cx + 1.2, y + h * 0.36, c1 - 2.4, { valorSize: 7 });
-  etiquetaValor(doc, "Pliegos", fmtNum(primeraLinea(reg.pliegos, data.pliegos_guillotina)), cx + 1.2, y + h * 0.82, c1 - 2.4, { valorSize: 8 });
+  // Letra más grande a petición de Jose (2026-08-21): estos dos valores se
+  // leen en planta con la hoja en mano y a 7/8 pt quedaban muy chicos.
+  etiquetaValor(doc, "Pliego", primeraLinea(data.pliego, reg.pliego), cx + 1.2, y + h * 0.36, c1 - 2.4, { valorSize: 10 });
+  etiquetaValor(doc, "Pliegos", fmtNum(primeraLinea(reg.pliegos, data.pliegos_guillotina)), cx + 1.2, y + h * 0.82, c1 - 2.4, { valorSize: 11 });
   cx += c1;
 
   const c2 = restante * 0.13;
@@ -1123,10 +1177,17 @@ function bloqueImpresion(
     txt(doc, entrada, box2X + box2W * 0.46, divY - 1.8, { size: 14, bold: true, align: "right" });
     txt(doc, "Maquina", box2X + box2W * 0.52, divY - 1.8, { size: 8 });
   }
+  // CORREGIDO (2026-08-21): Impresión lleva el CORTE del producto dado de
+  // alta (`corte`), no el pliego hojeado — son datos distintos y aquí se
+  // estaba mostrando el equivocado.
+  const corteImpresion = primeraLinea(data.corte);
   const materialTexto = primeraLinea(
     data.material_impresion,
-    [primeraLinea(data.material), primeraLinea(data.calibre), `${pliegoHojeadoTexto(data)} cm`]
-      .filter(Boolean).join("   ")
+    [
+      primeraLinea(data.material),
+      primeraLinea(data.calibre),
+      corteImpresion ? `${corteImpresion} cm` : "",
+    ].filter(Boolean).join("   ")
   );
   txt(doc, materialTexto, box2X + box2W / 2, y + topH - 2.2, {
     size: 8, align: "center", maxW: box2W - 3, maxLines: 1,

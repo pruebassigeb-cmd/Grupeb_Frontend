@@ -184,18 +184,26 @@ export interface OrdenProduccionPapelData {
   pliegos_impresion_estimados?: number | null;
   material_impresion?: string | null;
 
-  // Cantidad real a producir = cantidad pedida + merma congelada de la
-  // orden (orden_produccion_merma.cantidad_a_producir). Ya la calcula e
-  // inyecta el backend (getSeguimiento/getOrdenProduccion, vía
-  // getCantidadesAProducirBatch). Alimenta los cálculos internos de
-  // pliegos/hojeado Y las 3 celdas visibles "con Merma" del PDF (ver
+  // Cantidad pedida + merma congelada de la orden
+  // (orden_produccion_merma.cantidad_a_producir). CORREGIDO (2026-08-21):
+  // ya NO alimenta el cálculo de pliegos — la merma se suma sobre los
+  // cortes, no sobre la cantidad (ver merma_total abajo). Se conserva solo
+  // como dato informativo para las celdas visibles "con Merma" del PDF (ver
   // filaMerma en generarPdfOrdenProduccionPapel.ts). La celda "Cantidad"
-  // sigue mostrando `cantidad` sin merma. Todas null si la orden no tiene
+  // sigue mostrando `cantidad` sin merma. Null si la orden no tiene
   // snapshot (anteriores al sistema, o aún no congelada).
   cantidad_produccion?: number | null;
+  /** Merma congelada de la orden, en pliegos de máquina. Se suma a `cortes`. */
+  merma_total?: number | null;
+  /** cortes + merma_total, ya calculado por el backend. */
+  cortes_con_merma?: number | null;
+  /** pliegos_hojeado x hoj_rendimiento, tras subir los pliegos a entero. */
+  maquina_hojeado_calculada?: number | null;
+  /** pliegos_guillotina x rendimiento, tras subir los pliegos a entero. */
+  maquina_guillotina_calculada?: number | null;
   // PZS del suaje (alta de producto, sección Suaje) -- paso intermedio
-  // obligatorio antes de dividir entre rendimiento: cortes = cantidad con
-  // merma / piezas_suaje. Ver calcularCortes() en este mismo archivo.
+  // obligatorio antes de dividir entre rendimiento: cortes = cantidad
+  // pedida / piezas_suaje. Ver calcularCortes() en este mismo archivo.
   piezas_suaje?: number | null;
   cantidad_con_merma?: number | null;
   cantidad_hojeada_con_merma?: number | null;

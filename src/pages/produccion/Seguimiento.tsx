@@ -793,11 +793,13 @@ export default function Seguimiento() {
   const [filtroTipo, setFiltroTipo] = useState("todos");
   const [busqueda, setBusqueda] = useState("");
   const [pantallaCompleta, setPantallaCompleta] = useState(false);
-  // ── NUEVO: botón discreto para volver a ver órdenes ya finalizadas por
-  // completo (producción + envío + pago). Por defecto siguen ocultas —
-  // igual que antes — pero con esto activo no dependen de tener que
-  // escribir algo en el buscador para reaparecer.
-  const [mostrarFinalizados, setMostrarFinalizados] = useState(false);
+  // ── NUEVO: botón discreto que cambia a una vista EXCLUSIVA de órdenes ya
+  // finalizadas por completo (producción + envío + pago). Apagado (default):
+  // se ven las órdenes activas, igual que siempre. Encendido: la lista se
+  // reemplaza por solo las que ya se cerraron del todo — no es un "mostrar
+  // también", es un filtro aparte, para poder auditar/consultar lo ya
+  // cerrado sin que se mezcle con lo que sigue en curso.
+  const [soloFinalizados, setSoloFinalizados] = useState(false);
 
   const [modalProceso, setModalProceso] = useState<{ pedido: PedidoSeguimiento; nombreProceso: string } | null>(null);
   const [modalAnticipo, setModalAnticipo] = useState<{ venta: Venta; metodos: MetodoPago[] } | null>(null);
@@ -1068,13 +1070,21 @@ export default function Seguimiento() {
   //  - todos sus procesos aplicables (los que no son "no-aplica") están
   //    en "finalizado" — en papel se usa el único estado_resumen_papel
   //    que ya calcula el backend, porque ahí no hay columnas por proceso;
-  //  - el envío está "finalizado" (o "no-aplica" — OJO: para papel hoy
-  //    ese es el valor que SIEMPRE trae el backend, porque los bultos aún
-  //    no se ligan a sus procesos allá — ver nota en
-  //    seguimiento.controller.ts. Eso hace que una orden de papel se
-  //    pueda dar por "enviada" sin haberse enviado de verdad; hay que
-  //    corregirlo del lado del backend cuando se ligue bultos↔procesos
-  //    de papel, este filtro no lo puede distinguir);
+  //  - ✅ CORREGIDO: el envío tiene que estar realmente "finalizado". Antes
+  //    también se aceptaba "no-aplica", pero para papel ese es HOY el valor
+  //    que el backend manda SIEMPRE (los bultos aún no se ligan a procesos
+  //    de papel — ver nota en seguimiento.controller.ts), no un "de verdad
+  //    no aplica envío". Eso ocultaba órdenes de papel con bultos sin
+  //    siquiera registrar. Mientras el backend no pueda distinguir ambos
+  //    casos, una orden de papel simplemente no se oculta por este filtro
+  //    (evita el falso positivo; es preferible mostrar de más).
+  //    Plástico sigue tratando "no-aplica" como válido para el pedido que
+  //    genuinamente no requiere envío.
+  //  - ✅ CORREGIDO: si el producto tiene una orden de diseño (OD) creada,
+  //    esa OD tiene que estar aprobada Y con archivos subidos
+  //    (od_tiene_archivos) — "aprobado_sin_archivos" (aprobado
+  //    administrativamente pero sin ningún render/master/feedback subido
+  //    todavía) NO cuenta como terminado, aunque el badge diga "Aprobado".
   //  - ✅ NUEVO: el pedido ya está pagado por completo (saldo en 0). Antes
   //    esta función no revisaba el pago, así que un pedido con producción
   //    y envío terminados pero CON SALDO PENDIENTE desaparecía de
@@ -1101,7 +1111,20 @@ export default function Seguimiento() {
       if (!okOProcesoNoAplica(p.asa_flexible_estado)) return false;
     }
 
-    if (!okOProcesoNoAplica((p as any).estado_envio)) return false;
+    const estadoEnvio = (p as any).estado_envio;
+    if (esPapel) {
+      if (estadoEnvio !== "finalizado") return false;
+    } else {
+      if (!okOProcesoNoAplica(estadoEnvio)) return false;
+    }
+
+    const idOrdenDiseno = (p as any).idorden_diseno;
+    if (idOrdenDiseno != null) {
+      const odAprobada = (p as any).od_estado === "aprobado";
+      const odTieneArchivos = Boolean((p as any).od_tiene_archivos);
+      if (!odAprobada || !odTieneArchivos) return false;
+    }
+
     if (!estaPagadoPorCompleto(p)) return false;
 
     return true;
@@ -1126,7 +1149,13 @@ export default function Seguimiento() {
   const hayBusquedaActiva = busqueda.trim().length > 0;
 
   const pedidosFiltrados = pedidos
-    .filter(p => hayBusquedaActiva || mostrarFinalizados || !pedidosTerminadosPorCompleto.has(p.no_pedido))
+    // soloFinalizados es un filtro exclusivo: prendido, se descarta todo lo
+    // que NO esté ya terminado (aunque haya búsqueda activa); apagado, es
+    // el comportamiento de siempre — se esconde lo terminado salvo que se
+    // esté buscando algo puntual.
+    .filter(p => soloFinalizados
+      ? pedidosTerminadosPorCompleto.has(p.no_pedido)
+      : (hayBusquedaActiva || !pedidosTerminadosPorCompleto.has(p.no_pedido)))
     .filter(p => {
       const pasaTipo = filtroTipo === "todos"
         || norm(p.tipo_producto ?? "").includes(norm(filtroTipo));
@@ -1332,7 +1361,7 @@ export default function Seguimiento() {
               if (!ordenVigente) return;
               puedeExtrusion ? abrirProceso("extrusion") : setModalVerificacion({ pedido, proceso: "extrusion" });
             }} />
-          {extEstado === "finalizado" && <FechaCorta fecha={pedido.extrusion_fecha_estado} />}
+          {extEstado === "finalizado" && <FechaCorta fecha={pedido.extrusion_fecha_fin} />}
         </td>
 
         <td className={`${px} text-center`}>
@@ -1343,7 +1372,7 @@ export default function Seguimiento() {
               if (!ordenVigente) return;
               puedeImpresion ? abrirProceso("impresion") : setModalVerificacion({ pedido, proceso: "impresion" });
             }} />
-          {impEstado === "finalizado" && <FechaCorta fecha={pedido.impresion_fecha_estado} />}
+          {impEstado === "finalizado" && <FechaCorta fecha={pedido.impresion_fecha_fin} />}
         </td>
 
         <td className={`${px} text-center`}>
@@ -1354,7 +1383,7 @@ export default function Seguimiento() {
               if (!ordenVigente) return;
               puedeBolseo ? abrirProceso("bolseo") : setModalVerificacion({ pedido, proceso: "bolseo" });
             }} />
-          {bolEstado === "finalizado" && <FechaCorta fecha={pedido.bolseo_fecha_estado} />}
+          {bolEstado === "finalizado" && <FechaCorta fecha={pedido.bolseo_fecha_fin} />}
         </td>
 
         <td className={`${px} text-center`}>
@@ -1365,7 +1394,7 @@ export default function Seguimiento() {
               if (!ordenVigente) return;
               puedeAsaFlexible ? abrirProceso("asa_flexible") : setModalVerificacion({ pedido, proceso: "asa_flexible" });
             }} />
-          {asaEstado === "finalizado" && <FechaCorta fecha={pedido.asa_flexible_fecha_estado} />}
+          {asaEstado === "finalizado" && <FechaCorta fecha={pedido.asa_flexible_fecha_fin} />}
         </td>
 
         {PROCESOS_PAPEL.map(({ key }, idxPapel) => {
@@ -1707,33 +1736,30 @@ export default function Seguimiento() {
             </select>
           </div>
 
-          {/* ── NUEVO: botón discreto — sin este toggle, una orden ya
-              pagada+enviada solo reaparece si se busca por nombre/folio.
-              Aquí se puede volver a ver el listado completo con un click. */}
+          {/* ── NUEVO: botón discreto — filtro EXCLUSIVO, no un "mostrar
+              también". Apagado: vista normal (activas, se esconden las ya
+              cerradas). Encendido: la lista se reemplaza por solo las
+              órdenes ya finalizadas por completo (producción + envío +
+              pago) — para auditar lo cerrado sin que se mezcle con lo que
+              sigue en curso. */}
           <button
             type="button"
-            onClick={() => setMostrarFinalizados(prev => !prev)}
-            title={mostrarFinalizados
-              ? "Ocultar de nuevo las órdenes ya finalizadas por completo"
-              : "Mostrar también las órdenes ya finalizadas por completo (producción + envío + pago)"}
+            onClick={() => setSoloFinalizados(prev => !prev)}
+            title={soloFinalizados
+              ? "Volver a la vista normal (órdenes activas)"
+              : "Ver solo las órdenes ya finalizadas por completo (producción + envío + pago)"}
             className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium border transition-colors ${
-              mostrarFinalizados
-                ? "bg-gray-700 text-white border-gray-700 hover:bg-gray-800"
+              soloFinalizados
+                ? "bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700"
                 : "text-gray-400 border-transparent hover:text-gray-600 hover:bg-gray-100"
             }`}>
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              {mostrarFinalizados ? (
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                  d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-              ) : (
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                  d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.774 3.162 10.066 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" />
-              )}
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
             </svg>
-            {mostrarFinalizados ? "Viendo todas" : "Ver finalizadas"}
+            {soloFinalizados ? "Solo finalizadas" : "Ver finalizadas"}
           </button>
 
-          {(busqueda || filtroTipo !== "todos" || mostrarFinalizados) && (
+          {(busqueda || filtroTipo !== "todos" || soloFinalizados) && (
             <span className="text-sm text-gray-500 ml-auto">
               {pedidosFiltrados.length} resultado{pedidosFiltrados.length !== 1 ? "s" : ""}
             </span>

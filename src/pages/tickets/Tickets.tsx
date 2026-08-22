@@ -12,10 +12,16 @@ import {
   cambiarEstadoTicket,
   tomarTicket,
   comentarTicket,
+  asignarTicketA,
+  liberarTicket,
+  getUsuariosAsignables,
+  getEquipoActivo,
   type Ticket,
   type TicketDetalle,
   type EstadoTicket,
   type PrioridadTicket,
+  type UsuarioAsignable,
+  type EquipoActivoItem,
 } from "../../services/tickets/tickets.service";
 
 const PRIORIDADES: PrioridadTicket[] = ["Baja", "Media", "Alta", "Urgente"];
@@ -76,15 +82,30 @@ export default function Tickets() {
 
   const [mostrarForm, setMostrarForm] = useState(false);
   const [nuevo, setNuevo] = useState({
-    titulo: "", descripcion: "", ubicacion: "", prioridad: "Media" as PrioridadTicket, idticket_relacionado: "",
+    titulo: "", descripcion: "", ubicacion: "", prioridad: "Media" as PrioridadTicket, idticket_relacionado: "", es_personal: false,
   });
   const [archivosNuevo, setArchivosNuevo] = useState<File[]>([]);
   const [guardando, setGuardando] = useState(false);
+
+  // Fase 1: equipo activo (panel de devs con tickets En proceso) y usuarios
+  // a los que se puede asignar directo desde el drawer.
+  const [equipoActivo, setEquipoActivo] = useState<EquipoActivoItem[]>([]);
+  const [usuariosAsignables, setUsuariosAsignables] = useState<UsuarioAsignable[]>([]);
+  const [asignarA, setAsignarA] = useState("");
+  const [asignando, setAsignando] = useState(false);
+  const [liberando, setLiberando] = useState(false);
 
   const [comentarioDraft, setComentarioDraft] = useState("");
   const [comentarioInterno, setComentarioInterno] = useState(false);
   const [archivosComentario, setArchivosComentario] = useState<File[]>([]);
   const [enviandoComentario, setEnviandoComentario] = useState(false);
+
+  // Evita que arrastrar el mouse (ej. seleccionando texto) desde dentro del
+  // modal hacia afuera se interprete como un clic en el fondo y lo cierre.
+  // Solo cierra si el mousedown Y el click ocurrieron los dos directo sobre
+  // el fondo — no si el arrastre empezó adentro del contenido.
+  const [mouseDownEnFondoForm, setMouseDownEnFondoForm] = useState(false);
+  const [mouseDownEnFondoDrawer, setMouseDownEnFondoDrawer] = useState(false);
 
   const cargarLista = useCallback(async () => {
     setCargando(true);
@@ -106,6 +127,14 @@ export default function Tickets() {
   useEffect(() => {
     cargarLista();
   }, [cargarLista]);
+
+  // Panel de equipo + catálogo de a quién se puede asignar — solo aplica
+  // a Super Usuario, así que no se piden si el usuario es solo Admin.
+  useEffect(() => {
+    if (!esResolutor) return;
+    getEquipoActivo().then(setEquipoActivo).catch((e) => console.error("❌ Equipo activo:", e));
+    getUsuariosAsignables().then(setUsuariosAsignables).catch((e) => console.error("❌ Usuarios asignables:", e));
+  }, [esResolutor, tickets]);
 
   const refrescarDetalle = async (id: number) => {
     const data = await getTicketDetalle(id);
@@ -159,6 +188,7 @@ export default function Tickets() {
         ubicacion: nuevo.ubicacion || undefined,
         prioridad: nuevo.prioridad,
         idticket_relacionado: nuevo.idticket_relacionado ? Number(nuevo.idticket_relacionado) : undefined,
+        es_personal: nuevo.es_personal,
       });
 
       // El ticket ya existe — cerramos el modal de inmediato. No hacemos
@@ -166,7 +196,7 @@ export default function Tickets() {
       // una foto de cámara puede pesar varios MB y tardar bastante con
       // datos móviles; sentía que se quedaba "trabado" creando).
       const archivosPendientes = archivosNuevo;
-      setNuevo({ titulo: "", descripcion: "", ubicacion: "", prioridad: "Media", idticket_relacionado: "" });
+      setNuevo({ titulo: "", descripcion: "", ubicacion: "", prioridad: "Media", idticket_relacionado: "", es_personal: false });
       setArchivosNuevo([]);
       setMostrarForm(false);
       await cargarLista();
@@ -210,6 +240,36 @@ export default function Tickets() {
       if (drawerId === id) await refrescarDetalle(id);
     } catch (e: any) {
       showAlert(e.response?.data?.error || "Ya lo tomó alguien más", "error");
+    }
+  };
+
+  const handleAsignarA = async (id: number) => {
+    if (!asignarA) return;
+    setAsignando(true);
+    try {
+      await asignarTicketA(id, Number(asignarA));
+      setAsignarA("");
+      await cargarLista();
+      if (drawerId === id) await refrescarDetalle(id);
+      showAlert("Ticket asignado", "success");
+    } catch (e: any) {
+      showAlert(e.response?.data?.error || "No se pudo asignar", "error");
+    } finally {
+      setAsignando(false);
+    }
+  };
+
+  const handleLiberar = async (id: number) => {
+    setLiberando(true);
+    try {
+      await liberarTicket(id);
+      await cargarLista();
+      if (drawerId === id) await refrescarDetalle(id);
+      showAlert("Ticket liberado — cualquier dev lo puede tomar ahora", "success");
+    } catch (e: any) {
+      showAlert(e.response?.data?.error || "No se pudo liberar", "error");
+    } finally {
+      setLiberando(false);
     }
   };
 
@@ -297,7 +357,7 @@ export default function Tickets() {
           </div>
         )}
 
-        {/* ── Tablero kanban ─────────────────────────────────────────── */}
+        {/* ── Tablero kanban + equipo activo ───────────────────────────── */}
         {cargando ? (
           <p className="text-sm text-slate-400 italic">Cargando tickets...</p>
         ) : tickets.length === 0 ? (
@@ -305,62 +365,122 @@ export default function Tickets() {
             <p className="text-sm text-slate-400">No hay tickets por aquí. 🎉</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-            {COLUMNAS.map((col) => {
-              const items = tickets.filter((t) => t.estado === col.estado);
-              return (
-                <div key={col.estado} className="flex flex-col min-w-0">
-                  <div className="flex items-center gap-2 mb-3 px-1">
-                    <span className={`w-2.5 h-2.5 rounded-full ${col.dot}`} />
-                    <h2 className="text-sm font-bold text-slate-700">{col.label}</h2>
-                    <span className="ml-auto text-xs font-semibold text-slate-400 bg-slate-100 rounded-full px-2 py-0.5">
-                      {items.length}
-                    </span>
+          <div className="flex flex-col xl:flex-row gap-4 items-start">
+            {/* Pendiente y En proceso ocupan el doble de ancho que
+                Finalizado y Cancelado — ya no compiten por espacio con
+                columnas que en la práctica casi nadie revisa a diario. */}
+            <div className="flex-1 min-w-0 w-full grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-[2fr_2fr_1fr_1fr] gap-4">
+              {COLUMNAS.map((col) => {
+                const items = tickets.filter((t) => t.estado === col.estado);
+                return (
+                  <div key={col.estado} className="flex flex-col min-w-0">
+                    <div className="flex items-center gap-2 mb-3 px-1">
+                      <span className={`w-2.5 h-2.5 rounded-full ${col.dot}`} />
+                      <h2 className="text-sm font-bold text-slate-700">{col.label}</h2>
+                      <span className="ml-auto text-xs font-semibold text-slate-400 bg-slate-100 rounded-full px-2 py-0.5">
+                        {items.length}
+                      </span>
+                    </div>
+                    <div className={`flex-1 space-y-2.5 rounded-2xl border-t-4 ${col.header} bg-slate-50/60 p-2.5 min-h-[120px]`}>
+                      {items.length === 0 && (
+                        <p className="text-xs text-slate-300 italic px-2 py-4 text-center">vacío</p>
+                      )}
+                      {items.map((t) => (
+                        <button
+                          key={t.idticket}
+                          onClick={() => abrirTicket(t.idticket)}
+                          className={`w-full text-left bg-white border-l-4 ${BARRA_PRIORIDAD[t.prioridad]} border border-slate-200 rounded-xl px-3 py-2.5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all`}
+                        >
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-[10px] font-mono text-slate-400">{t.folio}</span>
+                            <div className="flex items-center gap-1">
+                              {t.es_personal && (
+                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-purple-100 text-purple-700">
+                                  🔒 Personal
+                                </span>
+                              )}
+                              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${PILDORA_PRIORIDAD[t.prioridad]}`}>
+                                {t.prioridad}
+                              </span>
+                            </div>
+                          </div>
+                          <p className="text-sm font-semibold text-slate-800 leading-snug line-clamp-2">{t.titulo}</p>
+                          <div className="flex items-center justify-between mt-2">
+                            {t.asignado_nombre ? (
+                              <span
+                                title={`${t.asignado_nombre} ${t.asignado_apellido ?? ""}`}
+                                className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 text-[10px] font-bold flex items-center justify-center"
+                              >
+                                {iniciales(t.asignado_nombre, t.asignado_apellido)}
+                              </span>
+                            ) : esResolutor && t.estado !== "Finalizado" && t.estado !== "Cancelado" ? (
+                              <span className="text-[10px] font-semibold text-blue-600">Sin tomar</span>
+                            ) : (
+                              <span />
+                            )}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                  <div className={`flex-1 space-y-2.5 rounded-2xl border-t-4 ${col.header} bg-slate-50/60 p-2.5 min-h-[120px]`}>
-                    {items.length === 0 && (
-                      <p className="text-xs text-slate-300 italic px-2 py-4 text-center">vacío</p>
-                    )}
-                    {items.map((t) => (
-                      <button
-                        key={t.idticket}
-                        onClick={() => abrirTicket(t.idticket)}
-                        className={`w-full text-left bg-white border-l-4 ${BARRA_PRIORIDAD[t.prioridad]} border border-slate-200 rounded-xl px-3 py-2.5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all`}
-                      >
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="text-[10px] font-mono text-slate-400">{t.folio}</span>
-                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${PILDORA_PRIORIDAD[t.prioridad]}`}>
-                            {t.prioridad}
+                );
+              })}
+            </div>
+
+            {/* Panel de equipo activo — solo Super Usuario, y solo si hay
+                alguien con algo En proceso. Si el único dev que anda con
+                tickets asignados no tiene nada activo, el panel ni aparece. */}
+            {esResolutor && equipoActivo.length > 0 && (
+              <div className="w-full xl:w-72 flex-shrink-0 bg-white border border-slate-200 rounded-2xl p-3.5">
+                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-3 px-0.5">
+                  Equipo activo
+                </h3>
+                <div className="space-y-4">
+                  {equipoActivo.map((dev) => (
+                    <div key={dev.idusuario}>
+                      <div className="flex items-center gap-2 mb-1.5">
+                        {dev.foto_url ? (
+                          <img src={dev.foto_url} alt={dev.nombre} className="w-8 h-8 rounded-full object-cover" />
+                        ) : (
+                          <span className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold flex items-center justify-center">
+                            {iniciales(dev.nombre, dev.apellido)}
                           </span>
+                        )}
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-slate-700 truncate">{dev.nombre} {dev.apellido}</p>
+                          <p className="text-[10px] text-slate-400">{dev.tickets.length} en proceso</p>
                         </div>
-                        <p className="text-sm font-semibold text-slate-800 leading-snug line-clamp-2">{t.titulo}</p>
-                        <div className="flex items-center justify-between mt-2">
-                          {t.asignado_nombre ? (
-                            <span
-                              title={`${t.asignado_nombre} ${t.asignado_apellido ?? ""}`}
-                              className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 text-[10px] font-bold flex items-center justify-center"
-                            >
-                              {iniciales(t.asignado_nombre, t.asignado_apellido)}
-                            </span>
-                          ) : esResolutor && t.estado !== "Finalizado" && t.estado !== "Cancelado" ? (
-                            <span className="text-[10px] font-semibold text-blue-600">Sin tomar</span>
-                          ) : (
-                            <span />
-                          )}
-                        </div>
-                      </button>
-                    ))}
-                  </div>
+                      </div>
+                      <div className="space-y-1 pl-10">
+                        {dev.tickets.map((t) => (
+                          <button
+                            key={t.idticket}
+                            onClick={() => abrirTicket(t.idticket)}
+                            className="w-full text-left text-xs text-slate-500 hover:text-blue-600 truncate"
+                            title={t.titulo}
+                          >
+                            · {t.titulo}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              );
-            })}
+              </div>
+            )}
           </div>
         )}
       </div>
 
       {/* ── Modal: nuevo ticket ─────────────────────────────────────── */}
       {mostrarForm && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/40 backdrop-blur-[2px] p-4" onClick={() => setMostrarForm(false)}>
+        <div
+          className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/40 backdrop-blur-[2px] p-4"
+          onMouseDown={(e) => setMouseDownEnFondoForm(e.target === e.currentTarget)}
+          onClick={(e) => {
+            if (mouseDownEnFondoForm && e.target === e.currentTarget) setMostrarForm(false);
+          }}
+        >
           <div
             className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
@@ -414,6 +534,15 @@ export default function Tickets() {
                   </select>
                 )}
               </div>
+
+              <label className="flex items-center gap-2 text-sm text-slate-600 bg-purple-50 border border-purple-200 rounded-lg px-3 py-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={nuevo.es_personal}
+                  onChange={(e) => setNuevo({ ...nuevo, es_personal: e.target.checked })}
+                />
+                🔒 Ticket personal — se autoasigna a mí, nadie más lo ve como pendiente
+              </label>
 
               <div className="space-y-2">
                 <label className="inline-flex items-center gap-2 text-sm font-semibold text-blue-600 border border-blue-200 bg-blue-50 hover:bg-blue-100 px-3 py-2 rounded-lg cursor-pointer transition-colors">
@@ -469,7 +598,13 @@ export default function Tickets() {
       {/* ── Drawer: detalle del ticket ──────────────────────────────── */}
       {drawerId !== null && (
         <div className="fixed inset-0 z-40 flex justify-end">
-          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-[2px]" onClick={cerrarDrawer} />
+          <div
+            className="absolute inset-0 bg-slate-900/40 backdrop-blur-[2px]"
+            onMouseDown={(e) => setMouseDownEnFondoDrawer(e.target === e.currentTarget)}
+            onClick={(e) => {
+              if (mouseDownEnFondoDrawer && e.target === e.currentTarget) cerrarDrawer();
+            }}
+          />
           <div className="relative w-full max-w-md h-full bg-white shadow-2xl overflow-y-auto animate-[slideIn_.2s_ease-out]">
             <style>{`@keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }`}</style>
 
@@ -496,6 +631,11 @@ export default function Tickets() {
                       <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${PILDORA_PRIORIDAD[detalle.prioridad]}`}>
                         {detalle.prioridad}
                       </span>
+                      {detalle.es_personal && (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-100 text-purple-700">
+                          🔒 Personal
+                        </span>
+                      )}
                     </div>
                   </div>
                   <button onClick={cerrarDrawer} className="text-slate-400 hover:text-slate-600 text-2xl leading-none flex-shrink-0">×</button>
@@ -542,7 +682,7 @@ export default function Tickets() {
                 </div>
 
                 {esResolutor && (
-                  <div className="px-5 py-3.5 border-b border-slate-100 bg-slate-50">
+                  <div className="px-5 py-3.5 border-b border-slate-100 bg-slate-50 space-y-2.5">
                     {detalle.asignado_a === user?.id ? (
                       <div className="flex flex-wrap gap-1.5">
                         {COLUMNAS.map((c) => (
@@ -574,8 +714,55 @@ export default function Tickets() {
                         </button>
                       </div>
                     )}
+
+                    {/* Asignación directa a cualquiera con acceso al módulo —
+                        siempre disponible para el resolutor, tome o no el
+                        ticket ya alguien. Sirve para reasignar también. */}
+                    {!["Finalizado", "Cancelado"].includes(detalle.estado) && usuariosAsignables.length > 0 && (
+                      <div className="flex items-center gap-1.5">
+                        <select
+                          value={asignarA}
+                          onChange={(e) => setAsignarA(e.target.value)}
+                          className="flex-1 text-xs px-2 py-1.5 rounded-lg border border-slate-200 bg-white"
+                        >
+                          <option value="">Asignar directo a...</option>
+                          {usuariosAsignables
+                            .filter((u) => u.idusuario !== detalle.asignado_a)
+                            .map((u) => (
+                              <option key={u.idusuario} value={u.idusuario}>
+                                {u.nombre} {u.apellido} · {u.rol}
+                              </option>
+                            ))}
+                        </select>
+                        <button
+                          onClick={() => handleAsignarA(detalle.idticket)}
+                          disabled={!asignarA || asignando}
+                          className="text-xs px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded-lg font-semibold disabled:opacity-40"
+                        >
+                          {asignando ? "..." : "Asignar"}
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
+
+                {/* Liberar: convierte un ticket personal en uno normal
+                    disponible para cualquier dev. Lo puede hacer el dueño
+                    del pendiente o cualquier resolutor. */}
+                {detalle.es_personal &&
+                  !["Finalizado", "Cancelado"].includes(detalle.estado) &&
+                  (detalle.creado_por === user?.id || esResolutor) && (
+                    <div className="px-5 py-3 border-b border-slate-100 bg-purple-50 flex items-center justify-between gap-2">
+                      <span className="text-xs text-purple-700">🔒 Este es un ticket personal</span>
+                      <button
+                        onClick={() => handleLiberar(detalle.idticket)}
+                        disabled={liberando}
+                        className="text-xs px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-semibold disabled:opacity-50"
+                      >
+                        {liberando ? "..." : "Liberar como normal"}
+                      </button>
+                    </div>
+                  )}
 
                 <div className="px-5 py-4 space-y-2.5">
                   {detalle.comentarios.length === 0 && (

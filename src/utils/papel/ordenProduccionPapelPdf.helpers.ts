@@ -207,6 +207,10 @@ export function ultimaMedidaCm(...values: unknown[]): number | null {
   return null;
 }
 
+// CORREGIDO (2026-08-21): los pliegos se redondean SIEMPRE hacia arriba.
+// Un pliego es una hoja física — no existe medio pliego — y cualquier
+// decimal sube al entero siguiente (1.1 pliegos son 2). Espejo de
+// seguimiento.controller.ts::calcularPliegosPorRendimiento.
 export function calcularCantidadHojeada(
   cantidad: unknown,
   rendimiento: unknown
@@ -216,7 +220,31 @@ export function calcularCantidadHojeada(
   if (cantidadNum === null || rendimientoNum === null || rendimientoNum <= 0) {
     return null;
   }
-  return redondear(cantidadNum / rendimientoNum);
+  return Math.ceil(cantidadNum / rendimientoNum);
+}
+
+// La merma se suma sobre los CORTES ya convertidos, no sobre la cantidad
+// pedida — ver la nota de R1 en merma.service.ts (backend) para el porqué.
+export function sumarMermaACortes(
+  cortes: unknown,
+  mermaTotal: unknown
+): number | null {
+  const cortesNum = n(cortes);
+  if (cortesNum === null) return null;
+  return redondear(cortesNum + (n(mermaTotal) ?? 0));
+}
+
+// Máquina real tras subir los pliegos a entero: pliegos x rendimiento.
+export function calcularMaquinaDesdePliegos(
+  pliegos: unknown,
+  rendimiento: unknown
+): number | null {
+  const pliegosNum = n(pliegos);
+  const rendimientoNum = n(rendimiento);
+  if (pliegosNum === null || rendimientoNum === null || rendimientoNum <= 0) {
+    return null;
+  }
+  return redondear(pliegosNum * rendimientoNum);
 }
 
 // Paso intermedio confirmado por Jose (2026-08-13): cantidad con merma /
@@ -455,26 +483,29 @@ export function refuerzoTexto(data: OrdenProduccionPapelData): string {
 }
 
 export function getValoresCalculadosPapel(data: OrdenProduccionPapelData): Partial<OrdenProduccionPapelData> {
-  // cantidad_produccion (pedido + merma congelada, calculado por el backend
-  // en getSeguimiento/getOrdenProduccion vía getCantidadesAProducirBatch)
-  // es la base real para cortar material -- incluye el margen de merma sin
-  // tocar la cantidad pedida. Si la orden no tiene snapshot de merma
-  // todavía, cae a `data.cantidad` tal cual (comportamiento previo al
-  // sistema de merma). La celda "Cantidad" del PDF sigue mostrando
-  // `data.cantidad` sin modificar -- solo los cálculos internos de pliegos
-  // usan esta base.
+  // CORREGIDO (2026-08-21): la merma NO infla la cantidad antes de dividir.
+  // La cadena correcta (validada por Jose en "papel formula.xlsx") es:
+  //   cortes = cantidad_pedida / piezas_suaje   <- sin merma
+  //   cortes + merma_total                      <- la merma entra aquí
+  //   pliegos = techo(... / rendimiento)
+  // `cantidad_produccion` (pedido + merma) se sigue recibiendo, pero ya solo
+  // como dato informativo para la celda "con merma" del PDF.
   const cantidadProduccion = n(data.cantidad_produccion);
-  const cantidadParaProduccion = cantidadProduccion ?? n(data.cantidad);
+  const cantidadPedida = n(data.cantidad) ?? cantidadProduccion;
+  const mermaTotal = n((data as any).merma_total) ?? 0;
 
   // Cortes: paso intermedio obligatorio antes de dividir entre rendimiento
-  // -- cantidad con merma / PZS del suaje. Sin esto, cualquier producto con
-  // PZS distinto de 1 salía con hojeado/pliegos mal (ver calcularCortes).
-  const cortes = calcularCortes(cantidadParaProduccion, data.piezas_suaje);
-  const corteBase = cortes ?? cantidadParaProduccion;
+  // -- cantidad / PZS del suaje. Sin esto, cualquier producto con PZS
+  // distinto de 1 salía con hojeado/pliegos mal (ver calcularCortes).
+  const cortes = calcularCortes(cantidadPedida, data.piezas_suaje);
+  const corteBase = cortes ?? cantidadPedida;
+  const cortesConMerma =
+    n((data as any).cortes_con_merma) ?? sumarMermaACortes(corteBase, mermaTotal);
+  const baseParaPliegos = cortesConMerma ?? corteBase;
 
   // Pliegos/bolsas se calculan con el rendimiento de HOJEADO (cómo se tiene
   // que cortar el material), no con el rendimiento general del material.
-  const pliegosCalculado = calcularCantidadHojeada(corteBase, data.hoj_rendimiento);
+  const pliegosCalculado = calcularCantidadHojeada(baseParaPliegos, data.hoj_rendimiento);
   const pliegos = pliegosCalculado ?? n(data.pliegos_impresion_estimados);
 
   // CORREGIDO: `pliegos_guillotina` estaba declarado en el tipo pero nunca
@@ -483,7 +514,7 @@ export function getValoresCalculadosPapel(data: OrdenProduccionPapelData): Parti
   // real ya capturado) o quedaba en blanco/mal, nunca un estimado. Usa el
   // rendimiento GENÉRICO (el de Guillotina), no hoj_rendimiento -- son dos
   // rendimientos distintos, no intercambiables.
-  const pliegosGuillotinaCalculado = calcularCantidadHojeada(corteBase, data.rendimiento);
+  const pliegosGuillotinaCalculado = calcularCantidadHojeada(baseParaPliegos, data.rendimiento);
 
 
   // El backend ya resuelve desarrollo_laminacion_mm priorizando el valor

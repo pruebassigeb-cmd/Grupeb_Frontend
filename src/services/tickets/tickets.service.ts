@@ -42,6 +42,23 @@ export interface Ticket {
   archivado_en: string | null;
   fecha_cierre: string | null;
   created_at: string;
+  es_personal: boolean;
+}
+
+export interface UsuarioAsignable {
+  idusuario: number;
+  nombre: string;
+  apellido: string;
+  rol: string;
+  foto_url: string | null;
+}
+
+export interface EquipoActivoItem {
+  idusuario: number;
+  nombre: string;
+  apellido: string;
+  foto_url: string | null;
+  tickets: { idticket: number; folio: string; titulo: string; prioridad: PrioridadTicket }[];
 }
 
 export interface TicketDetalle extends Ticket {
@@ -55,10 +72,31 @@ export interface CrearTicketPayload {
   ubicacion?: string;
   prioridad?: PrioridadTicket;
   idticket_relacionado?: number;
+  es_personal?: boolean;
 }
 
 export const crearTicket = async (payload: CrearTicketPayload): Promise<Ticket> => {
   const { data } = await api.post<Ticket>('/tickets', payload);
+  return data;
+};
+
+export const getUsuariosAsignables = async (): Promise<UsuarioAsignable[]> => {
+  const { data } = await api.get<UsuarioAsignable[]>('/tickets/usuarios-asignables');
+  return data;
+};
+
+export const asignarTicketA = async (id: number, usuario_id: number): Promise<Ticket> => {
+  const { data } = await api.patch<Ticket>(`/tickets/${id}/asignar`, { usuario_id });
+  return data;
+};
+
+export const liberarTicket = async (id: number): Promise<Ticket> => {
+  const { data } = await api.post<Ticket>(`/tickets/${id}/liberar`);
+  return data;
+};
+
+export const getEquipoActivo = async (): Promise<EquipoActivoItem[]> => {
+  const { data } = await api.get<EquipoActivoItem[]>('/tickets/equipo-activo');
   return data;
 };
 

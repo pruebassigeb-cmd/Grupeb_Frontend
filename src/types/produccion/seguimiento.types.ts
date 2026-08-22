@@ -42,6 +42,14 @@ export interface PedidoSeguimientoBase {
   bolseo_fecha_estado: string | null;
   asa_flexible_fecha_estado: string | null;
 
+  /** Fecha real en que terminó cada proceso — a diferencia de *_fecha_estado
+   *  (que se pone en null al finalizar; solo mide antigüedad mientras está
+   *  pendiente/en proceso), esta sí sirve para mostrar bajo el badge. */
+  extrusion_fecha_fin: string | null;
+  impresion_fecha_fin: string | null;
+  bolseo_fecha_fin: string | null;
+  asa_flexible_fecha_fin: string | null;
+
   anticipo_fecha_estado: string | null;
   pago_fecha_estado: string | null;
   diseno_fecha_estado: string | null;
@@ -91,6 +99,7 @@ export interface PedidoSeguimientoBase {
   fecha_entrega?: string | null;
   idorden_diseno?: number | null;
   od_estado?: string | null;
+  od_tiene_archivos?: boolean;
   es_parcialidad?: boolean;
 
   // Metas/merma de producción — se leen en ModalProcesoIndividual.tsx sin
