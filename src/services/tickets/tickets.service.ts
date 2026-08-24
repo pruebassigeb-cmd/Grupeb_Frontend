@@ -36,6 +36,7 @@ export interface Ticket {
   asignado_a: number | null;
   asignado_nombre?: string;
   asignado_apellido?: string;
+  asignado_foto_url?: string | null;
   idticket_relacionado: number | null;
   relacionado_folio?: string;
   archivado: boolean;
@@ -43,6 +44,13 @@ export interface Ticket {
   fecha_cierre: string | null;
   created_at: string;
   es_personal: boolean;
+  rebotado: boolean;
+  motivo_rebote: string | null;
+  rebotado_en: string | null;
+  tomado_en: string | null;
+  duracion_estimada_horas: number | null;
+  fecha_compromiso: string | null;
+  tiempo_real_horas: number | null;
 }
 
 export interface UsuarioAsignable {
@@ -58,7 +66,14 @@ export interface EquipoActivoItem {
   nombre: string;
   apellido: string;
   foto_url: string | null;
-  tickets: { idticket: number; folio: string; titulo: string; prioridad: PrioridadTicket }[];
+  tickets: {
+    idticket: number;
+    folio: string;
+    titulo: string;
+    prioridad: PrioridadTicket;
+    estado: EstadoTicket;
+    rebotado: boolean;
+  }[];
 }
 
 export interface TicketDetalle extends Ticket {
@@ -95,6 +110,16 @@ export const liberarTicket = async (id: number): Promise<Ticket> => {
   return data;
 };
 
+export const cambiarPrioridadTicket = async (id: number, prioridad: PrioridadTicket): Promise<Ticket> => {
+  const { data } = await api.patch<Ticket>(`/tickets/${id}/prioridad`, { prioridad });
+  return data;
+};
+
+export const rebotarTicket = async (id: number, motivo?: string, asignar_a?: number): Promise<Ticket> => {
+  const { data } = await api.post<Ticket>(`/tickets/${id}/rebotar`, { motivo, asignar_a });
+  return data;
+};
+
 export const getEquipoActivo = async (): Promise<EquipoActivoItem[]> => {
   const { data } = await api.get<EquipoActivoItem[]>('/tickets/equipo-activo');
   return data;
@@ -124,13 +149,23 @@ export const getContadorTickets = async (): Promise<number> => {
   return data.activos;
 };
 
+export interface NotificacionesTickets {
+  porTicket: Record<number, boolean>;
+  total: number;
+}
+
+export const getNotificacionesTickets = async (): Promise<NotificacionesTickets> => {
+  const { data } = await api.get<NotificacionesTickets>('/tickets/notificaciones');
+  return data;
+};
+
 export const cambiarEstadoTicket = async (id: number, estado: EstadoTicket): Promise<Ticket> => {
   const { data } = await api.patch<Ticket>(`/tickets/${id}/estado`, { estado });
   return data;
 };
 
-export const tomarTicket = async (id: number): Promise<Ticket> => {
-  const { data } = await api.post<Ticket>(`/tickets/${id}/tomar`);
+export const tomarTicket = async (id: number, duracion?: { dias_habiles?: number; horas_habiles?: number }): Promise<Ticket> => {
+  const { data } = await api.post<Ticket>(`/tickets/${id}/tomar`, duracion ?? {});
   return data;
 };
 

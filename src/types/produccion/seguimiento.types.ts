@@ -221,6 +221,8 @@ export interface PedidoSeguimientoPapel extends PedidoSeguimientoBase {
   ctes_mod_laminacion?: string | null;
   metros_laminacion_estimados?: number | null;
   rollos_laminacion_estimados?: number | null;
+  metros_laminacion_sin_merma?: number | null;
+  rollos_laminacion_sin_merma?: number | null;
 
   tipo_pegue?: string | null;
   tipo_pegado?: string | null;

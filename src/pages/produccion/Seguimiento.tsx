@@ -741,8 +741,14 @@ function ModalCuentasPorCobrar({
     <div className="overflow-x-auto max-h-[70vh]">
       <table className="min-w-full divide-y divide-gray-200 text-sm">
         <thead className="bg-gray-50 sticky top-0">
+            {/* ── NUEVO: columna "Estado de cuenta" — antes había que salir de
+                este modal e ir a buscar el pedido en la tabla principal solo
+                para descargar su PDF. Reutiliza BotonEstadoCuentaPdf; todo lo
+                que aparece en Cuentas por Cobrar ya tiene un estado de cuenta
+                vigente generado (es el requisito para entrar a esta lista),
+                así que generado siempre va en true aquí. */}
           <tr>
-            {["Pedido", "Cliente", "Generado", "Vencido", "Total real", "Saldo", ""].map(h => (
+            {["Pedido", "Cliente", "Generado", "Vencido", "Total real", "Saldo", "Estado de cuenta", ""].map(h => (
               <th key={h} className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{h}</th>
             ))}
           </tr>
@@ -761,6 +767,13 @@ function ModalCuentasPorCobrar({
               </td>
               <td className="px-3 py-2 font-semibold text-red-600 whitespace-nowrap">
                 ${Number(c.saldo).toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+              </td>
+              <td className="px-3 py-2">
+                <BotonEstadoCuentaPdf
+                  noPedido={c.no_pedido}
+                  generado={true}
+                  fechaGeneracion={c.fecha_generacion}
+                />
               </td>
               <td className="px-3 py-2">
                 <button
@@ -1071,15 +1084,16 @@ export default function Seguimiento() {
   //    en "finalizado" — en papel se usa el único estado_resumen_papel
   //    que ya calcula el backend, porque ahí no hay columnas por proceso;
   //  - ✅ CORREGIDO: el envío tiene que estar realmente "finalizado". Antes
-  //    también se aceptaba "no-aplica", pero para papel ese es HOY el valor
-  //    que el backend manda SIEMPRE (los bultos aún no se ligan a procesos
-  //    de papel — ver nota en seguimiento.controller.ts), no un "de verdad
-  //    no aplica envío". Eso ocultaba órdenes de papel con bultos sin
-  //    siquiera registrar. Mientras el backend no pueda distinguir ambos
-  //    casos, una orden de papel simplemente no se oculta por este filtro
-  //    (evita el falso positivo; es preferible mostrar de más).
-  //    Plástico sigue tratando "no-aplica" como válido para el pedido que
-  //    genuinamente no requiere envío.
+  //    también se aceptaba "no-aplica", pero para papel ese era HOY el valor
+  //    que el backend mandaba SIEMPRE, porque la query de seguimiento nunca
+  //    revisaba bultos.empaque_papel_idempaque_papel — 2026-08-25: esa parte
+  //    ya se corrigió en seguimiento.controller.ts (ahora sí cuenta las
+  //    "cajas" ligadas al proceso de Empaque papel), pero sigue pendiente
+  //    del lado de escritura que ese proceso realmente genere bultos, así
+  //    que se deja este filtro estricto por ahora — en cuanto el backend
+  //    reporte "finalizado" de verdad, este chequeo ya lo toma tal cual sin
+  //    tocar nada más aquí. Plástico sigue tratando "no-aplica" como válido
+  //    para el pedido que genuinamente no requiere envío.
   //  - ✅ CORREGIDO: si el producto tiene una orden de diseño (OD) creada,
   //    esa OD tiene que estar aprobada Y con archivos subidos
   //    (od_tiene_archivos) — "aprobado_sin_archivos" (aprobado

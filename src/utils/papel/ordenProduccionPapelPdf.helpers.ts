@@ -296,6 +296,19 @@ export function calcularCtesMod(...medidas: unknown[]): string | null {
   return `${redondear((largoCm - 0.5) * 0.3937)}"`;
 }
 
+// CORREGIDO (2026-08-24, confirmado por Jose): CTES/Mod sale del MISMO
+// desarrollo con el que se cobra el costo de laminado
+// (acabados_papel.desarrollo_laminado), no del largo del pliego. Es la medida
+// de la pieza que ve la película, igual que en los metros: con el pliego de
+// OP26021 daba 49.02" cuando la pieza real de 24.7 cm son 9.53".
+// Como recibe el desarrollo ya resuelto, respeta solo el valor capturado y
+// también el `desarrollo_base` = bobina, sin tener que repetir esa decisión.
+export function calcularCtesModDesdeDesarrollo(desarrolloMm: unknown): string | null {
+  const desarrolloNum = n(desarrolloMm);
+  if (desarrolloNum === null || desarrolloNum <= 0) return null;
+  return `${redondear((desarrolloNum / 10 - 0.5) * 0.3937)}"`;
+}
+
 export function calcularCtesModPorBase(data: OrdenProduccionPapelData): string | null {
   const base = f((data as any).desarrollo_base).toLowerCase();
 
@@ -527,9 +540,28 @@ export function getValoresCalculadosPapel(data: OrdenProduccionPapelData): Parti
     n(data.desarrollo_mm) ??
     calcularDesarrolloMmPorBase(data);
 
+  // CORREGIDO (2026-08-24, observación de cliente en OP26021): los metros se
+  // multiplicaban por `pliegos`, dejándolos divididos entre el rendimiento —
+  // 248 mts donde debían ser 1,739. El desarrollo es el avance de UNA pieza,
+  // no del pliego: la guillotina ya partió el pliego 71x125 en cortes de
+  // 24.75x45 y la bobina de laminación mide justo 45 cm, el lado ancho de
+  // esa pieza. De la guillotina para abajo (impresión incluida) la máquina
+  // corre piezas, así que el conteo que multiplica al desarrollo tiene que
+  // ser de piezas: pliegos ya enteros x rendimiento.
+  const piezasLaminacion =
+    calcularMaquinaDesdePliegos(pliegosGuillotinaCalculado, data.rendimiento) ?? pliegos;
+
   const metros =
-    calcularMetrosLaminacion(pliegos, desarrollo) ??
+    calcularMetrosLaminacion(piezasLaminacion, desarrollo) ??
     n(data.metros_laminacion_estimados);
+
+  // Referencia informativa: consumo teórico del pedido, sin merma y sin el
+  // redondeo del pliego a entero. Es el número con el que el cliente compara
+  // (1,680 mts en OP26021). Va aparte y NUNCA sustituye a `metros`, que es lo
+  // que de verdad hay que surtir para producir la orden completa.
+  const metrosSinMerma =
+    calcularMetrosLaminacion(corteBase, desarrollo) ??
+    n(data.metros_laminacion_sin_merma);
 
   // Celdas explícitas "con Merma" para el PDF: mismos valores que ya
   // absorbieron el margen arriba (cantidadParaProduccion), pero expuestos
@@ -546,12 +578,16 @@ export function getValoresCalculadosPapel(data: OrdenProduccionPapelData): Parti
     desarrollo_laminacion_mm: desarrollo,
     desarrollo_mm: n(data.desarrollo_mm) ?? desarrollo,
     ctes_mod_laminacion:
+      calcularCtesModDesdeDesarrollo(desarrollo) ??
       calcularCtesModPorBase(data) ??
       data.ctes_mod_laminacion ??
       data.ctes_mod,
     metros_laminacion_estimados: metros,
     rollos_laminacion_estimados:
       calcularRollosLaminacion(metros) ?? n(data.rollos_laminacion_estimados),
+    metros_laminacion_sin_merma: metrosSinMerma,
+    rollos_laminacion_sin_merma:
+      calcularRollosLaminacion(metrosSinMerma) ?? n(data.rollos_laminacion_sin_merma),
     bolsas_armadas_calculadas:
       n(data.bolsas_armadas_calculadas) ?? calcularBolsasArmadas(pliegos, data.hoj_rendimiento),
     bobina_laminacion_cm:

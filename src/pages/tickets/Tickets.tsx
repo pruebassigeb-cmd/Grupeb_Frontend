@@ -6,16 +6,18 @@ import { subirArchivo } from "../../services/archivos/archivos.service";
 import { showAlert } from "../../components/CustomAlert";
 import {
   crearTicket,
-  getMisTickets,
   getTickets,
   getTicketDetalle,
   cambiarEstadoTicket,
+  cambiarPrioridadTicket,
   tomarTicket,
   comentarTicket,
   asignarTicketA,
   liberarTicket,
+  rebotarTicket,
   getUsuariosAsignables,
   getEquipoActivo,
+  getNotificacionesTickets,
   type Ticket,
   type TicketDetalle,
   type EstadoTicket,
@@ -26,6 +28,10 @@ import {
 
 const PRIORIDADES: PrioridadTicket[] = ["Baja", "Media", "Alta", "Urgente"];
 
+// Urgente siempre arriba, Baja siempre abajo — mismo orden en todas las
+// columnas del tablero.
+const RANGO_PRIORIDAD: Record<PrioridadTicket, number> = { Urgente: 0, Alta: 1, Media: 2, Baja: 3 };
+
 // ── Columnas del tablero ──────────────────────────────────────────────────
 // El orden importa: así se recorre el flujo natural de un ticket de
 // izquierda a derecha. El "dot" es el mismo color que usa la barra
@@ -35,6 +41,27 @@ const COLUMNAS: { estado: EstadoTicket; label: string; dot: string; header: stri
   { estado: "En proceso", label: "En proceso", dot: "bg-blue-600", header: "border-t-blue-600" },
   { estado: "Finalizado", label: "Finalizado", dot: "bg-emerald-500", header: "border-t-emerald-500" },
   { estado: "Cancelado", label: "Cancelado", dot: "bg-red-500", header: "border-t-red-500" },
+];
+
+// Columnas del TABLERO — distinto de COLUMNAS de arriba (esas son los 4
+// estados reales, usadas para los botones de cambio de estado del drawer).
+// Aquí "Rebotados" es una columna visual aparte: mismo estado Pendiente,
+// pero separado para que salte a la vista que ese ticket ya se le regresó
+// a alguien antes. En cuanto alguien lo vuelve a tomar, sale solo de aquí
+// (porque su estado deja de ser Pendiente) sin que haya que resetear nada.
+interface ColumnaTablero {
+  key: string;
+  label: string;
+  dot: string;
+  header: string;
+  filtro: (t: Ticket) => boolean;
+}
+const TABLERO_COLUMNAS: ColumnaTablero[] = [
+  { key: "Rebotados", label: "Rebotados", dot: "bg-rose-500", header: "border-t-rose-500", filtro: (t) => t.estado === "Pendiente" && t.rebotado },
+  { key: "Pendiente", label: "Pendiente", dot: "bg-amber-500", header: "border-t-amber-500", filtro: (t) => t.estado === "Pendiente" && !t.rebotado },
+  { key: "En proceso", label: "En proceso", dot: "bg-blue-600", header: "border-t-blue-600", filtro: (t) => t.estado === "En proceso" },
+  { key: "Finalizado", label: "Finalizado", dot: "bg-emerald-500", header: "border-t-emerald-500", filtro: (t) => t.estado === "Finalizado" },
+  { key: "Cancelado", label: "Cancelado", dot: "bg-red-500", header: "border-t-red-500", filtro: (t) => t.estado === "Cancelado" },
 ];
 
 const BARRA_PRIORIDAD: Record<PrioridadTicket, string> = {
@@ -59,15 +86,28 @@ const PILDORA_ESTADO: Record<EstadoTicket, string> = {
 const iniciales = (nombre?: string, apellido?: string) =>
   `${nombre?.[0] ?? ""}${apellido?.[0] ?? ""}`.toUpperCase() || "?";
 
+const estaVencido = (t: Ticket) =>
+  !!t.fecha_compromiso &&
+  new Date(t.fecha_compromiso) < new Date() &&
+  !["Finalizado", "Cancelado"].includes(t.estado);
+
+// "Reservado" = le asignaron el ticket directo (asignarTicketA) pero
+// todavía no lo confirma/toma — se queda en Pendiente a propósito, con
+// dueño ya puesto, para que nadie más lo agarre mientras tanto.
+const esReservado = (t: Ticket) => t.estado === "Pendiente" && !!t.asignado_a && !t.rebotado;
+
 export default function Tickets() {
   const { user } = useAuth();
-  // OJO: no se usa tienePermiso("tickets.resolver") de useAuth — esa función
-  // hace bypass total con acceso_total, y Admin TAMBIÉN tiene acceso_total =
-  // true igual que Super Usuario. Usarla le mostraría a Admin la cola
-  // completa y los controles de resolver. Aquí se checa el rol exacto, y
-  // el privilegio explícito directo del arreglo (sin pasar por el bypass) —
-  // así coincide con esResolutorTickets() del backend.
-  const esResolutor = user?.rol === "Super Usuario" || (user?.privilegios ?? []).includes("tickets.resolver");
+  // El acceso a tickets es 100% manual por privilegio — sin atajos por rol
+  // ni por acceso_total. Antes esResolutor daba por hecho que cualquiera
+  // con rol "Super Usuario" era resolutor, lo que hacía inútil desmarcar la
+  // casilla en Roles y Privilegios para ese rol. Ahora depende únicamente
+  // de que "tickets.crear"/"tickets.resolver" esté en user.privilegios —
+  // mismo criterio exacto que esResolutorTickets()/tieneAccesoTickets() del
+  // backend (tickets.controller.ts), para que nunca se desalineen.
+  const privilegiosTickets = user?.privilegios ?? [];
+  const tieneAcceso = privilegiosTickets.includes("tickets.crear") || privilegiosTickets.includes("tickets.resolver");
+  const esResolutor = privilegiosTickets.includes("tickets.resolver");
 
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [cargando, setCargando] = useState(true);
@@ -89,11 +129,22 @@ export default function Tickets() {
 
   // Fase 1: equipo activo (panel de devs con tickets En proceso) y usuarios
   // a los que se puede asignar directo desde el drawer.
-  const [equipoActivo, setEquipoActivo] = useState<EquipoActivoItem[]>([]);
+  const [equipoActivoRaw, setEquipoActivoRaw] = useState<EquipoActivoItem[]>([]);
   const [usuariosAsignables, setUsuariosAsignables] = useState<UsuarioAsignable[]>([]);
+  const [notificaciones, setNotificaciones] = useState<Record<number, boolean>>({});
   const [asignarA, setAsignarA] = useState("");
   const [asignando, setAsignando] = useState(false);
   const [liberando, setLiberando] = useState(false);
+  const [motivoRebote, setMotivoRebote] = useState("");
+  const [rebotarDestino, setRebotarDestino] = useState("");
+  const [rebotando, setRebotando] = useState(false);
+  const [mostrarRebote, setMostrarRebote] = useState(false);
+  const [cambiandoPrioridad, setCambiandoPrioridad] = useState<number | null>(null);
+
+  // Duración estimada al tomar un ticket (Fase 3)
+  const [mostrarEstimacion, setMostrarEstimacion] = useState(false);
+  const [estimacionDias, setEstimacionDias] = useState("");
+  const [estimacionHoras, setEstimacionHoras] = useState("");
 
   const [comentarioDraft, setComentarioDraft] = useState("");
   const [comentarioInterno, setComentarioInterno] = useState(false);
@@ -110,31 +161,56 @@ export default function Tickets() {
   const cargarLista = useCallback(async () => {
     setCargando(true);
     try {
-      const data = esResolutor
-        ? await getTickets({
-            prioridad: filtroPrioridad !== "Todas" ? filtroPrioridad : undefined,
-            archivado: verArchivados,
-          })
-        : await getMisTickets();
+      // Antes solo el resolutor veía la cola completa (getTickets) y el
+      // Admin solo veía lo suyo (getMisTickets) — eso significaba que un
+      // Admin no podía ver en qué estaba trabajando un Super Usuario. Ahora
+      // cualquiera con acceso al módulo ve la cola completa; la privacidad
+      // de los personales ya está protegida del lado del backend.
+      const data = await getTickets({
+        prioridad: filtroPrioridad !== "Todas" ? filtroPrioridad : undefined,
+        archivado: verArchivados,
+      });
       setTickets(data);
     } catch (e) {
       console.error("❌ Error cargando tickets:", e);
     } finally {
       setCargando(false);
     }
-  }, [esResolutor, filtroPrioridad, verArchivados]);
+    // La campanita se pide aparte y no bloquea el spinner de la lista —
+    // si falla, simplemente no se pinta ningún punto rojo, no truena nada.
+    getNotificacionesTickets()
+      .then((n) => setNotificaciones(n.porTicket))
+      .catch((e) => console.error("❌ Error cargando notificaciones:", e));
+  }, [filtroPrioridad, verArchivados]);
 
   useEffect(() => {
     cargarLista();
   }, [cargarLista]);
 
-  // Panel de equipo + catálogo de a quién se puede asignar — solo aplica
-  // a Super Usuario, así que no se piden si el usuario es solo Admin.
+  // El panel "Equipo activo" ahora es visible para cualquiera con acceso al
+  // módulo (Admin también) — es solo informativo, no da ningún poder extra.
   useEffect(() => {
-    if (!esResolutor) return;
-    getEquipoActivo().then(setEquipoActivo).catch((e) => console.error("❌ Equipo activo:", e));
+    getEquipoActivo()
+      .then((data) => setEquipoActivoRaw(Array.isArray(data) ? data : []))
+      .catch((e) => console.error("❌ Equipo activo:", e));
+  }, [tickets]);
+
+  // El usuario logueado siempre va primero en la lista — "soy yo, quiero
+  // verme de inmediato sin buscar" — el resto conserva el orden que ya
+  // trae el backend (alfabético).
+  const equipoActivo = [...equipoActivoRaw].sort((a, b) => {
+    if (a.idusuario === user?.id) return -1;
+    if (b.idusuario === user?.id) return 1;
+    return 0;
+  });
+
+  // El catálogo de "a quién asignar/rebotar" también se abrió: un Admin
+  // necesita esta lista para poder rebotar SU propio ticket personal directo
+  // a alguien. La acción de asignación en frío (PATCH /asignar) sigue
+  // siendo exclusiva de Super Usuario — eso no cambió, solo el catálogo.
+  useEffect(() => {
     getUsuariosAsignables().then(setUsuariosAsignables).catch((e) => console.error("❌ Usuarios asignables:", e));
-  }, [esResolutor, tickets]);
+  }, []);
 
   const refrescarDetalle = async (id: number) => {
     const data = await getTicketDetalle(id);
@@ -152,6 +228,9 @@ export default function Tickets() {
     setCargandoDetalle(true);
     try {
       await refrescarDetalle(id);
+      // El backend ya marcó ticket_visto al servir el detalle — reflejamos
+      // eso de inmediato en la UI sin esperar al próximo cargarLista().
+      setNotificaciones((prev) => ({ ...prev, [id]: false }));
     } catch (e) {
       console.error("❌ Error cargando detalle:", e);
     } finally {
@@ -173,6 +252,13 @@ export default function Tickets() {
     setComentarioDraft("");
     setComentarioInterno(false);
     setArchivosComentario([]);
+    setAsignarA("");
+    setMotivoRebote("");
+    setRebotarDestino("");
+    setMostrarRebote(false);
+    setMostrarEstimacion(false);
+    setEstimacionDias("");
+    setEstimacionHoras("");
   };
 
   const handleCrear = async () => {
@@ -235,7 +321,12 @@ export default function Tickets() {
 
   const handleTomar = async (id: number) => {
     try {
-      await tomarTicket(id);
+      const dias = Number(estimacionDias) || 0;
+      const horas = Number(estimacionHoras) || 0;
+      await tomarTicket(id, { dias_habiles: dias, horas_habiles: horas });
+      setEstimacionDias("");
+      setEstimacionHoras("");
+      setMostrarEstimacion(false);
       await cargarLista();
       if (drawerId === id) await refrescarDetalle(id);
     } catch (e: any) {
@@ -270,6 +361,36 @@ export default function Tickets() {
       showAlert(e.response?.data?.error || "No se pudo liberar", "error");
     } finally {
       setLiberando(false);
+    }
+  };
+
+  const handleRebotar = async (id: number) => {
+    setRebotando(true);
+    try {
+      await rebotarTicket(id, motivoRebote.trim() || undefined, rebotarDestino ? Number(rebotarDestino) : undefined);
+      setMotivoRebote("");
+      setRebotarDestino("");
+      setMostrarRebote(false);
+      await cargarLista();
+      if (drawerId === id) await refrescarDetalle(id);
+      showAlert(rebotarDestino ? "Ticket rebotado directo a la persona" : "Ticket regresado a la cola", "success");
+    } catch (e: any) {
+      showAlert(e.response?.data?.error || "No se pudo rebotar", "error");
+    } finally {
+      setRebotando(false);
+    }
+  };
+
+  const handleCambiarPrioridad = async (id: number, prioridad: PrioridadTicket) => {
+    setCambiandoPrioridad(id);
+    try {
+      await cambiarPrioridadTicket(id, prioridad);
+      await cargarLista();
+      if (drawerId === id) await refrescarDetalle(id);
+    } catch (e: any) {
+      showAlert(e.response?.data?.error || "No se pudo cambiar la prioridad", "error");
+    } finally {
+      setCambiandoPrioridad(null);
     }
   };
 
@@ -313,9 +434,31 @@ export default function Tickets() {
 
   const archivablesParaVincular = tickets.filter((t) => t.estado === "Finalizado");
 
+  // Blindaje extra: aunque el Sidebar/rutas ya no deberían dejar entrar a
+  // nadie sin el privilegio real, esto evita que alguien vea el tablero
+  // completo si llega por URL directa y le falta la casilla en Roles.
+  if (!tieneAcceso) {
+    return (
+      <Dashboard>
+        <div className="max-w-md mx-auto mt-16 text-center bg-white border border-slate-200 rounded-2xl p-8">
+          <p className="text-3xl mb-2">🔒</p>
+          <h2 className="text-lg font-bold text-slate-800 mb-1">Sin acceso a Mesa de Tickets</h2>
+          <p className="text-sm text-slate-500">
+            Tu cuenta no tiene el privilegio de tickets asignado. Pídele a un administrador que te lo active desde
+            Roles y Privilegios.
+          </p>
+        </div>
+      </Dashboard>
+    );
+  }
+
   return (
     <Dashboard>
       <div className="w-full space-y-5">
+        <style>{`
+          .scroll-oculto { scrollbar-width: none; -ms-overflow-style: none; }
+          .scroll-oculto::-webkit-scrollbar { display: none; }
+        `}</style>
         {/* ── Encabezado ─────────────────────────────────────────────── */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
@@ -369,11 +512,11 @@ export default function Tickets() {
             {/* Pendiente y En proceso ocupan el doble de ancho que
                 Finalizado y Cancelado — ya no compiten por espacio con
                 columnas que en la práctica casi nadie revisa a diario. */}
-            <div className="flex-1 min-w-0 w-full grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-[2fr_2fr_1fr_1fr] gap-4">
-              {COLUMNAS.map((col) => {
-                const items = tickets.filter((t) => t.estado === col.estado);
+            <div className="flex-1 min-w-0 w-full grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-[1fr_2fr_2fr_1fr_1fr] gap-4">
+              {TABLERO_COLUMNAS.map((col) => {
+                const items = tickets.filter(col.filtro).sort((a, b) => RANGO_PRIORIDAD[a.prioridad] - RANGO_PRIORIDAD[b.prioridad]);
                 return (
-                  <div key={col.estado} className="flex flex-col min-w-0">
+                  <div key={col.key} className="flex flex-col min-w-0">
                     <div className="flex items-center gap-2 mb-3 px-1">
                       <span className={`w-2.5 h-2.5 rounded-full ${col.dot}`} />
                       <h2 className="text-sm font-bold text-slate-700">{col.label}</h2>
@@ -381,7 +524,7 @@ export default function Tickets() {
                         {items.length}
                       </span>
                     </div>
-                    <div className={`flex-1 space-y-2.5 rounded-2xl border-t-4 ${col.header} bg-slate-50/60 p-2.5 min-h-[120px]`}>
+                    <div className={`scroll-oculto flex-1 space-y-2.5 rounded-2xl border-t-4 ${col.header} bg-slate-50/60 p-2.5 min-h-[120px] max-h-[calc(100vh-260px)] overflow-y-auto`}>
                       {items.length === 0 && (
                         <p className="text-xs text-slate-300 italic px-2 py-4 text-center">vacío</p>
                       )}
@@ -389,14 +532,37 @@ export default function Tickets() {
                         <button
                           key={t.idticket}
                           onClick={() => abrirTicket(t.idticket)}
-                          className={`w-full text-left bg-white border-l-4 ${BARRA_PRIORIDAD[t.prioridad]} border border-slate-200 rounded-xl px-3 py-2.5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all`}
+                          className={`relative w-full text-left bg-white border-l-4 ${BARRA_PRIORIDAD[t.prioridad]} border border-slate-200 rounded-xl px-3 py-2.5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all`}
                         >
+                          {notificaciones[t.idticket] && (
+                            <span
+                              title="Algo nuevo sin leer"
+                              className="absolute -top-2.5 -right-2.5 w-7 h-7 rounded-full bg-rose-600 border-2 border-white flex items-center justify-center text-sm leading-none animate-pulse"
+                            >
+                              🔔
+                            </span>
+                          )}
                           <div className="flex items-center justify-between mb-1">
                             <span className="text-[10px] font-mono text-slate-400">{t.folio}</span>
                             <div className="flex items-center gap-1">
                               {t.es_personal && (
                                 <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-purple-100 text-purple-700">
                                   🔒 Personal
+                                </span>
+                              )}
+                              {t.rebotado && (
+                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-rose-100 text-rose-700">
+                                  ↻ Rebotado
+                                </span>
+                              )}
+                              {esReservado(t) && (
+                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-700">
+                                  📌 Reservado
+                                </span>
+                              )}
+                              {estaVencido(t) && (
+                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-red-600 text-white">
+                                  ⏰ Vencido
                                 </span>
                               )}
                               <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${PILDORA_PRIORIDAD[t.prioridad]}`}>
@@ -407,12 +573,20 @@ export default function Tickets() {
                           <p className="text-sm font-semibold text-slate-800 leading-snug line-clamp-2">{t.titulo}</p>
                           <div className="flex items-center justify-between mt-2">
                             {t.asignado_nombre ? (
-                              <span
-                                title={`${t.asignado_nombre} ${t.asignado_apellido ?? ""}`}
-                                className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 text-[10px] font-bold flex items-center justify-center"
-                              >
-                                {iniciales(t.asignado_nombre, t.asignado_apellido)}
-                              </span>
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                {t.asignado_foto_url ? (
+                                  <img
+                                    src={t.asignado_foto_url}
+                                    alt={t.asignado_nombre}
+                                    className="w-6 h-6 rounded-full object-cover flex-shrink-0"
+                                  />
+                                ) : (
+                                  <span className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 text-[10px] font-bold flex items-center justify-center flex-shrink-0">
+                                    {iniciales(t.asignado_nombre, t.asignado_apellido)}
+                                  </span>
+                                )}
+                                <span className="text-[10px] text-slate-600 truncate">{t.asignado_nombre}</span>
+                              </div>
                             ) : esResolutor && t.estado !== "Finalizado" && t.estado !== "Cancelado" ? (
                               <span className="text-[10px] font-semibold text-blue-600">Sin tomar</span>
                             ) : (
@@ -427,44 +601,67 @@ export default function Tickets() {
               })}
             </div>
 
-            {/* Panel de equipo activo — solo Super Usuario, y solo si hay
-                alguien con algo En proceso. Si el único dev que anda con
-                tickets asignados no tiene nada activo, el panel ni aparece. */}
-            {esResolutor && equipoActivo.length > 0 && (
-              <div className="w-full xl:w-72 flex-shrink-0 bg-white border border-slate-200 rounded-2xl p-3.5">
-                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-3 px-0.5">
+            {/* Panel de equipo activo — visible para cualquiera con acceso
+                al módulo (Admin también), y solo si hay alguien con algo En
+                proceso. Si el único dev que anda con tickets asignados no
+                tiene nada activo, el panel ni aparece. */}
+            {equipoActivo.length > 0 && (
+              <div className="w-full xl:w-72 flex-shrink-0 bg-white border border-slate-200 rounded-2xl p-3.5 max-h-[calc(100vh-260px)] flex flex-col">
+                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-3 px-0.5 flex-shrink-0">
                   Equipo activo
                 </h3>
-                <div className="space-y-4">
-                  {equipoActivo.map((dev) => (
-                    <div key={dev.idusuario}>
-                      <div className="flex items-center gap-2 mb-1.5">
-                        {dev.foto_url ? (
-                          <img src={dev.foto_url} alt={dev.nombre} className="w-8 h-8 rounded-full object-cover" />
-                        ) : (
-                          <span className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold flex items-center justify-center">
-                            {iniciales(dev.nombre, dev.apellido)}
-                          </span>
-                        )}
-                        <div className="min-w-0">
-                          <p className="text-sm font-semibold text-slate-700 truncate">{dev.nombre} {dev.apellido}</p>
-                          <p className="text-[10px] text-slate-400">{dev.tickets.length} en proceso</p>
+                <div className="scroll-oculto space-y-5 overflow-y-auto">
+                  {equipoActivo.map((dev) => {
+                    const enProceso = dev.tickets.filter((t) => t.estado === "En proceso").length;
+                    return (
+                      <div key={dev.idusuario}>
+                        <div className="flex items-center gap-3 mb-2">
+                          {dev.foto_url ? (
+                            <img src={dev.foto_url} alt={dev.nombre} className="w-20 h-20 rounded-full object-cover flex-shrink-0" />
+                          ) : (
+                            <span className="w-20 h-20 rounded-full bg-indigo-100 text-indigo-700 text-xl font-bold flex items-center justify-center flex-shrink-0">
+                              {iniciales(dev.nombre, dev.apellido)}
+                            </span>
+                          )}
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-slate-700 truncate">
+                              {dev.nombre} {dev.apellido}
+                              {dev.idusuario === user?.id && (
+                                <span className="ml-1.5 text-[9px] font-bold text-blue-600 align-middle">TÚ</span>
+                              )}
+                            </p>
+                            <p className="text-[10px] text-slate-400">
+                              {enProceso} en proceso
+                              {dev.tickets.length > enProceso && ` · ${dev.tickets.length - enProceso} por confirmar`}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="space-y-1 pl-1">
+                          {dev.tickets.map((t) => {
+                            // Mismo ticket, 3 lecturas posibles: ya en
+                            // proceso de verdad (sin indicador), se lo
+                            // rebotaron directo (↻) o se lo asignaron
+                            // directo y todavía no lo confirma (📌).
+                            const indicador =
+                              t.estado === "En proceso" ? null : t.rebotado ? "↻" : "📌";
+                            return (
+                              <button
+                                key={t.idticket}
+                                onClick={() => abrirTicket(t.idticket)}
+                                className={`w-full text-left text-xs truncate flex items-center gap-1 ${
+                                  indicador ? "text-amber-600 hover:text-amber-700" : "text-slate-500 hover:text-blue-600"
+                                }`}
+                                title={indicador === "↻" ? "Rebotado — sin confirmar" : indicador === "📌" ? "Reservado — sin confirmar" : t.titulo}
+                              >
+                                <span>· {t.titulo}</span>
+                                {indicador && <span className="flex-shrink-0">{indicador}</span>}
+                              </button>
+                            );
+                          })}
                         </div>
                       </div>
-                      <div className="space-y-1 pl-10">
-                        {dev.tickets.map((t) => (
-                          <button
-                            key={t.idticket}
-                            onClick={() => abrirTicket(t.idticket)}
-                            className="w-full text-left text-xs text-slate-500 hover:text-blue-600 truncate"
-                            title={t.titulo}
-                          >
-                            · {t.titulo}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -628,12 +825,39 @@ export default function Tickets() {
                       <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${PILDORA_ESTADO[detalle.estado]}`}>
                         {detalle.estado}
                       </span>
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${PILDORA_PRIORIDAD[detalle.prioridad]}`}>
-                        {detalle.prioridad}
-                      </span>
+                      {detalle.creado_por === user?.id ? (
+                        <select
+                          value={detalle.prioridad}
+                          disabled={cambiandoPrioridad === detalle.idticket}
+                          onChange={(e) => handleCambiarPrioridad(detalle.idticket, e.target.value as PrioridadTicket)}
+                          title="Cambiar prioridad"
+                          className={`text-[10px] font-bold pl-2 pr-1 py-0.5 rounded-full border-none appearance-none cursor-pointer disabled:opacity-50 ${PILDORA_PRIORIDAD[detalle.prioridad]}`}
+                        >
+                          {PRIORIDADES.map((p) => (
+                            <option key={p} value={p} className="bg-white text-slate-700">
+                              {p}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span
+                          title="Solo quien reportó el ticket puede cambiar la prioridad"
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${PILDORA_PRIORIDAD[detalle.prioridad]}`}
+                        >
+                          {detalle.prioridad}
+                        </span>
+                      )}
                       {detalle.es_personal && (
                         <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-100 text-purple-700">
                           🔒 Personal
+                        </span>
+                      )}
+                      {detalle.rebotado && (
+                        <span
+                          title={detalle.motivo_rebote || undefined}
+                          className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-700"
+                        >
+                          ↻ Rebotado{detalle.motivo_rebote ? ": " + detalle.motivo_rebote : ""}
                         </span>
                       )}
                     </div>
@@ -647,6 +871,16 @@ export default function Tickets() {
                   <p className="text-xs text-slate-400">
                     Creado por {detalle.creador_nombre} {detalle.creador_apellido}
                   </p>
+                  {detalle.fecha_compromiso && (
+                    <p className={`text-xs font-semibold ${
+                      new Date(detalle.fecha_compromiso) < new Date() && !["Finalizado", "Cancelado"].includes(detalle.estado)
+                        ? "text-red-600"
+                        : "text-slate-500"
+                    }`}>
+                      📅 Compromiso: {new Date(detalle.fecha_compromiso).toLocaleString("es-MX", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
+                      {new Date(detalle.fecha_compromiso) < new Date() && !["Finalizado", "Cancelado"].includes(detalle.estado) && " — vencido"}
+                    </p>
+                  )}
                   {detalle.relacionado_folio && detalle.idticket_relacionado && (
                     <button
                       onClick={() => abrirTicket(detalle.idticket_relacionado!, true)}
@@ -681,10 +915,15 @@ export default function Tickets() {
                   )}
                 </div>
 
-                {esResolutor && (
-                  <div className="px-5 py-3.5 border-b border-slate-100 bg-slate-50 space-y-2.5">
-                    {detalle.asignado_a === user?.id ? (
-                      <div className="flex flex-wrap gap-1.5">
+                {/* Ya NO exclusivo de Super Usuario — Admin también puede
+                    asignar directo (ver el selector al final del bloque).
+                    "Tomar ticket" (agarrar de la cola) sí sigue siendo
+                    exclusivo de resolutor, por eso ese botón puntual todavía
+                    checa esResolutor más abajo. */}
+                <div className="px-5 py-3.5 border-b border-slate-100 bg-slate-50 space-y-2.5">
+                  {detalle.asignado_a === user?.id && detalle.estado !== "Pendiente" ? (
+                    <div className="space-y-2">
+                      <div className="flex flex-wrap items-center gap-1.5">
                         {COLUMNAS.map((c) => (
                           <button
                             key={c.estado}
@@ -698,53 +937,232 @@ export default function Tickets() {
                             {c.label}
                           </button>
                         ))}
+                        {!["Finalizado", "Cancelado"].includes(detalle.estado) && (
+                          <button
+                            onClick={() => setMostrarRebote((v) => !v)}
+                            className="text-xs px-2.5 py-1 rounded-lg font-semibold border border-rose-200 text-rose-600 hover:bg-rose-50 ml-auto"
+                          >
+                            ↻ Rebotar
+                          </button>
+                        )}
                       </div>
-                    ) : detalle.asignado_a ? (
-                      <p className="text-xs text-slate-500">
-                        Asignado a <strong>{detalle.asignado_nombre} {detalle.asignado_apellido}</strong> — solo esa persona puede cambiar el estado
-                      </p>
-                    ) : (
+                      {mostrarRebote && (
+                        <div className="bg-rose-50 border border-rose-200 rounded-lg p-2 space-y-1.5">
+                          <input
+                            value={motivoRebote}
+                            onChange={(e) => setMotivoRebote(e.target.value)}
+                            placeholder="Motivo (opcional) — ej. falta material"
+                            className="w-full text-xs px-2 py-1.5 rounded-md border border-rose-200 bg-white"
+                          />
+                          <div className="flex items-center gap-1.5">
+                            <select
+                              value={rebotarDestino}
+                              onChange={(e) => setRebotarDestino(e.target.value)}
+                              className="flex-1 text-xs px-2 py-1.5 rounded-md border border-rose-200 bg-white"
+                            >
+                              <option value="">Sin asignar — vuelve al montón</option>
+                              {usuariosAsignables
+                                .filter((u) => u.idusuario !== detalle.asignado_a)
+                                .map((u) => (
+                                  <option key={u.idusuario} value={u.idusuario}>
+                                    Rebotar directo a {u.nombre} {u.apellido} · {u.rol}
+                                  </option>
+                                ))}
+                            </select>
+                            <button
+                              onClick={() => handleRebotar(detalle.idticket)}
+                              disabled={rebotando}
+                              className="text-xs px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-md font-semibold disabled:opacity-50"
+                            >
+                              {rebotando ? "..." : "Confirmar"}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : detalle.asignado_a === user?.id && detalle.estado === "Pendiente" ? (
+                    // Reservado para mí (asignación directa o rebote con
+                    // destino) pero todavía no lo confirmo — mismo flujo de
+                    // "Tomar ticket" con estimado, solo que aquí el ticket
+                    // ya es mío de entrada. También puedo rebotarlo sin
+                    // confirmarlo, si no me toca a mí resolverlo.
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-semibold text-amber-700">
+                          {detalle.rebotado ? "↻ Te rebotaron este ticket" : "📌 Reservado para ti"} — falta confirmar
+                        </span>
+                        <button
+                          onClick={() => setMostrarEstimacion((v) => !v)}
+                          className="text-xs px-3 py-1.5 bg-gradient-to-br from-blue-600 to-indigo-700 text-white rounded-lg font-semibold flex-shrink-0"
+                        >
+                          Confirmar y tomar
+                        </button>
+                      </div>
+                      {mostrarEstimacion && (
+                        <div className="bg-white border border-slate-200 rounded-lg p-2.5 space-y-2">
+                          <p className="text-[11px] text-slate-500">
+                            ¿Cuánto crees que te va a tomar? Opcional — horas hábiles (L-V, 8am-6pm).
+                          </p>
+                          <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1">
+                              <input
+                                type="text"
+                                inputMode="numeric"
+                                value={estimacionDias}
+                                onChange={(e) => setEstimacionDias(e.target.value.replace(/\D/g, ""))}
+                                placeholder="0"
+                                className="w-14 text-xs px-2 py-1.5 rounded-md border border-slate-200"
+                              />
+                              <span className="text-xs text-slate-500">días</span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <input
+                                type="text"
+                                inputMode="numeric"
+                                value={estimacionHoras}
+                                onChange={(e) => setEstimacionHoras(e.target.value.replace(/\D/g, ""))}
+                                placeholder="0"
+                                className="w-14 text-xs px-2 py-1.5 rounded-md border border-slate-200"
+                              />
+                              <span className="text-xs text-slate-500">horas</span>
+                            </div>
+                            <button
+                              onClick={() => handleTomar(detalle.idticket)}
+                              className="ml-auto text-xs px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-md font-semibold"
+                            >
+                              Confirmar
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                      <button
+                        onClick={() => setMostrarRebote((v) => !v)}
+                        className="text-xs px-2.5 py-1 rounded-lg font-semibold border border-rose-200 text-rose-600 hover:bg-rose-50"
+                      >
+                        ↻ Prefiero rebotarlo sin confirmar
+                      </button>
+                      {mostrarRebote && (
+                        <div className="bg-rose-50 border border-rose-200 rounded-lg p-2 space-y-1.5">
+                          <input
+                            value={motivoRebote}
+                            onChange={(e) => setMotivoRebote(e.target.value)}
+                            placeholder="Motivo (opcional) — ej. falta material"
+                            className="w-full text-xs px-2 py-1.5 rounded-md border border-rose-200 bg-white"
+                          />
+                          <div className="flex items-center gap-1.5">
+                            <select
+                              value={rebotarDestino}
+                              onChange={(e) => setRebotarDestino(e.target.value)}
+                              className="flex-1 text-xs px-2 py-1.5 rounded-md border border-rose-200 bg-white"
+                            >
+                              <option value="">Sin asignar — vuelve al montón</option>
+                              {usuariosAsignables
+                                .filter((u) => u.idusuario !== detalle.asignado_a)
+                                .map((u) => (
+                                  <option key={u.idusuario} value={u.idusuario}>
+                                    Rebotar directo a {u.nombre} {u.apellido} · {u.rol}
+                                  </option>
+                                ))}
+                            </select>
+                            <button
+                              onClick={() => handleRebotar(detalle.idticket)}
+                              disabled={rebotando}
+                              className="text-xs px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-md font-semibold disabled:opacity-50"
+                            >
+                              {rebotando ? "..." : "Confirmar"}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : detalle.asignado_a ? (
+                    <p className="text-xs text-slate-500">
+                      {esReservado(detalle) || detalle.rebotado
+                        ? <>Reservado para <strong>{detalle.asignado_nombre} {detalle.asignado_apellido}</strong> — todavía no lo confirma</>
+                        : <>Asignado a <strong>{detalle.asignado_nombre} {detalle.asignado_apellido}</strong> — solo esa persona puede cambiar el estado</>}
+                    </p>
+                  ) : (
+                    <div className="space-y-2">
                       <div className="flex items-center justify-between">
                         <span className="text-xs text-slate-500">Nadie lo ha tomado todavía</span>
-                        <button
-                          onClick={() => handleTomar(detalle.idticket)}
-                          className="text-xs px-3 py-1.5 bg-gradient-to-br from-blue-600 to-indigo-700 text-white rounded-lg font-semibold"
-                        >
-                          Tomar ticket
-                        </button>
+                        {esResolutor && (
+                          <button
+                            onClick={() => setMostrarEstimacion((v) => !v)}
+                            className="text-xs px-3 py-1.5 bg-gradient-to-br from-blue-600 to-indigo-700 text-white rounded-lg font-semibold"
+                          >
+                            Tomar ticket
+                          </button>
+                        )}
                       </div>
-                    )}
+                      {mostrarEstimacion && esResolutor && (
+                        <div className="bg-white border border-slate-200 rounded-lg p-2.5 space-y-2">
+                          <p className="text-[11px] text-slate-500">
+                            ¿Cuánto crees que te va a tomar? Opcional — horas hábiles (L-V, 8am-6pm).
+                          </p>
+                          <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1">
+                              <input
+                                type="text"
+                                inputMode="numeric"
+                                value={estimacionDias}
+                                onChange={(e) => setEstimacionDias(e.target.value.replace(/\D/g, ""))}
+                                placeholder="0"
+                                className="w-14 text-xs px-2 py-1.5 rounded-md border border-slate-200"
+                              />
+                              <span className="text-xs text-slate-500">días</span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <input
+                                type="text"
+                                inputMode="numeric"
+                                value={estimacionHoras}
+                                onChange={(e) => setEstimacionHoras(e.target.value.replace(/\D/g, ""))}
+                                placeholder="0"
+                                className="w-14 text-xs px-2 py-1.5 rounded-md border border-slate-200"
+                              />
+                              <span className="text-xs text-slate-500">horas</span>
+                            </div>
+                            <button
+                              onClick={() => handleTomar(detalle.idticket)}
+                              className="ml-auto text-xs px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-md font-semibold"
+                            >
+                              Confirmar
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
 
-                    {/* Asignación directa a cualquiera con acceso al módulo —
-                        siempre disponible para el resolutor, tome o no el
-                        ticket ya alguien. Sirve para reasignar también. */}
-                    {!["Finalizado", "Cancelado"].includes(detalle.estado) && usuariosAsignables.length > 0 && (
-                      <div className="flex items-center gap-1.5">
-                        <select
-                          value={asignarA}
-                          onChange={(e) => setAsignarA(e.target.value)}
-                          className="flex-1 text-xs px-2 py-1.5 rounded-lg border border-slate-200 bg-white"
-                        >
-                          <option value="">Asignar directo a...</option>
-                          {usuariosAsignables
-                            .filter((u) => u.idusuario !== detalle.asignado_a)
-                            .map((u) => (
-                              <option key={u.idusuario} value={u.idusuario}>
-                                {u.nombre} {u.apellido} · {u.rol}
-                              </option>
-                            ))}
-                        </select>
-                        <button
-                          onClick={() => handleAsignarA(detalle.idticket)}
-                          disabled={!asignarA || asignando}
-                          className="text-xs px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded-lg font-semibold disabled:opacity-40"
-                        >
-                          {asignando ? "..." : "Asignar"}
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
+                  {/* Asignación directa — ahora disponible para Admin
+                      también, no solo resolutor. Sirve para reasignar sin
+                      importar si ya alguien lo tiene. */}
+                  {!["Finalizado", "Cancelado"].includes(detalle.estado) && usuariosAsignables.length > 0 && (
+                    <div className="flex items-center gap-1.5">
+                      <select
+                        value={asignarA}
+                        onChange={(e) => setAsignarA(e.target.value)}
+                        className="flex-1 text-xs px-2 py-1.5 rounded-lg border border-slate-200 bg-white"
+                      >
+                        <option value="">Asignar directo a...</option>
+                        {usuariosAsignables
+                          .filter((u) => u.idusuario !== detalle.asignado_a)
+                          .map((u) => (
+                            <option key={u.idusuario} value={u.idusuario}>
+                              {u.nombre} {u.apellido} · {u.rol}
+                            </option>
+                          ))}
+                      </select>
+                      <button
+                        onClick={() => handleAsignarA(detalle.idticket)}
+                        disabled={!asignarA || asignando}
+                        className="text-xs px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded-lg font-semibold disabled:opacity-40"
+                      >
+                        {asignando ? "..." : "Asignar"}
+                      </button>
+                    </div>
+                  )}
+                </div>
 
                 {/* Liberar: convierte un ticket personal en uno normal
                     disponible para cualquier dev. Lo puede hacer el dueño
@@ -763,6 +1181,54 @@ export default function Tickets() {
                       </button>
                     </div>
                   )}
+
+                {detalle.estado === "Finalizado" &&
+                  detalle.duracion_estimada_horas != null &&
+                  detalle.tiempo_real_horas != null &&
+                  (() => {
+                    const estimado = detalle.duracion_estimada_horas!;
+                    const real = detalle.tiempo_real_horas!;
+                    const pct = Math.round(((real - estimado) / estimado) * 100);
+                    const sobreEstimado = pct > 0;
+                    const base = Math.max(estimado, real);
+                    const anchoEstimado = Math.min((estimado / base) * 100, 100);
+                    const anchoReal = Math.min((real / base) * 100, 100);
+                    return (
+                      <div className="px-5 py-4 border-b border-slate-100">
+                        <h4 className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-2.5">
+                          Tiempo estimado vs. real
+                        </h4>
+                        <div className="space-y-2.5">
+                          <div>
+                            <div className="flex justify-between text-[11px] text-slate-500 mb-1">
+                              <span>Estimado</span>
+                              <span>{estimado} h</span>
+                            </div>
+                            <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                              <div className="h-full bg-slate-400 rounded-full" style={{ width: `${anchoEstimado}%` }} />
+                            </div>
+                          </div>
+                          <div>
+                            <div className="flex justify-between text-[11px] text-slate-500 mb-1">
+                              <span>Real</span>
+                              <span>{real} h</span>
+                            </div>
+                            <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                              <div
+                                className={`h-full rounded-full ${sobreEstimado ? "bg-red-500" : "bg-emerald-500"}`}
+                                style={{ width: `${anchoReal}%` }}
+                              />
+                            </div>
+                          </div>
+                          <p className={`text-xs font-semibold ${sobreEstimado ? "text-red-600" : "text-emerald-600"}`}>
+                            {sobreEstimado
+                              ? `⚠️ Se tardó ${pct}% más de lo estimado`
+                              : `✅ Terminó ${Math.abs(pct)}% más rápido de lo estimado`}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                 <div className="px-5 py-4 space-y-2.5">
                   {detalle.comentarios.length === 0 && (

@@ -215,8 +215,14 @@ export interface OrdenProduccionPapelData {
   desarrollo_laminacion_mm?: number | string | null;
   ctes_mod?: string | null;
   ctes_mod_laminacion?: string | null;
+  // Lo que hay que surtir de verdad: piezas de guillotina (pliegos enteros x
+  // rendimiento) x desarrollo. Incluye la merma congelada de la orden.
   metros_laminacion_estimados?: number | null;
   rollos_laminacion_estimados?: number | null;
+  // Consumo teórico del pedido, sin merma — solo referencia para cotejar con
+  // el cálculo a mano del cliente. Nunca es la cantidad a comprar.
+  metros_laminacion_sin_merma?: number | null;
+  rollos_laminacion_sin_merma?: number | null;
 
   tipo_pegue?: string | null;
   tipo_pegado?: string | null;

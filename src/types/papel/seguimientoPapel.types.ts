@@ -108,6 +108,9 @@ export interface PedidoSeguimientoPapel {
   ctes_mod_laminacion: string | null;
   metros_laminacion_estimados: number | null;
   rollos_laminacion_estimados: number | null;
+  // Consumo teórico del pedido, sin merma. Solo referencia de cotejo.
+  metros_laminacion_sin_merma: number | null;
+  rollos_laminacion_sin_merma: number | null;
 
   // Hot Stamping — solicitud_producto_papel.idfoil (FK a foil)
   foil_nombre: string | null; // ej "Oro Bl45"

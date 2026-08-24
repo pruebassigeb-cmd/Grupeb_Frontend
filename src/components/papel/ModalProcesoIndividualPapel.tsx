@@ -474,6 +474,15 @@ function BloqueVisualHojeadoGuillotina({
             )}
           </div>
         )}
+        {/* Cotejo, no instrucción: lo que se surte son los metros de arriba,
+            que ya traen la merma. Este es el consumo teórico del pedido. */}
+        {pedido.metros_laminacion_sin_merma != null && (
+          <p className="mt-1.5 text-[10px] text-slate-400">
+            Sin merma: {pedido.metros_laminacion_sin_merma.toLocaleString("es-MX")} mts
+            {pedido.rollos_laminacion_sin_merma != null &&
+              ` · ${pedido.rollos_laminacion_sin_merma.toLocaleString("es-MX")} rollos`}
+          </p>
+        )}
       </div>
     );
   }
@@ -1619,6 +1628,9 @@ export default function ModalProcesoIndividualPapel({ pedido, nombreProceso, onC
   const [formEditar, setFormEditar] = useState<Record<string, any>>({});
   const [obsEditar, setObsEditar] = useState("");
   const [guardandoEdit, setGuardandoEdit] = useState(false);
+  // ¿Este pedido también pasa por Guillotina? Solo se usa/se muestra al
+  // finalizar Hojeado — ver debeIgnorarAnteriorPapel en el backend.
+  const [continuarGuillotina, setContinuarGuillotina] = useState(false);
 
   useAutoguardarBorrador(claveBorradorFinalizar, { formDatos, observaciones }, accion === "finalizar");
 
@@ -1656,15 +1668,29 @@ export default function ModalProcesoIndividualPapel({ pedido, nombreProceso, onC
   // plástico, donde el riesgo era asumir 4 procesos fijos sin filtrar.
   const procIndex = datos?.procesos.findIndex((p) => p.tabla === nombreProceso) ?? -1;
 
-  // Hojeado y Guillotina son un par intercambiable, no una secuencia: si
-  // lo que queda justo antes en el array es uno de los dos, el "anterior"
-  // real para efectos de desbloqueo/límite es el que de verdad se usó
-  // (el que tenga avances o esté terminado), sin importar cuál de los dos
-  // ocupe la posición -1. Espejo del resolverAnteriorEfectivoPapel del
+  // Hojeado -> Guillotina es una secuencia de orden físico fijo (decisión
+  // de Jose, 2026-08-24), no un par intercambiable de alternativas: si lo
+  // que queda justo antes en el array es uno de los dos, el "anterior"
+  // real para efectos de desbloqueo/límite es el que efectivamente rige
+  // como compromiso de este pedido (tiene registro, aunque sea pendiente
+  // sin arrancar), sin importar cuál de los dos ocupe la posición -1.
+  // Espejo del resolverAnteriorEfectivoPapel/getPreparacionUsadaPapel del
   // backend — se necesita aquí también porque este componente calcula
   // anteriorTerminado/anteriorTieneAvancesOTerminado localmente.
   const esProcesoPreparacion = nombreProceso === "hojeado_papel" || nombreProceso === "guillotina_papel";
   const esTablaPreparacion = (tabla?: string) => tabla === "hojeado_papel" || tabla === "guillotina_papel";
+
+  // Hojeado siempre es punto de entrada libre (nunca depende de nada
+  // anterior). Guillotina también lo es, PERO SOLO mientras Hojeado no se
+  // haya usado en este pedido — en cuanto Hojeado tiene registro real,
+  // Guillotina pasa a depender de él como cualquier proceso normal de la
+  // cascada. Espejo exacto de debeIgnorarAnteriorPapel en el backend.
+  const procHojeado = datos?.procesos.find((p) => p.tabla === "hojeado_papel");
+  const hojeadoTieneRegistroReal =
+    !!procHojeado?.registro?.fecha_inicio || (procHojeado?.avances?.length ?? 0) > 0;
+  const ignorarAnterior =
+    nombreProceso === "hojeado_papel" ||
+    (nombreProceso === "guillotina_papel" && !hojeadoTieneRegistroReal);
 
   const procInmediatoAnterior = procIndex > 0 ? datos?.procesos[procIndex - 1] : null;
   let procAnterior = procInmediatoAnterior;
@@ -1673,16 +1699,19 @@ export default function ModalProcesoIndividualPapel({ pedido, nombreProceso, onC
     const parCandidatos = [procInmediatoAnterior, candidatoDosAntes].filter(
       (p): p is NonNullable<typeof p> => !!p && esTablaPreparacion(p.tabla)
     );
-    procAnterior =
-      parCandidatos.find((p) => p.estado === "terminado" || (p.avances?.length ?? 0) > 0) ?? null;
+    // Se prefiere el que tenga registro (aunque sea pendiente) sobre el
+    // que no tenga ninguno — mismo criterio que getPreparacionUsadaPapel
+    // en el backend: en el array [inmediato, dosAntes] eso ya deja
+    // Guillotina antes que Hojeado cuando ambos aplican.
+    procAnterior = parCandidatos.find((p) => p.registro != null) ?? null;
   }
 
   const anteriorTieneAvancesOTerminado =
-    esProcesoPreparacion || // Hojeado/Guillotina nunca dependen de nada anterior
+    ignorarAnterior ||
     procAnterior?.estado === "terminado" ||
     (procAnterior?.avances != null && procAnterior.avances.length > 0);
   const anteriorTerminado =
-    esProcesoPreparacion || procAnterior == null || procAnterior?.estado === "terminado";
+    ignorarAnterior || procAnterior == null || procAnterior?.estado === "terminado";
 
   // Estimado informativo (cantidad x rendimiento) del par Hojeado/Guillotina,
   // para mostrar en el proceso siguiente (normalmente Impresión) ANTES de
@@ -1699,15 +1728,22 @@ export default function ModalProcesoIndividualPapel({ pedido, nombreProceso, onC
   const limiteAnterior: number | null = (proc as any)?.limite_avance ?? null;
   const esBloqueVisual = esProcesoPreparacion;
 
-  // ── Reinicio del par Hojeado/Guillotina ──
+  // ── Reinicio de Hojeado/Guillotina ── Ya no exige fecha_inicio: una
+  // Guillotina pendiente sin arrancar (porque el operador confirmó "sí"
+  // al finalizar Hojeado, pero luego resultó que no hacía falta) también
+  // se puede quitar — si no, quedaría huérfana bloqueando Impresión para
+  // siempre (ver debeIgnorarAnteriorPapel / reiniciarProcesoPreparacionPapel).
   const [reiniciando, setReiniciando] = useState(false);
   const puedeReiniciarPreparacion =
-    esProcesoPreparacion && proc?.estado !== "no_aplica" && !!proc?.registro?.fecha_inicio;
+    esProcesoPreparacion && proc?.estado !== "no_aplica" && proc?.registro != null;
+  const preparacionYaArranco = !!proc?.registro?.fecha_inicio;
 
   const handleReiniciarPreparacion = async () => {
     if (!pedido.idproduccion || !esProcesoPreparacion) return;
     const confirmado = window.confirm(
-      `¿Seguro que quieres reiniciar ${NOMBRES_PROCESO_PAPEL[nombreProceso]}? Se borrará lo capturado y los avances de este proceso para poder elegir la otra máquina.`
+      preparacionYaArranco
+        ? `¿Seguro que quieres reiniciar ${NOMBRES_PROCESO_PAPEL[nombreProceso]}? Se borrará lo capturado y los avances de este proceso.`
+        : `¿Ya no necesitas ${NOMBRES_PROCESO_PAPEL[nombreProceso]} para este pedido? Se quitará (todavía no tiene nada capturado).`
     );
     if (!confirmado) return;
 
@@ -1740,9 +1776,10 @@ export default function ModalProcesoIndividualPapel({ pedido, nombreProceso, onC
     try {
       await finalizarProcesoPapel(pedido.idproduccion, {
         ...formDatos, observaciones: observaciones.trim() || null, tabla_proceso: nombreProceso,
+        ...(nombreProceso === "hojeado_papel" ? { continuar_guillotina: continuarGuillotina } : {}),
       });
       limpiarBorrador(claveBorradorFinalizar);
-      await cargar(); onActualizar(); setAccion(null); setFormDatos({});
+      await cargar(); onActualizar(); setAccion(null); setFormDatos({}); setContinuarGuillotina(false);
     } catch (e: any) {
       setError(e.response?.data?.error || "Error al finalizar proceso");
     } finally { setGuardando(false); }
@@ -1792,7 +1829,7 @@ export default function ModalProcesoIndividualPapel({ pedido, nombreProceso, onC
   // puede apuntar a uno de los dos a la vez y el otro seguiría bloqueado
   // sin motivo.
   const puedeIniciar = esProcesoPreparacion
-    ? proc?.estado === "pendiente"
+    ? proc?.estado === "pendiente" && anteriorTieneAvancesOTerminado
     : (datos?.proceso_actual === proc?.idproceso_cat && proc?.estado === "pendiente") || tienePendienteSinIniciar;
   const puedeFinalizar = proc?.estado === "en_proceso" && proc?.registro?.fecha_inicio && anteriorTerminado;
   const puedeAvance = proc?.estado === "en_proceso" && proc?.registro?.fecha_inicio;
@@ -1891,15 +1928,20 @@ export default function ModalProcesoIndividualPapel({ pedido, nombreProceso, onC
       {puedeReiniciarPreparacion && (
         <div className="flex items-center justify-between bg-red-50 border border-red-200 rounded-lg px-3 py-2">
           <p className="text-xs text-red-700">
-            ¿Te equivocaste de máquina? Puedes reiniciar {NOMBRES_PROCESO_PAPEL[nombreProceso]} para
-            capturar en la otra.
+            {preparacionYaArranco
+              ? <>¿Te equivocaste de máquina? Puedes reiniciar {NOMBRES_PROCESO_PAPEL[nombreProceso]}.</>
+              : <>¿Ya no necesitas {NOMBRES_PROCESO_PAPEL[nombreProceso]} para este pedido? Puedes quitarlo.</>
+            }
           </p>
           <button
             onClick={handleReiniciarPreparacion}
             disabled={reiniciando}
             className="shrink-0 ml-3 px-3 py-1.5 text-xs font-semibold text-red-700 border border-red-300 rounded-lg hover:bg-red-100 disabled:opacity-50"
           >
-            {reiniciando ? "Reiniciando…" : "Reiniciar proceso"}
+            {reiniciando
+              ? "Reiniciando…"
+              : preparacionYaArranco ? "Reiniciar proceso" : "Quitar proceso"
+            }
           </button>
         </div>
       )}
@@ -2178,6 +2220,29 @@ export default function ModalProcesoIndividualPapel({ pedido, nombreProceso, onC
               ) : (
                 <div className="space-y-3 bg-gray-50 border border-gray-200 rounded-lg p-3">
                   <p className="text-sm font-semibold text-gray-700">Datos de finalización</p>
+
+                  {nombreProceso === "hojeado_papel" && (
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                      <label className="flex items-start gap-2 text-sm font-medium text-blue-900">
+                        <input
+                          type="checkbox"
+                          checked={continuarGuillotina}
+                          onChange={(e) => setContinuarGuillotina(e.target.checked)}
+                          className="w-4 h-4 mt-0.5"
+                        />
+                        <span>
+                          ¿Este pedido también pasa por Guillotina?
+                          <span className="block text-xs font-normal text-blue-600 mt-0.5">
+                            Márcalo solo si esta orden necesita las dos máquinas de preparación, una
+                            seguida de la otra. Si lo dejas sin marcar, este proceso se da por
+                            completo y sigue directo al siguiente (Guillotina queda como
+                            "No aplica" para este pedido — lo puedes cambiar después si hiciera falta).
+                          </span>
+                        </span>
+                      </label>
+                    </div>
+                  )}
+
                   {camposRegistroPropio.map((campo) => (
                     <div key={campo.key}>
                       <label className="block text-xs font-medium text-gray-600 mb-1">{campo.label}</label>

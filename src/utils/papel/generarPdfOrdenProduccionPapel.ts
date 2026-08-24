@@ -1248,6 +1248,11 @@ function bloqueLaminacion(
 
   const metros = fmtNum(reg.metros ?? anyData.metros_laminacion_estimados);
   const rollos = fmtNum(reg.rollos ?? anyData.rollos_laminacion_estimados, 1);
+  // Referencia sin merma: solo cuando el número de arriba es el estimado del
+  // sistema. Si planta ya capturó metros reales, comparar contra el teórico
+  // del pedido no aporta nada y solo mete ruido en la celda.
+  const metrosSinMerma =
+    reg.metros == null ? fmtNum(anyData.metros_laminacion_sin_merma) : "";
   const desarrollo = primeraLinea(reg.desarrollo_mm, anyData.desarrollo_laminacion_mm, anyData.desarrollo_mm);
   const ctesMod = primeraLinea(reg.ctes_mod, anyData.ctes_mod_laminacion, anyData.ctes_mod);
 
@@ -1264,6 +1269,15 @@ function bloqueLaminacion(
   }
   if (ctesMod) {
     etiquetaValor(doc, "CTES/Mod:", f(ctesMod), mainX + 1.4, sy, box1W - 3, { labelSize: FS.SPEC, valorSize: FS.SPEC });
+    sy += 3.0;
+  }
+  // Discreta a propósito: gris y en la tipografía más chica del formato. Es
+  // un dato de cotejo, no una instrucción de planta -- lo que se surte es el
+  // renglón "Metros" de arriba, que sí trae la merma.
+  if (metrosSinMerma) {
+    txt(doc, `s/merma: ${metrosSinMerma} mts`, mainX + 1.4, sy, {
+      size: FS.ETIQUETA, color: GRAY_LABEL,
+    });
   }
 
   // Columna derecha: número arriba, acabado + bobina abajo.

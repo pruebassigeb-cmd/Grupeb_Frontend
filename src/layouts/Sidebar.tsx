@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, type ReactNode } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { tienePermisoDePantalla } from "../utils/permisosUsuario";
-import { getContadorTickets } from "../services/tickets/tickets.service";
+import { getContadorTickets, getNotificacionesTickets } from "../services/tickets/tickets.service";
 import logo from "../assets/grupeblanco.png";
 import InstallButton from "../components/pwa/InstallButton";
 
@@ -42,6 +42,10 @@ export default function Dashboard({ children }: DashboardProps) {
   // del menú. Se pide al montar y se refresca al cambiar de pantalla —
   // sin polling constante para no generar tráfico de más.
   const [contadorTickets, setContadorTickets] = useState<number | null>(null);
+  // 🔔 Cuántos tickets tienen algo nuevo sin leer (comentario o imagen de
+  // alguien más desde la última vez que los abriste). Aparte del contador
+  // de activos — ese cuenta tickets abiertos, esto cuenta "hay algo nuevo".
+  const [campanitaTickets, setCampanitaTickets] = useState<number>(0);
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -83,6 +87,9 @@ export default function Dashboard({ children }: DashboardProps) {
     getContadorTickets()
       .then(setContadorTickets)
       .catch(() => setContadorTickets(null));
+    getNotificacionesTickets()
+      .then((n) => setCampanitaTickets(n.total))
+      .catch(() => setCampanitaTickets(0));
   }, [location.pathname]);
 
   const menuItems: MenuItem[] = [
@@ -277,6 +284,15 @@ export default function Dashboard({ children }: DashboardProps) {
     : esRolExclusivoCotizadorLibre
     ? menuItems.filter((item) => item.name === "Cotizador Interactivo")
     : menuItems.filter((item) => {
+        // Tickets es la única pantalla que a propósito NO bypassa con
+        // acceso_total — Admin y Super Usuario tienen ese flag en true, y
+        // si se dejara pasar por ahí, desmarcar la casilla de tickets en
+        // Roles y Privilegios no serviría de nada (seguiría apareciendo el
+        // menú). Aquí se exige el privilegio real, sin atajos.
+        if (item.name === "Tickets") {
+          const p = user?.privilegios ?? [];
+          return p.includes("tickets.crear") || p.includes("tickets.resolver");
+        }
         if (item.accesoTotal) return user?.acceso_total === true;
         if (!item.permiso && !item.permisoOr && !item.permisoPantalla) return true;
         if (user?.acceso_total) return true;
@@ -314,6 +330,19 @@ export default function Dashboard({ children }: DashboardProps) {
     </span>
   );
 
+  // 🔔 Campanita de no-leído — distinta del Badge de arriba a propósito:
+  // el Badge cuenta tickets ABIERTOS (pendiente+en proceso), esta cuenta
+  // cuántos de ESOS tienen algo nuevo (comentario/imagen) sin que lo hayas
+  // visto. Son dos preguntas distintas, por eso dos colores distintos.
+  const BellBadge = ({ n }: { n: number }) => (
+    <span
+      title="Tickets con algo nuevo sin leer"
+      className="inline-flex items-center gap-0.5 justify-center min-w-[24px] h-[18px] px-1.5 rounded-full bg-rose-600 text-white text-[10px] font-bold leading-none"
+    >
+      🔔 {n > 99 ? "99+" : n}
+    </span>
+  );
+
   const renderMenuItem = (item: MenuItem) => {
     const hasSub       = item.subItems.length > 0;
     const expanded     = expandedMenus.includes(item.name);
@@ -328,6 +357,7 @@ export default function Dashboard({ children }: DashboardProps) {
     });
 
     const badgeCount = item.name === "Tickets" ? contadorTickets : null;
+    const campanaCount = item.name === "Tickets" ? campanitaTickets : 0;
 
     // ── COLAPSADO ─────────────────────────────────────────────────────────────
     if (collapsed) {
@@ -364,6 +394,12 @@ export default function Dashboard({ children }: DashboardProps) {
                 <Badge n={badgeCount} />
               </span>
             )}
+            {campanaCount > 0 && (
+              <span
+                title="Tickets con algo nuevo sin leer"
+                className="absolute bottom-0.5 right-1.5 w-2 h-2 rounded-full bg-rose-600 border border-slate-800"
+              />
+            )}
           </button>
         </div>
       );
@@ -389,6 +425,7 @@ export default function Dashboard({ children }: DashboardProps) {
           <span>{item.name}</span>
           <span className="flex items-center gap-1.5">
             {!!badgeCount && <Badge n={badgeCount} />}
+            {campanaCount > 0 && <BellBadge n={campanaCount} />}
             {hasSub && (
               <span className={`transition-transform ${expanded ? "rotate-180" : ""}`}>▼</span>
             )}

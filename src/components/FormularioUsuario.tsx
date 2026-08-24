@@ -279,9 +279,14 @@ const subirFotosINE = async (idusuario: number) => {
   const cargarBaseDelRol = async (rolId: number): Promise<number[]> => {
     try {
       const privilegiosRol = await getPrivilegiosByRol(rolId);
-      const base = privilegiosRol.acceso_total ? [] : privilegiosRol.base;
-      setBaseDelRol(base);
-      return base;
+      // ANTES: "privilegiosRol.acceso_total ? [] : privilegiosRol.base" —
+      // tiraba la base real cuando el rol tenía acceso total, porque ese
+      // flag ya daba acceso a todo lo demás. Pero Tickets es la excepción
+      // manual (ver Roles.tsx): un rol como Admin puede traer
+      // "tickets.resolver" marcado a nivel de rol, y aquí hay que mostrarlo
+      // como heredado de verdad, no descartarlo.
+      setBaseDelRol(privilegiosRol.base);
+      return privilegiosRol.base;
     } catch {
       setBaseDelRol([]);
       return [];
@@ -441,6 +446,15 @@ else if (!/^\d{4,8}$/.test(datos.codigo)) e.codigo = "El código debe tener entr
   const rolSeleccionado  = roles.find(r => r.idroles === datos.roles_idroles);
   const tieneAccesoTotal = rolSeleccionado?.acceso_total || false;
   const totalINE         = fotosINE.length + archivosINEPendientes.length;
+
+  // Mismo criterio que Roles.tsx: el privilegio de tickets solo aparece
+  // como opción si el rol de esta persona es Admin o Super Usuario — a un
+  // "Usuario" o "Ventas" ni se le ofrece la casilla, aunque sea individual.
+  const ROLES_CON_ACCESO_TICKETS = ["Admin", "Super Usuario"];
+  const rolConAccesoTickets = ROLES_CON_ACCESO_TICKETS.includes(rolSeleccionado?.nombre || "");
+  const privilegiosVisibles = privilegios.filter(
+    (p) => !p.clave?.startsWith("tickets.") || rolConAccesoTickets
+  );
 
   const input = (campo?: string) =>
     `w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent
@@ -675,14 +689,40 @@ else if (!/^\d{4,8}$/.test(datos.codigo)) e.codigo = "El código debe tener entr
         ) : (
           <p className="text-gray-600 mb-4 text-sm">Selecciona los privilegios que tendrá este usuario</p>
         )}
-        <SelectorPrivilegios
-          privilegios={privilegios}
-          modulos={modulos}
-          seleccionados={datos.privilegios || []}
-          bloqueados={baseDelRol}
-          deshabilitado={tieneAccesoTotal}
-          onChange={ids => setDatos(prev => ({ ...prev, privilegios: ids }))}
-        />
+
+        {/* Con acceso total, el selector general no sirve de nada (ese flag
+            ya da acceso a todo) — PERO Tickets es la excepción manual: esta
+            persona puede necesitar el privilegio aunque su rol ya tenga
+            acceso total al resto. Por eso aquí NO se deshabilita para
+            tickets, aunque sí para todo lo demás (el selector de abajo ni
+            se muestra en ese caso). */}
+        {tieneAccesoTotal ? (
+          rolConAccesoTickets && (
+            <div className="mt-2">
+              <p className="text-sm font-medium text-gray-700 mb-2">
+                🎫 Acceso individual a Mesa de Tickets{" "}
+                <span className="text-xs text-gray-400 font-normal">
+                  (excepción — esta persona puede tenerlo aunque otros Admin no)
+                </span>
+              </p>
+              <SelectorPrivilegios
+                privilegios={privilegios.filter(p => p.clave?.startsWith("tickets."))}
+                modulos={modulos}
+                seleccionados={datos.privilegios || []}
+                bloqueados={baseDelRol}
+                onChange={ids => setDatos(prev => ({ ...prev, privilegios: ids }))}
+              />
+            </div>
+          )
+        ) : (
+          <SelectorPrivilegios
+            privilegios={privilegiosVisibles}
+            modulos={modulos}
+            seleccionados={datos.privilegios || []}
+            bloqueados={baseDelRol}
+            onChange={ids => setDatos(prev => ({ ...prev, privilegios: ids }))}
+          />
+        )}
         <div className="flex justify-end gap-3 mt-6">
           <button type="button" onClick={() => setPaso(1)}
             className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">Atrás</button>

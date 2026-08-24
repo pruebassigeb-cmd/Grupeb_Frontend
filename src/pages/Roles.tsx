@@ -23,6 +23,17 @@ import type { Privilegio, PrivilegioModulo } from "../types/privilegio.types";
 
 type Tab = "roles" | "privilegios";
 
+// Roles a los que se les permite ver/seleccionar los privilegios de tickets
+// (tickets.crear, tickets.resolver, y cualquier otro que empiece con
+// "tickets."). Un rol como "Usuario" o "Ventas" ni siquiera ve la casilla —
+// no es que esté deshabilitada, no aparece. Y aunque el rol sea Admin o
+// Super Usuario, nunca nace premarcada: alguien tiene que entrar aquí y
+// marcarla a propósito, porque hay Admin que no deben tener acceso al
+// módulo. Ver también: middlewares/auth.middleware.ts (esResolutorTickets
+// tampoco usa acceso_total para esto, mismo criterio de "no dar por hecho
+// el acceso solo por el rol").
+const ROLES_CON_ACCESO_TICKETS = ["Admin", "Super Usuario"];
+
 // ════════════════════════════════════════════════════════════════════════
 // FORMULARIO DE ROL
 // ════════════════════════════════════════════════════════════════════════
@@ -39,12 +50,12 @@ function FormularioRol({
   const [descripcion, setDescripcion] = useState(rol?.descripcion || "");
   const [accesoTotal, setAccesoTotal] = useState(rol?.acceso_total || false);
   const [base, setBase]               = useState<number[]>([]);
-  const [cargandoBase, setCargandoBase] = useState(!!rol && !rol.acceso_total);
+  const [cargandoBase, setCargandoBase] = useState(!!rol);
   const [guardando, setGuardando]     = useState(false);
   const [error, setError]             = useState("");
 
   useEffect(() => {
-    if (!rol || rol.acceso_total) { setCargandoBase(false); return; }
+    if (!rol) { setCargandoBase(false); return; }
     (async () => {
       try {
         const data = await getPrivilegiosByRol(rol.idroles);
@@ -56,6 +67,29 @@ function FormularioRol({
       }
     })();
   }, [rol]);
+
+  // Se evalúa contra el NOMBRE que se está escribiendo ahora mismo, no
+  // contra `rol` — así funciona igual creando un rol nuevo llamado "Admin"
+  // que editando uno que ya se llamaba así.
+  const rolConAccesoTickets = ROLES_CON_ACCESO_TICKETS.includes(nombre.trim());
+
+  const privilegiosVisibles = privilegios.filter(
+    (p) => !p.clave?.startsWith("tickets.") || rolConAccesoTickets
+  );
+
+  // Si renombran el rol y deja de calificar (ej. de "Admin" a "Admin Junior"),
+  // los privilegios de tickets que ya estaban marcados se sueltan solos —
+  // si no, se guardarían "a ciegas" aunque la casilla ya ni se vea.
+  useEffect(() => {
+    if (rolConAccesoTickets) return;
+    const idsTickets = privilegios.filter((p) => p.clave?.startsWith("tickets.")).map((p) => p.idprivilegios);
+    if (idsTickets.length === 0) return;
+    setBase((prev) => {
+      const filtrado = prev.filter((id) => !idsTickets.includes(id));
+      return filtrado.length === prev.length ? prev : filtrado;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rolConAccesoTickets]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -96,7 +130,31 @@ function FormularioRol({
             <p className="text-sm text-gray-500">Cargando privilegios...</p>
           ) : (
             <SelectorPrivilegios
-              privilegios={privilegios}
+              privilegios={privilegiosVisibles}
+              modulos={modulos}
+              seleccionados={base}
+              onChange={setBase}
+            />
+          )}
+        </div>
+      )}
+
+      {/* Excepción: Tickets NO se rige por "acceso total" — se controla
+          100% manual, así que aunque el rol tenga acceso total al resto del
+          sistema, aquí sigue apareciendo para marcarlo (o no) a propósito. */}
+      {accesoTotal && rolConAccesoTickets && (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            🎫 Acceso a Mesa de Tickets{" "}
+            <span className="text-xs text-gray-400 font-normal">
+              (excepción — no depende de "acceso total", se marca aparte)
+            </span>
+          </label>
+          {cargandoBase ? (
+            <p className="text-sm text-gray-500">Cargando privilegios...</p>
+          ) : (
+            <SelectorPrivilegios
+              privilegios={privilegios.filter((p) => p.clave?.startsWith("tickets."))}
               modulos={modulos}
               seleccionados={base}
               onChange={setBase}
@@ -267,9 +325,15 @@ export default function Roles() {
         ? await editarRol(rolEditar.idroles, { nombre: datos.nombre, descripcion: datos.descripcion, acceso_total: datos.acceso_total })
         : await crearRol({ nombre: datos.nombre, descripcion: datos.descripcion, acceso_total: datos.acceso_total });
 
-      if (!datos.acceso_total) {
-        await actualizarPrivilegiosRol(guardado.idroles, datos.base);
-      }
+      // ANTES: "if (!datos.acceso_total)" — se saltaba el guardado entero
+      // de privilegios para roles con acceso total, porque ese flag ya les
+      // daba acceso a todo lo demás. Pero Tickets es la excepción manual
+      // (ver FormularioRol): un rol con acceso total puede perfectamente
+      // traer 1 o 2 privilegios de tickets marcados, y hay que guardarlos
+      // sin importar el flag. Guardar un arreglo vacío para el resto de los
+      // roles con acceso total tampoco rompe nada — sigue siendo lo mismo
+      // que ya pasaba antes para ellos.
+      await actualizarPrivilegiosRol(guardado.idroles, datos.base);
 
       showAlert(rolEditar ? "Rol actualizado exitosamente" : "Rol creado exitosamente");
       setModalRolAbierto(false);
