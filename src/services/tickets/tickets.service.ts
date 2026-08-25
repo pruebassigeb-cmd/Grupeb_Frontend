@@ -29,6 +29,7 @@ export interface Ticket {
   descripcion: string;
   ubicacion: string | null;
   prioridad: PrioridadTicket;
+  estrellas: 1 | 2 | 3 | 4 | 5;
   estado: EstadoTicket;
   creado_por: number;
   creador_nombre?: string;
@@ -86,6 +87,7 @@ export interface CrearTicketPayload {
   descripcion: string;
   ubicacion?: string;
   prioridad?: PrioridadTicket;
+  estrellas?: 1 | 2 | 3 | 4 | 5;
   idticket_relacionado?: number;
   es_personal?: boolean;
 }
@@ -112,6 +114,11 @@ export const liberarTicket = async (id: number): Promise<Ticket> => {
 
 export const cambiarPrioridadTicket = async (id: number, prioridad: PrioridadTicket): Promise<Ticket> => {
   const { data } = await api.patch<Ticket>(`/tickets/${id}/prioridad`, { prioridad });
+  return data;
+};
+
+export const cambiarEstrellasTicket = async (id: number, estrellas: 1 | 2 | 3 | 4 | 5): Promise<Ticket> => {
+  const { data } = await api.patch<Ticket>(`/tickets/${id}/estrellas`, { estrellas });
   return data;
 };
 

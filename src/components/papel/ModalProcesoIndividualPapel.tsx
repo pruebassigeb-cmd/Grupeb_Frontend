@@ -1788,8 +1788,18 @@ export default function ModalProcesoIndividualPapel({ pedido, nombreProceso, onC
   const handleAbrirFinalizar = () => {
     const preFill: Record<string, any> = {};
     const camposEntrada = campos.filter(c => c.readOnly);
+    // Hojeado y Guillotina son puntos de entrada de la cascada (no tienen
+    // procAnterior real que les herede una cantidad) -- su campo "objetivo"
+    // sale del estimado calculado en la ficha (el mismo que se muestra en
+    // BloqueVisualHojeadoGuillotina como "Pliegos calculados"), no de un
+    // proceso anterior. Sin este caso especial siempre caía en 0.
+    const calculadoFicha =
+      nombreProceso === "hojeado_papel" ? pedido.pliegos_hojeado_calculado
+      : nombreProceso === "guillotina_papel" ? pedido.pliegos_guillotina_calculado
+      : undefined;
     camposEntrada.forEach(c => {
-      preFill[c.key] = proc?.registro?.[c.key] ?? procAnterior?.registro?.pliegos_entregados
+      preFill[c.key] = proc?.registro?.[c.key] ?? calculadoFicha
+        ?? procAnterior?.registro?.pliegos_entregados
         ?? procAnterior?.registro?.cantidad_entregada ?? procAnterior?.registro?.bolsas_entregadas ?? 0;
     });
     setFormDatos(preFill); setAccion("finalizar");

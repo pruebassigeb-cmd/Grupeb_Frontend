@@ -10,6 +10,7 @@ import {
   getTicketDetalle,
   cambiarEstadoTicket,
   cambiarPrioridadTicket,
+  cambiarEstrellasTicket,
   tomarTicket,
   comentarTicket,
   asignarTicketA,
@@ -96,6 +97,69 @@ const estaVencido = (t: Ticket) =>
 // dueño ya puesto, para que nadie más lo agarre mientras tanto.
 const esReservado = (t: Ticket) => t.estado === "Pendiente" && !!t.asignado_a && !t.rebotado;
 
+// Hora de un mensaje individual, formato "6:04 p.m." — usa la zona horaria
+// del navegador, que ya es la correcta (la de quien lo está viendo).
+const formatearHora = (iso: string) =>
+  new Date(iso).toLocaleTimeString("es-MX", { hour: "numeric", minute: "2-digit" });
+
+// Separador de día estilo WhatsApp: "Hoy" / "Ayer" / "25 de agosto".
+const formatearSeparadorFecha = (iso: string) => {
+  const fecha = new Date(iso);
+  const hoy = new Date();
+  const ayer = new Date();
+  ayer.setDate(hoy.getDate() - 1);
+  const mismoDia = (a: Date, b: Date) =>
+    a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+  if (mismoDia(fecha, hoy)) return "Hoy";
+  if (mismoDia(fecha, ayer)) return "Ayer";
+  return fecha.toLocaleDateString("es-MX", {
+    day: "numeric",
+    month: "long",
+    year: fecha.getFullYear() !== hoy.getFullYear() ? "numeric" : undefined,
+  });
+};
+
+// Estrellas 1-3 para desempatar importancia dentro de la misma prioridad.
+// En modo solo-lectura son <span> (se usa dentro de la tarjeta, que ya es
+// un <button> — no se puede meter un <button> dentro de otro). En modo
+// editable sí son botones individuales, solo se usa en el drawer.
+function Estrellas({
+  valor,
+  editable = false,
+  onChange,
+  className = "text-xs",
+}: {
+  valor: number;
+  editable?: boolean;
+  onChange?: (n: 1 | 2 | 3 | 4 | 5) => void;
+  className?: string;
+}) {
+  return (
+    <span className={`inline-flex items-center gap-0.5 ${className}`}>
+      {([1, 2, 3, 4, 5] as const).map((n) =>
+        editable ? (
+          <button
+            key={n}
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onChange?.(n);
+            }}
+            title={`${n} estrella${n > 1 ? "s" : ""}`}
+            className="leading-none px-0.5 hover:scale-110 transition-transform"
+          >
+            <span className={n <= valor ? "text-amber-500" : "text-slate-300"}>★</span>
+          </button>
+        ) : (
+          <span key={n} className={`leading-none ${n <= valor ? "text-amber-500" : "text-slate-300"}`}>
+            ★
+          </span>
+        )
+      )}
+    </span>
+  );
+}
+
 export default function Tickets() {
   const { user } = useAuth();
   // El acceso a tickets es 100% manual por privilegio — sin atajos por rol
@@ -122,7 +186,7 @@ export default function Tickets() {
 
   const [mostrarForm, setMostrarForm] = useState(false);
   const [nuevo, setNuevo] = useState({
-    titulo: "", descripcion: "", ubicacion: "", prioridad: "Media" as PrioridadTicket, idticket_relacionado: "", es_personal: false,
+    titulo: "", descripcion: "", ubicacion: "", prioridad: "Media" as PrioridadTicket, estrellas: 1 as 1 | 2 | 3 | 4 | 5, idticket_relacionado: "", es_personal: false,
   });
   const [archivosNuevo, setArchivosNuevo] = useState<File[]>([]);
   const [guardando, setGuardando] = useState(false);
@@ -273,6 +337,7 @@ export default function Tickets() {
         descripcion: nuevo.descripcion,
         ubicacion: nuevo.ubicacion || undefined,
         prioridad: nuevo.prioridad,
+        estrellas: nuevo.estrellas,
         idticket_relacionado: nuevo.idticket_relacionado ? Number(nuevo.idticket_relacionado) : undefined,
         es_personal: nuevo.es_personal,
       });
@@ -282,7 +347,7 @@ export default function Tickets() {
       // una foto de cámara puede pesar varios MB y tardar bastante con
       // datos móviles; sentía que se quedaba "trabado" creando).
       const archivosPendientes = archivosNuevo;
-      setNuevo({ titulo: "", descripcion: "", ubicacion: "", prioridad: "Media", idticket_relacionado: "", es_personal: false });
+      setNuevo({ titulo: "", descripcion: "", ubicacion: "", prioridad: "Media", estrellas: 1, idticket_relacionado: "", es_personal: false });
       setArchivosNuevo([]);
       setMostrarForm(false);
       await cargarLista();
@@ -391,6 +456,16 @@ export default function Tickets() {
       showAlert(e.response?.data?.error || "No se pudo cambiar la prioridad", "error");
     } finally {
       setCambiandoPrioridad(null);
+    }
+  };
+
+  const handleCambiarEstrellas = async (id: number, estrellas: 1 | 2 | 3 | 4 | 5) => {
+    try {
+      await cambiarEstrellasTicket(id, estrellas);
+      await cargarLista();
+      if (drawerId === id) await refrescarDetalle(id);
+    } catch (e: any) {
+      showAlert(e.response?.data?.error || "No se pudieron cambiar las estrellas", "error");
     }
   };
 
@@ -514,7 +589,15 @@ export default function Tickets() {
                 columnas que en la práctica casi nadie revisa a diario. */}
             <div className="flex-1 min-w-0 w-full grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-[1fr_2fr_2fr_1fr_1fr] gap-4">
               {TABLERO_COLUMNAS.map((col) => {
-                const items = tickets.filter(col.filtro).sort((a, b) => RANGO_PRIORIDAD[a.prioridad] - RANGO_PRIORIDAD[b.prioridad]);
+                const items = tickets
+                  .filter(col.filtro)
+                  .sort((a, b) => {
+                    const porPrioridad = RANGO_PRIORIDAD[a.prioridad] - RANGO_PRIORIDAD[b.prioridad];
+                    if (porPrioridad !== 0) return porPrioridad;
+                    // Misma prioridad — desempata con estrellas, más
+                    // estrellas primero (3 antes que 1).
+                    return b.estrellas - a.estrellas;
+                  });
                 return (
                   <div key={col.key} className="flex flex-col min-w-0">
                     <div className="flex items-center gap-2 mb-3 px-1">
@@ -570,7 +653,10 @@ export default function Tickets() {
                               </span>
                             </div>
                           </div>
-                          <p className="text-sm font-semibold text-slate-800 leading-snug line-clamp-2">{t.titulo}</p>
+                          <div className="flex items-center gap-1.5 mb-1">
+                            <p className="text-sm font-semibold text-slate-800 leading-snug line-clamp-2 flex-1">{t.titulo}</p>
+                            <Estrellas valor={t.estrellas} className="text-[10px] flex-shrink-0" />
+                          </div>
                           <div className="flex items-center justify-between mt-2">
                             {t.asignado_nombre ? (
                               <div className="flex items-center gap-1.5 min-w-0">
@@ -731,6 +817,15 @@ export default function Tickets() {
                   </select>
                 )}
               </div>
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200 bg-slate-50">
+                <span className="text-xs text-slate-500">Importancia dentro de esta prioridad:</span>
+                <Estrellas
+                  valor={nuevo.estrellas}
+                  editable
+                  onChange={(n) => setNuevo({ ...nuevo, estrellas: n })}
+                  className="text-base"
+                />
+              </div>
 
               <label className="flex items-center gap-2 text-sm text-slate-600 bg-purple-50 border border-purple-200 rounded-lg px-3 py-2 cursor-pointer">
                 <input
@@ -847,6 +942,12 @@ export default function Tickets() {
                           {detalle.prioridad}
                         </span>
                       )}
+                      <Estrellas
+                        valor={detalle.estrellas}
+                        editable={detalle.creado_por === user?.id}
+                        onChange={(n) => handleCambiarEstrellas(detalle.idticket, n)}
+                        className="text-sm"
+                      />
                       {detalle.es_personal && (
                         <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-100 text-purple-700">
                           🔒 Personal
@@ -1234,42 +1335,58 @@ export default function Tickets() {
                   {detalle.comentarios.length === 0 && (
                     <p className="text-xs italic text-slate-400">Aún no hay comentarios.</p>
                   )}
-                  {detalle.comentarios.map((c) => (
-                    <div
-                      key={c.idticket_comentario}
-                      className={`p-2.5 rounded-xl text-sm ${
-                        c.es_interno ? "bg-amber-50 border border-amber-200" : "bg-slate-50 border border-slate-100"
-                      }`}
-                    >
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-xs font-semibold text-slate-700">
-                          {c.nombre} {c.apellido}
-                        </span>
-                        {c.es_interno && (
-                          <span className="text-[10px] font-semibold text-amber-700">🔒 Nota interna</span>
+                  {detalle.comentarios.map((c, i) => {
+                    const anterior = detalle.comentarios[i - 1];
+                    const mostrarSeparador =
+                      !anterior || formatearSeparadorFecha(c.created_at) !== formatearSeparadorFecha(anterior.created_at);
+                    return (
+                      <div key={c.idticket_comentario}>
+                        {mostrarSeparador && (
+                          <div className="flex items-center justify-center py-1.5">
+                            <span className="text-[10px] font-semibold text-slate-400 bg-slate-100 rounded-full px-3 py-1">
+                              {formatearSeparadorFecha(c.created_at)}
+                            </span>
+                          </div>
                         )}
-                      </div>
-                      <p className="text-slate-600">{c.comentario}</p>
-                      {detalle.archivos.filter((a) => a.ticket_comentario_id === c.idticket_comentario).length > 0 && (
-                        <div className="flex flex-wrap gap-1.5 pt-2">
-                          {detalle.archivos
-                            .filter((a) => a.ticket_comentario_id === c.idticket_comentario)
-                            .map((a) => (
-                              <a
-                                key={a.id_archivo}
-                                href={a.url || "#"}
-                                target="_blank"
-                                rel="noreferrer"
-                                title={a.nombre}
-                                className="block w-12 h-12 rounded-md overflow-hidden border border-slate-200 hover:opacity-80 transition-opacity"
-                              >
-                                {a.url && <img src={a.url} alt={a.nombre} className="w-full h-full object-cover" />}
-                              </a>
-                            ))}
+                        <div
+                          className={`p-2.5 rounded-xl text-sm ${
+                            c.es_interno ? "bg-amber-50 border border-amber-200" : "bg-slate-50 border border-slate-100"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between mb-1 gap-2">
+                            <span className="text-xs font-semibold text-slate-700 truncate">
+                              {c.nombre} {c.apellido}
+                            </span>
+                            <div className="flex items-center gap-1.5 flex-shrink-0">
+                              {c.es_interno && (
+                                <span className="text-[10px] font-semibold text-amber-700">🔒 Nota interna</span>
+                              )}
+                              <span className="text-[10px] text-slate-400">{formatearHora(c.created_at)}</span>
+                            </div>
+                          </div>
+                          <p className="text-slate-600">{c.comentario}</p>
+                          {detalle.archivos.filter((a) => a.ticket_comentario_id === c.idticket_comentario).length > 0 && (
+                            <div className="flex flex-wrap gap-1.5 pt-2">
+                              {detalle.archivos
+                                .filter((a) => a.ticket_comentario_id === c.idticket_comentario)
+                                .map((a) => (
+                                  <a
+                                    key={a.id_archivo}
+                                    href={a.url || "#"}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    title={a.nombre}
+                                    className="block w-12 h-12 rounded-md overflow-hidden border border-slate-200 hover:opacity-80 transition-opacity"
+                                  >
+                                    {a.url && <img src={a.url} alt={a.nombre} className="w-full h-full object-cover" />}
+                                  </a>
+                                ))}
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </div>
-                  ))}
+                      </div>
+                    );
+                  })}
                 </div>
 
                 <div className="px-5 pb-4">
