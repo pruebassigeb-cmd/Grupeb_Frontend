@@ -171,7 +171,7 @@ export const cambiarEstadoTicket = async (id: number, estado: EstadoTicket): Pro
   return data;
 };
 
-export const tomarTicket = async (id: number, duracion?: { dias_habiles?: number; horas_habiles?: number }): Promise<Ticket> => {
+export const tomarTicket = async (id: number, duracion?: { dias_habiles?: number; horas_habiles?: number; minutos_habiles?: number }): Promise<Ticket> => {
   const { data } = await api.post<Ticket>(`/tickets/${id}/tomar`, duracion ?? {});
   return data;
 };

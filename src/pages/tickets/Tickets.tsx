@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Dashboard from "../../layouts/Sidebar";
 import { useAuth } from "../../context/AuthContext";
 import AuditoriaDesplegable from "../../components/auditoria/AuditoriaDesplegable";
@@ -96,6 +96,15 @@ const estaVencido = (t: Ticket) =>
 // todavía no lo confirma/toma — se queda en Pendiente a propósito, con
 // dueño ya puesto, para que nadie más lo agarre mientras tanto.
 const esReservado = (t: Ticket) => t.estado === "Pendiente" && !!t.asignado_a && !t.rebotado;
+
+// % de diferencia entre lo real y lo estimado — mismo cálculo que ya se
+// usaba solo dentro del drawer, ahora reutilizable para la tarjeta también.
+// null si no hay con qué comparar (falta el estimado o el real).
+const pctTiempo = (t: Ticket): { pct: number; sobreEstimado: boolean } | null => {
+  if (t.duracion_estimada_horas == null || t.tiempo_real_horas == null || t.duracion_estimada_horas === 0) return null;
+  const pct = Math.round(((t.tiempo_real_horas - t.duracion_estimada_horas) / t.duracion_estimada_horas) * 100);
+  return { pct, sobreEstimado: pct > 0 };
+};
 
 // Hora de un mensaje individual, formato "6:04 p.m." — usa la zona horaria
 // del navegador, que ya es la correcta (la de quien lo está viendo).
@@ -209,6 +218,7 @@ export default function Tickets() {
   const [mostrarEstimacion, setMostrarEstimacion] = useState(false);
   const [estimacionDias, setEstimacionDias] = useState("");
   const [estimacionHoras, setEstimacionHoras] = useState("");
+  const [estimacionMinutos, setEstimacionMinutos] = useState("");
 
   const [comentarioDraft, setComentarioDraft] = useState("");
   const [comentarioInterno, setComentarioInterno] = useState(false);
@@ -323,6 +333,7 @@ export default function Tickets() {
     setMostrarEstimacion(false);
     setEstimacionDias("");
     setEstimacionHoras("");
+    setEstimacionMinutos("");
   };
 
   const handleCrear = async () => {
@@ -388,9 +399,11 @@ export default function Tickets() {
     try {
       const dias = Number(estimacionDias) || 0;
       const horas = Number(estimacionHoras) || 0;
-      await tomarTicket(id, { dias_habiles: dias, horas_habiles: horas });
+      const minutos = Number(estimacionMinutos) || 0;
+      await tomarTicket(id, { dias_habiles: dias, horas_habiles: horas, minutos_habiles: minutos });
       setEstimacionDias("");
       setEstimacionHoras("");
+      setEstimacionMinutos("");
       setMostrarEstimacion(false);
       await cargarLista();
       if (drawerId === id) await refrescarDetalle(id);
@@ -509,6 +522,41 @@ export default function Tickets() {
 
   const archivablesParaVincular = tickets.filter((t) => t.estado === "Finalizado");
 
+  // Con "Ver archivo histórico" activo, solo Finalizado y Cancelado pueden
+  // tener algo (son los únicos estados que el cron archiva) — mostrar
+  // Rebotados/Pendiente/En proceso vacíos ahí no aporta nada.
+  const columnasVisibles = verArchivados
+    ? TABLERO_COLUMNAS.filter((c) => c.key === "Finalizado" || c.key === "Cancelado")
+    : TABLERO_COLUMNAS;
+  const gridColsClass = verArchivados
+    ? "xl:grid-cols-[minmax(260px,1fr)_minmax(260px,1fr)]"
+    : "xl:grid-cols-[minmax(155px,1fr)_minmax(220px,2fr)_minmax(220px,2fr)_minmax(155px,1fr)_minmax(155px,1fr)]";
+
+  // Altura real del tablero, medida en JS — no una clase de Tailwind con
+  // calc(100vh-...), que en este build no estaba surtiendo efecto (por eso
+  // ninguna columna se recortaba y cada una crecía a su tamaño natural,
+  // dejando hueco debajo de las más cortas). Esto sí es 100% responsive:
+  // se recalcula solo con cada resize, sin importar el tamaño de pantalla.
+  const tableroRef = useRef<HTMLDivElement>(null);
+  const [alturaTablero, setAlturaTablero] = useState<number | null>(null);
+
+  useEffect(() => {
+    const calcular = () => {
+      // Por debajo de xl (1280px) el tablero se apila en 1-2 columnas de
+      // flujo normal — ahí no aplica altura fija, se deja crecer natural.
+      if (window.innerWidth < 1280 || !tableroRef.current) {
+        setAlturaTablero(null);
+        return;
+      }
+      const top = tableroRef.current.getBoundingClientRect().top;
+      const disponible = window.innerHeight - top - 16;
+      setAlturaTablero(Math.max(disponible, 320));
+    };
+    calcular();
+    window.addEventListener("resize", calcular);
+    return () => window.removeEventListener("resize", calcular);
+  }, [cargando]);
+
   // Blindaje extra: aunque el Sidebar/rutas ya no deberían dejar entrar a
   // nadie sin el privilegio real, esto evita que alguien vea el tablero
   // completo si llega por URL directa y le falta la casilla en Roles.
@@ -583,14 +631,22 @@ export default function Tickets() {
             <p className="text-sm text-slate-400">No hay tickets por aquí. 🎉</p>
           </div>
         ) : (
-          <div className="flex flex-col xl:flex-row gap-4 items-start">
+          <div
+            ref={tableroRef}
+            className="flex flex-col xl:flex-row gap-4 items-stretch"
+            style={alturaTablero ? { height: `${alturaTablero}px` } : undefined}
+          >
             {/* Pendiente y En proceso ocupan el doble de ancho que
-                Finalizado y Cancelado — ya no compiten por espacio con
-                columnas que en la práctica casi nadie revisa a diario. */}
-            <div className="flex-1 min-w-0 w-full grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-[1fr_2fr_2fr_1fr_1fr] gap-4">
-              {TABLERO_COLUMNAS.map((col) => {
-                const items = tickets
-                  .filter(col.filtro)
+                Finalizado y Cancelado. Mínimos bajos a propósito — mejor
+                que las columnas se achiquen a que aparezca scroll
+                horizontal (eso ya se probó y cortaba contenido a la vista).
+                Un solo cálculo de altura arriba en vez de repetido en cada
+                columna — así todas usan exactamente el mismo espacio
+                disponible y no queda hueco entre la más corta y el resto. */}
+            <div className={`flex-1 grid grid-cols-1 sm:grid-cols-2 ${gridColsClass} xl:grid-rows-[minmax(0,1fr)] gap-3 xl:items-stretch`}>
+                {columnasVisibles.map((col) => {
+                  const items = tickets
+                    .filter(col.filtro)
                   .sort((a, b) => {
                     const porPrioridad = RANGO_PRIORIDAD[a.prioridad] - RANGO_PRIORIDAD[b.prioridad];
                     if (porPrioridad !== 0) return porPrioridad;
@@ -599,15 +655,15 @@ export default function Tickets() {
                     return b.estrellas - a.estrellas;
                   });
                 return (
-                  <div key={col.key} className="flex flex-col min-w-0">
-                    <div className="flex items-center gap-2 mb-3 px-1">
+                  <div key={col.key} className="flex flex-col min-w-0 xl:h-full">
+                    <div className="flex items-center gap-2 mb-3 px-1 flex-shrink-0">
                       <span className={`w-2.5 h-2.5 rounded-full ${col.dot}`} />
                       <h2 className="text-sm font-bold text-slate-700">{col.label}</h2>
                       <span className="ml-auto text-xs font-semibold text-slate-400 bg-slate-100 rounded-full px-2 py-0.5">
                         {items.length}
                       </span>
                     </div>
-                    <div className={`scroll-oculto flex-1 space-y-2.5 rounded-2xl border-t-4 ${col.header} bg-slate-50/60 p-2.5 min-h-[120px] max-h-[calc(100vh-260px)] overflow-y-auto`}>
+                    <div className={`scroll-oculto flex-1 min-h-0 space-y-2.5 rounded-2xl border-t-4 ${col.header} bg-slate-50/60 p-2.5 overflow-y-auto`}>
                       {items.length === 0 && (
                         <p className="text-xs text-slate-300 italic px-2 py-4 text-center">vacío</p>
                       )}
@@ -617,30 +673,39 @@ export default function Tickets() {
                           onClick={() => abrirTicket(t.idticket)}
                           className={`relative w-full text-left bg-white border-l-4 ${BARRA_PRIORIDAD[t.prioridad]} border border-slate-200 rounded-xl px-3 py-2.5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all`}
                         >
-                          {notificaciones[t.idticket] && (
-                            <span
-                              title="Algo nuevo sin leer"
-                              className="absolute -top-2.5 -right-2.5 w-7 h-7 rounded-full bg-rose-600 border-2 border-white flex items-center justify-center text-sm leading-none animate-pulse"
-                            >
-                              🔔
-                            </span>
-                          )}
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-[10px] font-mono text-slate-400">{t.folio}</span>
-                            <div className="flex items-center gap-1">
+                          <div className="flex items-center justify-between mb-1 gap-1 flex-wrap">
+                            <span className="text-[10px] font-mono text-slate-400 flex-shrink-0">{t.folio}</span>
+                            <div className="flex items-center gap-1 flex-wrap justify-end min-w-0">
+                              {notificaciones[t.idticket] && (
+                                <span
+                                  title="Algo nuevo sin leer"
+                                  className="w-5 h-5 rounded-full bg-rose-600 flex items-center justify-center text-[11px] leading-none animate-pulse flex-shrink-0"
+                                >
+                                  🔔
+                                </span>
+                              )}
                               {t.es_personal && (
-                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-purple-100 text-purple-700">
-                                  🔒 Personal
+                                <span
+                                  title="Ticket personal"
+                                  className="w-4 h-4 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center text-[9px] flex-shrink-0"
+                                >
+                                  🔒
                                 </span>
                               )}
                               {t.rebotado && (
-                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-rose-100 text-rose-700">
-                                  ↻ Rebotado
+                                <span
+                                  title="Rebotado"
+                                  className="w-4 h-4 rounded-full bg-rose-100 text-rose-700 flex items-center justify-center text-[9px] flex-shrink-0"
+                                >
+                                  ↻
                                 </span>
                               )}
                               {esReservado(t) && (
-                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-700">
-                                  📌 Reservado
+                                <span
+                                  title="Reservado — asignado, falta confirmar"
+                                  className="w-4 h-4 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center text-[9px] flex-shrink-0"
+                                >
+                                  📌
                                 </span>
                               )}
                               {estaVencido(t) && (
@@ -657,6 +722,27 @@ export default function Tickets() {
                             <p className="text-sm font-semibold text-slate-800 leading-snug line-clamp-2 flex-1">{t.titulo}</p>
                             <Estrellas valor={t.estrellas} className="text-[10px] flex-shrink-0" />
                           </div>
+                          {t.fecha_compromiso && (
+                            <p className={`text-[10px] mb-1 ${estaVencido(t) ? "text-red-600 font-semibold" : "text-slate-400"}`}>
+                              📅{" "}
+                              {new Date(t.fecha_compromiso).toLocaleString("es-MX", {
+                                day: "2-digit",
+                                month: "short",
+                                hour: "numeric",
+                                minute: "2-digit",
+                              })}
+                            </p>
+                          )}
+                          {(() => {
+                            const resultado = pctTiempo(t);
+                            if (!resultado) return null;
+                            return (
+                              <p className={`text-[10px] font-semibold mb-1 ${resultado.sobreEstimado ? "text-red-600" : "text-emerald-600"}`}>
+                                {resultado.sobreEstimado ? "⚠️" : "✅"} {Math.abs(resultado.pct)}%{" "}
+                                {resultado.sobreEstimado ? "más lento" : "más rápido"} de lo estimado
+                              </p>
+                            );
+                          })()}
                           <div className="flex items-center justify-between mt-2">
                             {t.asignado_nombre ? (
                               <div className="flex items-center gap-1.5 min-w-0">
@@ -692,11 +778,11 @@ export default function Tickets() {
                 proceso. Si el único dev que anda con tickets asignados no
                 tiene nada activo, el panel ni aparece. */}
             {equipoActivo.length > 0 && (
-              <div className="w-full xl:w-72 flex-shrink-0 bg-white border border-slate-200 rounded-2xl p-3.5 max-h-[calc(100vh-260px)] flex flex-col">
+              <div className="w-full xl:w-72 flex-shrink-0 bg-white border border-slate-200 rounded-2xl p-3.5 xl:h-full flex flex-col">
                 <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-3 px-0.5 flex-shrink-0">
                   Equipo activo
                 </h3>
-                <div className="scroll-oculto space-y-5 overflow-y-auto">
+                <div className="scroll-oculto flex-1 min-h-0 space-y-5 overflow-y-auto">
                   {equipoActivo.map((dev) => {
                     const enProceso = dev.tickets.filter((t) => t.estado === "En proceso").length;
                     return (
@@ -781,10 +867,10 @@ export default function Tickets() {
               />
               <textarea
                 placeholder="Describe el problema o solicitud..."
-                rows={3}
+                rows={6}
                 value={nuevo.descripcion}
                 onChange={(e) => setNuevo({ ...nuevo, descripcion: e.target.value })}
-                className="w-full text-sm px-3 py-2 rounded-lg border border-slate-200 resize-none"
+                className="w-full text-sm px-3 py-2 rounded-lg border border-slate-200 resize-y min-h-[120px]"
               />
               <input
                 placeholder="¿Dónde ocurre? ej. Seguimiento → ventana de envíos"
@@ -967,7 +1053,7 @@ export default function Tickets() {
                 </div>
 
                 <div className="px-5 py-4 border-b border-slate-100 space-y-1.5">
-                  <p className="text-sm text-slate-600">{detalle.descripcion}</p>
+                  <p className="text-sm text-slate-600 whitespace-pre-wrap">{detalle.descripcion}</p>
                   {detalle.ubicacion && <p className="text-xs text-slate-500">📍 {detalle.ubicacion}</p>}
                   <p className="text-xs text-slate-400">
                     Creado por {detalle.creador_nombre} {detalle.creador_apellido}
@@ -1104,7 +1190,7 @@ export default function Tickets() {
                           <p className="text-[11px] text-slate-500">
                             ¿Cuánto crees que te va a tomar? Opcional — horas hábiles (L-V, 8am-6pm).
                           </p>
-                          <div className="flex items-center gap-2">
+                          <div className="flex flex-wrap items-center gap-2">
                             <div className="flex items-center gap-1">
                               <input
                                 type="text"
@@ -1126,6 +1212,17 @@ export default function Tickets() {
                                 className="w-14 text-xs px-2 py-1.5 rounded-md border border-slate-200"
                               />
                               <span className="text-xs text-slate-500">horas</span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <input
+                                type="text"
+                                inputMode="numeric"
+                                value={estimacionMinutos}
+                                onChange={(e) => setEstimacionMinutos(e.target.value.replace(/\D/g, ""))}
+                                placeholder="0"
+                                className="w-14 text-xs px-2 py-1.5 rounded-md border border-slate-200"
+                              />
+                              <span className="text-xs text-slate-500">min</span>
                             </div>
                             <button
                               onClick={() => handleTomar(detalle.idticket)}
@@ -1200,7 +1297,7 @@ export default function Tickets() {
                           <p className="text-[11px] text-slate-500">
                             ¿Cuánto crees que te va a tomar? Opcional — horas hábiles (L-V, 8am-6pm).
                           </p>
-                          <div className="flex items-center gap-2">
+                          <div className="flex flex-wrap items-center gap-2">
                             <div className="flex items-center gap-1">
                               <input
                                 type="text"
@@ -1222,6 +1319,17 @@ export default function Tickets() {
                                 className="w-14 text-xs px-2 py-1.5 rounded-md border border-slate-200"
                               />
                               <span className="text-xs text-slate-500">horas</span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <input
+                                type="text"
+                                inputMode="numeric"
+                                value={estimacionMinutos}
+                                onChange={(e) => setEstimacionMinutos(e.target.value.replace(/\D/g, ""))}
+                                placeholder="0"
+                                className="w-14 text-xs px-2 py-1.5 rounded-md border border-slate-200"
+                              />
+                              <span className="text-xs text-slate-500">min</span>
                             </div>
                             <button
                               onClick={() => handleTomar(detalle.idticket)}
@@ -1284,13 +1392,11 @@ export default function Tickets() {
                   )}
 
                 {detalle.estado === "Finalizado" &&
-                  detalle.duracion_estimada_horas != null &&
-                  detalle.tiempo_real_horas != null &&
+                  pctTiempo(detalle) &&
                   (() => {
                     const estimado = detalle.duracion_estimada_horas!;
                     const real = detalle.tiempo_real_horas!;
-                    const pct = Math.round(((real - estimado) / estimado) * 100);
-                    const sobreEstimado = pct > 0;
+                    const { pct, sobreEstimado } = pctTiempo(detalle)!;
                     const base = Math.max(estimado, real);
                     const anchoEstimado = Math.min((estimado / base) * 100, 100);
                     const anchoReal = Math.min((real / base) * 100, 100);
@@ -1364,7 +1470,7 @@ export default function Tickets() {
                               <span className="text-[10px] text-slate-400">{formatearHora(c.created_at)}</span>
                             </div>
                           </div>
-                          <p className="text-slate-600">{c.comentario}</p>
+                          <p className="text-slate-600 whitespace-pre-wrap">{c.comentario}</p>
                           {detalle.archivos.filter((a) => a.ticket_comentario_id === c.idticket_comentario).length > 0 && (
                             <div className="flex flex-wrap gap-1.5 pt-2">
                               {detalle.archivos
@@ -1395,8 +1501,8 @@ export default function Tickets() {
                       value={comentarioDraft}
                       onChange={(e) => setComentarioDraft(e.target.value)}
                       placeholder="Escribe un comentario o actualización..."
-                      rows={2}
-                      className="w-full text-sm px-3 py-2 resize-none outline-none block"
+                      rows={3}
+                      className="w-full text-sm px-3 py-2 resize-y outline-none block min-h-[70px]"
                     />
                     {archivosComentario.length > 0 && (
                       <div className="flex flex-wrap gap-2 px-3 pb-2">
