@@ -1,5 +1,6 @@
 import type { AdvertenciaCalculoPrecioPapel } from "../papel/calculador-precio-papel.types";
 
+import { fmtFecha } from "../../utils/fecha";
 // src/types/expo/expo.types.ts
 // ═══════════════════════════════════════════════════════════════════════════
 // PRODUCTOS DEL SISTEMA DISPONIBLES PARA PRECARGAR EL REGISTRO EXPO
@@ -388,7 +389,7 @@ export const claveProducto = (p: {
     p.idgrupo_papel ? `:g${p.idgrupo_papel}` : ""
   }`;
 
-export const TODAY = new Date().toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" });
+export const TODAY = fmtFecha(new Date());
 
 export const folioAPedido = (folioCotizacion: string): string =>
   folioCotizacion.replace(/^COT/, "P");

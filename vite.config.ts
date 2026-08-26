@@ -44,7 +44,12 @@ export default defineConfig({
         // Por defecto Workbox solo precachea js/css/html — se agregan las
         // imágenes (íconos del Home, logos, etc.) para que el shell offline
         // no muestre imágenes rotas.
-        globPatterns: ["**/*.{js,css,html,png,svg,jpg,jpeg,webp,ico}"],
+        //
+        // `mjs` es para el worker de pdf.js (Vite lo emite como módulo ES, no
+        // como .js) y `ttf`/`pfb` para las fuentes base que pdf.js necesita al
+        // dibujar los PDFs de jsPDF — sin ellas el visor abre el documento en
+        // blanco cuando el equipo está sin conexión. Ver components/visor/.
+        globPatterns: ["**/*.{js,mjs,css,html,png,svg,jpg,jpeg,webp,ico,ttf,pfb}"],
       },
       manifest: {
         name: "SIGEB - Sistema de Gestión",

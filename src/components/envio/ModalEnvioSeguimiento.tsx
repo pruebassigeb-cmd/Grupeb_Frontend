@@ -29,6 +29,7 @@ import BotonAuditoria from "../auditoria/BotonAuditoria";
 import AuditoriaDesplegable from "../auditoria/AuditoriaDesplegable";
 import { leerBorrador, useAutoguardarBorrador, limpiarBorrador } from "../../hooks/useBorradorFormulario";
 
+import { fmtFechaCorta, fmtFechaHora } from "../../utils/fecha";
 // ─────────────────────────────────────────────────────────────────────────────
 // TIPOS LOCALES
 // ─────────────────────────────────────────────────────────────────────────────
@@ -73,8 +74,6 @@ const ESTADO_BULTO_LABEL: Record<string, string> = {
   entregado:  "Entregado",
 };
 
-const fmtFechaHora = (v?: string | null) =>
-  v ? new Date(v).toLocaleString("es-MX", { dateStyle: "medium", timeStyle: "short" }) : "—";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SUBCOMPONENTE — DETALLE COMPLETO (desglosable)
@@ -299,7 +298,7 @@ function TarjetaEnvio({
           </span>
 
           <span className="text-xs text-gray-400">
-            {new Date(envio.fecha_envio).toLocaleDateString("es-MX")}
+            {fmtFechaCorta(envio.fecha_envio)}
           </span>
 
           {/* ── Trazabilidad: número de guía y/o foto de la nota ── */}

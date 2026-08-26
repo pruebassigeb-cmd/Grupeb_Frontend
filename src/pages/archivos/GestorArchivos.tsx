@@ -1,12 +1,14 @@
 import { useState, useEffect, useRef } from "react";
 import type { Archivo, CarpetaFrontend, Estadisticas, SubcarpetaPDF, SubcarpetaSuaje, SubcarpetaCatalogo } from "../../services/archivos/archivos.service";
-import { subirArchivo, listarArchivos, eliminarArchivo, CARPETAS_LABELS, obtenerEstadisticas, SUBCARPETAS_PDF, SUBCARPETAS_SUAJE, SUBCARPETAS_CATALOGO, SUBCARPETAS_CATALOGOS_ADMIN } from "../../services/archivos/archivos.service";
+import { subirArchivo, listarArchivos, eliminarArchivo, CARPETAS_LABELS, obtenerEstadisticas, SUBCARPETAS_PDF, SUBCARPETAS_SUAJE, SUBCARPETAS_CATALOGO, SUBCARPETAS_CATALOGOS_ADMIN, descargarArchivoBlob } from "../../services/archivos/archivos.service";
 import { verificarCodigo } from "../../services/archivos/backup.service";
 import Dashboard from "../../layouts/Sidebar";
 import { showAlert } from '../../components/CustomAlert';
 import { showConfirm } from '../../components/CustomConfirm';
 import { useAuth } from "../../context/AuthContext";
+import { abrirVisorPdf } from "../../components/visor/visorPdfGlobal";
 
+import { fmtFecha } from "../../utils/fecha";
 type Vista = "carpetas" | "subcarpetas" | "archivos";
 type OrdenTipo = "fecha_desc" | "fecha_asc" | "nombre_asc" | "nombre_desc" | "tamano_asc" | "tamano_desc" | "tipo_asc";
 type AgrupaTipo = "ninguno" | "semana" | "mes" | "año";
@@ -346,6 +348,31 @@ const [subcarpetaActiva, setSubcarpetaActiva] = useState<SubcarpetaPDF | Subcarp
   const filtrosRef = useRef<HTMLDivElement>(null);
   const grupaRef = useRef<HTMLDivElement>(null);
 
+  // Archivo cuyo contenido se está bajando para abrir el visor (para el spinner).
+  const [abriendoArchivo, setAbriendoArchivo] = useState<string | null>(null);
+
+  /**
+   * Abre un PDF en el visor interno.
+   *
+   * Antes se le pasaba `archivo.url` (la URL firmada de S3) y el visor hacía
+   * `fetch` de ella desde el navegador — cosa que CORS bloquea, porque el
+   * bucket no autoriza al dominio de la app. Ahora los bytes se bajan por la
+   * API (mismo origen, con token) y al visor se le entrega el Blob ya listo.
+   */
+  const abrirPdfEnVisor = async (archivo: Archivo) => {
+    if (abriendoArchivo) return;
+    setAbriendoArchivo(archivo.id_archivo);
+    try {
+      const blob = await descargarArchivoBlob(archivo.id_archivo);
+      abrirVisorPdf({ blob, nombre: archivo.nombre });
+    } catch (error) {
+      console.error("Error al abrir el archivo:", error);
+      showAlert("No se pudo abrir el documento. Revisa tu conexión e inténtalo de nuevo.");
+    } finally {
+      setAbriendoArchivo(null);
+    }
+  };
+
   const cargarArchivos = async () => {
     try {
       setCargando(true);
@@ -549,7 +576,7 @@ const [subcarpetaActiva, setSubcarpetaActiva] = useState<SubcarpetaPDF | Subcarp
     archivos.filter(a => a.carpeta === carpetaActiva && a.subcarpeta === subcarpeta).length;
 
   const formatFecha = (fecha: string) =>
-    new Date(fecha).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" });
+    fmtFecha(fecha);
   const formatTamano = (kb: number) => kb < 1024 ? `${kb} KB` : `${(kb / 1024).toFixed(1)} MB`;
 
   const ordenActualLabel = ORDEN_OPTIONS.find(o => o.value === orden)?.label ?? "Ordenar";
@@ -619,9 +646,23 @@ const colores: Record<CarpetaFrontend, string> = {
             <div className="aspect-square bg-gray-50 flex items-center justify-center overflow-hidden cursor-pointer"
               onClick={() => {
                 if (modoSeleccion) { toggleSeleccion(archivo.id_archivo); return; }
+                // Los PDFs se abren en el visor interno: en los equipos en modo
+                // kiosko una pestaña nueva ya no se puede cerrar. El resto de
+                // tipos sigue igual que antes.
+                if (archivo.tipo === "pdf") {
+                  void abrirPdfEnVisor(archivo);
+                  return;
+                }
                 window.open(archivo.url, "_blank", "noopener,noreferrer");
               }}>
-              <ArchivoPreview archivo={archivo} />
+              {abriendoArchivo === archivo.id_archivo ? (
+                <div className="flex flex-col items-center gap-2 text-gray-500">
+                  <div className="w-7 h-7 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                  <span className="text-xs">Abriendo…</span>
+                </div>
+              ) : (
+                <ArchivoPreview archivo={archivo} />
+              )}
             </div>
             <div className="p-2">
               <p className="text-xs text-gray-700 font-medium truncate" title={archivo.nombre}>{archivo.nombre}</p>

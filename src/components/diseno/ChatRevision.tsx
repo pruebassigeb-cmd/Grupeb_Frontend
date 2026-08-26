@@ -28,23 +28,8 @@ import {
 } from "../../utils/permisosUsuario";
 
 
+import { fmtFecha, fmtHora } from "../../utils/fecha";
 const POLLING_MS = 3000;
-
-const fmtHora = (iso: string) => {
-  try {
-    return new Date(iso).toLocaleTimeString("es-MX", {
-      hour: "2-digit", minute: "2-digit",
-    });
-  } catch { return ""; }
-};
-
-const fmtFecha = (iso: string) => {
-  try {
-    return new Date(iso).toLocaleDateString("es-MX", {
-      day: "2-digit", month: "short", year: "numeric",
-    });
-  } catch { return iso; }
-};
 
 function ArchivosRevision({
   revision,

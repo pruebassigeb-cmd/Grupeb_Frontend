@@ -32,6 +32,7 @@ import {
   EVENTO_PEDIDO_ACTUALIZADO,
 } from "../../services/pedidosService";
 
+import { fmtFecha, hoyMX } from "../../utils/fecha";
 const ESTADO = { PENDIENTE: 1, EN_PROCESO: 2, PAGADO: 6 } as const;
 const POR_PAGINA = 10;
 
@@ -43,14 +44,6 @@ const ANTICIPO_VALIDACION_MIN = 0.40;
 
 const fmt = (n: number) =>
   Number(n).toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
-const fmtFecha = (iso: string) => {
-  try {
-    return new Date(iso).toLocaleDateString("es-MX", {
-      day: "2-digit", month: "short", year: "numeric",
-    });
-  } catch { return iso; }
-};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // calcularEstado: recibe es_credito_anticipo para que el estado en tabla
@@ -568,7 +561,10 @@ export function EditarAntLiqReal({
 
   const pctPagado        = totalRef > 0 ? Math.min((totalPagado / totalRef) * 100, 100) : 0;
   const herramentalTotal = Number(venta.herramental_total ?? 0);
-  const hoy              = new Date().toISOString().split("T")[0];
+  // hoyMX y no toISOString: este proceso corre en el navegador, y después
+  // de las 18:00 hora de México toISOString ya devuelve el día siguiente,
+  // así que el `max` del input dejaba capturar un pago con fecha futura.
+  const hoy              = hoyMX();
 
   const recargar = async () => {
     const actualizada = await getVentaByPedido(venta.no_pedido);

@@ -27,6 +27,7 @@ import type { PedidoSeguimiento } from "../../types/produccion/seguimiento.types
 import AuditoriaDesplegable from "../auditoria/AuditoriaDesplegable";
 import { leerBorrador, useAutoguardarBorrador, limpiarBorrador } from "../../hooks/useBorradorFormulario";
 
+import { deInputFechaHora, fmtFechaHora, fmtFechaHoraCorta, fmtHora, paraInputFechaHora } from "../../utils/fecha";
 // ─────────────────────────────────────────────
 // CONSTANTES
 // ─────────────────────────────────────────────
@@ -433,9 +434,7 @@ function SeccionAvances({
                 </div>
               </div>
               <p className="text-[10px] text-gray-400 whitespace-nowrap flex-shrink-0 ml-2 mt-0.5">
-                {new Date(a.fecha_registro).toLocaleString("es-MX", {
-                  day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit",
-                })}
+                {fmtFechaHoraCorta(a.fecha_registro)}
               </p>
             </div>
           ))}
@@ -786,7 +785,7 @@ function TarjetaBulto({ bulto, numero, bultosFinalizados, eliminando, onEliminar
         </div>
         <div className="flex items-center gap-2">
           <span className="text-xs text-gray-400">
-            {new Date(bulto.fecha_creacion).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}
+            {fmtHora(bulto.fecha_creacion)}
           </span>
           {!bultosFinalizados && !yaEnviado && (
             <button onClick={() => onEliminar(bulto.idbulto)} disabled={eliminando === bulto.idbulto}
@@ -1750,12 +1749,14 @@ export default function ModalProcesoIndividual({ pedido, nombreProceso, onClose,
       preFill.repeticion = partes[1] ?? "";
     }
 
+    // slice(0,16) cortaba el ISO en UTC y lo metía a un input que el
+    // usuario lee como hora de México: el mismo desfase de 6 horas.
     if (registro.fecha_inicio != null) {
-      preFill.fecha_inicio = textoReact(registro.fecha_inicio).slice(0, 16);
+      preFill.fecha_inicio = paraInputFechaHora(textoReact(registro.fecha_inicio));
     }
 
     if (registro.fecha_fin != null) {
-      preFill.fecha_fin = textoReact(registro.fecha_fin).slice(0, 16);
+      preFill.fecha_fin = paraInputFechaHora(textoReact(registro.fecha_fin));
     }
   }
 
@@ -1772,7 +1773,12 @@ export default function ModalProcesoIndividual({ pedido, nombreProceso, onClose,
     setGuardandoEdit(true); setError(null);
     try {
       await editarProceso(pedido.idproduccion, nombreProceso, {
-        ...formEditar, observaciones: obsEditar.trim() || null,
+        // Ver nota en ModalProcesoIndividualPapel: el valor del input es
+        // hora de México y se convierte a UTC aquí, en la frontera.
+        ...formEditar,
+        fecha_inicio: formEditar.fecha_inicio ? deInputFechaHora(formEditar.fecha_inicio) : formEditar.fecha_inicio,
+        fecha_fin:    formEditar.fecha_fin    ? deInputFechaHora(formEditar.fecha_fin)    : formEditar.fecha_fin,
+        observaciones: obsEditar.trim() || null,
       });
       await cargar(); onActualizar(); setEditando(false);
     } catch (e: any) {
@@ -1927,13 +1933,13 @@ export default function ModalProcesoIndividual({ pedido, nombreProceso, onClose,
               {proc.registro.fecha_inicio != null && textoReact(proc.registro.fecha_inicio) !== "" && (
                 <div className="flex justify-between text-xs">
                   <span className="text-gray-400">Inicio</span>
-                  <span className="text-gray-800 font-medium">{new Date(textoReact(proc.registro.fecha_inicio)).toLocaleString("es-MX")}</span>
+                  <span className="text-gray-800 font-medium">{fmtFechaHora(textoReact(proc.registro.fecha_inicio))}</span>
                 </div>
               )}
               {proc.registro.fecha_fin != null && textoReact(proc.registro.fecha_fin) !== "" && (
                 <div className="flex justify-between text-xs">
                   <span className="text-gray-400">Fin</span>
-                  <span className="text-gray-800 font-medium">{new Date(textoReact(proc.registro.fecha_fin)).toLocaleString("es-MX")}</span>
+                  <span className="text-gray-800 font-medium">{fmtFechaHora(textoReact(proc.registro.fecha_fin))}</span>
                 </div>
               )}
               {nombreProceso === "impresion" && proc.registro.maquina != null && textoReact(proc.registro.maquina) !== "" && (
@@ -2009,9 +2015,7 @@ export default function ModalProcesoIndividual({ pedido, nombreProceso, onClose,
                           </div>
                         </div>
                         <p className="text-[10px] text-gray-400 whitespace-nowrap flex-shrink-0 ml-2 mt-0.5">
-                          {new Date(a.fecha_registro).toLocaleString("es-MX", {
-                            day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit",
-                          })}
+                          {fmtFechaHoraCorta(a.fecha_registro)}
                         </p>
                       </div>
                     ))}

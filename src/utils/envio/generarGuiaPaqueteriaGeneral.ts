@@ -1,6 +1,8 @@
 import jsPDF from "jspdf";
 import type { GuiaPaqueteriaGeneral } from "../../types/envio/envios.types";
 import { subirPdfA3 } from "../../services/pdfS3.service";
+import { entregarPdf } from "../entregarPdf";
+import { fmtFechaLarga } from "../fecha";
 // Carta: 215.9mm x 279.4mm
 // jsPDF: format:"letter", orientation:"portrait"
 
@@ -77,9 +79,7 @@ export async function generarGuiaPaqueteriaGeneral(datos: GuiaPaqueteriaGeneral,
   doc.setTextColor(0, 0, 0);
 
   txt(doc, datos.no_pedido,            ML + 3,             Y_INFO1 + 9, 10);
-  txt(doc, new Date(datos.fecha_envio).toLocaleDateString("es-MX", {
-    day: "2-digit", month: "long", year: "numeric",
-  }),                                   ML + COL_W + 3,     Y_INFO1 + 9, 8);
+  txt(doc, fmtFechaLarga(datos.fecha_envio),                                   ML + COL_W + 3,     Y_INFO1 + 9, 8);
   txt(doc, String(datos.total_bultos),  ML + COL_W * 2 + 3, Y_INFO1 + 9, 10);
 
   const cobroLabel = datos.tipo_cobro === "pagado"
@@ -252,9 +252,8 @@ export async function generarGuiaPaqueteriaGeneral(datos: GuiaPaqueteriaGeneral,
   txt(doc, folio, ML + CW - 25, Y_PIE + 4, 7);
 
   const nombre = `GuiaEnvio_${datos.paqueteria}_${datos.no_pedido}.pdf`;
-  doc.save(nombre);
+  const blob = entregarPdf(doc, nombre);
   if (guardarEnS3) {
-        const blob = doc.output("blob");
     await subirPdfA3(blob, nombre, "pdfs", "formas-envio");
   }
 }

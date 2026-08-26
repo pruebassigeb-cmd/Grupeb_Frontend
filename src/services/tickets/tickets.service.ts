@@ -1,6 +1,6 @@
 import api from '../api';
 
-export type PrioridadTicket = 'Baja' | 'Media' | 'Alta' | 'Urgente';
+export type PrioridadTicket = 'Baja' | 'Media' | 'Alta' | 'Urgente' | 'Prioritario';
 export type EstadoTicket = 'Pendiente' | 'En proceso' | 'Finalizado' | 'Cancelado';
 
 export interface TicketComentario {
@@ -22,6 +22,13 @@ export interface TicketArchivo {
   url: string | null;
 }
 
+export interface CoAsignado {
+  idusuario: number;
+  nombre: string;
+  apellido: string;
+  foto_url?: string | null;
+}
+
 export interface Ticket {
   idticket: number;
   folio: string;
@@ -38,6 +45,10 @@ export interface Ticket {
   asignado_nombre?: string;
   asignado_apellido?: string;
   asignado_foto_url?: string | null;
+  // Lista real de responsables — puede ser más de uno (ver "unirse").
+  // asignado_a/asignado_nombre se quedan como el "principal" (quien lo
+  // tomó primero), esto es la lista completa para mostrar a todos.
+  asignados: CoAsignado[];
   idticket_relacionado: number | null;
   relacionado_folio?: string;
   archivado: boolean;
@@ -107,6 +118,13 @@ export const asignarTicketA = async (id: number, usuario_id: number): Promise<Ti
   return data;
 };
 
+// El botón "➕👥" — sumarse como responsable a un ticket que ya está en
+// proceso con alguien más, sin quitárselo a nadie.
+export const unirseTicket = async (id: number): Promise<{ mensaje: string }> => {
+  const { data } = await api.post<{ mensaje: string }>(`/tickets/${id}/unirse`);
+  return data;
+};
+
 export const liberarTicket = async (id: number): Promise<Ticket> => {
   const { data } = await api.post<Ticket>(`/tickets/${id}/liberar`);
   return data;
@@ -129,6 +147,28 @@ export const rebotarTicket = async (id: number, motivo?: string, asignar_a?: num
 
 export const getEquipoActivo = async (): Promise<EquipoActivoItem[]> => {
   const { data } = await api.get<EquipoActivoItem[]>('/tickets/equipo-activo');
+  return data;
+};
+
+export interface EstadisticasUsuarioTickets {
+  idusuario: number;
+  nombre: string;
+  apellido: string;
+  rol: string;
+  foto_url: string | null;
+  finalizados: number;
+  en_proceso: number;
+  cancelados: number;
+  reportados: number;
+  con_compromiso: number;
+  a_tiempo: number;
+  pct_promedio_vs_estimado: number | null;
+  por_prioridad: { Prioritario: number; Urgente: number; Alta: number; Media: number; Baja: number };
+}
+
+// Exclusivo de resolutor — para el click en un avatar de Equipo Activo.
+export const getEstadisticasUsuario = async (usuarioId: number): Promise<EstadisticasUsuarioTickets> => {
+  const { data } = await api.get<EstadisticasUsuarioTickets>(`/tickets/estadisticas/${usuarioId}`);
   return data;
 };
 

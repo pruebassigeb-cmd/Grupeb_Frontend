@@ -3,6 +3,7 @@ import { cargarLogoBase64 } from "./Pdfutils";
 import type { EtiquetaData } from "../services/produccion/seguimientoService";
 import logoUrl from "../assets/grupeblanco.png";
 import { subirPdfA3 } from "../services/pdfS3.service";
+import { entregarPdf } from "./entregarPdf";
 
 // ── Paleta B/N ───────────────────────────────────────────────
 const BLACK: [number, number, number] = [0, 0, 0];
@@ -382,9 +383,8 @@ export async function generarPdfEtiquetas(data: EtiquetaData, guardarEnS3 = fals
 
   const sufijo = data.es_parcialidad ? `_parcial${data.numero_envio_parcial ?? 1}` : "";
   const nombre = `Etiquetas_${data.no_produccion ?? data.no_pedido}${sufijo}.pdf`;
-  doc.save(nombre);
+  const blob = entregarPdf(doc, nombre);
   if (guardarEnS3) {
-    const blob = doc.output("blob");
     await subirPdfA3(blob, nombre, "pdfs", "etiquetas");
   }
 }

@@ -8,10 +8,10 @@ import { showAlert } from "./../CustomAlert";
 import type { EnvioPaqueteria, BitacoraRegistro, UpdateBitacoraRequest } from "../../types/envio/envios.types";
 import { leerBorrador, useAutoguardarBorrador, limpiarBorrador } from "../../hooks/useBorradorFormulario";
 
-const toDatetimeLocal = (iso: string) => {
-  const d = new Date(iso), pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-};
+import { deInputFechaHora, fmtFechaCorta, paraInputFechaHora } from "../../utils/fecha";
+
+// Ver nota en BitacoraLocal: el valor del input va en hora de México.
+const toDatetimeLocal = (iso: string) => paraInputFechaHora(iso);
 
 const ChevronIcon = ({ open }: { open: boolean }) => (
   <svg className={`w-4 h-4 text-gray-400 transition-transform duration-200 flex-shrink-0 ${open ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -120,9 +120,11 @@ export default function BitacoraPaqueteria() {
     if (!editando) return;
     setGuardando(true);
     try {
+      // Ver nota en BitacoraLocal: el valor del input es hora de México y
+      // se convierte a UTC aquí, en la frontera con la API.
       await marcarEntregaEnvio(editando.envio.idenvio, {
-        hora_salida: modoModal === "paqueteria_edicion" ? data.hora_salida || undefined : undefined,
-        hora_llegada: modoModal === "paqueteria_edicion" ? data.hora_llegada || undefined : undefined,
+        hora_salida: modoModal === "paqueteria_edicion" ? deInputFechaHora(data.hora_salida ?? "") ?? undefined : undefined,
+        hora_llegada: modoModal === "paqueteria_edicion" ? deInputFechaHora(data.hora_llegada ?? "") ?? undefined : undefined,
         observacion_extra: data.observacion_extra || undefined,
         numero_guia: data.numero_guia || undefined,
       });
@@ -185,7 +187,7 @@ export default function BitacoraPaqueteria() {
                     <tr key={e.idenvio} className={`cursor-pointer transition-colors ${exp ? "bg-indigo-50" : "hover:bg-gray-50"}`}
                       onClick={() => setExpandida(exp ? null : e.idenvio)}>
                       <td className="px-3 py-3 w-8"><ChevronIcon open={exp} /></td>
-                      <td className="px-3 py-3 text-gray-700 whitespace-nowrap text-xs">{new Date(e.fecha_envio).toLocaleDateString("es-MX")}</td>
+                      <td className="px-3 py-3 text-gray-700 whitespace-nowrap text-xs">{fmtFechaCorta(e.fecha_envio)}</td>
                       <td className="px-3 py-3 text-blue-600 font-bold whitespace-nowrap">{e.no_pedido}</td>
                       <td className="px-3 py-3 text-gray-800 whitespace-nowrap font-medium">{e.cliente}</td>
                       <td className="px-3 py-3 text-gray-700 whitespace-nowrap">{e.paqueteria.nombre}</td>
@@ -216,7 +218,7 @@ export default function BitacoraPaqueteria() {
                                 </span>
                               </div>
                               <Campo label="Costo flete" value={e.costo_flete != null ? `$${Number(e.costo_flete).toLocaleString("es-MX")}` : null} />
-                              {e.fecha_entrega_estimada && <Campo label="Fecha est. entrega" value={new Date(e.fecha_entrega_estimada).toLocaleDateString("es-MX")} />}
+                              {e.fecha_entrega_estimada && <Campo label="Fecha est. entrega" value={fmtFechaCorta(e.fecha_entrega_estimada)} />}
                               {e.observaciones && <div className="col-span-2"><Campo label="Obs. del envío" value={e.observaciones} /></div>}
                             </Seccion>
 

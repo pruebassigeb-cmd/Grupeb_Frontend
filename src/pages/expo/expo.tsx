@@ -43,8 +43,9 @@ import { useCalculoPrecioPapel } from "../../hooks/expo/useCalculoPrecioPapel";
 import { useCalculoPrecioPlastico } from "../../hooks/expo/useCalculoPrecioPlastico";
 import { leerBorrador, useAutoguardarBorrador, limpiarBorrador } from "../../hooks/useBorradorFormulario";
 
+import { fmtFecha } from "../../utils/fecha";
 const TODAY_NOW = () =>
-  new Date().toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" });
+  fmtFecha(new Date());
 
 // Sube y VINCULA la foto de un producto de Catálogo Expo directo a
 // producto_papel/configuracion_plastico (vía idproducto_papel /
@@ -276,7 +277,7 @@ useEffect(() => {
           intereses: (c.intereses || []) as ClienteExpo["intereses"],
           observaciones: c.observaciones,
         },
-        fecha: new Date(c.fecha).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" }),
+        fecha: fmtFecha(c.fecha),
         estado: c.estado as "cotizacion" | "pedido",
         filas: [],
         comentarios: "",

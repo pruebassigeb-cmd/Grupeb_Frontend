@@ -3,7 +3,10 @@ import type { NotaRemisionData } from "../../services/envio/enviosService";
 import type { NotaRemisionMultiData } from "../../types/envio/envios.types";
 import logoGrupeb from "../../assets/grupeblanco.png";
 import { subirPdfA3 } from "../../services/pdfS3.service";
+import { entregarPdf } from "../entregarPdf";
+import { abrirVisorPdf } from "../../components/visor/visorPdfGlobal";
 
+import { fmtFechaCorta } from "../fecha";
 // ─────────────────────────────────────────────────────────────────
 // UTILIDADES
 // ─────────────────────────────────────────────────────────────────
@@ -188,11 +191,7 @@ const dibujarNota = (
   doc.setFontSize(7);
   doc.setFont("helvetica", "normal");
 
-  const fecha = new Date(data.envio.fecha_envio).toLocaleDateString("es-MX", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  });
+  const fecha = fmtFechaCorta(data.envio.fecha_envio);
 
   doc.text(`Fecha: ${fecha}`, W - m - 26, y + 13, { align: "center" });
 
@@ -344,9 +343,8 @@ export const generarNotaRemision = async (
   dibujarNota(doc, data, ALTO_COPIA + SEP, "COPIA");
 
   const nombre = `nota-remision-${data.no_nota}.pdf`;
-  doc.save(nombre);
+  const blob = entregarPdf(doc, nombre);
   if (guardarEnS3) {
-    const blob = doc.output("blob");
     await subirPdfA3(blob, nombre, "pdfs", "notas-remision");
   }
 };
@@ -380,12 +378,18 @@ export const generarNotasMultiples = async (
     dibujarNota(doc, nota, ALTO_COPIA + SEP, "COPIA");
   });
 
+  const nombreMulti = `notas-remision-batch-${Date.now()}.pdf`;
+  const blob = doc.output("blob") as Blob;
+
   if (guardarEnS3) {
-    const nombreMulti = `notas-remision-batch-${Date.now()}.pdf`;
-    const blob = doc.output("blob");
     await subirPdfA3(blob, nombreMulti, "pdfs", "notas-remision");
   }
-  doc.output("dataurlnewwindow");
+
+  // Antes: doc.output("dataurlnewwindow"), que abría una pestaña nueva con el
+  // PDF — justo lo que el modo kiosko no deja cerrar. Este lote se genera para
+  // imprimirlo en el momento, así que se abre directo en el visor (sin
+  // preguntar) y desde ahí se manda a la impresora.
+  abrirVisorPdf({ blob, nombre: nombreMulti });
 };
 
 // ─────────────────────────────────────────────────────────────────
@@ -436,11 +440,7 @@ const dibujarNotaMulti = (
   doc.setFontSize(7);
   doc.setFont("helvetica", "normal");
 
-  const fecha = new Date(data.envio.fecha_envio).toLocaleDateString("es-MX", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  });
+  const fecha = fmtFechaCorta(data.envio.fecha_envio);
 
   doc.text(`Fecha: ${fecha}`, W - m - 26, y + 13, { align: "center" });
 
@@ -612,9 +612,8 @@ export const generarNotaRemisionMulti = async (
   dibujarNotaMulti(doc, data, ALTO_COPIA_MULTI + SEP_MULTI, "COPIA");
 
   const nombre = `nota-remision-${data.no_nota}.pdf`;
-  doc.save(nombre);
+  const blob = entregarPdf(doc, nombre);
   if (guardarEnS3) {
-    const blob = doc.output("blob");
     await subirPdfA3(blob, nombre, "pdfs", "notas-remision");
   }
 };

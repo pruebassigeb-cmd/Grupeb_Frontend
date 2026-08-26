@@ -1,6 +1,7 @@
 import jsPDF from "jspdf";
 import { cargarLogoBase64 } from "../Pdfutils";
 import logoUrl from "../../assets/logogrupeb.png";
+import { entregarPdf } from "../entregarPdf";
 
 const GOLD: [number, number, number] = [201, 146, 42];
 const BLACK: [number, number, number] = [13, 13, 13];
@@ -99,6 +100,6 @@ export async function generarPdfAgradecimiento(descargar = false): Promise<Blob>
   doc.text("ventas@grupoeb.com.mx", M, footerY + 24);
 
   const blob = doc.output("blob");
-  if (descargar) doc.save("GrupoEB_Informacion.pdf");
+  if (descargar) entregarPdf(blob, "GrupoEB_Informacion.pdf");
   return blob;
 }

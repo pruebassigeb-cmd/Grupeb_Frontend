@@ -5,6 +5,7 @@ import { getHistorialPedidosPorCliente } from "../../services/pedidosService";
 import type { ClienteBusqueda } from "../../types/clientes.types";
 import type { Pedido } from "../../types/cotizaciones.types";
 
+import { fmtFecha } from "../../utils/fecha";
 interface Props {
   onSeleccionar: (pedido: Pedido) => void;
   onClose: () => void;
@@ -66,9 +67,7 @@ export default function ModalRepetirPedido({ onSeleccionar, onClose }: Props) {
 
   const formatFecha = (iso: string) => {
     try {
-      return new Date(iso).toLocaleDateString("es-MX", {
-        day: "2-digit", month: "short", year: "numeric",
-      });
+      return fmtFecha(iso);
     } catch { return iso; }
   };
 

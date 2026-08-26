@@ -13,6 +13,7 @@ import type { Bulto } from "../../services/produccion/seguimientoService";
 import type { PedidoSeguimiento } from "../../types/produccion/seguimiento.types";
 import { leerBorrador, useAutoguardarBorrador, limpiarBorrador } from "../../hooks/useBorradorFormulario";
 
+import { fmtHora } from "../../utils/fecha";
 export default function ModalBultos({
   pedido,
   onClose,
@@ -238,9 +239,7 @@ export default function ModalBultos({
                     {b.cantidad_unidades.toLocaleString("es-MX")}
                   </td>
                   <td className="px-3 py-2 text-center text-xs text-gray-400">
-                    {new Date(b.fecha_creacion).toLocaleTimeString("es-MX", {
-                      hour: "2-digit", minute: "2-digit"
-                    })}
+                    {fmtHora(b.fecha_creacion)}
                   </td>
                   <td className="px-3 py-2 text-center">
                     <button

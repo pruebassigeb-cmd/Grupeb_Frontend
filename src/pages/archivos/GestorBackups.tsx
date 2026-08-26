@@ -9,6 +9,7 @@ import {
   type ArchivoBackup,
 } from "../../services/archivos/backup.service";
 
+import { fmtFechaHora } from "../../utils/fecha";
 // ─────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────
@@ -16,10 +17,7 @@ const formatTamano = (kb: number) =>
   kb < 1024 ? `${kb} KB` : `${(kb / 1024).toFixed(1)} MB`;
 
 const formatFecha = (iso: string) =>
-  new Date(iso).toLocaleString("es-MX", {
-    day: "2-digit", month: "short", year: "numeric",
-    hour: "2-digit", minute: "2-digit",
-  });
+  fmtFechaHora(iso);
 
 // ─────────────────────────────────────────────────────────
 // Modal de código de acceso

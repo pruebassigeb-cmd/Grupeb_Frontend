@@ -21,6 +21,7 @@ import BotonAuditoria from "../components/auditoria/BotonAuditoria";
 import AuditoriaDesplegable from "../components/auditoria/AuditoriaDesplegable";
 import api from "../services/api";
 
+import { fmtFecha } from "../utils/fecha";
 // Convierte un Blob (el PDF ya generado en el navegador) a base64 puro,
 // listo para mandarlo en el body JSON de /correos/documento.
 function blobABase64(blob: Blob): Promise<string> {
@@ -558,9 +559,7 @@ export default function Cotizaciones() {
 
   const formatFecha = (iso: string) => {
     try {
-      return new Date(iso).toLocaleDateString("es-MX", {
-        day: "2-digit", month: "short", year: "numeric",
-      });
+      return fmtFecha(iso);
     } catch { return iso; }
   };
 

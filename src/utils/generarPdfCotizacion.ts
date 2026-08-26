@@ -13,6 +13,7 @@ import type { ProductoPdf } from "./Pdfutils";
 import logoUrl from "../assets/logogrupeb.png";
 import { subirPdfA3 } from "../services/pdfS3.service";
 import { formatMoney, type Moneda } from "./formatMoney";
+import { entregarPdf } from "./entregarPdf";
 
 interface CotizacionPdf {
   no_cotizacion: string;
@@ -702,7 +703,7 @@ export async function generarPdfCotizacion(
 
 const nombre = `Cotizacion_${cotizacion.no_cotizacion}.pdf`;
   const blob = doc.output("blob");
-  if (descargar) doc.save(nombre);
+  if (descargar) entregarPdf(blob, nombre);
   if (guardarEnS3) {
     await subirPdfA3(blob, nombre, "pdfs", "cotizaciones");
   }

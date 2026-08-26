@@ -1,6 +1,8 @@
 import jsPDF from "jspdf";
 import { subirPdfA3 } from "../../services/pdfS3.service";
+import { entregarPdf } from "../entregarPdf";
 
+import { fmtFechaCorta } from "../fecha";
 const ROW_H         = 11.8;
 const TABLA_Y_START = 362;
 
@@ -107,9 +109,7 @@ export async function generarFormatoCastores(params: FormatoCastoresParams, guar
   doc.setTextColor(0, 0, 0);
 
   // Fila 1 — FECHA
-  const hoy = new Date().toLocaleDateString("es-MX", {
-    day: "2-digit", month: "2-digit", year: "numeric",
-  });
+  const hoy = fmtFechaCorta(new Date());
   txt(doc, hoy, 120, 78.8, 7);
 
   // Fila 2 — Nombre Remitente
@@ -213,9 +213,8 @@ export async function generarFormatoCastores(params: FormatoCastoresParams, guar
   }
 
   const nombre = `SolicitudCastores_${datos.no_pedido}.pdf`;
-  doc.save(nombre);
+  const blob = entregarPdf(doc, nombre);
   if (guardarEnS3) {
-    const blob = doc.output("blob");
     await subirPdfA3(blob, nombre, "pdfs", "formas-envio");
   }
 }

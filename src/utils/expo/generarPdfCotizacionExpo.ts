@@ -1,4 +1,5 @@
 import jsPDF from "jspdf";
+import { entregarPdf } from "../entregarPdf";
 
 // ============================================================================
 // PDF OVERLAY PARA LA HOJA PREIMPRESA DE COTIZACION EXPO
@@ -654,7 +655,7 @@ export function generarPdfCotizacionExpo(params: PdfCotizacionExpoParams, modoCa
 
   if (modoCalibracion) dibujarCalibracion(doc);
 
-  doc.save(`Cotizacion_${folio}.pdf`);
+  entregarPdf(doc, `Cotizacion_${folio}.pdf`);
 }
 
 // ============================================================================

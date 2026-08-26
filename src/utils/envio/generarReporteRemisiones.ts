@@ -2,7 +2,9 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { subirPdfA3 } from "../../services/pdfS3.service";
 import type { PedidoRemision, HistorialEntregasPedido } from "../../types/envio/envios.types";
+import { entregarPdf } from "../entregarPdf";
 
+import { fmtFechaCorta, fmtFechaLarga, fmtHora, hoyMX } from "../fecha";
 const AZUL    = [37, 99, 235]   as [number, number, number];
 const AZUL_L  = [219, 234, 254] as [number, number, number];
 const GRIS    = [107, 114, 128] as [number, number, number];
@@ -15,7 +17,7 @@ const AMBER   = [255, 251, 235] as [number, number, number];
 const AMBER_T = [92, 64, 0]     as [number, number, number];
 
 const fmtFecha = (iso: string) =>
-  new Date(iso).toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric" });
+  fmtFechaCorta(iso);
 const fmtNum  = (n: number) => n.toLocaleString("es-MX");
 const fmtCant = (n: number) =>
   Number.isInteger(n)
@@ -55,8 +57,8 @@ export async function generarReporteRemisiones(
 ): Promise<void> {
   const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "letter" });
 
-  const hoyStr  = new Date().toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" });
-  const horaStr = new Date().toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" });
+  const hoyStr  = fmtFechaLarga(new Date());
+  const horaStr = fmtHora(new Date());
 
   const pedidoMap    = new Map(params.pedidos.map(p => [p.idsolicitud, p]));
   const historialMap = new Map(params.historial.map(h => [h.idsolicitud, h]));
@@ -236,10 +238,9 @@ export async function generarReporteRemisiones(
     doc.text(`Página ${i} de ${pageCount}`, 279 - 10, 210 - 5, { align: "right" });
   }
 
-  const nombreArchivo = `historial_remisiones_${new Date().toISOString().slice(0, 10)}.pdf`;
-  doc.save(nombreArchivo);
+  const nombreArchivo = `historial_remisiones_${hoyMX()}.pdf`;
+  const blob = entregarPdf(doc, nombreArchivo);
   if (guardarEnS3) {
-    const blob = doc.output("blob");
     await subirPdfA3(blob, nombreArchivo, "pdfs", "notas-remision");
   }
 }

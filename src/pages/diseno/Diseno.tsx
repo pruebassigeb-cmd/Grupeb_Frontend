@@ -17,16 +17,9 @@ import { leerBorrador, useAutoguardarBorrador } from "../../hooks/useBorradorFor
 
 
 
+import { fmtFecha } from "../../utils/fecha";
 const ESTADO = { PENDIENTE: 1, EN_PROCESO: 2, APROBADO: 3 } as const;
 const POR_PAGINA = 10;
-
-const fmtFecha = (iso: string) => {
-  try {
-    return new Date(iso).toLocaleDateString("es-MX", {
-      day: "2-digit", month: "short", year: "numeric",
-    });
-  } catch { return iso; }
-};
 
 function estadoLabel(estadoId: number): "pendiente" | "en_proceso" | "aprobado" {
   if (estadoId === ESTADO.APROBADO)   return "aprobado";

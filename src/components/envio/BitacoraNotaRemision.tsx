@@ -11,6 +11,11 @@ import { showAlert } from "./../CustomAlert";
 import type { NotaRemisionBitacoraItem } from "../../types/envio/envios.types";
 import { leerBorrador, useAutoguardarBorrador, limpiarBorrador } from "../../hooks/useBorradorFormulario";
 
+import {
+  deInputFechaHora,
+  fmtFechaCorta,
+  paraInputFechaHora,
+} from "../../utils/fecha";
 const ChevronIcon = ({ open }: { open: boolean }) => (
   <svg className={`w-4 h-4 text-gray-400 transition-transform duration-200 flex-shrink-0 ${open ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -63,12 +68,8 @@ function PanelFotosNota({ idnota }: { idnota: number }) {
 // ── Modal llegada local ───────────────────────────────────────
 function ModalMarcarLlegadaNota({ nota, onClose, onSuccess }: { nota: NotaRemisionBitacoraItem; onClose: () => void; onSuccess: () => void }) {
   const d = nota.local_datos;
-  const toLocal = (iso: string | null) => {
-    if (!iso) return "";
-    const dt = new Date(iso);
-    const pad = (n: number) => String(n).padStart(2, "0");
-    return `${dt.getFullYear()}-${pad(dt.getMonth()+1)}-${pad(dt.getDate())}T${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
-  };
+  // Ver nota en BitacoraLocal: el valor del input va en hora de México.
+  const toLocal = (iso: string | null) => paraInputFechaHora(iso);
   interface FormLlegadaNota {
     hora_llegada: string;
     observacion: "" | "E" | "RA" | "RD" | "PD";
@@ -102,7 +103,9 @@ function ModalMarcarLlegadaNota({ nota, onClose, onSuccess }: { nota: NotaRemisi
   const handleSubmit = async () => {
     setGuardando(true);
     try {
-      await marcarEntregadoLocalNota(nota.idnota, { hora_llegada: form.hora_llegada || undefined, observacion: form.observacion || undefined, observacion_extra: form.observacion_extra || undefined, firma: form.firma || undefined });
+      // Ver nota en BitacoraLocal: el valor del input es hora de México y
+      // se convierte a UTC aquí, en la frontera con la API.
+      await marcarEntregadoLocalNota(nota.idnota, { hora_llegada: deInputFechaHora(form.hora_llegada) ?? undefined, observacion: form.observacion || undefined, observacion_extra: form.observacion_extra || undefined, firma: form.firma || undefined });
       if (foto) {
         const ext = foto.name.match(/\.[^/.]+$/)?.[0] || "";
         await subirArchivo(new File([foto], `nota-${nota.idnota}-${nota.no_nota}-${Date.now()}${ext}`, { type: foto.type }), "fotos-envios", undefined, undefined, nota.idnota);
@@ -335,7 +338,7 @@ export default function BitacoraNotaRemision() {
                     <tr key={n.idnota} className={`cursor-pointer transition-colors ${exp ? "bg-emerald-50" : "hover:bg-gray-50"}`}
                       onClick={() => setExpandida(exp ? null : n.idnota)}>
                       <td className="px-3 py-3 w-8"><ChevronIcon open={exp} /></td>
-                      <td className="px-3 py-3 text-gray-700 whitespace-nowrap text-xs">{new Date(n.created_at).toLocaleDateString("es-MX")}</td>
+                      <td className="px-3 py-3 text-gray-700 whitespace-nowrap text-xs">{fmtFechaCorta(n.created_at)}</td>
                       <td className="px-3 py-3 whitespace-nowrap">
                         <span className="text-emerald-700 font-bold">{n.no_nota}</span>
                         <span className="ml-2 text-blue-600 text-xs font-medium">{n.no_pedido}</span>
@@ -369,7 +372,7 @@ export default function BitacoraNotaRemision() {
                               <Campo label="Total bultos" value={String(n.total_bultos)} />
                               {n.chofer && <Campo label="Chofer" value={n.chofer.nombre} />}
                               {n.unidad && <div className="col-span-2"><Campo label="Unidad" value={n.unidad.nombre} /></div>}
-                              {n.fecha_entrega_estimada && <div className="col-span-2"><Campo label="Fecha est. entrega" value={new Date(n.fecha_entrega_estimada).toLocaleDateString("es-MX")} /></div>}
+                              {n.fecha_entrega_estimada && <div className="col-span-2"><Campo label="Fecha est. entrega" value={fmtFechaCorta(n.fecha_entrega_estimada)} /></div>}
                               {n.observaciones && <div className="col-span-2">
                                 <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold mb-0.5">Obs. de la nota</p>
                                 <p className="text-xs text-amber-800 bg-yellow-50 border border-yellow-200 rounded px-2 py-1 italic">{n.observaciones}</p>

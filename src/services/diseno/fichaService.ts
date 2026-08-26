@@ -1,4 +1,5 @@
 import api from "../api";
+import { abrirVisorPdf } from "../../components/visor/visorPdfGlobal";
 
 // ============================================================
 // TIPOS
@@ -239,13 +240,12 @@ const obtenerBlobPdf = async (idficha: number, descargar: boolean) => {
   return { blob: res.data as Blob, nombre };
 };
 
-/** Abre el PDF en una pestaña nueva, sin descargarlo. */
+/** Abre el PDF en el visor interno, sin descargarlo. */
 export const verPdfFicha = async (idficha: number) => {
-  const { blob } = await obtenerBlobPdf(idficha, false);
-  const url = URL.createObjectURL(blob);
-  window.open(url, "_blank", "noopener,noreferrer");
-  // Se libera tarde para que el visor alcance a leerlo.
-  setTimeout(() => URL.revokeObjectURL(url), 60000);
+  const { blob, nombre } = await obtenerBlobPdf(idficha, false);
+  // Antes se abría con window.open en una pestaña nueva; en los equipos en
+  // modo kiosko esa pestaña ya no se podía cerrar. Ver components/visor/.
+  abrirVisorPdf({ blob, nombre });
 };
 
 /** Fuerza la descarga con el nombre que manda el servidor. */

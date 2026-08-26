@@ -6,17 +6,7 @@ import api from "../../services/api";
 import { showAlert } from '../CustomAlert';
 import { showConfirm } from '../CustomConfirm';
 import BotonAuditoria from "../auditoria/BotonAuditoria";
-
-
-
-const fmtFecha = (iso: string) => {
-  try {
-    return new Date(iso).toLocaleDateString("es-MX", {
-      day: "2-digit", month: "short", year: "numeric",
-      hour: "2-digit", minute: "2-digit",
-    });
-  } catch { return iso; }
-};
+import { fmtFechaHora as fmtFecha } from "../../utils/fecha";
 
 interface Props {
   revisiones:   RevisionDiseno[];

@@ -18,7 +18,9 @@ import type {
   Conductor,
   Paqueteria,
 } from "../../types/envio/envios.types";
+import { entregarPdf } from "../entregarPdf";
 
+import { fmtFechaCorta, fmtFechaLarga, fmtHora, hoyMX } from "../fecha";
 // ── Tipos de entrada ─────────────────────────────────────────
 
 type ParamsLocal = {
@@ -44,15 +46,8 @@ export type GenerarReporteParams = ParamsLocal | ParamsPaqueteria;
 // ── Helpers ──────────────────────────────────────────────────
 
 const fmtFecha = (iso: string) =>
-  new Date(iso).toLocaleDateString("es-MX", {
-    day: "2-digit", month: "2-digit", year: "numeric",
-  });
+  fmtFechaCorta(iso);
 
-const fmtHora = (iso: string | null) => {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-};
 
 const fmtFiltroFecha = (f?: string) => (f ? fmtFecha(f) : "—");
 
@@ -66,8 +61,8 @@ export async function generarReporteEnviosPDF(params: GenerarReporteParams, guar
   const NEGRO  = [17, 24, 39]   as [number, number, number];
   const BLANCO = [255, 255, 255] as [number, number, number];
 
-  const hoyStr  = new Date().toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" });
-  const horaStr = new Date().toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" });
+  const hoyStr  = fmtFechaLarga(new Date());
+  const horaStr = fmtHora(new Date());
 
   // ── Encabezado ───────────────────────────────────────────────
   doc.setFillColor(...AZUL);
@@ -247,12 +242,11 @@ export async function generarReporteEnviosPDF(params: GenerarReporteParams, guar
 
   // ── Descargar ────────────────────────────────────────────────
   const nombreArchivo = params.tipo === "local"
-    ? `reporte_reparto_local_${new Date().toISOString().slice(0, 10)}.pdf`
-    : `reporte_paqueteria_${new Date().toISOString().slice(0, 10)}.pdf`;
+    ? `reporte_reparto_local_${hoyMX()}.pdf`
+    : `reporte_paqueteria_${hoyMX()}.pdf`;
 
-  doc.save(nombreArchivo);
+  const blob = entregarPdf(doc, nombreArchivo);
   if (guardarEnS3) {
-    const blob = doc.output("blob");
     await subirPdfA3(blob, nombreArchivo, "pdfs", "formas-envio");
   }
 }

@@ -8,8 +8,9 @@ import { generarNotaRemision, generarNotaRemisionMulti } from "../../utils/envio
 import type { ClienteRemision, PedidoRemision, HistorialEntregasPedido } from "../../types/envio/envios.types";
 import { showAlert } from "./../CustomAlert";
 
+import { fmtFechaCorta } from "../../utils/fecha";
 const fmtFecha = (iso: string) =>
-  new Date(iso).toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric" });
+  fmtFechaCorta(iso);
 const fmtNum  = (n: number) => n.toLocaleString("es-MX");
 const fmtCant = (n: number) =>
   Number.isInteger(n)

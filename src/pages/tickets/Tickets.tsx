@@ -14,10 +14,12 @@ import {
   tomarTicket,
   comentarTicket,
   asignarTicketA,
+  unirseTicket,
   liberarTicket,
   rebotarTicket,
   getUsuariosAsignables,
   getEquipoActivo,
+  getEstadisticasUsuario,
   getNotificacionesTickets,
   type Ticket,
   type TicketDetalle,
@@ -25,13 +27,14 @@ import {
   type PrioridadTicket,
   type UsuarioAsignable,
   type EquipoActivoItem,
+  type EstadisticasUsuarioTickets,
 } from "../../services/tickets/tickets.service";
 
-const PRIORIDADES: PrioridadTicket[] = ["Baja", "Media", "Alta", "Urgente"];
+const PRIORIDADES: PrioridadTicket[] = ["Prioritario", "Urgente", "Alta", "Media", "Baja"];
 
 // Urgente siempre arriba, Baja siempre abajo — mismo orden en todas las
 // columnas del tablero.
-const RANGO_PRIORIDAD: Record<PrioridadTicket, number> = { Urgente: 0, Alta: 1, Media: 2, Baja: 3 };
+const RANGO_PRIORIDAD: Record<PrioridadTicket, number> = { Prioritario: -1, Urgente: 0, Alta: 1, Media: 2, Baja: 3 };
 
 // ── Columnas del tablero ──────────────────────────────────────────────────
 // El orden importa: así se recorre el flujo natural de un ticket de
@@ -50,17 +53,23 @@ const COLUMNAS: { estado: EstadoTicket; label: string; dot: string; header: stri
 // pero separado para que salte a la vista que ese ticket ya se le regresó
 // a alguien antes. En cuanto alguien lo vuelve a tomar, sale solo de aquí
 // (porque su estado deja de ser Pendiente) sin que haya que resetear nada.
+//
+// "En proceso" YA NO es una columna fija — se reemplazó por una columna
+// POR PERSONA activa (ver columnasTablero dentro del componente), así un
+// ticket con 2 responsables aparece bajo los 2. `persona` solo se llena en
+// esas columnas dinámicas, para pintar el header con avatar en vez de
+// puntito de color.
 interface ColumnaTablero {
   key: string;
   label: string;
   dot: string;
   header: string;
   filtro: (t: Ticket) => boolean;
+  persona?: { idusuario: number; nombre: string; apellido: string; foto_url: string | null };
 }
-const TABLERO_COLUMNAS: ColumnaTablero[] = [
+const TABLERO_COLUMNAS_FIJAS: ColumnaTablero[] = [
   { key: "Rebotados", label: "Rebotados", dot: "bg-rose-500", header: "border-t-rose-500", filtro: (t) => t.estado === "Pendiente" && t.rebotado },
   { key: "Pendiente", label: "Pendiente", dot: "bg-amber-500", header: "border-t-amber-500", filtro: (t) => t.estado === "Pendiente" && !t.rebotado },
-  { key: "En proceso", label: "En proceso", dot: "bg-blue-600", header: "border-t-blue-600", filtro: (t) => t.estado === "En proceso" },
   { key: "Finalizado", label: "Finalizado", dot: "bg-emerald-500", header: "border-t-emerald-500", filtro: (t) => t.estado === "Finalizado" },
   { key: "Cancelado", label: "Cancelado", dot: "bg-red-500", header: "border-t-red-500", filtro: (t) => t.estado === "Cancelado" },
 ];
@@ -70,12 +79,14 @@ const BARRA_PRIORIDAD: Record<PrioridadTicket, string> = {
   Media: "border-l-amber-400",
   Alta: "border-l-orange-500",
   Urgente: "border-l-red-600",
+  Prioritario: "border-l-purple-700",
 };
 const PILDORA_PRIORIDAD: Record<PrioridadTicket, string> = {
   Baja: "bg-slate-100 text-slate-600",
   Media: "bg-amber-100 text-amber-700",
   Alta: "bg-orange-100 text-orange-700",
   Urgente: "bg-red-100 text-red-700",
+  Prioritario: "bg-purple-700 text-white",
 };
 const PILDORA_ESTADO: Record<EstadoTicket, string> = {
   Pendiente: "bg-amber-500 text-white",
@@ -207,6 +218,29 @@ export default function Tickets() {
   const [notificaciones, setNotificaciones] = useState<Record<number, boolean>>({});
   const [asignarA, setAsignarA] = useState("");
   const [asignando, setAsignando] = useState(false);
+  const [uniendo, setUniendo] = useState(false);
+
+  // Modal de estadísticas — se abre al hacer clic en alguien del panel
+  // Equipo Activo. null = cerrado. Exclusivo de resolutor (el backend ya
+  // lo bloquea, pero ni siquiera se ofrece el click si no aplica).
+  const [estadisticas, setEstadisticas] = useState<EstadisticasUsuarioTickets | null>(null);
+  const [cargandoEstadisticas, setCargandoEstadisticas] = useState(false);
+  const [modalEstadisticasAbierto, setModalEstadisticasAbierto] = useState(false);
+
+  const abrirEstadisticas = async (usuarioId: number) => {
+    setModalEstadisticasAbierto(true);
+    setCargandoEstadisticas(true);
+    setEstadisticas(null);
+    try {
+      const data = await getEstadisticasUsuario(usuarioId);
+      setEstadisticas(data);
+    } catch (e: any) {
+      showAlert(e.response?.data?.error || "No se pudieron cargar las estadísticas", "error");
+      setModalEstadisticasAbierto(false);
+    } finally {
+      setCargandoEstadisticas(false);
+    }
+  };
   const [liberando, setLiberando] = useState(false);
   const [motivoRebote, setMotivoRebote] = useState("");
   const [rebotarDestino, setRebotarDestino] = useState("");
@@ -428,6 +462,23 @@ export default function Tickets() {
     }
   };
 
+  // El botón "➕👥" — sumarse como responsable a un ticket que ya está en
+  // proceso con alguien más, sin quitárselo a esa persona. Los dos quedan
+  // como responsables por igual de ahí en adelante.
+  const handleUnirse = async (id: number) => {
+    setUniendo(true);
+    try {
+      await unirseTicket(id);
+      await cargarLista();
+      if (drawerId === id) await refrescarDetalle(id);
+      showAlert("Te uniste al ticket", "success");
+    } catch (e: any) {
+      showAlert(e.response?.data?.error || "No te pudiste unir", "error");
+    } finally {
+      setUniendo(false);
+    }
+  };
+
   const handleLiberar = async (id: number) => {
     setLiberando(true);
     try {
@@ -522,15 +573,57 @@ export default function Tickets() {
 
   const archivablesParaVincular = tickets.filter((t) => t.estado === "Finalizado");
 
+  // ¿Soy uno de los responsables reales del ticket abierto? Ya no es solo
+  // "asignado_a === yo" — puede haber más de una persona trabajando en el
+  // mismo ticket (ver botón "➕ unirse"). puedoUnirme decide si mostrar ese
+  // botón: solo resolutor, solo si ya está confirmado (En proceso), y solo
+  // si todavía no soy parte de la lista.
+  const soyResponsable = (detalle?.asignados ?? []).some((a) => a.idusuario === user?.id);
+  const puedoUnirme =
+    !!detalle && esResolutor && detalle.estado === "En proceso" && !!detalle.asignado_a && !soyResponsable;
+
+  // Una columna "En proceso" por cada persona que de verdad tiene algo EN
+  // PROCESO confirmado (no cuenta si solo tiene reservados/rebotados sin
+  // confirmar — esos se siguen viendo con su insignia en Pendiente/
+  // Rebotados, igual que antes). Si un ticket tiene 2 responsables,
+  // aparece bajo los 2 — el filtro checa la lista completa, no un dueño
+  // único.
+  const personasEnProceso = equipoActivo.filter((dev) => dev.tickets.some((t) => t.estado === "En proceso"));
+  const columnasPorPersona: ColumnaTablero[] = personasEnProceso.map((dev) => ({
+    key: `enproceso-${dev.idusuario}`,
+    label: dev.nombre,
+    dot: "bg-blue-600",
+    header: "border-t-blue-600",
+    filtro: (t: Ticket) => t.estado === "En proceso" && (t.asignados ?? []).some((a) => a.idusuario === dev.idusuario),
+    persona: { idusuario: dev.idusuario, nombre: dev.nombre, apellido: dev.apellido, foto_url: dev.foto_url },
+  }));
+
   // Con "Ver archivo histórico" activo, solo Finalizado y Cancelado pueden
   // tener algo (son los únicos estados que el cron archiva) — mostrar
-  // Rebotados/Pendiente/En proceso vacíos ahí no aporta nada.
-  const columnasVisibles = verArchivados
-    ? TABLERO_COLUMNAS.filter((c) => c.key === "Finalizado" || c.key === "Cancelado")
-    : TABLERO_COLUMNAS;
-  const gridColsClass = verArchivados
-    ? "xl:grid-cols-[minmax(260px,1fr)_minmax(260px,1fr)]"
-    : "xl:grid-cols-[minmax(155px,1fr)_minmax(220px,2fr)_minmax(220px,2fr)_minmax(155px,1fr)_minmax(155px,1fr)]";
+  // Rebotados/Pendiente/En-proceso-por-persona vacíos ahí no aporta nada.
+  const columnasVisibles: ColumnaTablero[] = verArchivados
+    ? TABLERO_COLUMNAS_FIJAS.filter((c) => c.key === "Finalizado" || c.key === "Cancelado")
+    : [
+        TABLERO_COLUMNAS_FIJAS[0], // Rebotados
+        TABLERO_COLUMNAS_FIJAS[1], // Pendiente
+        ...columnasPorPersona,
+        TABLERO_COLUMNAS_FIJAS[2], // Finalizado
+        TABLERO_COLUMNAS_FIJAS[3], // Cancelado
+      ];
+
+  // El número de columnas ya no es fijo (depende de cuánta gente tenga algo
+  // en proceso ahorita), así que el grid-template-columns se arma en JS y
+  // se aplica como estilo inline — igual que la altura de abajo, para no
+  // depender de que Tailwind genere bien una clase arbitraria dinámica.
+  const gridTemplateColumns = verArchivados
+    ? "minmax(260px,1fr) minmax(260px,1fr)"
+    : [
+        "minmax(155px,1fr)", // Rebotados
+        "minmax(220px,2fr)", // Pendiente
+        ...columnasPorPersona.map(() => "minmax(200px,1.4fr)"), // una por persona
+        "minmax(155px,1fr)", // Finalizado
+        "minmax(155px,1fr)", // Cancelado
+      ].join(" ");
 
   // Altura real del tablero, medida en JS — no una clase de Tailwind con
   // calc(100vh-...), que en este build no estaba surtiendo efecto (por eso
@@ -539,15 +632,20 @@ export default function Tickets() {
   // se recalcula solo con cada resize, sin importar el tamaño de pantalla.
   const tableroRef = useRef<HTMLDivElement>(null);
   const [alturaTablero, setAlturaTablero] = useState<number | null>(null);
+  // true = pantalla de escritorio (xl+), donde aplica el grid dinámico de
+  // arriba; false = se apila en columnas normales de flujo (móvil).
+  const [esEscritorio, setEsEscritorio] = useState(false);
 
   useEffect(() => {
     const calcular = () => {
       // Por debajo de xl (1280px) el tablero se apila en 1-2 columnas de
-      // flujo normal — ahí no aplica altura fija, se deja crecer natural.
+      // flujo normal — ahí no aplica altura fija ni grid dinámico.
       if (window.innerWidth < 1280 || !tableroRef.current) {
         setAlturaTablero(null);
+        setEsEscritorio(false);
         return;
       }
+      setEsEscritorio(true);
       const top = tableroRef.current.getBoundingClientRect().top;
       const disponible = window.innerHeight - top - 16;
       setAlturaTablero(Math.max(disponible, 320));
@@ -581,6 +679,7 @@ export default function Tickets() {
         <style>{`
           .scroll-oculto { scrollbar-width: none; -ms-overflow-style: none; }
           .scroll-oculto::-webkit-scrollbar { display: none; }
+          button:not(:disabled) { cursor: pointer; }
         `}</style>
         {/* ── Encabezado ─────────────────────────────────────────────── */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -633,17 +732,20 @@ export default function Tickets() {
         ) : (
           <div
             ref={tableroRef}
-            className="flex flex-col xl:flex-row gap-4 items-stretch"
+            className="w-full"
             style={alturaTablero ? { height: `${alturaTablero}px` } : undefined}
           >
-            {/* Pendiente y En proceso ocupan el doble de ancho que
-                Finalizado y Cancelado. Mínimos bajos a propósito — mejor
-                que las columnas se achiquen a que aparezca scroll
-                horizontal (eso ya se probó y cortaba contenido a la vista).
-                Un solo cálculo de altura arriba en vez de repetido en cada
-                columna — así todas usan exactamente el mismo espacio
-                disponible y no queda hueco entre la más corta y el resto. */}
-            <div className={`flex-1 grid grid-cols-1 sm:grid-cols-2 ${gridColsClass} xl:grid-rows-[minmax(0,1fr)] gap-3 xl:items-stretch`}>
+            {/* El número de columnas ya no es fijo (una por persona activa),
+                así que tanto las columnas como las filas del grid se arman
+                en JS y se aplican como estilo inline en vez de una clase de
+                Tailwind — un arreglo arbitrario dinámico no se puede
+                expresar como clase estática. Un solo cálculo de altura
+                arriba en vez de repetido en cada columna — así todas usan
+                exactamente el mismo espacio disponible. */}
+            <div
+              className="h-full grid grid-cols-1 sm:grid-cols-2 gap-3"
+              style={esEscritorio ? { gridTemplateColumns, gridTemplateRows: "minmax(0,1fr)", alignItems: "stretch" } : undefined}
+            >
                 {columnasVisibles.map((col) => {
                   const items = tickets
                     .filter(col.filtro)
@@ -656,13 +758,44 @@ export default function Tickets() {
                   });
                 return (
                   <div key={col.key} className="flex flex-col min-w-0 xl:h-full">
-                    <div className="flex items-center gap-2 mb-3 px-1 flex-shrink-0">
-                      <span className={`w-2.5 h-2.5 rounded-full ${col.dot}`} />
-                      <h2 className="text-sm font-bold text-slate-700">{col.label}</h2>
-                      <span className="ml-auto text-xs font-semibold text-slate-400 bg-slate-100 rounded-full px-2 py-0.5">
-                        {items.length}
-                      </span>
-                    </div>
+                    {col.persona ? (
+                      <div
+                        onClick={esResolutor ? () => abrirEstadisticas(col.persona!.idusuario) : undefined}
+                        className={`flex flex-col items-center text-center gap-1 mb-3 px-1 flex-shrink-0 ${
+                          esResolutor ? "cursor-pointer rounded-lg -m-1 p-1.5 hover:bg-slate-100 transition-colors" : ""
+                        }`}
+                        title={esResolutor ? "Ver estadísticas" : undefined}
+                      >
+                        {col.persona.foto_url ? (
+                          <img
+                            src={col.persona.foto_url}
+                            alt={col.persona.nombre}
+                            className="w-[77px] h-[77px] rounded-full object-cover"
+                          />
+                        ) : (
+                          <span className="w-[77px] h-[77px] rounded-full bg-indigo-100 text-indigo-700 text-xl font-bold flex items-center justify-center">
+                            {iniciales(col.persona.nombre, col.persona.apellido)}
+                          </span>
+                        )}
+                        <div className="flex items-center gap-1 min-w-0">
+                          <h2 className="text-sm font-bold text-slate-700 truncate">{col.label}</h2>
+                          {col.persona.idusuario === user?.id && (
+                            <span className="text-[9px] font-bold text-blue-600 flex-shrink-0">TÚ</span>
+                          )}
+                        </div>
+                        <span className="text-xs font-semibold text-slate-400 bg-slate-100 rounded-full px-2 py-0.5">
+                          {items.length}
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 mb-3 px-1 flex-shrink-0">
+                        <span className={`w-2.5 h-2.5 rounded-full ${col.dot}`} />
+                        <h2 className="text-sm font-bold text-slate-700 truncate">{col.label}</h2>
+                        <span className="ml-auto text-xs font-semibold text-slate-400 bg-slate-100 rounded-full px-2 py-0.5 flex-shrink-0">
+                          {items.length}
+                        </span>
+                      </div>
+                    )}
                     <div className={`scroll-oculto flex-1 min-h-0 space-y-2.5 rounded-2xl border-t-4 ${col.header} bg-slate-50/60 p-2.5 overflow-y-auto`}>
                       {items.length === 0 && (
                         <p className="text-xs text-slate-300 italic px-2 py-4 text-center">vacío</p>
@@ -744,20 +877,36 @@ export default function Tickets() {
                             );
                           })()}
                           <div className="flex items-center justify-between mt-2">
-                            {t.asignado_nombre ? (
+                            {t.asignados && t.asignados.length > 0 ? (
                               <div className="flex items-center gap-1.5 min-w-0">
-                                {t.asignado_foto_url ? (
-                                  <img
-                                    src={t.asignado_foto_url}
-                                    alt={t.asignado_nombre}
-                                    className="w-6 h-6 rounded-full object-cover flex-shrink-0"
-                                  />
-                                ) : (
-                                  <span className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 text-[10px] font-bold flex items-center justify-center flex-shrink-0">
-                                    {iniciales(t.asignado_nombre, t.asignado_apellido)}
-                                  </span>
-                                )}
-                                <span className="text-[10px] text-slate-600 truncate">{t.asignado_nombre}</span>
+                                <div className="flex -space-x-1.5 flex-shrink-0">
+                                  {t.asignados.slice(0, 3).map((a) =>
+                                    a.foto_url ? (
+                                      <img
+                                        key={a.idusuario}
+                                        src={a.foto_url}
+                                        alt={a.nombre}
+                                        className="w-6 h-6 rounded-full object-cover border-2 border-white"
+                                      />
+                                    ) : (
+                                      <span
+                                        key={a.idusuario}
+                                        className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 text-[10px] font-bold flex items-center justify-center border-2 border-white"
+                                      >
+                                        {iniciales(a.nombre, a.apellido)}
+                                      </span>
+                                    )
+                                  )}
+                                  {t.asignados.length > 3 && (
+                                    <span className="w-6 h-6 rounded-full bg-slate-200 text-slate-600 text-[9px] font-bold flex items-center justify-center border-2 border-white">
+                                      +{t.asignados.length - 3}
+                                    </span>
+                                  )}
+                                </div>
+                                <span className="text-[10px] text-slate-600 truncate">
+                                  {t.asignados[0].nombre}
+                                  {t.asignados.length > 1 ? ` +${t.asignados.length - 1}` : ""}
+                                </span>
                               </div>
                             ) : esResolutor && t.estado !== "Finalizado" && t.estado !== "Cancelado" ? (
                               <span className="text-[10px] font-semibold text-blue-600">Sin tomar</span>
@@ -772,71 +921,6 @@ export default function Tickets() {
                 );
               })}
             </div>
-
-            {/* Panel de equipo activo — visible para cualquiera con acceso
-                al módulo (Admin también), y solo si hay alguien con algo En
-                proceso. Si el único dev que anda con tickets asignados no
-                tiene nada activo, el panel ni aparece. */}
-            {equipoActivo.length > 0 && (
-              <div className="w-full xl:w-72 flex-shrink-0 bg-white border border-slate-200 rounded-2xl p-3.5 xl:h-full flex flex-col">
-                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-3 px-0.5 flex-shrink-0">
-                  Equipo activo
-                </h3>
-                <div className="scroll-oculto flex-1 min-h-0 space-y-5 overflow-y-auto">
-                  {equipoActivo.map((dev) => {
-                    const enProceso = dev.tickets.filter((t) => t.estado === "En proceso").length;
-                    return (
-                      <div key={dev.idusuario}>
-                        <div className="flex items-center gap-3 mb-2">
-                          {dev.foto_url ? (
-                            <img src={dev.foto_url} alt={dev.nombre} className="w-20 h-20 rounded-full object-cover flex-shrink-0" />
-                          ) : (
-                            <span className="w-20 h-20 rounded-full bg-indigo-100 text-indigo-700 text-xl font-bold flex items-center justify-center flex-shrink-0">
-                              {iniciales(dev.nombre, dev.apellido)}
-                            </span>
-                          )}
-                          <div className="min-w-0">
-                            <p className="text-sm font-semibold text-slate-700 truncate">
-                              {dev.nombre} {dev.apellido}
-                              {dev.idusuario === user?.id && (
-                                <span className="ml-1.5 text-[9px] font-bold text-blue-600 align-middle">TÚ</span>
-                              )}
-                            </p>
-                            <p className="text-[10px] text-slate-400">
-                              {enProceso} en proceso
-                              {dev.tickets.length > enProceso && ` · ${dev.tickets.length - enProceso} por confirmar`}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="space-y-1 pl-1">
-                          {dev.tickets.map((t) => {
-                            // Mismo ticket, 3 lecturas posibles: ya en
-                            // proceso de verdad (sin indicador), se lo
-                            // rebotaron directo (↻) o se lo asignaron
-                            // directo y todavía no lo confirma (📌).
-                            const indicador =
-                              t.estado === "En proceso" ? null : t.rebotado ? "↻" : "📌";
-                            return (
-                              <button
-                                key={t.idticket}
-                                onClick={() => abrirTicket(t.idticket)}
-                                className={`w-full text-left text-xs truncate flex items-center gap-1 ${
-                                  indicador ? "text-amber-600 hover:text-amber-700" : "text-slate-500 hover:text-blue-600"
-                                }`}
-                                title={indicador === "↻" ? "Rebotado — sin confirmar" : indicador === "📌" ? "Reservado — sin confirmar" : t.titulo}
-                              >
-                                <span>· {t.titulo}</span>
-                                {indicador && <span className="flex-shrink-0">{indicador}</span>}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
           </div>
         )}
       </div>
@@ -1058,6 +1142,39 @@ export default function Tickets() {
                   <p className="text-xs text-slate-400">
                     Creado por {detalle.creador_nombre} {detalle.creador_apellido}
                   </p>
+                  {detalle.asignados && detalle.asignados.length > 0 && (
+                    <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                      <span className="text-xs text-slate-400">
+                        {detalle.asignados.length > 1 ? "Responsables:" : "Responsable:"}
+                      </span>
+                      {detalle.asignados.map((a) => (
+                        <span
+                          key={a.idusuario}
+                          className="flex items-center gap-1 text-xs bg-slate-100 rounded-full pl-0.5 pr-2 py-0.5"
+                        >
+                          {a.foto_url ? (
+                            <img src={a.foto_url} alt={a.nombre} className="w-5 h-5 rounded-full object-cover" />
+                          ) : (
+                            <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 text-[9px] font-bold flex items-center justify-center">
+                              {iniciales(a.nombre, a.apellido)}
+                            </span>
+                          )}
+                          <span className="text-slate-600">{a.nombre}</span>
+                        </span>
+                      ))}
+                      {puedoUnirme && (
+                        <button
+                          onClick={() => handleUnirse(detalle.idticket)}
+                          disabled={uniendo}
+                          title="Sumarte como responsable de este ticket"
+                          className="flex items-center gap-1 text-xs font-semibold text-blue-600 border border-blue-200 rounded-full pl-1.5 pr-2 py-0.5 hover:bg-blue-50 disabled:opacity-50"
+                        >
+                          <span>➕</span>
+                          <span>{uniendo ? "..." : "Unirme"}</span>
+                        </button>
+                      )}
+                    </div>
+                  )}
                   {detalle.fecha_compromiso && (
                     <p className={`text-xs font-semibold ${
                       new Date(detalle.fecha_compromiso) < new Date() && !["Finalizado", "Cancelado"].includes(detalle.estado)
@@ -1108,7 +1225,7 @@ export default function Tickets() {
                     exclusivo de resolutor, por eso ese botón puntual todavía
                     checa esResolutor más abajo. */}
                 <div className="px-5 py-3.5 border-b border-slate-100 bg-slate-50 space-y-2.5">
-                  {detalle.asignado_a === user?.id && detalle.estado !== "Pendiente" ? (
+                  {soyResponsable && detalle.estado !== "Pendiente" ? (
                     <div className="space-y-2">
                       <div className="flex flex-wrap items-center gap-1.5">
                         {COLUMNAS.map((c) => (
@@ -1118,7 +1235,7 @@ export default function Tickets() {
                             className={`text-xs px-2.5 py-1 rounded-lg font-semibold border transition-colors ${
                               detalle.estado === c.estado
                                 ? `${PILDORA_ESTADO[c.estado]} border-transparent`
-                                : "border-slate-200 text-slate-400 hover:border-slate-300"
+                                : "bg-white border-slate-300 text-slate-600 shadow-sm hover:bg-slate-100 hover:border-slate-400 hover:text-slate-800"
                             }`}
                           >
                             {c.label}
@@ -1167,7 +1284,7 @@ export default function Tickets() {
                         </div>
                       )}
                     </div>
-                  ) : detalle.asignado_a === user?.id && detalle.estado === "Pendiente" ? (
+                  ) : soyResponsable && detalle.estado === "Pendiente" ? (
                     // Reservado para mí (asignación directa o rebote con
                     // destino) pero todavía no lo confirmo — mismo flujo de
                     // "Tomar ticket" con estimado, solo que aquí el ticket
@@ -1275,9 +1392,22 @@ export default function Tickets() {
                     </div>
                   ) : detalle.asignado_a ? (
                     <p className="text-xs text-slate-500">
-                      {esReservado(detalle) || detalle.rebotado
-                        ? <>Reservado para <strong>{detalle.asignado_nombre} {detalle.asignado_apellido}</strong> — todavía no lo confirma</>
-                        : <>Asignado a <strong>{detalle.asignado_nombre} {detalle.asignado_apellido}</strong> — solo esa persona puede cambiar el estado</>}
+                      {esReservado(detalle) || detalle.rebotado ? (
+                        <>Reservado para <strong>{detalle.asignado_nombre} {detalle.asignado_apellido}</strong> — todavía no lo confirma</>
+                      ) : (
+                        <>
+                          Asignado a{" "}
+                          <strong>
+                            {detalle.asignados && detalle.asignados.length > 0
+                              ? detalle.asignados.map((a) => `${a.nombre} ${a.apellido}`).join(", ")
+                              : `${detalle.asignado_nombre} ${detalle.asignado_apellido}`}
+                          </strong>
+                          {" — "}
+                          {(detalle.asignados?.length ?? 1) > 1
+                            ? "cualquiera de ellos puede cambiar el estado"
+                            : "solo esa persona puede cambiar el estado"}
+                        </>
+                      )}
                     </p>
                   ) : (
                     <div className="space-y-2">
@@ -1559,6 +1689,133 @@ export default function Tickets() {
 
                 <div className="border-t border-slate-100 px-5 py-4">
                   <AuditoriaDesplegable tabla="ticket" id={detalle.idticket} titulo="Historial de auditoría" />
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal: estadísticas de un responsable ──────────────────────
+          Se abre al hacer clic en alguien del panel Equipo Activo. Junta
+          lo que hay disponible en la base — no hay bitácora de "quién
+          rebotó qué" todavía, así que el desglose es del estado actual,
+          no un histórico completo de cada acción. */}
+      {modalEstadisticasAbierto && (
+        <div
+          className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/40 backdrop-blur-[2px] p-4"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setModalEstadisticasAbierto(false);
+          }}
+        >
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            {cargandoEstadisticas || !estadisticas ? (
+              <div className="p-8 text-center text-sm text-slate-400">Cargando estadísticas...</div>
+            ) : (
+              <>
+                <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-100">
+                  {estadisticas.foto_url ? (
+                    <img src={estadisticas.foto_url} alt={estadisticas.nombre} className="w-14 h-14 rounded-full object-cover flex-shrink-0" />
+                  ) : (
+                    <span className="w-14 h-14 rounded-full bg-indigo-100 text-indigo-700 text-lg font-bold flex items-center justify-center flex-shrink-0">
+                      {iniciales(estadisticas.nombre, estadisticas.apellido)}
+                    </span>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <h3 className="font-bold text-slate-800 truncate">{estadisticas.nombre} {estadisticas.apellido}</h3>
+                    <p className="text-xs text-slate-400">{estadisticas.rol} · Mesa de Tickets</p>
+                  </div>
+                  <button
+                    onClick={() => setModalEstadisticasAbierto(false)}
+                    className="text-slate-400 hover:text-slate-600 text-xl leading-none flex-shrink-0"
+                  >
+                    ×
+                  </button>
+                </div>
+
+                <div className="p-5 space-y-4">
+                  {/* Números grandes — lo más importante de un vistazo */}
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <div className="bg-emerald-50 rounded-xl py-3">
+                      <p className="text-2xl font-bold text-emerald-700">{estadisticas.finalizados}</p>
+                      <p className="text-[10px] text-emerald-600 font-semibold">Finalizados</p>
+                    </div>
+                    <div className="bg-blue-50 rounded-xl py-3">
+                      <p className="text-2xl font-bold text-blue-700">{estadisticas.en_proceso}</p>
+                      <p className="text-[10px] text-blue-600 font-semibold">En proceso</p>
+                    </div>
+                    <div className="bg-rose-50 rounded-xl py-3">
+                      <p className="text-2xl font-bold text-rose-700">{estadisticas.cancelados}</p>
+                      <p className="text-[10px] text-rose-600 font-semibold">Cancelados</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between text-sm border-b border-slate-100 pb-2">
+                    <span className="text-slate-500">Tickets reportados</span>
+                    <span className="font-semibold text-slate-700">{estadisticas.reportados}</span>
+                  </div>
+
+                  {/* Cumplimiento — solo si hay algo con qué compararlo */}
+                  {estadisticas.con_compromiso > 0 && (
+                    <div>
+                      <div className="flex items-center justify-between text-sm mb-1">
+                        <span className="text-slate-500">Cumplió el compromiso</span>
+                        <span className="font-semibold text-slate-700">
+                          {estadisticas.a_tiempo} de {estadisticas.con_compromiso} (
+                          {Math.round((estadisticas.a_tiempo / estadisticas.con_compromiso) * 100)}%)
+                        </span>
+                      </div>
+                      <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-emerald-500"
+                          style={{ width: `${Math.round((estadisticas.a_tiempo / estadisticas.con_compromiso) * 100)}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Eficiencia — solo si hay finalizados con estimado real.
+                      Framing positivo: 100% - desviación = "efectividad".
+                      13.4% más lento de lo estimado → 86.6% de efectividad.
+                      3 rangos: ≥80% verde, 60-79% amarillo, <60% rojo. */}
+                  {estadisticas.pct_promedio_vs_estimado != null && (() => {
+                    const efectividad = Math.round((100 - estadisticas.pct_promedio_vs_estimado) * 10) / 10;
+                    const color =
+                      efectividad >= 80 ? "text-emerald-600" : efectividad >= 60 ? "text-amber-500" : "text-red-600";
+                    const icono = efectividad >= 80 ? "✅" : efectividad >= 60 ? "⚠️" : "🔴";
+                    return (
+                      <p className={`text-sm font-semibold ${color}`}>
+                        {icono} {efectividad}% de efectividad
+                      </p>
+                    );
+                  })()}
+
+                  {/* Desglose por prioridad de lo finalizado */}
+                  {estadisticas.finalizados > 0 && (
+                    <div>
+                      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Finalizados por prioridad</p>
+                      <div className="space-y-1">
+                        {(["Prioritario", "Urgente", "Alta", "Media", "Baja"] as const).map((p) => (
+                          <div key={p} className="flex items-center gap-2">
+                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md w-14 text-center ${PILDORA_PRIORIDAD[p]}`}>{p}</span>
+                            <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                              <div
+                                className="h-full bg-slate-400"
+                                style={{
+                                  width: `${estadisticas.finalizados > 0 ? (estadisticas.por_prioridad[p] / estadisticas.finalizados) * 100 : 0}%`,
+                                }}
+                              />
+                            </div>
+                            <span className="text-xs text-slate-500 w-4 text-right">{estadisticas.por_prioridad[p]}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {estadisticas.finalizados === 0 && estadisticas.en_proceso === 0 && estadisticas.cancelados === 0 && (
+                    <p className="text-sm text-slate-400 text-center py-2">Todavía no tiene actividad en Mesa de Tickets.</p>
+                  )}
                 </div>
               </>
             )}

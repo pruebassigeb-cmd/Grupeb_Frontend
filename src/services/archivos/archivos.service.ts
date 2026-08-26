@@ -159,6 +159,22 @@ export const eliminarArchivo = async (id_archivo: string): Promise<void> => {
   await api.delete(`/archivos/${id_archivo}`);
 };
 
+/**
+ * Descarga el contenido del archivo como Blob, pasando por la API.
+ *
+ * `archivo.url` apunta a S3 con una URL firmada, y hacer `fetch` de ella
+ * desde el navegador lo bloquea CORS: el bucket no autoriza al dominio de la
+ * app. Por eso el visor no podía abrir nada. Este endpoint sirve los bytes
+ * desde la propia API (mismo origen, CORS ya resuelto, y con el token que
+ * axios inyecta solo) — ver obtenerContenidoArchivo en el backend.
+ */
+export const descargarArchivoBlob = async (id_archivo: string): Promise<Blob> => {
+  const { data } = await api.get<Blob>(`/archivos/${id_archivo}/contenido`, {
+    responseType: "blob",
+  });
+  return data;
+};
+
 export interface Estadisticas {
   total_archivos:   number;
   total_imagenes:   number;

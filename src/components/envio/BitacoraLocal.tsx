@@ -12,14 +12,13 @@ import { showAlert } from "../CustomAlert";
 import type { BitacoraRegistro, UpdateBitacoraRequest } from "../../types/envio/envios.types";
 import { leerBorrador, useAutoguardarBorrador, limpiarBorrador } from "../../hooks/useBorradorFormulario";
 
-const toDatetimeLocal = (iso: string) => {
-  const d = new Date(iso), pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-};
-const ahoraDatetimeLocal = () => {
-  const d = new Date(), pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-};
+import { deInputFechaHora, fmtFechaCorta, paraInputFechaHora } from "../../utils/fecha";
+
+// El valor de un <input type="datetime-local"> se arma SIEMPRE en hora de
+// México, no con los componentes locales del Date (getHours y compañía),
+// que dependen del reloj de quien esté usando la pantalla.
+const toDatetimeLocal = (iso: string) => paraInputFechaHora(iso);
+const ahoraDatetimeLocal = () => paraInputFechaHora(new Date());
 
 const ChevronIcon = ({ open }: { open: boolean }) => (
   <svg className={`w-4 h-4 text-gray-400 transition-transform duration-200 flex-shrink-0 ${open ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -123,7 +122,14 @@ export default function BitacoraLocal() {
     if (!editando) return;
     setGuardando(true);
     try {
-      await updateBitacora(editando.idbitacora, data);
+      // Lo que trae el <input type="datetime-local"> es hora de México sin
+      // zona. Se convierte a UTC AQUÍ, en la frontera, para que la columna
+      // guarde siempre la misma convención que NOW() del servidor.
+      await updateBitacora(editando.idbitacora, {
+        ...data,
+        hora_salida:  data.hora_salida  ? deInputFechaHora(data.hora_salida)  ?? undefined : data.hora_salida,
+        hora_llegada: data.hora_llegada ? deInputFechaHora(data.hora_llegada) ?? undefined : data.hora_llegada,
+      });
       if (data.hora_llegada) await updateEstadoEnvio(editando.envio.idenvio, "entregado");
       if (fotosAEliminar?.length) await Promise.all(fotosAEliminar.map(id => eliminarArchivo(id)));
       if (foto) {
@@ -181,7 +187,7 @@ export default function BitacoraLocal() {
                     <tr key={r.idbitacora} className={`cursor-pointer transition-colors ${exp ? "bg-blue-50" : "hover:bg-gray-50"}`}
                       onClick={() => setExpandida(exp ? null : r.idbitacora)}>
                       <td className="px-3 py-3 w-8"><ChevronIcon open={exp} /></td>
-                      <td className="px-3 py-3 text-gray-700 whitespace-nowrap text-xs">{new Date(r.fecha).toLocaleDateString("es-MX")}</td>
+                      <td className="px-3 py-3 text-gray-700 whitespace-nowrap text-xs">{fmtFechaCorta(r.fecha)}</td>
                       <td className="px-3 py-3 text-blue-600 font-bold whitespace-nowrap">{r.no_pedido}</td>
                       <td className="px-3 py-3 text-gray-800 whitespace-nowrap font-medium">{r.cliente}</td>
                       <td className="px-3 py-3 whitespace-nowrap">
@@ -210,7 +216,7 @@ export default function BitacoraLocal() {
                               <Campo label="Unidad" value={r.unidad?.nombre ?? "—"} />
                               {(r as any).fecha_entrega_estimada && (
                                 <div className="col-span-2">
-                                  <Campo label="Fecha est. entrega" value={new Date((r as any).fecha_entrega_estimada).toLocaleDateString("es-MX")} />
+                                  <Campo label="Fecha est. entrega" value={fmtFechaCorta((r as any).fecha_entrega_estimada)} />
                                 </div>
                               )}
                               {(r as any).observaciones_envio && (

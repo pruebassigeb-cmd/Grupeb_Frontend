@@ -14,6 +14,7 @@ import type { ProductoPdf } from "./Pdfutils";
 import logoUrl from "../assets/logogrupeb.png";
 import { subirPdfA3 } from "../services/pdfS3.service";
 import { formatMoney, type Moneda } from "./formatMoney";
+import { entregarPdf } from "./entregarPdf";
 
 interface PedidoPdf {
   no_pedido: string;
@@ -596,7 +597,7 @@ export async function generarPdfPedido(
   const sufijoFormato = formato === "membretado" ? "_EB" : "";
   const nombre = `Pedido_${pedido.no_pedido}${sufijoFormato}.pdf`;
   const blob = doc.output("blob");
-  if (descargar) doc.save(nombre);
+  if (descargar) entregarPdf(blob, nombre);
   if (guardarEnS3) {
     await subirPdfA3(blob, nombre, "pdfs", "pedidos");
   }

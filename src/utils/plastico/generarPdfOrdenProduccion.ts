@@ -3,7 +3,9 @@ import { cargarLogoBase64, parsePantones } from "../Pdfutils";
 import type { MedidaKey } from "../../types/plastico/productos-plastico.types";
 import logoUrl from "../../assets/logogrupeb.png";
 import { subirPdfA3 } from "../../services/pdfS3.service";
+import { entregarPdf } from "../entregarPdf";
 
+import { fmtFecha } from "../fecha";
 export interface OrdenProduccionData {
   no_pedido: string;
   no_produccion: string | null;
@@ -566,9 +568,7 @@ function bloqueBultosAlmacen(
 function formatFecha(iso: string | null): string {
   if (!iso) return "";
   try {
-    return new Date(iso).toLocaleDateString("es-MX", {
-      day: "2-digit", month: "short", year: "numeric",
-    });
+    return fmtFecha(iso);
   } catch { return iso; }
 }
 
@@ -1130,9 +1130,8 @@ doc.setTextColor(BLACK[0], BLACK[1], BLACK[2]);  celdaLabel(doc, "Cantidad", can
   }
 
   const nombre = `OrdenProduccion_${data.no_produccion ?? data.no_pedido}_Produccion.pdf`;
-doc.save(nombre);
+const blob = entregarPdf(doc, nombre);
 if (guardarEnS3) {
-  const blob = doc.output("blob");
   await subirPdfA3(blob, nombre, "pdfs", "ordenes-produccion");
 }
 }

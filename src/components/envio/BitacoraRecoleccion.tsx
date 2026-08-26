@@ -9,6 +9,7 @@ import { showAlert } from "./../CustomAlert";
 import type { EnvioRecoleccion } from "../../types/envio/envios.types";
 import { leerBorrador, useAutoguardarBorrador, limpiarBorrador } from "../../hooks/useBorradorFormulario";
 
+import { fmtFechaCorta } from "../../utils/fecha";
 // Compartida por ModalEditarRecoleccion y handleGuardarRecoleccion (este
 // último no relanza sus errores — atrapa y muestra su propia alerta — así
 // que el modal no puede saber con certeza si el guardado tuvo éxito; quien
@@ -239,7 +240,7 @@ export default function BitacoraRecoleccion() {
                     <tr key={r.idenvio} className={`cursor-pointer transition-colors ${exp ? "bg-purple-50" : "hover:bg-gray-50"}`}
                       onClick={() => setExpandida(exp ? null : r.idenvio)}>
                       <td className="px-3 py-3 w-8"><ChevronIcon open={exp} /></td>
-                      <td className="px-3 py-3 text-gray-700 whitespace-nowrap text-xs">{new Date(r.fecha_envio).toLocaleDateString("es-MX")}</td>
+                      <td className="px-3 py-3 text-gray-700 whitespace-nowrap text-xs">{fmtFechaCorta(r.fecha_envio)}</td>
                       <td className="px-3 py-3 text-blue-600 font-bold whitespace-nowrap">{r.no_pedido}</td>
                       <td className="px-3 py-3 text-gray-800 whitespace-nowrap font-medium">{r.cliente}</td>
                       <td className="px-3 py-3 whitespace-nowrap">
@@ -262,7 +263,7 @@ export default function BitacoraRecoleccion() {
                                   {r.es_parcialidad ? "Parcialidad" : "Completo"}
                                 </span>
                               </div>
-                              {r.fecha_entrega_estimada && <div className="col-span-2"><Campo label="Fecha est. recolección" value={new Date(r.fecha_entrega_estimada).toLocaleDateString("es-MX")} /></div>}
+                              {r.fecha_entrega_estimada && <div className="col-span-2"><Campo label="Fecha est. recolección" value={fmtFechaCorta(r.fecha_entrega_estimada)} /></div>}
                               {r.observaciones && <div className="col-span-2"><Campo label="Obs. del envío" value={r.observaciones} /></div>}
                             </Seccion>
 

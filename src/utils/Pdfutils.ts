@@ -4,6 +4,7 @@ import jsPDF from "jspdf";
 import QRCode from "qrcode";
 import { formatMoney, type Moneda } from "./formatMoney";
 
+import { fmtFecha } from "./fecha";
 // ── Paleta B&N ────────────────────────────────────────────────────────────────
 export const GRAY_DARK  = [0,   0,   0]   as [number, number, number];
 export const GRAY_MED   = [150, 150, 150] as [number, number, number];
@@ -113,9 +114,7 @@ export function getMedida(prod: ProductoPdf): string {
 
 export function formatFecha(iso: string): string {
   try {
-    return new Date(iso).toLocaleDateString("es-MX", {
-      day: "2-digit", month: "short", year: "numeric",
-    });
+    return fmtFecha(iso);
   } catch { return iso; }
 }
 

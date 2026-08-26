@@ -44,6 +44,7 @@ import { NOMBRES_PROCESO_PAPEL } from "../../types/papel/seguimientoPapel.types"
 import { esProductoOrdenPapel } from "../../utils/papel/ordenProduccionPapelPdf.helpers";
 
 
+import { fmtFecha, fmtFechaCorta } from "../../utils/fecha";
 // Margen mínimo entre recargas automáticas disparadas por foco/visibilidad.
 // Volver a la ventana (tras un diálogo de archivos, una descarga de PDF o un
 // cambio de pestaña) no debe relanzar el seguimiento completo si acabamos de
@@ -58,7 +59,7 @@ const diasDesde = (fecha: string | null): number | null => {
 
 const formatearFechaAprobacion = (fecha: string | null): string | null => {
   if (!fecha) return null;
-  return new Date(fecha).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" });
+  return fmtFecha(fecha);
 };
 
 const FechaAprobacion = ({ fecha }: { fecha: string | null }) => {
@@ -418,7 +419,7 @@ function BotonPdfPedido({ pedido, puedePdf }: { pedido: PedidoSeguimiento; puede
 // (día/mes/año) — se muestra debajo del botón cuando ya hay snapshot.
 const formatearFechaGeneracion = (fecha: string | null): string | null => {
   if (!fecha) return null;
-  return new Date(fecha).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" });
+  return fmtFecha(fecha);
 };
 
 function BotonEstadoCuentaPdf({
@@ -639,7 +640,7 @@ function ContadorDiasHabiles({ pedido, vigente }: { pedido: PedidoSeguimiento; v
 
   return (
     <span
-      title={`Días hábiles desde que se habilitó la orden (${new Date(fechaInicio).toLocaleDateString("es-MX")})`}
+      title={`Días hábiles desde que se habilitó la orden (${fmtFechaCorta(fechaInicio)})`}
       className={`inline-flex items-center justify-center min-w-[2rem] px-1.5 py-0.5 rounded text-xs font-semibold ${estilos}`}
     >
       {dias}
@@ -759,7 +760,7 @@ function ModalCuentasPorCobrar({
               <td className="px-3 py-2 font-medium text-gray-900 whitespace-nowrap">{c.no_pedido}</td>
               <td className="px-3 py-2 text-gray-700">{c.cliente || c.empresa || "—"}</td>
               <td className="px-3 py-2 text-gray-500 whitespace-nowrap">
-                {new Date(c.fecha_generacion).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" })}
+                {fmtFecha(c.fecha_generacion)}
               </td>
               <td className="px-3 py-2"><BadgeDiasVencidos dias={c.dias_habiles_desde_generacion} /></td>
               <td className="px-3 py-2 text-gray-700 whitespace-nowrap">
@@ -1281,7 +1282,7 @@ export default function Seguimiento() {
         className="hover:bg-gray-50 transition-colors border-t border-gray-200">
 
         <td className={`${px} ${txt} text-gray-900 whitespace-nowrap`}>
-          {new Date(pedido.fecha).toLocaleDateString("es-MX")}
+          {fmtFechaCorta(pedido.fecha)}
         </td>
 
         <td className={`${px} whitespace-nowrap`}>

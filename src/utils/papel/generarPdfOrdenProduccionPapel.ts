@@ -20,6 +20,7 @@ import {
   redondear,
   validarProductoPapelParaPdf,
 } from "./ordenProduccionPapelPdf.helpers";
+import { entregarPdf } from "../entregarPdf";
 
 // ════════════════════════════════════════════════════════════════════════
 // GEOMETRÍA DEL FORMATO
@@ -1730,10 +1731,9 @@ export async function generarPdfOrdenProduccionPapel(
   }
 
   const nombre = `OrdenProduccionPapel_${data.no_produccion ?? data.no_pedido}.pdf`;
-  doc.save(nombre);
+  const blob = entregarPdf(doc, nombre);
 
   if (guardarEnS3) {
-    const blob = doc.output("blob");
     await subirPdfA3(blob, nombre, "pdfs", "ordenes-produccion");
   }
 }

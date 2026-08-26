@@ -5,7 +5,9 @@ import type { VentaPago } from "../types/ventas.types";
 import logoUrl from "../assets/logogrupeb.png";
 import { subirPdfA3 } from "../services/pdfS3.service";
 import { formatMoney, type Moneda } from "./formatMoney";
+import { entregarPdf } from "./entregarPdf";
 
+import { fmtFecha } from "./fecha";
 // ── Paleta monocromática ─────────────────────────────────────
 const BLACK:      [number, number, number] = [0,   0,   0  ];
 const WHITE:      [number, number, number] = [255, 255, 255];
@@ -27,9 +29,7 @@ const fmtNum = (n: number): string =>
 function formatFecha(iso: string | null): string {
   if (!iso) return "—";
   try {
-    return new Date(iso).toLocaleDateString("es-MX", {
-      day: "2-digit", month: "short", year: "numeric",
-    });
+    return fmtFecha(iso);
   } catch { return iso; }
 }
 
@@ -556,9 +556,8 @@ export async function generarPdfEstadoCuenta(
 
   doc.setTextColor(...BLACK);
   const nombre = `EstadoCuenta_Pedido${datos.no_pedido}.pdf`;
-  doc.save(nombre);
+  const blob = entregarPdf(doc, nombre);
   if (guardarEnS3) {
-    const blob = doc.output("blob");
     await subirPdfA3(blob, nombre, "pdfs", "estados-cuenta-detallado");
   }
 }

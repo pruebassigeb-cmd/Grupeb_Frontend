@@ -17,23 +17,11 @@ import EditarFicha from "./Editarficha";
 import AuditoriaDesplegable from "../auditoria/AuditoriaDesplegable";
 import BotonAuditoria from "../auditoria/BotonAuditoria";
 
+import { fmtFecha } from "../../utils/fecha";
 interface Props {
   idorden_diseno: number;
   onCambio?: () => void;
 }
-
-const fmtFecha = (iso: string | null) => {
-  if (!iso) return "—";
-  try {
-    return new Date(iso).toLocaleDateString("es-MX", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
-  } catch {
-    return iso;
-  }
-};
 
 export default function FichaDisenoPanel({ idorden_diseno, onCambio }: Props) {
   const { puedeEditarDiseno } = usePermisos({

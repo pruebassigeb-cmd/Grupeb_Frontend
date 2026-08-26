@@ -5,7 +5,9 @@ import type { EstadoCuenta } from "../services/anticipoLiquidacion/estadoCuentaS
 import logoUrl from "../assets/grupeblanco.png";
 import { subirPdfA3 } from "../services/pdfS3.service";
 import { formatMoney, type Moneda } from "./formatMoney";
+import { entregarPdf } from "./entregarPdf";
 
+import { fmtFechaLarga } from "./fecha";
 const BLACK:   [number, number, number] = [0,   0,   0  ];
 const WHITE:   [number, number, number] = [255, 255, 255];
 const GRAY_90: [number, number, number] = [25,  25,  25 ];
@@ -28,9 +30,7 @@ const fmtNum = (n: number): string => Number(n).toLocaleString("es-MX");
 function formatFecha(iso: string | null): string {
   if (!iso) return "—";
   try {
-    return new Date(iso).toLocaleDateString("es-MX", {
-      day: "2-digit", month: "long", year: "numeric",
-    });
+    return fmtFechaLarga(iso);
   } catch { return iso; }
 }
 
@@ -547,9 +547,8 @@ export async function generarPdfEstadoCuentaSimple(
 
   doc.setTextColor(...BLACK);
   const nombre = `EstadoCuenta_Pedido${datos.no_pedido}.pdf`;
-  doc.save(nombre);
+  const blob = entregarPdf(doc, nombre);
   if (guardarEnS3) {
-    const blob = doc.output("blob");
     await subirPdfA3(blob, nombre, "pdfs", "estados-cuenta-simple");
   }
 }

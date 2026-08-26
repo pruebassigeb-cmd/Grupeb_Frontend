@@ -1,18 +1,10 @@
 import type { EventoAuditoria } from "../../services/auditoriaService";
+import { fmtFecha, fmtFechaHora as fmtFechaHoraMX } from "../../utils/fecha";
 
-export const fmtFechaHora = (iso: string | null): string => {
-  if (!iso) return "Sin registro";
-  const fecha = new Date(iso);
-  if (Number.isNaN(fecha.getTime())) return iso;
-  return fecha.toLocaleString("es-MX", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-};
+export const fmtFechaHora = (iso: string | null): string =>
+  iso ? fmtFechaHoraMX(iso, iso) : "Sin registro";
 
+const ISO_SOLO_FECHA = /^\d{4}-\d{2}-\d{2}$/;
 const ISO_FECHA = /^\d{4}-\d{2}-\d{2}([T ]\d{2}:\d{2}|$)/;
 
 export const formatearValor = (valor: unknown): string => {
@@ -20,6 +12,10 @@ export const formatearValor = (valor: unknown): string => {
   if (typeof valor === "boolean") return valor ? "Sí" : "No";
   if (typeof valor === "number") return String(valor);
   if (typeof valor === "string") {
+    // Los timestamps que vienen dentro de datos_antes / datos_despues son
+    // jsonb: si la columna es `timestamp`, llegan SIN offset. fmtFecha* ya
+    // los interpreta como UTC — que es de donde salía el desfase de 6 h.
+    if (ISO_SOLO_FECHA.test(valor)) return fmtFecha(valor, valor);
     if (ISO_FECHA.test(valor)) return fmtFechaHora(valor);
     return valor.length > 120 ? `${valor.slice(0, 120)}…` : valor;
   }

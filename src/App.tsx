@@ -33,6 +33,7 @@ import PWAUpdatePrompt from "./components/pwa/PWAUpdatePrompt";
 import OfflineBanner from "./components/pwa/OfflineBanner";
 import SyncStatusIndicator from "./components/pwa/SyncStatusIndicator";
 import ConnectivityToast from "./components/pwa/ConnectivityToast";
+import VisorPdfHost from "./components/visor/VisorPdfHost";
 import "./offline/expoOutboxHandlers";
 import ReportesCorreo from "./pages/ReportesCorreo";
 import CotizadorLibre from "./pages/cotizadorLibre/CotizadorLibre";
@@ -56,6 +57,9 @@ function App() {
         <OfflineBanner />
         <SyncStatusIndicator />
         <ConnectivityToast />
+        {/* Visor de PDF: vive fuera de las rutas para que cualquier pantalla
+            (y los utils que generan PDFs) puedan abrirlo sin pasar props. */}
+        <VisorPdfHost />
         <Routes>
           {/* Pública */}
           <Route path="/" element={<Login />} />

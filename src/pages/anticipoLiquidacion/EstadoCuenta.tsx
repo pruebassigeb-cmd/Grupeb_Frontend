@@ -8,16 +8,9 @@ import {
 } from "../../services/anticipoLiquidacion/estadoCuentaService";
 import type { ResumenEstadoCuenta, EstadoCuenta } from "../../services/anticipoLiquidacion/estadoCuentaService";
 
+import { fmtFecha } from "../../utils/fecha";
 const fmt = (n: number) =>
   n.toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
-const fmtFecha = (iso: string) => {
-  try {
-    return new Date(iso).toLocaleDateString("es-MX", {
-      day: "2-digit", month: "short", year: "numeric",
-    });
-  } catch { return iso; }
-};
 
 function DetalleEstadoCuenta({
   noPedido,

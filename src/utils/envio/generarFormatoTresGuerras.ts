@@ -1,5 +1,6 @@
 import jsPDF from "jspdf";
 import { subirPdfA3 } from "../../services/pdfS3.service";
+import { entregarPdf } from "../entregarPdf";
 
 // 215mm x 140mm landscape
 // jsPDF: format:[140, 215] → PAGE_W=215mm, PAGE_H=140mm
@@ -245,9 +246,8 @@ export async function generarFormatoTresGuerras(params: FormatoTresGuerrasParams
   }
 
   const nombre = `OrdenServicioTresGuerras_${datos.no_pedido}.pdf`;
-  doc.save(nombre);
+  const blob = entregarPdf(doc, nombre);
   if (guardarEnS3) {
-    const blob = doc.output("blob");
     await subirPdfA3(blob, nombre, "pdfs", "formas-envio");
   }
 }
