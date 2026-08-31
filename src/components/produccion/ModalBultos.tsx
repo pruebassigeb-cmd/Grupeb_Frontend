@@ -12,6 +12,7 @@ import {
 import type { Bulto } from "../../services/produccion/seguimientoService";
 import type { PedidoSeguimiento } from "../../types/produccion/seguimiento.types";
 import { leerBorrador, useAutoguardarBorrador, limpiarBorrador } from "../../hooks/useBorradorFormulario";
+import { showAlert } from "../CustomAlert";
 
 import { fmtHora } from "../../utils/fecha";
 export default function ModalBultos({
@@ -31,7 +32,6 @@ export default function ModalBultos({
   const [eliminando,    setEliminando]    = useState<number | null>(null);
   const [nuevaCantidad, setNuevaCantidad] = useState(borradorInicial?.nuevaCantidad ?? "");
   const [repetir,       setRepetir]       = useState(borradorInicial?.repetir ?? "1");
-  const [error,         setError]         = useState<string | null>(null);
 
   useAutoguardarBorrador(claveBorrador, { nuevaCantidad, repetir }, true);
 
@@ -40,12 +40,11 @@ export default function ModalBultos({
   const cargar = async () => {
     try {
       setCargando(true);
-      setError(null);
       const res = await getBultos(pedido.idproduccion!);
       setBultos(res.bultos);
       setTotalUnidades(res.total_unidades);
     } catch {
-      setError("No se pudieron cargar los bultos.");
+      showAlert("No se pudieron cargar los bultos.");
     } finally {
       setCargando(false);
     }
@@ -56,12 +55,11 @@ export default function ModalBultos({
     const veces     = Math.max(1, parseInt(repetir) || 1);
 
     if (!cantidad || cantidad <= 0) {
-      setError("Ingresa una cantidad válida mayor a 0.");
+      showAlert("Ingresa una cantidad válida mayor a 0.");
       return;
     }
 
     setGuardando(true);
-    setError(null);
 
     try {
       if (veces === 1) {
@@ -83,7 +81,7 @@ export default function ModalBultos({
       setNuevaCantidad("");
       setRepetir("1");
     } catch (e: any) {
-      setError(e.response?.data?.error || "Error al agregar bulto(s)");
+      showAlert(e.response?.data?.error || "Error al agregar bulto(s)");
     } finally {
       setGuardando(false);
     }
@@ -91,13 +89,12 @@ export default function ModalBultos({
 
   const handleEliminar = async (idbulto: number, cantidad: number) => {
     setEliminando(idbulto);
-    setError(null);
     try {
       await eliminarBulto(pedido.idproduccion!, idbulto);
       setBultos(prev => prev.filter(b => b.idbulto !== idbulto));
       setTotalUnidades(prev => prev - cantidad);
     } catch (e: any) {
-      setError(e.response?.data?.error || "Error al eliminar bulto");
+      showAlert(e.response?.data?.error || "Error al eliminar bulto");
     } finally {
       setEliminando(null);
     }
@@ -201,13 +198,6 @@ export default function ModalBultos({
           </div>
         )}
       </div>
-
-      {/* Error */}
-      {error && (
-        <div className="p-2 bg-red-50 border border-red-200 rounded text-red-700 text-xs">
-          {error}
-        </div>
-      )}
 
       {/* Lista de bultos */}
       {cargando ? (

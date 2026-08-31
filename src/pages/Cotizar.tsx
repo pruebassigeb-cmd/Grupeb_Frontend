@@ -56,7 +56,6 @@ export default function Cotizaciones() {
   const [busqueda, setBusqueda] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [guardando, setGuardando] = useState(false);
-  const [errorGuardar, setErrorGuardar] = useState<string | null>(null);
   const [modalEditarOpen, setModalEditarOpen] = useState(false);
   const [cotizacionEditando, setCotizacionEditando] = useState<Cotizacion | null>(null);
   const [catalogos, setCatalogos] = useState<CatalogosPlastico>({
@@ -270,7 +269,6 @@ export default function Cotizaciones() {
 
   const handleSubmit = async (datos: any) => {
     setGuardando(true);
-    setErrorGuardar(null);
     try {
       const respuesta = await crearCotizacion(datos);
       await cargarCotizaciones();
@@ -382,7 +380,7 @@ export default function Cotizaciones() {
         return;
       }
       console.error("❌ Error al guardar:", e);
-      setErrorGuardar(e.message || e.response?.data?.error || "Error al guardar");
+      showAlert(e.message || e.response?.data?.error || "Error al guardar");
     } finally { setGuardando(false); }
   };
 
@@ -682,7 +680,7 @@ export default function Cotizaciones() {
         </div>
 
         <button
-          onClick={() => { setErrorGuardar(null); setModalOpen(true); }}
+          onClick={() => setModalOpen(true)}
           className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-6 rounded-lg shadow transition">
           + Nueva Cotización
         </button>
@@ -931,11 +929,6 @@ export default function Cotizaciones() {
           </div>
         ) : (
           <div>
-            {errorGuardar && (
-              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
-                <p className="text-red-700 text-sm">❌ {errorGuardar}</p>
-              </div>
-            )}
             {guardando && (
               <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-center gap-3">
                 <div className="animate-spin rounded-full h-5 w-5 border-2 border-blue-600 border-t-transparent" />

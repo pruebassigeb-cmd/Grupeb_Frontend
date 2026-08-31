@@ -9,6 +9,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Dashboard from "../../layouts/Sidebar";
 import BotonAuditoria from "../../components/auditoria/BotonAuditoria";
 import { showAlert } from "../../components/CustomAlert";
+import { showPrompt } from "../../components/CustomPrompt";
 import {
   createEscalaMerma,
   getMatrizMerma,
@@ -156,7 +157,7 @@ export default function MermaPapel() {
 
   // ── Escalas ─────────────────────────────────────────────────────────────
   const agregarEscala = async () => {
-    const valor = window.prompt("Nueva cantidad (piezas):");
+    const valor = await showPrompt("Nueva cantidad (piezas):", { type: "number" });
     if (valor === null) return;
 
     const cantidad = Number(valor.replace(/,/g, "").trim());

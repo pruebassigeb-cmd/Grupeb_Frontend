@@ -2,6 +2,8 @@
 // Extraído de pages/papel/Papel.tsx para ser reutilizable
 import { useState, useEffect, useMemo, useRef } from "react";
 import type React from "react";
+import { showAlert } from "../CustomAlert";
+import { showConfirm } from "../CustomConfirm";
 import {
   newProductoForm,
   newGrupo,
@@ -516,7 +518,7 @@ function SecArchivos({ idproducto, isEdit, archivosIniciales, onPendientesChange
         headers: { Authorization: `Bearer ${localStorage.getItem("token") ?? ""}` },
         body: formData,
       });
-      if (!res.ok) { const err = await res.json().catch(() => ({})); alert(`Error al subir: ${err.error ?? res.statusText}`); return; }
+      if (!res.ok) { const err = await res.json().catch(() => ({})); showAlert(`Error al subir: ${err.error ?? res.statusText}`); return; }
       const r2 = await fetch(`${BASE}/productos-papel/${idproducto}`, { headers: { Authorization: `Bearer ${localStorage.getItem("token") ?? ""}` } });
       const d = await r2.json();
       setArchivosGuardados((d.archivos ?? []).map((a: any) => ({ ...a, pendiente: false })));
@@ -524,7 +526,7 @@ function SecArchivos({ idproducto, isEdit, archivosIniciales, onPendientesChange
   };
 
   const eliminarGuardado = async (idArchivo: number) => {
-    if (!confirm("¿Eliminar este archivo?")) return;
+    if (!(await showConfirm("¿Eliminar este archivo?"))) return;
     try {
       const BASE = (import.meta as any).env.VITE_API_URL;
       await fetch(`${BASE}/archivos/${idArchivo}`, { method: "DELETE", headers: { Authorization: `Bearer ${localStorage.getItem("token") ?? ""}` } });

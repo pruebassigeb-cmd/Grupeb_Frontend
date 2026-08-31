@@ -1,6 +1,7 @@
 // src/pages/ReportesCorreo.tsx
 import { useEffect, useMemo, useState } from "react";
 import Dashboard from "../layouts/Sidebar";
+import { showAlert } from "../components/CustomAlert";
 import {
   getDestinatariosReporte,
   actualizarDestinatarioReporte,
@@ -19,7 +20,6 @@ const REPORTES: { key: TipoReporte; label: string; icon: string }[] = [
 export default function ReportesCorreo() {
   const [usuarios, setUsuarios] = useState<DestinatarioReporte[]>([]);
   const [cargando, setCargando] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [guardandoId, setGuardandoId] = useState<number | null>(null);
   const [busqueda, setBusqueda] = useState("");
 
@@ -29,12 +29,11 @@ export default function ReportesCorreo() {
 
   async function cargar() {
     setCargando(true);
-    setError(null);
     try {
       const data = await getDestinatariosReporte();
       setUsuarios(data);
     } catch (e: any) {
-      setError(e?.response?.data?.error || "Error al cargar destinatarios");
+      showAlert(e?.response?.data?.error || "Error al cargar destinatarios");
     } finally {
       setCargando(false);
     }
@@ -48,7 +47,6 @@ export default function ReportesCorreo() {
       prev.map((u) => (u.idusuario === usuario.idusuario ? { ...u, reportes: nuevosReportes } : u))
     );
     setGuardandoId(usuario.idusuario);
-    setError(null);
 
     try {
       await actualizarDestinatarioReporte(usuario.idusuario, nuevosReportes);
@@ -56,7 +54,7 @@ export default function ReportesCorreo() {
       setUsuarios((prev) =>
         prev.map((u) => (u.idusuario === usuario.idusuario ? { ...u, reportes: usuario.reportes } : u))
       );
-      setError(e?.response?.data?.error || "No se pudo guardar el cambio");
+      showAlert(e?.response?.data?.error || "No se pudo guardar el cambio");
     } finally {
       setGuardandoId(null);
     }
@@ -125,12 +123,6 @@ export default function ReportesCorreo() {
             </span>
           )}
         </div>
-
-        {error && (
-          <div className="mb-4 px-4 py-2 bg-red-50 border border-red-200 text-red-700 text-sm rounded-md">
-            {error}
-          </div>
-        )}
 
         {cargando ? (
           <div className="bg-white border border-gray-200 rounded-lg px-4 py-8 text-center">

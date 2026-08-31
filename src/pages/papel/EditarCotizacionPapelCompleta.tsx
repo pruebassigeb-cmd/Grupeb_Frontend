@@ -1,5 +1,6 @@
 // src/pages/EditarCotizacionPapelCompleta.tsx
 import { useState, useEffect } from "react";
+import { showAlert } from "../../components/CustomAlert";
 import { useLocation, useParams, useNavigate } from "react-router-dom";
 import Dashboard from "../../layouts/Sidebar";
 import { formatMoney } from "../../utils/formatMoney";
@@ -172,7 +173,6 @@ function BuscadorProductoPapel({
   const [lista, setLista] = useState<ProductoPapelBusqueda[]>([]);
   const [cargando, setCargando] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [errorAlt, setErrorAlt] = useState<string | null>(null);
 
   useEffect(() => {
     getProductosPapel().then(data => { setLista(data); setCargando(false); });
@@ -185,7 +185,6 @@ function BuscadorProductoPapel({
 
   const handleGuardarNuevo = async (form: ProductoPapelForm, pendientes: ArchivoPendiente[]) => {
     setSaving(true);
-    setErrorAlt(null);
     try {
       const resp = await crearProductoPapel(form);
       const nuevoId: number = resp.idproducto_papel;
@@ -200,7 +199,7 @@ function BuscadorProductoPapel({
       const medida = form.medida || "";
       onCreado(nuevoId, nombre, medida);
     } catch (e: any) {
-      setErrorAlt(e.response?.data?.error || e.message || "Error al crear el producto");
+      showAlert(e.response?.data?.error || e.message || "Error al crear el producto");
     } finally {
       setSaving(false);
     }
@@ -213,7 +212,7 @@ function BuscadorProductoPapel({
           <div className="flex items-center gap-3">
             {vista === "crear" && (
               <button
-                onClick={() => { setVista("buscar"); setErrorAlt(null); }}
+                onClick={() => setVista("buscar")}
                 className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500 transition"
                 title="Volver a búsqueda"
               >
@@ -296,14 +295,9 @@ function BuscadorProductoPapel({
 
         {vista === "crear" && (
           <div className="flex-1 overflow-y-auto">
-            {errorAlt && (
-              <div className="mx-4 mt-3 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
-                ❌ {errorAlt}
-              </div>
-            )}
             <FormularioProductoPapelAlta
               onSave={handleGuardarNuevo}
-              onCancel={() => { setVista("buscar"); setErrorAlt(null); }}
+              onCancel={() => setVista("buscar")}
               saving={saving}
             />
           </div>
@@ -796,7 +790,6 @@ export default function EditarCotizacionPapelCompleta() {
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [errorGuardar, setErrorGuardar] = useState<string | null>(null);
   const [exito, setExito] = useState(false);
   const [cotOrig, setCotOrig] = useState<Cotizacion | null>(null);
   // Moneda elegida en el selector — solo se aplica al guardar (handleGuardar),
@@ -1192,11 +1185,10 @@ export default function EditarCotizacionPapelCompleta() {
   // ── Guardar ────────────────────────────────────────────────────────────────
   const handleGuardar = async () => {
     if (!cotOrig) return;
-    setErrorGuardar(null);
 
     const productoSinTintas = productos.find(p => !p._eliminado && !p.tintasId);
     if (productoSinTintas) {
-      setErrorGuardar(`Selecciona una opción de Impresión (frente) para "${productoSinTintas.nombre}" — puede ser "Sin tintas".`);
+      showAlert(`Selecciona una opción de Impresión (frente) para "${productoSinTintas.nombre}" — puede ser "Sin tintas".`);
       return;
     }
 
@@ -1205,7 +1197,7 @@ export default function EditarCotizacionPapelCompleta() {
       p => !p.detalles.some(d => parseSafe(d.cantidad) > 0 && parseSafe(d.precio_total) > 0)
     );
     if (sinCantidadValida) {
-      setErrorGuardar(`El producto "${sinCantidadValida.nombre}" no tiene cantidades o precios válidos.`);
+      showAlert(`El producto "${sinCantidadValida.nombre}" no tiene cantidades o precios válidos.`);
       return;
     }
 
@@ -1293,7 +1285,7 @@ export default function EditarCotizacionPapelCompleta() {
         try {
           await cambiarMonedaCotizacion(cotOrig.no_cotizacion, monedaSeleccionada);
         } catch (errMoneda: any) {
-          setErrorGuardar(
+          showAlert(
             "Los demás cambios se guardaron, pero no se pudo cambiar la moneda: " +
             (errMoneda.response?.data?.error || errMoneda.message)
           );
@@ -1309,7 +1301,7 @@ export default function EditarCotizacionPapelCompleta() {
       setExito(true);
       setTimeout(() => volverAlOrigen(), 1500);
     } catch (e: any) {
-      setErrorGuardar(e.response?.data?.error || e.message || "Error al guardar");
+      showAlert(e.response?.data?.error || e.message || "Error al guardar");
     } finally {
       setGuardando(false);
     }
@@ -1406,16 +1398,6 @@ export default function EditarCotizacionPapelCompleta() {
               Papel
             </button>
           </div>
-        </div>
-      )}
-
-      {errorGuardar && (
-        <div className="mb-5 p-4 bg-red-50 border border-red-200 rounded-xl flex items-start gap-3">
-          <svg className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-              d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-          </svg>
-          <p className="text-red-700 text-sm">{errorGuardar}</p>
         </div>
       )}
 

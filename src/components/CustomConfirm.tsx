@@ -1,29 +1,37 @@
 import React, { useState, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 
+export interface ConfirmOptions {
+  /** Cuando es true, solo se muestra el botón "Aceptar" (sin "Cancelar").
+   *  Útil para avisos/advertencias bloqueantes que no son una decisión sí/no. */
+  soloAceptar?: boolean;
+}
+
 interface ConfirmState {
   isOpen: boolean;
   msg: string;
+  soloAceptar: boolean;
   resolve: (value: boolean) => void;
 }
 
-let showConfirmFn: (msg: string) => Promise<boolean> = () => Promise.resolve(true);
+let showConfirmFn: (msg: string, options?: ConfirmOptions) => Promise<boolean> = () => Promise.resolve(true);
 
 const ConfirmContainer = () => {
   const [state, setState] = useState<ConfirmState>({
     isOpen: false,
     msg: '',
+    soloAceptar: false,
     resolve: () => {},
   });
 
   useEffect(() => {
-    showConfirmFn = (msg: string) => {
+    showConfirmFn = (msg: string, options?: ConfirmOptions) => {
       // Evita poner otro dialogo si ya hay uno abierto, aunque para simpleza, lo sobreescribe
       return new Promise<boolean>((resolve) => {
-        setState({ isOpen: true, msg, resolve });
+        setState({ isOpen: true, msg, soloAceptar: !!options?.soloAceptar, resolve });
       });
     };
-    
+
     const handleKeyDown = (e: KeyboardEvent) => {
       if (state.isOpen) {
         if (e.key === 'Escape') {
@@ -35,7 +43,7 @@ const ConfirmContainer = () => {
         }
       }
     };
-    
+
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [state.isOpen]);
@@ -56,7 +64,7 @@ const ConfirmContainer = () => {
   return (
     <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
       <div className="bg-[#1f1f23] text-gray-100 rounded-2xl shadow-2xl max-w-md w-full p-6 border border-gray-700/50 animate-in zoom-in-95 duration-200">
-        
+
         <div className="flex items-start gap-4 mb-2">
           <div className="flex-shrink-0 w-10 h-10 mt-1 rounded-full bg-yellow-500/10 flex items-center justify-center text-yellow-500">
              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -67,15 +75,17 @@ const ConfirmContainer = () => {
             {state.msg || "¿Estás seguro de continuar con esta acción?"}
           </div>
         </div>
-        
+
         <div className="flex justify-end gap-3 mt-8">
-          <button 
-            onClick={handleCancel}
-            className="px-5 py-2 text-sm font-semibold text-gray-300 hover:text-white bg-[#2a2a30] hover:bg-gray-700 rounded-lg transition-all border border-gray-600 focus:ring-2 focus:ring-gray-500 focus:outline-none"
-          >
-            Cancelar
-          </button>
-          <button 
+          {!state.soloAceptar && (
+            <button
+              onClick={handleCancel}
+              className="px-5 py-2 text-sm font-semibold text-gray-300 hover:text-white bg-[#2a2a30] hover:bg-gray-700 rounded-lg transition-all border border-gray-600 focus:ring-2 focus:ring-gray-500 focus:outline-none"
+            >
+              Cancelar
+            </button>
+          )}
+          <button
             onClick={handleConfirm}
             className="px-5 py-2 text-sm font-semibold text-white bg-[#b2c8f8] text-[#1a1a1a] hover:bg-[#a1b8e8] rounded-lg transition-all focus:ring-2 focus:ring-blue-400 focus:outline-none"
           >
@@ -101,8 +111,10 @@ if (typeof document !== 'undefined') {
 /**
  * Muestra un diálogo de confirmación asíncrono.
  * Uso: const confirmado = await showConfirm('¿Estás seguro?');
+ * Uso como aviso bloqueante (un solo botón "Aceptar"):
+ *   await showConfirm('Ya no hay piezas disponibles.', { soloAceptar: true });
  */
-export const showConfirm = (msg: string | unknown): Promise<boolean> => {
+export const showConfirm = (msg: string | unknown, options?: ConfirmOptions): Promise<boolean> => {
   const messageStr = typeof msg === 'string' ? msg : String(msg);
-  return showConfirmFn(messageStr);
+  return showConfirmFn(messageStr, options);
 };

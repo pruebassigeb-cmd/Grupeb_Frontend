@@ -26,6 +26,7 @@ import { preguntarGuardarS3 } from "../../services/pdfS3.service";
 import type { PedidoSeguimiento } from "../../types/produccion/seguimiento.types";
 import AuditoriaDesplegable from "../auditoria/AuditoriaDesplegable";
 import { leerBorrador, useAutoguardarBorrador, limpiarBorrador } from "../../hooks/useBorradorFormulario";
+import { showAlert } from "../CustomAlert";
 
 import { deInputFechaHora, fmtFechaHora, fmtFechaHoraCorta, fmtHora, paraInputFechaHora } from "../../utils/fecha";
 // ─────────────────────────────────────────────
@@ -237,7 +238,6 @@ function SeccionAvances({
   const [cantidad, setCantidad] = useState(borradorInicial?.cantidad ?? "");
   const [observaciones, setObservaciones] = useState(borradorInicial?.observaciones ?? "");
   const [guardando, setGuardando] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [expandido, setExpandido] = useState(false);
   const [formularioAbierto, setFormularioAbierto] = useState(false);
   const [esAvanceFinal, setEsAvanceFinal] = useState(borradorInicial?.esAvanceFinal ?? false);
@@ -339,14 +339,13 @@ function SeccionAvances({
     const ajuste = parseFloat(ajusteFinal) || 0;
 
     if (!cant || cant <= 0) {
-      setError("Ingresa una cantidad válida mayor a 0.");
+      showAlert("Ingresa una cantidad válida mayor a 0.");
       return;
     }
 
     const totalFinal = Number(totalAvances ?? 0) + cant + ajuste;
 
     setGuardando(true);
-    setError(null);
 
     try {
       await registrarAvance(idproduccion, {
@@ -385,7 +384,7 @@ function SeccionAvances({
 
       onAvanceRegistrado();
     } catch (e: any) {
-      setError(e.response?.data?.error || e.message || "Error al registrar avance");
+      showAlert(e.response?.data?.error || e.message || "Error al registrar avance");
     } finally {
       setGuardando(false);
     }
@@ -528,7 +527,7 @@ function SeccionAvances({
               </label>
               <div className="flex gap-2">
                 <input type="text" inputMode="decimal" value={cantidad}
-                  onChange={e => { setCantidad(e.target.value.replace(/[^0-9.]/g, "")); setError(null); }}
+                  onChange={e => setCantidad(e.target.value.replace(/[^0-9.]/g, ""))}
                   onKeyDown={e => e.key === "Enter" && handleRegistrar()}
                   placeholder={config.placeholder}
                   className={`flex-1 px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 bg-white ${excedeLimite ? "border-red-400 focus:ring-red-300" : "border-blue-300 focus:ring-blue-400"}`}
@@ -576,10 +575,7 @@ function SeccionAvances({
                 <input
                   type="checkbox"
                   checked={esAvanceFinal}
-                  onChange={(e) => {
-                    setEsAvanceFinal(e.target.checked);
-                    setError(null);
-                  }}
+                  onChange={(e) => setEsAvanceFinal(e.target.checked)}
                   className="w-4 h-4"
                 />
                 Este avance finaliza el proceso
@@ -661,10 +657,7 @@ function SeccionAvances({
                         type="text"
                         inputMode="decimal"
                         value={ajusteFinal}
-                        onChange={(e) => {
-                          setAjusteFinal(e.target.value.replace(/[^0-9.]/g, ""));
-                          setError(null);
-                        }}
+                        onChange={(e) => setAjusteFinal(e.target.value.replace(/[^0-9.]/g, ""))}
                         placeholder={`Ej: 10 ${config.unidad}`}
                         className="flex-1 px-3 py-2 border border-green-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-400 bg-white"
                       />
@@ -689,13 +682,12 @@ function SeccionAvances({
                               type="text"
                               inputMode="decimal"
                               value={datosFinales[campo.key] ?? ""}
-                              onChange={(e) => {
+                              onChange={(e) =>
                                 setDatosFinales(prev => ({
                                   ...prev,
                                   [campo.key]: e.target.value.replace(/[^0-9.]/g, ""),
-                                }));
-                                setError(null);
-                              }}
+                                }))
+                              }
                               placeholder="0"
                               className="flex-1 px-3 py-2 border border-green-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-400 bg-white"
                             />
@@ -710,7 +702,6 @@ function SeccionAvances({
                 </div>
               )}
             </div>
-            {error && <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">{error}</p>}
             <button onClick={handleRegistrar} disabled={guardando || !cantidad}
               className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-lg transition-colors flex items-center justify-center gap-2">
               {guardando ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <span>📋</span>}
@@ -939,7 +930,6 @@ function SeccionBultos({
   const [confirmFinalizar, setConfirmFinalizar] = useState(false);
   const [eliminando, setEliminando] = useState<number | null>(null);
   const [form, setForm] = useState<NuevoBultoForm>(borradorBultoInicial?.form ?? FORM_VACIO);
-  const [error, setError] = useState<string | null>(null);
   const [generandoEtiquetas, setGenerandoEtiquetas] = useState(false);
   const [editandoBulto, setEditandoBulto] = useState<Bulto | null>(null);
   const [formEditar, setFormEditar] = useState<NuevoBultoForm>(FORM_VACIO);
@@ -956,13 +946,13 @@ function SeccionBultos({
 
   const cargarBultos = async () => {
     try {
-      setCargando(true); setError(null);
+      setCargando(true);
       const res = await getBultos(pedido.idproduccion!);
       setBultos(res.bultos);
       setTotalUnidades(res.total_unidades);
       setTotalKg(res.total_kg ?? 0);
       setBultosFinalizados(res.bultos_finalizado);
-    } catch { setError("No se pudieron cargar los bultos."); }
+    } catch { showAlert("No se pudieron cargar los bultos."); }
     finally { setCargando(false); }
   };
 
@@ -979,12 +969,12 @@ function SeccionBultos({
       largo: bulto.largo != null ? String(bulto.largo) : "",
       ancho: bulto.ancho != null ? String(bulto.ancho) : "",
     });
-    setEditandoBulto(bulto); setError(null);
+    setEditandoBulto(bulto);
   };
 
   const handleGuardarEdicion = async () => {
     if (!editandoBulto || !pedido.idproduccion) return;
-    setGuardandoEdicion(true); setError(null);
+    setGuardandoEdicion(true);
     try {
       const payload: NuevoBultoPayload = {
         cantidad_unidades: formEditar.cantidad_unidades !== "" ? parseInt(formEditar.cantidad_unidades) : null,
@@ -1001,7 +991,7 @@ function SeccionBultos({
       setTotalKg(Math.round(nuevosTotal.reduce((s, b) => s + (b.peso_producto ?? 0), 0) * 100) / 100);
       setEditandoBulto(null);
     } catch (e: any) {
-      setError(e.response?.data?.error || "Error al editar bulto");
+      showAlert(e.response?.data?.error || "Error al editar bulto");
     } finally { setGuardandoEdicion(false); }
   };
 
@@ -1049,10 +1039,10 @@ function SeccionBultos({
 
   const handleAgregar = async () => {
     const mensajeError = validarFormulario();
-    if (mensajeError) { setError(mensajeError); return; }
+    if (mensajeError) { showAlert(mensajeError); return; }
 
     const repeticionesNum = Math.max(1, Math.min(50, parseInt(repetir) || 1));
-    setGuardando(true); setError(null);
+    setGuardando(true);
 
     try {
       const payload: NuevoBultoPayload = {
@@ -1085,39 +1075,39 @@ function SeccionBultos({
     } catch (e: any) {
       const mensajeBackend = e.response?.data?.error;
       if (mensajeBackend?.includes("último proceso") || mensajeBackend?.includes("completamente terminada")) {
-        setError("El proceso aún no está listo para registrar bultos. Asegúrate de que esté en curso con al menos un avance.");
+        showAlert("El proceso aún no está listo para registrar bultos. Asegúrate de que esté en curso con al menos un avance.");
       } else {
-        setError(mensajeBackend || "Error al agregar bulto(s)");
+        showAlert(mensajeBackend || "Error al agregar bulto(s)");
       }
     } finally { setGuardando(false); }
   };
 
   const handleEliminar = async (idbulto: number) => {
     const bulto = bultos.find(b => b.idbulto === idbulto);
-    setEliminando(idbulto); setError(null);
+    setEliminando(idbulto);
     try {
       await eliminarBulto(pedido.idproduccion!, idbulto);
       setBultos(prev => prev.filter(b => b.idbulto !== idbulto));
       setTotalUnidades(prev => prev - (bulto?.cantidad_unidades ?? 0));
       setTotalKg(prev => Math.round((prev - (bulto?.peso_producto ?? 0)) * 100) / 100);
     } catch (e: any) {
-      setError(e.response?.data?.error || "Error al eliminar bulto");
+      showAlert(e.response?.data?.error || "Error al eliminar bulto");
     } finally { setEliminando(null); }
   };
 
   const handleFinalizar = async () => {
-    setFinalizando(true); setError(null);
+    setFinalizando(true);
     try {
       await finalizarBultos(pedido.idproduccion!);
       setBultosFinalizados(true); setConfirmFinalizar(false);
     } catch (e: any) {
-      setError(e.response?.data?.error || "Error al finalizar bultos");
+      showAlert(e.response?.data?.error || "Error al finalizar bultos");
     } finally { setFinalizando(false); }
   };
 
   const handleImprimirEtiquetas = async () => {
     if (!pedido.idproduccion) return;
-    setGenerandoEtiquetas(true); setError(null);
+    setGenerandoEtiquetas(true);
     try {
       const etiquetaData = await getBultosEtiqueta(pedido.idproduccion);
       console.log("descripcion en etiquetaData:", etiquetaData.descripcion); // ← agregar esto
@@ -1135,7 +1125,7 @@ function SeccionBultos({
         await cargarBultos();
       }
     } catch (e: any) {
-      setError(e.response?.data?.error || "Error al generar etiquetas");
+      showAlert(e.response?.data?.error || "Error al generar etiquetas");
     } finally { setGenerandoEtiquetas(false); }
   };
 
@@ -1215,7 +1205,7 @@ function SeccionBultos({
                   bultosGrupo={bultosGrupo}
                   modoKilo={modoKilo}
                   idproduccion={pedido.idproduccion!}
-                  onError={(msg) => setError(msg)}
+                  onError={(msg) => showAlert(msg)}
                 />
               ))}
             </div>
@@ -1278,7 +1268,7 @@ function SeccionBultos({
                   )}
                   <div className="flex gap-2 mt-1">
                     <input type="text" inputMode="decimal" value={form.peso_producto}
-                      onChange={e => { updateForm("peso_producto", e.target.value.replace(/[^0-9.]/g, "")); setError(null); }}
+                      onChange={e => updateForm("peso_producto", e.target.value.replace(/[^0-9.]/g, ""))}
                       onKeyDown={e => e.key === "Enter" && handleAgregar()}
                       placeholder="Ej: 25.50"
                       className={`flex-1 px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 bg-white ${excedeLimiteBulto ? "border-red-400 focus:ring-red-300" : "border-orange-300 focus:ring-orange-400"}`}
@@ -1307,7 +1297,7 @@ function SeccionBultos({
                     )}
                   </label>
                   <input type="text" inputMode="numeric" value={form.cantidad_unidades}
-                    onChange={e => { updateForm("cantidad_unidades", e.target.value.replace(/[^0-9]/g, "")); setError(null); }}
+                    onChange={e => updateForm("cantidad_unidades", e.target.value.replace(/[^0-9]/g, ""))}
                     onKeyDown={e => e.key === "Enter" && handleAgregar()}
                     placeholder="Ej: 3000"
                     className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 bg-white ${excedeLimiteBulto ? "border-red-400 focus:ring-red-300" : "border-gray-300 focus:ring-blue-400"}`}
@@ -1322,7 +1312,7 @@ function SeccionBultos({
                 <span className="ml-1.5 text-[10px] text-blue-500 font-semibold">× bultos</span>
               </label>
               <input type="text" min="1" max="50" value={repetir}
-                onChange={e => { setRepetir(e.target.value.replace(/[^0-9]/g, "")); setError(null); }}
+                onChange={e => setRepetir(e.target.value.replace(/[^0-9]/g, ""))}
                 onKeyDown={e => e.key === "Enter" && handleAgregar()}
                 placeholder="1"
                 className="w-full px-3 py-2 border border-blue-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white text-center font-semibold"
@@ -1374,7 +1364,7 @@ function SeccionBultos({
                     {label} <span className="text-red-500">*</span>
                   </label>
                   <input type="text" inputMode="decimal" value={form[key]}
-                    onChange={e => { updateForm(key, e.target.value.replace(/[^0-9.]/g, "")); setError(null); }}
+                    onChange={e => updateForm(key, e.target.value.replace(/[^0-9.]/g, ""))}
                     placeholder="0.0"
                     className={`w-full px-2 py-1.5 border rounded text-sm focus:outline-none focus:ring-2 focus:ring-${color}-300 placeholder-${color}-300 text-${color}-800 ${form[key].trim() !== "" ? `border-${color}-400 bg-${color}-50` : "border-red-200 bg-red-50"}`}
                   />
@@ -1393,8 +1383,6 @@ function SeccionBultos({
           </button>
         </div>
       )}
-
-      {error && <div className="p-2 bg-red-50 border border-red-200 rounded text-red-700 text-xs">{error}</div>}
 
       {cargando ? (
         <div className="flex justify-center py-6">
@@ -1552,9 +1540,8 @@ function SeccionBultos({
               </div>
             </div>
 
-            {error && <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded p-2">{error}</p>}
             <div className="flex gap-2 pt-1">
-              <button onClick={() => { setEditandoBulto(null); setError(null); }}
+              <button onClick={() => setEditandoBulto(null)}
                 className="flex-1 py-2 border border-gray-300 text-gray-600 text-sm rounded-lg hover:bg-gray-50">Cancelar</button>
               <button onClick={handleGuardarEdicion}
                 disabled={guardandoEdicion || (modoKilo ? !formEditar.peso_producto : !formEditar.cantidad_unidades)}
@@ -1662,9 +1649,9 @@ export default function ModalProcesoIndividual({ pedido, nombreProceso, onClose,
   const handleIniciar = async () => {
     if (!pedido.idproduccion) return;
     if (nombreProceso === "impresion" && !maquinaSeleccionada) {
-      setError("Debes seleccionar una maquina antes de iniciar."); return;
+      showAlert("Debes seleccionar una maquina antes de iniciar."); return;
     }
-    setGuardando(true); setError(null);
+    setGuardando(true);
     try {
       const datosProceso: Record<string, any> = {};
       if (nombreProceso === "impresion" && maquinaSeleccionada) {
@@ -1674,13 +1661,13 @@ export default function ModalProcesoIndividual({ pedido, nombreProceso, onClose,
       await iniciarProceso(pedido.idproduccion, datosProceso);
       await cargar(); onActualizar(); setAccion(null); setMaquinaSeleccionada("");
     } catch (e: any) {
-      setError(e.response?.data?.error || "Error al iniciar proceso");
+      showAlert(e.response?.data?.error || "Error al iniciar proceso");
     } finally { setGuardando(false); }
   };
 
   const handleFinalizar = async () => {
     if (!pedido.idproduccion) return;
-    setGuardando(true); setError(null);
+    setGuardando(true);
     try {
       await finalizarProceso(pedido.idproduccion, {
         ...formDatos, observaciones: observaciones.trim() || null, tabla_proceso: nombreProceso,
@@ -1688,7 +1675,7 @@ export default function ModalProcesoIndividual({ pedido, nombreProceso, onClose,
       limpiarBorrador(claveBorradorFinalizar);
       await cargar(); onActualizar(); setAccion(null); setFormDatos({});
     } catch (e: any) {
-      setError(e.response?.data?.error || "Error al finalizar proceso");
+      showAlert(e.response?.data?.error || "Error al finalizar proceso");
     } finally { setGuardando(false); }
   };
 
@@ -1765,12 +1752,11 @@ export default function ModalProcesoIndividual({ pedido, nombreProceso, onClose,
     registro?.observaciones != null ? textoReact(registro.observaciones) : ""
   );
   setEditando(true);
-  setError(null);
 };
 
   const handleGuardarEdicion = async () => {
     if (!pedido.idproduccion) return;
-    setGuardandoEdit(true); setError(null);
+    setGuardandoEdit(true);
     try {
       await editarProceso(pedido.idproduccion, nombreProceso, {
         // Ver nota en ModalProcesoIndividualPapel: el valor del input es
@@ -1782,7 +1768,7 @@ export default function ModalProcesoIndividual({ pedido, nombreProceso, onClose,
       });
       await cargar(); onActualizar(); setEditando(false);
     } catch (e: any) {
-      setError(e.response?.data?.error || "Error al guardar los cambios");
+      showAlert(e.response?.data?.error || "Error al guardar los cambios");
     } finally { setGuardandoEdit(false); }
   };
 

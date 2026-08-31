@@ -15,6 +15,8 @@ import ModalCatalogoExpo from "./ModalCatalogoExpo";
 import { useAuth } from "../../context/AuthContext";
 import { OperacionEncoladaError } from "../../offline/outbox";
 import { leerBorrador, useAutoguardarBorrador, limpiarBorrador } from "../../hooks/useBorradorFormulario";
+import { showAlert } from "../CustomAlert";
+import { showConfirm } from "../CustomConfirm";
 
 interface Props {
   clienteData: ClienteExpo;
@@ -290,18 +292,18 @@ function ModalProspectos({ onSeleccionar, onClose }: ModalProspectosProps) {
     } catch (e) {
       if (e instanceof OperacionEncoladaError) {
         limpiarBorrador(`expo-prospecto-editar-${id}`);
-        alert("Sin conexión: los cambios del prospecto se guardaron y se sincronizarán automáticamente.");
+        showAlert("Sin conexión: los cambios del prospecto se guardaron y se sincronizarán automáticamente.", "info");
         setEditandoId(null);
         return;
       }
-      alert("No se pudo actualizar el prospecto");
+      showAlert("No se pudo actualizar el prospecto");
     } finally {
       setGuardandoId(null);
     }
   };
 
   const handleEliminar = async (id: number, nombre: string) => {
-    if (!confirm(`¿Eliminar a "${nombre}" del directorio expo?`)) return;
+    if (!(await showConfirm(`¿Eliminar a "${nombre}" del directorio expo?`))) return;
     setEliminandoId(id);
     try {
       await eliminarClienteExpoAPI(id, nombre);
@@ -311,10 +313,10 @@ function ModalProspectos({ onSeleccionar, onClose }: ModalProspectosProps) {
       if (err instanceof OperacionEncoladaError) {
         setProspectos(prev => prev.filter(p => p.idclientes !== id));
         if (expandidoId === id) setExpandidoId(null);
-        alert("Sin conexión: la eliminación se guardó y se aplicará sola cuando vuelva la señal.");
+        showAlert("Sin conexión: la eliminación se guardó y se aplicará sola cuando vuelva la señal.", "info");
         return;
       }
-      alert("No se pudo eliminar el prospecto");
+      showAlert("No se pudo eliminar el prospecto");
     } finally {
       setEliminandoId(null);
     }
@@ -347,11 +349,11 @@ function ModalProspectos({ onSeleccionar, onClose }: ModalProspectosProps) {
     } catch (e: any) {
       if (e instanceof OperacionEncoladaError) {
         setProspectoAgradecer(null);
-        alert("Sin conexión: el correo de agradecimiento se guardó y se enviará automáticamente cuando vuelva la señal.");
+        showAlert("Sin conexión: el correo de agradecimiento se guardó y se enviará automáticamente cuando vuelva la señal.", "info");
         return;
       }
       console.error("❌ Error al enviar agradecimiento:", e);
-      alert(e?.response?.data?.error || "No se pudo enviar el correo de agradecimiento.");
+      showAlert(e?.response?.data?.error || "No se pudo enviar el correo de agradecimiento.");
     } finally {
       setEnviandoAgradecimiento(false);
     }
@@ -545,7 +547,6 @@ export default function RegistroCliente({
   const [modalProspectos, setModalProspectos] = useState(false);
   const [modalCatalogo, setModalCatalogo] = useState(false);
   const [guardando, setGuardando] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const [modoEdicion, setModoEdicion] = useState(clienteIdReal === null);
 
@@ -563,7 +564,6 @@ export default function RegistroCliente({
   const guardarYCotizar = async () => {
     if (!clienteData.nombre.trim()) return;
     setGuardando(true);
-    setError(null);
     try {
       if (clienteIdReal) {
         // Cliente que ya existe: aunque la edición se encole, ya tenemos un
@@ -584,17 +584,18 @@ export default function RegistroCliente({
         }
         // Cliente nuevo: sin id real todavía no se puede armar una
         // cotización (crearCotizacionExpo necesita un clienteId válido).
-        // Usa alert() (no setError) a propósito: setError se renderiza como
+        // Usa showAlert() (no setError) a propósito: setError se renderiza como
         // una caja roja de "⚠ error" — indistinguible de un fallo real. El
         // usuario reportó que este aviso "no daba pistas de si funcionó
         // correctamente" porque se veía igual que un error de verdad, pese
         // a ser una confirmación de que sí se guardó.
-        alert(
-          `✅ "${clienteData.nombre}" se guardó en este dispositivo sin conexión y se sincronizará solo cuando vuelva la señal.\n\nNo se puede cotizar un prospecto nuevo hasta que se sincronice — inténtalo de nuevo cuando vuelva la conexión.`
+        showAlert(
+          `✅ "${clienteData.nombre}" se guardó en este dispositivo sin conexión y se sincronizará solo cuando vuelva la señal.\n\nNo se puede cotizar un prospecto nuevo hasta que se sincronice — inténtalo de nuevo cuando vuelva la conexión.`,
+          "success"
         );
         return;
       }
-      setError(err?.response?.data?.error || "No se pudo registrar el prospecto.");
+      showAlert(err?.response?.data?.error || "No se pudo registrar el prospecto.");
     } finally {
       setGuardando(false);
     }
@@ -603,27 +604,27 @@ export default function RegistroCliente({
   const soloGuardar = async () => {
     if (!clienteData.nombre.trim()) return;
     setGuardando(true);
-    setError(null);
     try {
       if (clienteIdReal) {
         await actualizarClienteExpo(clienteIdReal, clienteData);
         setModoEdicion(false);
-        alert(`✅ Datos de "${clienteData.nombre}" actualizados.`);
+        showAlert(`✅ Datos de "${clienteData.nombre}" actualizados.`, "success");
       } else {
         const resultado = await crearClienteExpo(clienteData);
         setClienteData(CLIENTE_VACIO);
-        alert(`✅ Prospecto "${clienteData.nombre}" registrado (#${resultado.id})`);
+        showAlert(`✅ Prospecto "${clienteData.nombre}" registrado (#${resultado.id})`, "success");
       }
     } catch (err: any) {
       if (err instanceof OperacionEncoladaError) {
         if (clienteIdReal) setModoEdicion(false);
         else setClienteData(CLIENTE_VACIO);
-        alert(
-          `Sin conexión: "${clienteData.nombre}" se guardó en este dispositivo y se sincronizará automáticamente cuando vuelva la señal.`
+        showAlert(
+          `Sin conexión: "${clienteData.nombre}" se guardó en este dispositivo y se sincronizará automáticamente cuando vuelva la señal.`,
+          "info"
         );
         return;
       }
-      setError(err?.response?.data?.error || "No se pudo registrar el prospecto.");
+      showAlert(err?.response?.data?.error || "No se pudo registrar el prospecto.");
     } finally {
       setGuardando(false);
     }
@@ -673,7 +674,7 @@ export default function RegistroCliente({
 
   const cerrarSesion = async () => {
     if (cerrandoSesion) return;
-    if (!window.confirm("¿Deseas cerrar sesión?")) return;
+    if (!(await showConfirm("¿Deseas cerrar sesión?"))) return;
 
     setCerrandoSesion(true);
     try {
@@ -681,7 +682,7 @@ export default function RegistroCliente({
       navigate("/", { replace: true });
     } catch (error) {
       console.error("No se pudo cerrar la sesión:", error);
-      alert("No se pudo cerrar la sesión. Intenta nuevamente.");
+      showAlert("No se pudo cerrar la sesión. Intenta nuevamente.");
       setCerrandoSesion(false);
     }
   };
@@ -778,12 +779,6 @@ export default function RegistroCliente({
               )}
             </div>
           </div>
-
-          {error && (
-            <div style={{ background: "#2A0A0A", border: "1px solid #EF4444", borderRadius: 6, margin: "12px 20px 0", padding: "8px 12px", color: "#EF4444", fontSize: 12 }}>
-              ⚠ {error}
-            </div>
-          )}
 
           {/* Body */}
           <div style={{ flex: 1, overflow: "auto", padding: mob ? "14px" : "20px 24px" }}>

@@ -29,6 +29,10 @@ export interface CalcularPrecioPlasticoPayload {
     porKilo: number;
     tintasId?: number;
     tintasCantidad?: number;
+    // ✅ NUEVO — ver cotizadorLibrePrecio.types.ts (backend) para el porqué.
+    idTipoProductoPlastico: number;
+    // ✅ NUEVO — obligatorio solo cuando el tipo es "bolsa envíos".
+    cintaSeguridadId?: number;
   };
 }
 

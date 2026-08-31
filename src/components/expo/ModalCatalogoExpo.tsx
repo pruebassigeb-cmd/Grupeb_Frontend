@@ -1,4 +1,6 @@
 import { useState, useEffect } from "react";
+import { showAlert } from "../CustomAlert";
+import { showConfirm } from "../CustomConfirm";
 import api from "../../services/api";
 import ModalProducto from "./ModalProducto";
 import {
@@ -647,7 +649,7 @@ let idReal: number;
           await subirImagenProductoExpo(imagenPendiente, p.categoria, idReal);
         } catch (e) {
           console.error("No se pudo subir la imagen del producto:", e);
-          alert("El producto se guardó, pero la imagen no se pudo subir. Puedes agregarla editando el producto.");
+          showAlert("El producto se guardó, pero la imagen no se pudo subir. Puedes agregarla editando el producto.");
         }
       }
 
@@ -661,14 +663,15 @@ let idReal: number;
         // que esta fase del outbox todavía no maneja).
         setModalOpen(false);
         setEditando(null);
-        alert(
+        showAlert(
           imagenPendiente
             ? "Sin conexión: el producto se guardó y se sincronizará solo, pero la imagen NO se guardó — súbela editando el producto cuando vuelva la conexión."
-            : "Sin conexión: el producto se guardó y se sincronizará automáticamente."
+            : "Sin conexión: el producto se guardó y se sincronizará automáticamente.",
+          "info"
         );
         return;
       }
-      alert("No se pudo guardar: " + (err?.response?.data?.error || err.message));
+      showAlert("No se pudo guardar: " + (err?.response?.data?.error || err.message));
       throw err;
     } finally {
       setSaving(false);
@@ -676,7 +679,7 @@ let idReal: number;
   };
 
   const eliminarProd = async (id: number, nombre: string) => {
-    if (!confirm(`¿Eliminar "${nombre}" del catálogo expo?`)) return;
+    if (!(await showConfirm(`¿Eliminar "${nombre}" del catálogo expo?`))) return;
     // NUEVO: hay que mandar la categoría — el backend ya no tiene una sola
     // tabla catalogo_expo, necesita saber si busca en producto_papel o
     // configuracion_plastico.
@@ -689,10 +692,10 @@ let idReal: number;
     } catch (err) {
       if (err instanceof OperacionEncoladaError) {
         setProductos(prev => prev.filter(p => p.id !== id));
-        alert("Sin conexión: la eliminación se guardó y se aplicará sola cuando vuelva la señal.");
+        showAlert("Sin conexión: la eliminación se guardó y se aplicará sola cuando vuelva la señal.", "info");
         return;
       }
-      alert("No se pudo eliminar el producto");
+      showAlert("No se pudo eliminar el producto");
     } finally {
       setEliminandoId(null);
     }

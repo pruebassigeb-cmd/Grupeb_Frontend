@@ -22,6 +22,7 @@ import GestorArchivos from "./pages/archivos/GestorArchivos";
 import GestorBackups from "./pages/archivos/GestorBackups";
 import ProveedoresPage from "./pages/proveedores/ProveedoresPage";
 import Papel from "./pages/papel/Papel";
+import ProductoEspecial from "./pages/papel/ProductoEspecial";
 import Catalogos from "./pages/papel/catalogos.tsx";
 import PreciosAcabadosPapel from "./pages/papel/PreciosAcabadosPapel";
 import MermaPapel from "./pages/papel/MermaPapel";
@@ -312,6 +313,22 @@ function App() {
             element={
               <ProtectedRoute permisoPantalla="productos.papel.">
                 <Papel />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Producto especial — pantalla propia, a pedido de Jose (no un
+              checkbox dentro del alta normal de arriba). Mismo componente
+              de página (Papel.tsx con soloEspeciales=true vía
+              ProductoEspecial.tsx), misma tabla producto_papel, mismo
+              privilegio de pantalla que /papel — es el mismo recurso, solo
+              que separado en dos vistas. Si prefieres un privilegio propio
+              en vez de reusar "productos.papel.", dímelo y lo separamos. */}
+          <Route
+            path="/producto-especial"
+            element={
+              <ProtectedRoute permisoPantalla="productos.papel.">
+                <ProductoEspecial />
               </ProtectedRoute>
             }
           />

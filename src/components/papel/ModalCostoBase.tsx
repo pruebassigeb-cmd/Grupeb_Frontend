@@ -5,6 +5,7 @@
 // puede tener 1 o N grupos (opciones de material), y cada uno tiene su
 // propio costo base — por eso se muestra una fila por grupo.
 import { useState, useEffect } from "react";
+import { showAlert } from "../CustomAlert";
 import { leerBorrador, useAutoguardarBorrador, limpiarBorrador } from "../../hooks/useBorradorFormulario";
 
 interface GrupoCosto {
@@ -34,7 +35,6 @@ export default function ModalCostoBase({ idProducto, nombreProducto, onClose, on
   const claveBorrador = `costo-base-${idProducto}`;
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [grupos, setGrupos] = useState<GrupoCosto[]>([]);
 
   useAutoguardarBorrador(claveBorrador, grupos, grupos.length > 0);
@@ -59,7 +59,7 @@ export default function ModalCostoBase({ idProducto, nombreProducto, onClose, on
         setGrupos(lista);
       })
       .catch(() => {
-        if (!cancelado) setError("No se pudo cargar la información del producto.");
+        if (!cancelado) showAlert("No se pudo cargar la información del producto.");
       })
       .finally(() => {
         if (!cancelado) setLoading(false);
@@ -78,7 +78,6 @@ export default function ModalCostoBase({ idProducto, nombreProducto, onClose, on
 
   const handleGuardar = async () => {
     setSaving(true);
-    setError(null);
     try {
       const BASE = (import.meta as any).env.VITE_API_URL;
       const payload = {
@@ -107,7 +106,7 @@ export default function ModalCostoBase({ idProducto, nombreProducto, onClose, on
       onSaved(data.grupos ?? []);
       onClose();
     } catch (e: any) {
-      setError(e.message ?? "Error al guardar el costo base");
+      showAlert(e.message ?? "Error al guardar el costo base");
     } finally {
       setSaving(false);
     }
@@ -178,7 +177,6 @@ export default function ModalCostoBase({ idProducto, nombreProducto, onClose, on
           </div>
         )}
 
-        {error && <p style={{ fontSize: 12, color: "#DC2626", margin: "0 0 12px" }}>{error}</p>}
 
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
           <button

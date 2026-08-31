@@ -15,6 +15,7 @@ import {
 import ModalRegistrarInsumo from "../proveedores/ModalRegistrarInsumo";
 import FormularioProveedor from "../proveedores/FormularioProveedor";
 import { showAlert } from "../../components/CustomAlert";
+import { showConfirm } from "../../components/CustomConfirm";
 import BotonAuditoria from "../auditoria/BotonAuditoria";
 import { leerBorrador, useAutoguardarBorrador, limpiarBorrador } from "../../hooks/useBorradorFormulario";
 import ImagenCatalogo from "./ImagenCatalogo";
@@ -292,7 +293,7 @@ export default function InsumoCatalogoPanel({
   };
 
   const handleDesactivar = async (idinsumo: number, nombre: string) => {
-    if (!confirm(`¿Desactivar "${nombre}"? No se elimina, solo deja de aparecer para uso nuevo.`)) return;
+    if (!(await showConfirm(`¿Desactivar "${nombre}"? No se elimina, solo deja de aparecer para uso nuevo.`))) return;
     setProcesando(idinsumo);
     try {
       await desactivarInsumo(idinsumo);
@@ -317,7 +318,7 @@ export default function InsumoCatalogoPanel({
   };
 
   const handleQuitarProveedor = async (idproveedor: number, idinsumo_proveedor: number, nombreInsumo: string) => {
-    if (!confirm(`¿Quitar este proveedor de "${nombreInsumo}"?`)) return;
+    if (!(await showConfirm(`¿Quitar este proveedor de "${nombreInsumo}"?`))) return;
     try {
       await eliminarProductoProveedor(idproveedor, idinsumo_proveedor);
       recargar();

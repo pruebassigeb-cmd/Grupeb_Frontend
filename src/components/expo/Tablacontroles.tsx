@@ -1,5 +1,6 @@
 // src/components/expo/Tablacontroles.tsx
 import { useState, useRef, useCallback, memo, useEffect } from "react";
+import { showConfirm } from "../CustomConfirm";
 import {
   MEDIDAS_CAT, CATS,
 } from "../../types/expo/expo.types";
@@ -861,8 +862,9 @@ export const FilaTabla = memo(function FilaTabla({
             title="Ver advertencias"
             aria-label={`Ver ${advertencias.length} advertencia${advertencias.length === 1 ? "" : "s"}`}
             onClick={() =>
-              window.alert(
-                tituloAdvertencias || "No hay advertencias para esta cantidad."
+              showConfirm(
+                tituloAdvertencias || "No hay advertencias para esta cantidad.",
+                { soloAceptar: true }
               )
             }
             style={{
@@ -892,9 +894,10 @@ export const FilaTabla = memo(function FilaTabla({
     type="button"
     title={fila.errorCalculoPrecio}
     onClick={() =>
-      window.alert(
+      showConfirm(
         fila.errorCalculoPrecio ??
-          "No se pudo calcular el precio automáticamente."
+          "No se pudo calcular el precio automáticamente.",
+        { soloAceptar: true }
       )
     }
     style={{

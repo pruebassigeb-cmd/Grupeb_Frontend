@@ -135,6 +135,7 @@ export default function Dashboard({ children }: DashboardProps) {
       subItems: [
         { name: "Plástico", path: "/plastico", permisoPantalla: "productos.plastico." },
         { name: "Papel",    path: "/papel",    permisoPantalla: "productos.papel." },
+        { name: "Especial", path: "/producto-especial", permisoPantalla: "productos.papel." },
       ],
     },
     {

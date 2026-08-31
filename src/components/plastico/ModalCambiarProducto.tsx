@@ -1,5 +1,6 @@
 // src/components/ModalCambiarProducto.tsx
 import { useState, useEffect, useRef } from "react";
+import { showAlert } from "../CustomAlert";
 import ConfigurarProducto from "./ConfigurarProducto";
 import {
   getCatalogosPlastico,
@@ -209,7 +210,6 @@ export default function ModalCambiarProducto({
   const [catalogos,   setCatalogos]   = useState<CatalogosPlastico | null>(null);
   const [cargandoCat, setCargandoCat] = useState(true);
   const [guardando,   setGuardando]   = useState(false);
-  const [error,       setError]       = useState<string | null>(null);
   const [mountKey,    setMountKey]    = useState(0);
 
   const [prodBuscado, setProdBuscado] = useState<ProductoBusqueda | null>(null);
@@ -235,13 +235,12 @@ export default function ModalCambiarProducto({
     if (!abierto) return;
     setMountKey(k => k + 1);
     setCargandoCat(true);
-    setError(null);
     (async () => {
       try {
         const cats = await getCatalogosPlastico();
         setCatalogos(cats);
       } catch {
-        setError("Error al cargar catálogos");
+        showAlert("Error al cargar catálogos");
       } finally {
         setCargandoCat(false);
       }
@@ -254,16 +253,13 @@ export default function ModalCambiarProducto({
       setTab("buscar");
       setProdBuscado(null);
       setDatosNuevos(null);
-      setError(null);
       setGuardando(false);
     }
   }, [abierto]);
 
   const handleConfirmar = async () => {
-    setError(null);
-
     if (tab === "buscar") {
-      if (!prodBuscado) { setError("Selecciona un producto de la lista"); return; }
+      if (!prodBuscado) { showAlert("Selecciona un producto de la lista"); return; }
       onConfirmar({
         configuracion_plastico_id: prodBuscado.id,
         tipo_producto_id:   prodBuscado.tipo_producto_id,
@@ -289,11 +285,11 @@ export default function ModalCambiarProducto({
 
     // Tab crear
     if (!datosNuevos?.tipoProductoId || !datosNuevos?.materialId || !datosNuevos?.calibreId) {
-      setError("Selecciona tipo de producto, material y calibre");
+      showAlert("Selecciona tipo de producto, material y calibre");
       return;
     }
     if (!datosNuevos.medidas.altura || !datosNuevos.medidas.ancho) {
-      setError("Ingresa al menos altura y ancho");
+      showAlert("Ingresa al menos altura y ancho");
       return;
     }
 
@@ -307,7 +303,7 @@ export default function ModalCambiarProducto({
       : calcularPorKiloStr(datosNuevos, catalogos?.materiales ?? []);
 
     if (!porKiloCalculado || parseFloat(porKiloCalculado) <= 0) {
-      setError("No se pudo calcular las piezas por kilo. Verifica las medidas ingresadas.");
+      showAlert("No se pudo calcular las piezas por kilo. Verifica las medidas ingresadas.");
       return;
     }
 
@@ -357,7 +353,7 @@ export default function ModalCambiarProducto({
         medidas:            datosNuevos.medidas,
       });
     } catch (e: any) {
-      setError(e.response?.data?.detalle || e.message || "Error al procesar producto");
+      showAlert(e.response?.data?.detalle || e.message || "Error al procesar producto");
     } finally {
       setGuardando(false);
     }
@@ -467,13 +463,6 @@ export default function ModalCambiarProducto({
                 <p className="text-sm font-semibold text-gray-800 truncate">{nombrePreview}</p>
               </div>
             </div>
-          </div>
-        )}
-
-        {/* Error */}
-        {error && (
-          <div className="px-6 py-2.5 bg-red-50 border-t border-red-100 flex-shrink-0">
-            <p className="text-xs text-red-600">{error}</p>
           </div>
         )}
 

@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { useCatalogosPlastico } from "../../hooks/plastico/useCatalogosPlastico";
+import { showAlert } from "../CustomAlert";
 import type {
   TipoProductoAdminItem,
   MaterialAdminItem,
@@ -224,7 +225,7 @@ function TipoProductoPanel({
       setNewNombre("");
       setNewImagenFile(null);
     } catch (e: any) {
-      alert(e.response?.data?.error ?? "Error al agregar el tipo de producto");
+      showAlert(e.response?.data?.error ?? "Error al agregar el tipo de producto");
     } finally {
       setSaving(false);
     }
@@ -237,7 +238,7 @@ function TipoProductoPanel({
       await onEdit(editId, editNombre.trim());
       setEditId(null);
     } catch (e: any) {
-      alert(e.response?.data?.error ?? "Error al editar el tipo de producto");
+      showAlert(e.response?.data?.error ?? "Error al editar el tipo de producto");
     } finally {
       setSaving(false);
     }
@@ -248,7 +249,7 @@ function TipoProductoPanel({
     try {
       await onDesactivar(deleteId);
     } catch (e: any) {
-      alert(e.response?.data?.error ?? "Error al desactivar");
+      showAlert(e.response?.data?.error ?? "Error al desactivar");
     }
     setDeleteId(null);
   };
@@ -346,7 +347,7 @@ function TroquelPanel({
       setNewNombre("");
       setNewImagenFile(null);
     } catch (e: any) {
-      alert(e.response?.data?.error ?? "Error al agregar el tipo de troquel");
+      showAlert(e.response?.data?.error ?? "Error al agregar el tipo de troquel");
     } finally {
       setSaving(false);
     }
@@ -359,7 +360,7 @@ function TroquelPanel({
       await onEdit(editId, editNombre.trim());
       setEditId(null);
     } catch (e: any) {
-      alert(e.response?.data?.error ?? "Error al editar el tipo de troquel");
+      showAlert(e.response?.data?.error ?? "Error al editar el tipo de troquel");
     } finally {
       setSaving(false);
     }
@@ -370,7 +371,7 @@ function TroquelPanel({
     try {
       await onDesactivar(deleteId);
     } catch (e: any) {
-      alert(e.response?.data?.error ?? "Error al desactivar");
+      showAlert(e.response?.data?.error ?? "Error al desactivar");
     }
     setDeleteId(null);
   };
@@ -468,7 +469,7 @@ function SuajePanel({
       setNewNombre("");
       setNewImagenFile(null);
     } catch (e: any) {
-      alert(e.response?.data?.error ?? "Error al agregar el asa/suaje");
+      showAlert(e.response?.data?.error ?? "Error al agregar el asa/suaje");
     } finally {
       setSaving(false);
     }
@@ -481,7 +482,7 @@ function SuajePanel({
       await onEdit(editId, editNombre.trim());
       setEditId(null);
     } catch (e: any) {
-      alert(e.response?.data?.error ?? "Error al editar el asa/suaje");
+      showAlert(e.response?.data?.error ?? "Error al editar el asa/suaje");
     } finally {
       setSaving(false);
     }
@@ -492,7 +493,7 @@ function SuajePanel({
     try {
       await onDesactivar(deleteId);
     } catch (e: any) {
-      alert(e.response?.data?.error ?? "Error al desactivar");
+      showAlert(e.response?.data?.error ?? "Error al desactivar");
     }
     setDeleteId(null);
   };
@@ -595,7 +596,7 @@ function CintaSeguridadPanel({
       setNewNombre(""); setNewMedida("");
       setNewImagenFile(null);
     } catch (e: any) {
-      alert(e.response?.data?.error ?? "Error al agregar la cinta de seguridad");
+      showAlert(e.response?.data?.error ?? "Error al agregar la cinta de seguridad");
     } finally {
       setSaving(false);
     }
@@ -608,7 +609,7 @@ function CintaSeguridadPanel({
       await onEdit(editId, editNombre.trim(), editMedida.trim() || null);
       setEditId(null);
     } catch (e: any) {
-      alert(e.response?.data?.error ?? "Error al editar la cinta de seguridad");
+      showAlert(e.response?.data?.error ?? "Error al editar la cinta de seguridad");
     } finally {
       setSaving(false);
     }
@@ -619,7 +620,7 @@ function CintaSeguridadPanel({
     try {
       await onDesactivar(deleteId);
     } catch (e: any) {
-      alert(e.response?.data?.error ?? "Error al desactivar");
+      showAlert(e.response?.data?.error ?? "Error al desactivar");
     }
     setDeleteId(null);
   };
@@ -710,7 +711,7 @@ function MaterialPanel({
     if (!newNombre.trim()) return;
     const v = parseFloat(newValor);
     if (isNaN(v) || v <= 0) {
-      alert("El valor (factor de cálculo) debe ser un número mayor a 0");
+      showAlert("El valor (factor de cálculo) debe ser un número mayor a 0");
       return;
     }
     setSaving(true);
@@ -719,7 +720,7 @@ function MaterialPanel({
       setNewNombre("");
       setNewValor("");
     } catch (e: any) {
-      alert(e.response?.data?.error ?? "Error al agregar el material");
+      showAlert(e.response?.data?.error ?? "Error al agregar el material");
     } finally {
       setSaving(false);
     }
@@ -729,7 +730,7 @@ function MaterialPanel({
     if (editId === null || !editNombre.trim()) return;
     const v = parseFloat(editValor);
     if (isNaN(v) || v <= 0) {
-      alert("El valor (factor de cálculo) debe ser un número mayor a 0");
+      showAlert("El valor (factor de cálculo) debe ser un número mayor a 0");
       return;
     }
     setSaving(true);
@@ -737,7 +738,7 @@ function MaterialPanel({
       await onEdit(editId, editNombre.trim(), v);
       setEditId(null);
     } catch (e: any) {
-      alert(e.response?.data?.error ?? "Error al editar el material");
+      showAlert(e.response?.data?.error ?? "Error al editar el material");
     } finally {
       setSaving(false);
     }
@@ -748,7 +749,7 @@ function MaterialPanel({
     try {
       await onDesactivar(deleteId);
     } catch (e: any) {
-      alert(e.response?.data?.error ?? "Error al desactivar");
+      showAlert(e.response?.data?.error ?? "Error al desactivar");
     }
     setDeleteId(null);
   };
@@ -851,27 +852,27 @@ function CalibrePanel({
     if (tipoNuevo === "bopp") {
       const cb = parseInt(newCalibreBopp, 10);
       const g = parseFloat(newGramos);
-      if (isNaN(cb) || cb <= 0) { alert("El calibre BOPP es obligatorio para este tipo"); return; }
-      if (isNaN(g) || g <= 0) { alert("Los gramos son obligatorios para este tipo"); return; }
+      if (isNaN(cb) || cb <= 0) { showAlert("El calibre BOPP es obligatorio para este tipo"); return; }
+      if (isNaN(g) || g <= 0) { showAlert("Los gramos son obligatorios para este tipo"); return; }
       setSaving(true);
       try {
         await onAdd(cb, cb, g);
         limpiarNuevo();
       } catch (e: any) {
-        alert(e.response?.data?.error ?? "Error al agregar el calibre");
+        showAlert(e.response?.data?.error ?? "Error al agregar el calibre");
       } finally {
         setSaving(false);
       }
       return;
     }
     const c = parseInt(newCalibre, 10);
-    if (isNaN(c) || c <= 0) { alert("El calibre debe ser un número entero mayor a 0"); return; }
+    if (isNaN(c) || c <= 0) { showAlert("El calibre debe ser un número entero mayor a 0"); return; }
     setSaving(true);
     try {
       await onAdd(c, null, null);
       limpiarNuevo();
     } catch (e: any) {
-      alert(e.response?.data?.error ?? "Error al agregar el calibre");
+      showAlert(e.response?.data?.error ?? "Error al agregar el calibre");
     } finally {
       setSaving(false);
     }
@@ -891,27 +892,27 @@ function CalibrePanel({
     if (editTipo === "bopp") {
       const cb = parseInt(editCalibreBopp, 10);
       const g = parseFloat(editGramos);
-      if (isNaN(cb) || cb <= 0) { alert("El calibre BOPP es obligatorio para este tipo"); return; }
-      if (isNaN(g) || g <= 0) { alert("Los gramos son obligatorios para este tipo"); return; }
+      if (isNaN(cb) || cb <= 0) { showAlert("El calibre BOPP es obligatorio para este tipo"); return; }
+      if (isNaN(g) || g <= 0) { showAlert("Los gramos son obligatorios para este tipo"); return; }
       setSaving(true);
       try {
         await onEdit(editId, cb, cb, g);
         setEditId(null);
       } catch (e: any) {
-        alert(e.response?.data?.error ?? "Error al editar el calibre");
+        showAlert(e.response?.data?.error ?? "Error al editar el calibre");
       } finally {
         setSaving(false);
       }
       return;
     }
     const c = parseInt(editCalibre, 10);
-    if (isNaN(c) || c <= 0) { alert("El calibre debe ser un número entero mayor a 0"); return; }
+    if (isNaN(c) || c <= 0) { showAlert("El calibre debe ser un número entero mayor a 0"); return; }
     setSaving(true);
     try {
       await onEdit(editId, c, null, null);
       setEditId(null);
     } catch (e: any) {
-      alert(e.response?.data?.error ?? "Error al editar el calibre");
+      showAlert(e.response?.data?.error ?? "Error al editar el calibre");
     } finally {
       setSaving(false);
     }
@@ -922,7 +923,7 @@ function CalibrePanel({
     try {
       await onDesactivar(deleteId);
     } catch (e: any) {
-      alert(e.response?.data?.error ?? "Error al desactivar");
+      showAlert(e.response?.data?.error ?? "Error al desactivar");
     }
     setDeleteId(null);
   };

@@ -1,6 +1,8 @@
 // src/pages/Expo.tsx
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { showAlert } from "../../components/CustomAlert";
+import { showConfirm } from "../../components/CustomConfirm";
 import {
   CATS, CLIENTE_VACIO, filaDesdeProducto, sumarTotales, claveProducto,
   mapearCatalogoExpoAProducto, mapearPlasticoSistemaAProducto, mapearPapelSistemaAProducto,
@@ -349,10 +351,10 @@ useEffect(() => {
       if (err instanceof OperacionEncoladaError) {
         setCatalogo(prev => prev.filter(p => p.id !== id));
         setFilas(prev => prev.filter(f => f.producto.id !== id));
-        alert("Sin conexión: la eliminación se guardó y se aplicará sola cuando vuelva la señal.");
+        showAlert("Sin conexión: la eliminación se guardó y se aplicará sola cuando vuelva la señal.", "info");
         return;
       }
-      alert("No se pudo eliminar el producto");
+      showAlert("No se pudo eliminar el producto");
     }
   };
 
@@ -484,7 +486,7 @@ useEffect(() => {
           await subirImagenProductoExpo(imagenPendiente, p.categoria, idReal);
         } catch (e) {
           console.error("No se pudo subir la imagen del producto:", e);
-          alert("El producto se guardó, pero la imagen no se pudo subir. Puedes agregarla editando el producto.");
+          showAlert("El producto se guardó, pero la imagen no se pudo subir. Puedes agregarla editando el producto.");
         }
       }
 
@@ -497,7 +499,7 @@ useEffect(() => {
       setEditando(null);
     } catch (err: any) {
       console.error("Error al guardar producto:", err);
-      alert("No se pudo guardar: " + (err?.response?.data?.error || err.message));
+      showAlert("No se pudo guardar: " + (err?.response?.data?.error || err.message));
       throw err;
     } finally {
       setSavingModal(false);
@@ -519,7 +521,7 @@ useEffect(() => {
   const LIMITE_PRODUCTOS = 5;
   const addProd = useCallback(async (p: Producto) => {
     setFilas(prev => {
-      if (prev.length >= LIMITE_PRODUCTOS) { alert(`Máximo ${LIMITE_PRODUCTOS} productos por cotización.`); return prev; }
+      if (prev.length >= LIMITE_PRODUCTOS) { showAlert(`Máximo ${LIMITE_PRODUCTOS} productos por cotización.`); return prev; }
       return prev;
     });
 
@@ -601,9 +603,9 @@ useEffect(() => {
 
   // ── Cotizaciones ──────────────────────────────────────────────────────────
   const guardarConOpciones = async (opciones: { imprimir: boolean; correo: boolean }) => {
-    if (filas.length === 0) { alert("Agrega al menos un producto."); return; }
-    if (!cliente.trim())    { alert("Falta el nombre del cliente."); return; }
-    if (!clienteIdReal)     { alert("Regresa y registra el prospecto primero."); return; }
+    if (filas.length === 0) { showAlert("Agrega al menos un producto."); return; }
+    if (!cliente.trim())    { showAlert("Falta el nombre del cliente."); return; }
+    if (!clienteIdReal)     { showAlert("Regresa y registra el prospecto primero."); return; }
 
     let folioRegistrado: string | null = null;
     // Hoisted fuera del try: si crearCotizacionExpo se encola offline, el
@@ -727,20 +729,21 @@ useEffect(() => {
         }
 
         limpiar();
-        alert(
+        showAlert(
           opciones.correo
             ? "Sin conexión: la cotización se guardó en este dispositivo. Se sincronizará y el correo se enviará solo, automáticamente, cuando vuelva la señal."
             : "Sin conexión: la cotización se guardó en este dispositivo y se subirá sola cuando vuelva la señal. El PDF no se genera hasta que el servidor le asigne folio real.",
+          "info",
         );
         return;
       }
       console.error("Error al guardar cotización:", err);
       if (folioRegistrado) {
-        alert(
+        showAlert(
           `La cotización ${folioRegistrado} sí quedó registrada, pero ocurrió un problema al generar, imprimir o enviar el documento.`,
         );
       } else {
-        alert("No se pudo guardar la cotización.");
+        showAlert("No se pudo guardar la cotización.");
       }
     } finally {
       setGuardando(false);
@@ -770,7 +773,7 @@ useEffect(() => {
         // pidió correo.
         throw err;
       }
-      alert("No se pudo aprobar la cotización.");
+      showAlert("No se pudo aprobar la cotización.");
       return null;
     } finally {
       setAprobando(false);
@@ -784,16 +787,16 @@ useEffect(() => {
     } catch (err) {
       if (err instanceof OperacionEncoladaError) {
         setCotizaciones(prev => prev.filter(c => c.folio !== folio));
-        alert("Sin conexión: la eliminación se guardó y se aplicará sola cuando vuelva la señal.");
+        showAlert("Sin conexión: la eliminación se guardó y se aplicará sola cuando vuelva la señal.", "info");
         return;
       }
-      alert("No se pudo eliminar la cotización.");
+      showAlert("No se pudo eliminar la cotización.");
     }
   };
 
   const editarCotizacionSistema = (cotizacion: CotizacionGuardada) => {
     if (!cotizacion.folio) {
-      alert("No se encontró el folio de la cotización.");
+      showAlert("No se encontró el folio de la cotización.");
       return;
     }
 
@@ -862,7 +865,7 @@ useEffect(() => {
 
   const cerrarSesion = async () => {
     if (cerrandoSesion) return;
-    if (!window.confirm("¿Deseas cerrar sesión?")) return;
+    if (!(await showConfirm("¿Deseas cerrar sesión?"))) return;
 
     setCerrandoSesion(true);
     try {
@@ -870,7 +873,7 @@ useEffect(() => {
       navigate("/", { replace: true });
     } catch (error) {
       console.error("No se pudo cerrar la sesión:", error);
-      alert("No se pudo cerrar la sesión. Intenta nuevamente.");
+      showAlert("No se pudo cerrar la sesión. Intenta nuevamente.");
       setCerrandoSesion(false);
     }
   };

@@ -1,13 +1,13 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { showAlert } from "../components/CustomAlert";
 import logo from "../assets/grupeblanco.png";
 import bolsas from "../assets/bolsas.png";
 
 export default function Login() {
   const [correo, setCorreo] = useState("");
   const [codigo, setCodigo] = useState("");
-  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
@@ -29,18 +29,17 @@ export default function Login() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError("");
     console.log("🔵 Iniciando login con correo:", correo, "y código");
 
     // Validación de correo
     if (!correo || !correo.includes("@")) {
-      setError("Ingresa un correo válido");
+      showAlert("Ingresa un correo válido");
       return;
     }
 
     // Validación: mínimo 4 dígitos
     if (codigo.length < 4) {
-      setError("El código debe tener al menos 4 dígitos");
+      showAlert("El código debe tener al menos 4 dígitos");
       return;
     }
 
@@ -53,7 +52,7 @@ export default function Login() {
       navigate(destino, { replace: true });
     } catch (err: any) {
       console.error("❌ Error en login:", err);
-      setError(err.response?.data?.error || "Credenciales incorrectas");
+      showAlert(err.response?.data?.error || "Credenciales incorrectas");
     } finally {
       setLoading(false);
     }
@@ -112,13 +111,6 @@ export default function Login() {
                   autoComplete="off"
                 />
               </div>
-
-              {/* MENSAJE DE ERROR */}
-              {error && (
-                <div className="text-sm text-red-400 bg-red-400/10 border border-red-400/20 rounded-lg px-3 py-2">
-                  {error}
-                </div>
-              )}
 
               <button
                 type="submit"

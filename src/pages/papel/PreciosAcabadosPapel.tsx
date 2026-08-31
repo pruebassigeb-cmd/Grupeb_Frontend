@@ -24,6 +24,8 @@ import {
   normalizarPrecioInput,
 } from "../../utils/papel/preciosAcabadosPapel.utils";
 import { leerBorrador, useAutoguardarBorrador, limpiarBorrador } from "../../hooks/useBorradorFormulario";
+import { showAlert } from "../../components/CustomAlert";
+import { showPrompt } from "../../components/CustomPrompt";
 
 type EstadoPrecios = Record<string, string>;
 
@@ -39,8 +41,6 @@ export default function PreciosAcabadosPapel() {
   const [guardando, setGuardando] = useState(false);
   const [costoMetro, setCostoMetro] = useState("");
   const [guardandoCostoMetro, setGuardandoCostoMetro] = useState(false);
-  const [mensaje, setMensaje] = useState("");
-  const [error, setError] = useState("");
 
   // Punto de guardado (ver src/hooks/useBorradorFormulario.ts) — la matriz
   // se recarga del servidor cada vez que cambia idAcabado Y también después
@@ -77,7 +77,6 @@ export default function PreciosAcabadosPapel() {
 
   const cargarCatalogos = useCallback(async () => {
     setLoading(true);
-    setError("");
 
     try {
       const [data, costoMetroData] = await Promise.all([
@@ -100,7 +99,7 @@ export default function PreciosAcabadosPapel() {
         );
       });
     } catch (err: any) {
-      setError(
+      showAlert(
         err?.response?.data?.error || "No se pudieron cargar los catálogos",
       );
     } finally {
@@ -110,8 +109,6 @@ export default function PreciosAcabadosPapel() {
 
   const cargarMatriz = useCallback(async (acabadoId: number) => {
     setLoadingMatriz(true);
-    setError("");
-    setMensaje("");
 
     try {
       const data = await getMatrizPreciosAcabado(acabadoId);
@@ -135,7 +132,7 @@ export default function PreciosAcabadosPapel() {
       }
       setPrecios(siguiente);
     } catch (err: any) {
-      setError(err?.response?.data?.error || "No se pudo cargar la matriz");
+      showAlert(err?.response?.data?.error || "No se pudo cargar la matriz");
     } finally {
       setLoadingMatriz(false);
     }
@@ -153,8 +150,6 @@ export default function PreciosAcabadosPapel() {
     if (!matriz || !idAcabado) return;
 
     setGuardando(true);
-    setMensaje("");
-    setError("");
 
     try {
       const celdas = matriz.filas.flatMap((fila) =>
@@ -171,26 +166,27 @@ export default function PreciosAcabadosPapel() {
         celdas,
       });
 
-      setMensaje(
+      showAlert(
         `${resultado.message}. Celdas procesadas: ${resultado.actualizadas}.`,
+        "success",
       );
       limpiarBorrador(`precios-acabados-${idAcabado}`);
       await cargarMatriz(idAcabado);
     } catch (err: any) {
-      setError(err?.response?.data?.error || "No se pudo guardar la matriz");
+      showAlert(err?.response?.data?.error || "No se pudo guardar la matriz");
     } finally {
       setGuardando(false);
     }
   };
 
-  const pedirCantidad = (titulo: string, inicial = ""): number | null => {
-    const valor = window.prompt(titulo, inicial);
+  const pedirCantidad = async (titulo: string, inicial = ""): Promise<number | null> => {
+    const valor = await showPrompt(titulo, { inicial, type: "number" });
     if (valor === null) return null;
 
     const cantidad = Number(valor.replace(/,/g, "").trim());
 
     if (!Number.isInteger(cantidad) || cantidad <= 0) {
-      window.alert("La cantidad debe ser un entero mayor que cero.");
+      showAlert("La cantidad debe ser un entero mayor que cero.");
       return null;
     }
 
@@ -198,7 +194,7 @@ export default function PreciosAcabadosPapel() {
   };
 
   const agregarEscala = async () => {
-    const cantidad = pedirCantidad("Nueva cantidad de piezas:");
+    const cantidad = await pedirCantidad("Nueva cantidad de piezas:");
     if (!cantidad) return;
 
     try {
@@ -206,12 +202,12 @@ export default function PreciosAcabadosPapel() {
       await cargarCatalogos();
       if (idAcabado) await cargarMatriz(idAcabado);
     } catch (err: any) {
-      window.alert(err?.response?.data?.error || "No se pudo crear la escala");
+      showAlert(err?.response?.data?.error || "No se pudo crear la escala");
     }
   };
 
   const editarEscala = async (escala: EscalaCostoCatalogo) => {
-    const cantidad = pedirCantidad("Nueva cantidad:", String(escala.cantidad));
+    const cantidad = await pedirCantidad("Nueva cantidad:", String(escala.cantidad));
     if (!cantidad) return;
 
     try {
@@ -219,7 +215,7 @@ export default function PreciosAcabadosPapel() {
       await cargarCatalogos();
       if (idAcabado) await cargarMatriz(idAcabado);
     } catch (err: any) {
-      window.alert(
+      showAlert(
         err?.response?.data?.error || "No se pudo actualizar la escala",
       );
     }
@@ -231,7 +227,7 @@ export default function PreciosAcabadosPapel() {
       await cargarCatalogos();
       if (idAcabado) await cargarMatriz(idAcabado);
     } catch (err: any) {
-      window.alert(
+      showAlert(
         err?.response?.data?.error || "No se pudo cambiar el estado",
       );
     }
@@ -241,20 +237,18 @@ export default function PreciosAcabadosPapel() {
     const costo = Number(costoMetro);
 
     if (!Number.isFinite(costo) || costo < 0 || costo > 99.99) {
-      setError("El costo por m² debe estar entre 0.00 y 99.99");
+      showAlert("El costo por m² debe estar entre 0.00 y 99.99");
       return;
     }
 
     setGuardandoCostoMetro(true);
-    setMensaje("");
-    setError("");
 
     try {
       const resultado = await updateCostoMetroLaminado(costo);
       setCostoMetro(Number(resultado.costoMetro.costo).toFixed(2));
-      setMensaje(resultado.message);
+      showAlert(resultado.message, "success");
     } catch (err: any) {
-      setError(
+      showAlert(
         err?.response?.data?.error || "No se pudo guardar el costo por m²",
       );
     } finally {
@@ -277,7 +271,7 @@ export default function PreciosAcabadosPapel() {
 
       setMatriz((prev) => (prev ? { ...prev, acabado } : prev));
     } catch (err: any) {
-      window.alert(
+      showAlert(
         err?.response?.data?.error || "No se pudo cambiar el estado",
       );
     }
@@ -573,51 +567,6 @@ export default function PreciosAcabadosPapel() {
             </div>
           </div>
         </section>
-
-        {/* Mensajes */}
-        {error && (
-          <div className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 shadow-sm">
-            <svg
-              className="mt-0.5 h-5 w-5 shrink-0"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"
-              />
-            </svg>
-            <div>
-              <p className="font-bold">No se pudo completar la acción</p>
-              <p className="mt-0.5">{error}</p>
-            </div>
-          </div>
-        )}
-
-        {mensaje && (
-          <div className="flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 shadow-sm">
-            <svg
-              className="mt-0.5 h-5 w-5 shrink-0"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-              />
-            </svg>
-            <div>
-              <p className="font-bold">Cambios guardados</p>
-              <p className="mt-0.5">{mensaje}</p>
-            </div>
-          </div>
-        )}
 
         {/* Matriz */}
         <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">

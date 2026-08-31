@@ -13,6 +13,7 @@ import {
 import { generarPdfPedido } from "../../utils/generarPdfPedido";
 import { getVentaByPedido } from "../../services/ventasservice";
 import { showConfirm } from "../CustomConfirm";
+import { showAlert } from "../CustomAlert";
 import { leerBorrador, useAutoguardarBorrador, limpiarBorrador } from "../../hooks/useBorradorFormulario";
 
 const ESTADO_ID = {
@@ -236,8 +237,6 @@ export default function EditarCotizacion({
   useAutoguardarBorrador(claveBorrador, productos, true);
 
   const [guardando, setGuardando] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [mensajeExito, setMensajeExito] = useState<string | null>(null);
   const [loadingDetalle, setLoadingDetalle] = useState<number | null>(null);
   const [loadingHerramental, setLoadingHerramental] = useState<number | null>(
     null,
@@ -269,7 +268,6 @@ export default function EditarCotizacion({
   ) => {
     const nuevoValor = valorActual !== true;
     setLoadingHerramental(herramentalId);
-    setError(null);
 
     try {
       await aprobarHerramental(herramentalId, nuevoValor);
@@ -282,7 +280,7 @@ export default function EditarCotizacion({
         return copia;
       });
     } catch {
-      setError("No se pudo actualizar el herramental.");
+      showAlert("No se pudo actualizar el herramental.");
     } finally {
       setLoadingHerramental(null);
     }
@@ -296,8 +294,6 @@ export default function EditarCotizacion({
   ) => {
     const nuevoValor = valorActual !== true;
     setLoadingDetalle(detalleId);
-    setError(null);
-    setMensajeExito(null);
 
     try {
       if (nuevoValor) {
@@ -336,7 +332,7 @@ export default function EditarCotizacion({
         return copia;
       });
     } catch {
-      setError("No se pudo actualizar la selección.");
+      showAlert("No se pudo actualizar la selección.");
     } finally {
       setLoadingDetalle(null);
     }
@@ -359,7 +355,7 @@ export default function EditarCotizacion({
     try {
       await actualizarObservacion(productoId, valor);
     } catch {
-      setError("No se pudo guardar la observación.");
+      showAlert("No se pudo guardar la observación.");
     }
   };
 
@@ -440,8 +436,6 @@ export default function EditarCotizacion({
     }
 
     setGuardando(true);
-    setError(null);
-    setMensajeExito(null);
 
     try {
       const respuesta = await actualizarEstado(
@@ -455,15 +449,17 @@ export default function EditarCotizacion({
       limpiarBorrador(claveBorrador);
 
       if (respuesta.convertida_a_pedido && respuesta.no_pedido) {
-        setMensajeExito(
+        showAlert(
           `Cotización convertida al Pedido #${respuesta.no_pedido}.`,
+          "success",
         );
         await descargarPdfPedido(respuesta.no_pedido);
       } else {
-        setMensajeExito(
+        showAlert(
           estadoId === ESTADO_ID.APROBADO
             ? "Cotización aprobada exitosamente."
             : "Cotización marcada como rechazada.",
+          "success",
         );
       }
 
@@ -478,7 +474,7 @@ export default function EditarCotizacion({
         no_pedido: respuesta.no_pedido ?? cotizacion.no_pedido,
       });
     } catch (err: any) {
-      setError(
+      showAlert(
         err?.response?.data?.error ?? "No se pudo actualizar el estado.",
       );
     } finally {
@@ -636,30 +632,6 @@ export default function EditarCotizacion({
               </button>
             </div>
           </div>
-        </div>
-      )}
-
-      {error && (
-        <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-start justify-between gap-2">
-          <p className="text-red-700 text-sm">⚠️ {error}</p>
-          <button
-            onClick={() => setError(null)}
-            className="text-red-400 hover:text-red-700 text-lg leading-none"
-          >
-            ×
-          </button>
-        </div>
-      )}
-
-      {mensajeExito && (
-        <div className="p-3 bg-green-50 border border-green-200 rounded-lg flex items-start justify-between gap-2">
-          <p className="text-green-700 text-sm font-medium">{mensajeExito}</p>
-          <button
-            onClick={() => setMensajeExito(null)}
-            className="text-green-400 hover:text-green-700 text-lg leading-none"
-          >
-            ×
-          </button>
         </div>
       )}
 

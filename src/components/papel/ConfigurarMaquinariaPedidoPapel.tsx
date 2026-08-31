@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { showAlert } from "../CustomAlert";
 import type {
   ProductoCotizacion,
   ProductoPapelCotizacionLeido,
@@ -37,7 +38,6 @@ export default function ConfigurarMaquinariaPedidoPapel({
 }: Props) {
   const [abierto, setAbierto] = useState(false);
   const [guardando, setGuardando] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   if (!contienePapel(productos)) return null;
 
@@ -45,13 +45,12 @@ export default function ConfigurarMaquinariaPedidoPapel({
     selecciones: MaquinariaProductoPedidoPapel[]
   ) => {
     setGuardando(true);
-    setError(null);
     try {
       await guardarMaquinariaPedidoPapel(noPedido, selecciones);
       setAbierto(false);
       onSaved?.();
     } catch (err: any) {
-      setError(
+      showAlert(
         err?.response?.data?.error ??
           "No se pudo guardar la maquinaria del pedido."
       );
@@ -69,12 +68,6 @@ export default function ConfigurarMaquinariaPedidoPapel({
       >
         Configurar maquinaria
       </button>
-
-      {error && (
-        <p className="mt-2 text-sm text-red-600">
-          {error}
-        </p>
-      )}
 
       {abierto && (
         <ModalMaquinariaPedidoPapel

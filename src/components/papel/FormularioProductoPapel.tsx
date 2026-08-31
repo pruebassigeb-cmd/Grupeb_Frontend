@@ -1,5 +1,6 @@
 // src/components/papel/FormularioProductoPapel.tsx
 import { useState, useEffect } from "react";
+import { showAlert } from "../CustomAlert";
 import ComboboxInsumo from "../proveedores/ComboboxInsumo";
 import ModalRegistrarInsumo from "../proveedores/ModalRegistrarInsumo";
 import {
@@ -638,7 +639,7 @@ const productos = productosTodos
         aplicarSugerido(g.precio_sugerido);
       }
     } catch (e: any) {
-      alert(e.message ?? "Error al registrar el producto");
+      showAlert(e.message ?? "Error al registrar el producto");
     } finally {
       setSavingNuevo(false);
     }
@@ -763,11 +764,11 @@ const productos = productosTodos
       (i) => specs.cantidades[i] > 0 && specs.precios[i] > 0,
     );
     if (!tieneValido) {
-      alert("Ingresa al menos una cantidad y precio válidos");
+      showAlert("Ingresa al menos una cantidad y precio válidos");
       return;
     }
     if (!specs.tintasId) {
-      alert("Selecciona una opción de Impresión (o 'Sin tintas' si no lleva)");
+      showAlert("Selecciona una opción de Impresión (o 'Sin tintas' si no lleva)");
       return;
     }
 

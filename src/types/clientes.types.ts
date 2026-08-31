@@ -70,6 +70,16 @@ export interface CreateClienteLigeroRequest {
   telefono?: string;
   correo?: string;
   empresa?: string;
+  // ✅ NUEVO — 5 campos base adicionales para que la cotización/pedido
+  // generados desde el Cotizador Interactivo salgan completos (antes solo
+  // se mandaban estos 4). Todos opcionales, así que cualquier caller
+  // existente que solo mande los 4 de siempre sigue funcionando igual.
+  atencion?: string;
+  razon_social?: string;
+  rfc_rs?: string;
+  cp_rs?: string;
+  impresion?: string;
+  celular?: string;
 }
 
 export interface CreateClienteLigeroResponse {
@@ -80,6 +90,12 @@ export interface CreateClienteLigeroResponse {
     empresa: string | null;
     correo: string | null;
     telefono: string | null;
+    // ✅ NUEVO
+    razon_social?: string | null;
+    rfc_rs?: string | null;
+    cp_rs?: string | null;
+    impresion?: string | null;
+    celular?: string | null;
   };
 }
 

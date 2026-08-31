@@ -1,5 +1,6 @@
 // src/components/expo/ModalProducto.tsx
 import { useState, useRef, useEffect, useMemo } from "react";
+import { showAlert } from "../CustomAlert";
 import { CATS } from "../../types/expo/expo.types";
 import type {
   Producto,
@@ -807,7 +808,7 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
     try {
       if (esPapelCarton) {
         if (!editando && productoPapelBaseId && !grupoPapelBaseId) {
-          alert("Selecciona el grupo del producto del sistema que se copiará.");
+          showAlert("Selecciona el grupo del producto del sistema que se copiará.");
           return;
         }
 
@@ -872,7 +873,7 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
         setF("imagen", url);
       } catch (e) {
         console.error("❌ No se pudo subir la imagen:", e);
-        alert("No se pudo subir la imagen. Intenta de nuevo.");
+        showAlert("No se pudo subir la imagen. Intenta de nuevo.");
       } finally {
         setSubiendoFoto(false);
       }

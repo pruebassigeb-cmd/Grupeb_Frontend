@@ -1,4 +1,6 @@
 import { useRef, useState } from "react";
+import { showAlert } from "../CustomAlert";
+import { showConfirm } from "../CustomConfirm";
 import type {
   ArchivoProductoPlastico,
   ArchivoPendientePlastico,
@@ -74,19 +76,19 @@ export default function ArchivosProductoPlastico({
       const subido = await subirArchivoProductoPlastico(file, categoria, idconfiguracion_plastico!);
       setArchivosGuardados((prev) => [...prev.filter((a) => a.categoria !== categoria), subido]);
     } catch (e: any) {
-      alert(e.message ?? "Error al subir el archivo");
+      showAlert(e.message ?? "Error al subir el archivo");
     } finally {
       setSubiendo(false);
     }
   };
 
   const eliminarGuardado = async (id_archivo: number) => {
-    if (!confirm("¿Eliminar esta imagen?")) return;
+    if (!(await showConfirm("¿Eliminar esta imagen?"))) return;
     try {
       await eliminarArchivoProductoPlastico(id_archivo);
       setArchivosGuardados((prev) => prev.filter((a) => a.id_archivo !== id_archivo));
     } catch {
-      alert("No se pudo eliminar el archivo");
+      showAlert("No se pudo eliminar el archivo");
     }
   };
 

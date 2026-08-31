@@ -1,6 +1,7 @@
 // src/components/cotizadorLibre/LandingCotizadorLibre.tsx
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
+import { showConfirm } from "../CustomConfirm";
 import { useAuth } from "../../context/AuthContext";
 import {
   getLandingCotizadorLibre,
@@ -34,6 +35,20 @@ const BENEFICIOS = [
   ["♧", "Sustentable", "Materiales amigables con el planeta"],
   ["✺", "Experiencia", "Más de 35 años contigo"],
 ] as const;
+
+// Paleta del póster: cada categoría de la barra inferior lleva su propio color
+// de acento (verde, azul, oro, café, morado, rojo, gris) como en la referencia.
+const COLORES_CATEGORIA = [
+  "#1d4a30",
+  "#22405c",
+  "#b07f33",
+  "#7a4b22",
+  "#14361f",
+  "#c08a2e",
+  "#5b3f78",
+  "#a8323a",
+  "#3b423d",
+];
 
 export default function LandingCotizadorLibre({
   esClienteExterno,
@@ -87,38 +102,45 @@ export default function LandingCotizadorLibre({
   return (
     <div
       onClick={esClienteExterno ? onComenzar : undefined}
-      className="min-h-dvh lg:h-dvh bg-[#f5f1e9] text-[#122b1e] overflow-x-hidden lg:overflow-hidden"
+      className="min-h-dvh lg:h-dvh bg-[#f6f2ea] text-[#122b1e] overflow-x-hidden lg:overflow-hidden"
     >
       {/* Marco general. El max-width evita que todo se vuelva gigantesco en TV/4K. */}
-      <div className="w-full max-w-[1920px] mx-auto bg-[#f5f1e9] lg:h-full lg:grid lg:grid-rows-[auto_minmax(0,1fr)_auto_auto]">
+      <div className="w-full max-w-[1920px] mx-auto bg-[#f6f2ea] lg:h-full lg:grid lg:grid-rows-[auto_minmax(0,1fr)_auto_auto]">
         {/* ================================================================
             CABECERA / MARCA
            ================================================================ */}
         <header className="px-[clamp(14px,2vw,34px)] pt-[clamp(10px,1.2vh,18px)] pb-[clamp(4px,0.5vh,8px)]">
           <div className="flex items-start justify-between gap-4">
             <div className="flex items-center min-w-0">
-              <div className="flex items-center border-r border-[#bdb7aa] pr-[clamp(12px,1.4vw,24px)] mr-[clamp(12px,1.4vw,24px)]">
+              <div className="flex items-center border-r border-[#c9c2b3] pr-[clamp(12px,1.4vw,24px)] mr-[clamp(12px,1.4vw,24px)]">
                 <span
                   className="hidden sm:block mr-2 text-[clamp(12px,1vw,18px)] tracking-[0.18em] text-[#27392f]"
                   style={{ writingMode: "vertical-rl", transform: "rotate(180deg)" }}
                 >
                   GRUPO
                 </span>
-                <span className="text-[clamp(48px,5.2vw,88px)] lg:text-[clamp(48px,8vh,76px)] leading-[0.72] font-black tracking-[-0.09em] text-[#0e3323]">
+                <span className="text-[clamp(48px,5.2vw,88px)] lg:text-[clamp(48px,8vh,76px)] leading-[0.72] font-black tracking-[-0.09em] text-[#12301f]">
                   EB
                 </span>
               </div>
 
               <div className="min-w-0">
-                <p className="font-black uppercase leading-none tracking-[-0.035em] text-[clamp(20px,2.4vw,42px)] lg:text-[clamp(20px,4vh,34px)] text-[#102d20] whitespace-nowrap">
+                <p className="font-black uppercase leading-none tracking-[-0.03em] text-[clamp(20px,2.4vw,42px)] lg:text-[clamp(20px,4vh,34px)] text-[#12301f] whitespace-nowrap">
                   EB Cotizador
                 </p>
-                <p className="font-semibold uppercase leading-none tracking-[0.19em] text-[clamp(14px,1.8vw,30px)] lg:text-[clamp(14px,3vh,25px)] text-[#b78336] mt-1">
+                <p className="font-black uppercase leading-none tracking-[0.2em] text-[clamp(14px,1.8vw,30px)] lg:text-[clamp(14px,3vh,25px)] text-[#b07f33] mt-1.5">
                   Inteligente
                 </p>
-                <p className="hidden sm:block mt-1.5 uppercase tracking-[0.12em] font-medium text-[clamp(8px,0.72vw,13px)] lg:text-[clamp(8px,1.45vh,11px)] text-[#242a26]">
-                  Diseña&nbsp; · &nbsp;Personaliza&nbsp; · &nbsp;Cotiza
-                </p>
+                <div className="hidden sm:flex items-center gap-[clamp(6px,0.6vw,10px)] mt-2 border-t border-[#c9c2b3] pt-1.5">
+                  {["Diseña", "Personaliza", "Cotiza"].map((palabra, index) => (
+                    <span key={palabra} className="flex items-center gap-[clamp(6px,0.6vw,10px)]">
+                      {index > 0 && <span className="text-[#b07f33] text-[8px] leading-none">●</span>}
+                      <span className="uppercase tracking-[0.14em] font-bold text-[clamp(8px,0.72vw,13px)] lg:text-[clamp(8px,1.45vh,11px)] text-[#2b312c]">
+                        {palabra}
+                      </span>
+                    </span>
+                  ))}
+                </div>
               </div>
             </div>
 
@@ -126,17 +148,26 @@ export default function LandingCotizadorLibre({
               <a
                 href="tel:+523339999999"
                 onClick={(e) => e.stopPropagation()}
-                className="hidden lg:flex items-center gap-2 rounded-full bg-[#102d20] px-[clamp(12px,1.1vw,20px)] py-[clamp(7px,0.7vw,11px)] text-[clamp(9px,0.72vw,12px)] font-extrabold uppercase tracking-wide text-[#e5bd70] shadow-sm hover:bg-[#19432f] transition-colors"
+                className="hidden lg:flex items-center gap-[clamp(8px,0.8vw,13px)] rounded-full bg-[#12301f] pl-[clamp(6px,0.5vw,9px)] pr-[clamp(14px,1.3vw,24px)] py-[clamp(5px,0.5vw,8px)] shadow-[0_5px_14px_rgba(18,43,30,0.20)] hover:bg-[#1b432c] transition-colors"
               >
-                <span className="text-[1.2em]">◉</span>
-                ¿Necesitas ayuda? Llamar a un asesor
+                <span className="flex h-[clamp(26px,2.4vw,40px)] w-[clamp(26px,2.4vw,40px)] items-center justify-center rounded-full bg-[#e5bd70] text-[clamp(13px,1.2vw,20px)] text-[#12301f]">
+                  ☏
+                </span>
+                <span className="text-left leading-tight">
+                  <span className="block font-black uppercase tracking-[0.03em] text-[clamp(9px,0.76vw,13px)] text-white">
+                    ¿Necesitas ayuda?
+                  </span>
+                  <span className="block font-bold uppercase tracking-[0.06em] text-[clamp(8px,0.66vw,11px)] text-[#e5bd70]">
+                    Llamar a un asesor
+                  </span>
+                </span>
               </a>
               <button
                 onClick={(e) => {
                   e.stopPropagation();
                   onSalir();
                 }}
-                className="rounded-full border border-[#d8d1c5] bg-white/70 px-3 py-2 text-[11px] sm:text-xs font-bold text-[#5e655f] hover:border-[#b78336] hover:text-[#9a6c2d] transition-colors"
+                className="rounded-full border border-[#d8d1c5] bg-white/70 px-3 py-2 text-[11px] sm:text-xs font-bold text-[#5e655f] hover:border-[#b07f33] hover:text-[#9a6c2d] transition-colors"
               >
                 {esClienteExterno ? "Salir" : "Inicio"}
               </button>
@@ -152,35 +183,38 @@ export default function LandingCotizadorLibre({
             {/* Columna izquierda */}
             <aside className="pt-[clamp(4px,0.7vh,10px)] self-start lg:h-full lg:min-h-0">
               <section className="max-w-[670px]">
-                <h1 className="font-black uppercase leading-[1.02] tracking-[-0.035em] text-[clamp(26px,2.8vw,46px)] lg:text-[clamp(24px,4.8vh,40px)] text-[#123424]">
+                <h1 className="font-black uppercase leading-[1.02] tracking-[-0.035em] text-[clamp(26px,2.8vw,46px)] lg:text-[clamp(24px,4.8vh,40px)] text-[#12301f]">
                   Diseña el empaque ideal
-                  <span className="block text-[#b78336] mt-1">para tu marca</span>
+                  <span className="block text-[#b07f33] mt-1.5">para tu marca</span>
                 </h1>
 
-                <div className="mt-[clamp(7px,1vh,12px)] flex items-center gap-3">
-                  <span className="h-px flex-1 bg-[#9f9a8f]" />
-                  <span className="text-[clamp(10px,0.85vw,14px)] lg:text-[clamp(9px,1.6vh,12px)] font-black uppercase tracking-[0.06em] text-[#173f2c] whitespace-nowrap">
-                    ♧ En menos de 2 minutos
+                <div className="mt-[clamp(7px,1vh,12px)] flex items-center gap-3 max-w-[564px]">
+                  <span className="h-px w-[clamp(18px,2vw,34px)] bg-[#a8a294]" />
+                  <span className="flex items-center gap-1.5 text-[clamp(10px,0.85vw,14px)] lg:text-[clamp(9px,1.6vh,12px)] font-black uppercase tracking-[0.06em] text-[#12301f] whitespace-nowrap">
+                    <span className="text-[#3f7a4a]">♧</span>
+                    En menos de 2 minutos
                   </span>
-                  <span className="h-px flex-1 bg-[#9f9a8f]" />
+                  <span className="h-px flex-1 bg-[#a8a294]" />
                 </div>
 
-                <p className="mt-[clamp(7px,1vh,12px)] text-[clamp(12px,0.95vw,16px)] lg:text-[clamp(11px,1.8vh,14px)] leading-[1.35] text-[#323833] max-w-[564px]">
+                <p className="mt-[clamp(7px,1vh,12px)] text-[clamp(12px,0.95vw,16px)] lg:text-[clamp(11px,1.8vh,14px)] leading-[1.4] text-[#3a403a] max-w-[564px]">
                   Crea, personaliza y cotiza al instante el empaque perfecto para tu negocio.
                 </p>
 
                 <button
                   onClick={onComenzar}
-                  className="mt-[clamp(12px,1.5vh,20px)] w-full max-w-[564px] rounded-[clamp(14px,1.2vw,22px)] bg-[#173b28] px-[clamp(18px,1.7vw,28px)] py-[clamp(10px,1.35vh,16px)] text-white shadow-[0_7px_15px_rgba(31,47,37,0.22)] transition-all hover:bg-[#214f37] hover:-translate-y-0.5 active:translate-y-0"
+                  className="mt-[clamp(12px,1.5vh,20px)] w-full max-w-[564px] rounded-[clamp(14px,1.2vw,22px)] bg-[#1c3f2a] px-[clamp(18px,1.7vw,28px)] py-[clamp(10px,1.35vh,16px)] text-white shadow-[0_10px_22px_rgba(18,43,30,0.26)] transition-all hover:bg-[#245134] hover:-translate-y-0.5 active:translate-y-0"
                 >
                   <span className="grid grid-cols-[auto_1px_1fr_auto] items-center gap-[clamp(10px,1vw,18px)]">
-                    <span className="text-[clamp(20px,2vw,32px)] lg:text-[clamp(18px,3vh,26px)] leading-none">☝</span>
-                    <span className="h-[42px] bg-white/35" />
+                    <span className="flex h-[clamp(34px,3vw,52px)] w-[clamp(34px,3vw,52px)] items-center justify-center rounded-[clamp(8px,0.7vw,12px)] border border-white/45 text-[clamp(18px,1.7vw,28px)] leading-none">
+                      ☝
+                    </span>
+                    <span className="h-[42px] bg-white/30" />
                     <span className="text-left leading-none">
-                      <span className="block uppercase font-black text-[clamp(20px,2.1vw,34px)] lg:text-[clamp(18px,3.3vh,28px)] tracking-[-0.025em]">
+                      <span className="block uppercase font-black text-[clamp(20px,2.1vw,34px)] lg:text-[clamp(18px,3.3vh,28px)] tracking-[-0.02em]">
                         Comenzar
                       </span>
-                      <span className="block mt-1.5 uppercase text-[clamp(9px,0.8vw,13px)] font-medium tracking-[0.04em] text-white/80">
+                      <span className="block mt-2 uppercase text-[clamp(9px,0.8vw,13px)] font-semibold tracking-[0.1em] text-white/75">
                         Diseña tu empaque ahora
                       </span>
                     </span>
@@ -188,8 +222,9 @@ export default function LandingCotizadorLibre({
                   </span>
                 </button>
 
-                <p className="mt-2 text-center max-w-[564px] uppercase text-[clamp(9px,0.72vw,12px)] font-black tracking-[0.04em] text-[#202923]">
-                  ☝ Toca la pantalla para comenzar
+                <p className="mt-2.5 flex items-center justify-center gap-1.5 max-w-[564px] uppercase text-[clamp(9px,0.72vw,12px)] font-black tracking-[0.08em] text-[#12301f]">
+                  <span className="text-[1.25em] leading-none">☝</span>
+                  Toca la pantalla para comenzar
                 </p>
               </section>
 
@@ -197,7 +232,7 @@ export default function LandingCotizadorLibre({
               {(etiquetas.length > 0 || esAdmin) && (
                 <section id="landing-seccion-etiquetas" className="scroll-mt-6 mt-[clamp(10px,1.3vh,16px)]">
                   <div className="relative mb-1.5 flex items-center justify-between gap-2 max-w-[564px]">
-                    <h2 className="uppercase text-[clamp(9px,0.72vw,12px)] font-black tracking-[0.04em] text-[#1c3025]">
+                    <h2 className="uppercase text-[clamp(9px,0.72vw,12px)] font-black tracking-[0.08em] text-[#12301f]">
                       {SECCIONES_LANDING_META.etiquetas.label}
                     </h2>
                     {esAdmin && <NuevoSlotCompacto seccion="etiquetas" onCreado={cargar} />}
@@ -267,8 +302,8 @@ export default function LandingCotizadorLibre({
                             id={`landing-seccion-${seccion}`}
                             className="scroll-mt-6 min-w-0"
                           >
-                            <div className="relative min-h-[1.6em] mb-0.5 flex items-end justify-center gap-1">
-                              <h2 className="text-center uppercase leading-[1.08] text-[clamp(8px,0.66vw,11px)] font-black tracking-[0.02em] text-[#1d2a23]">
+                            <div className="relative min-h-[1.6em] mb-1 flex items-end justify-center gap-1">
+                              <h2 className="text-center uppercase leading-[1.1] text-[clamp(8px,0.66vw,11px)] font-black tracking-[0.06em] text-[#12301f]">
                                 {SECCIONES_LANDING_META[seccion].label}
                               </h2>
                               {esAdmin && <NuevoSlotCompacto seccion={seccion} onCreado={cargar} compact />}
@@ -304,18 +339,21 @@ export default function LandingCotizadorLibre({
         {/* ================================================================
             NAVEGACIÓN POR CATEGORÍAS
            ================================================================ */}
-        <nav className="border-y border-[#e4ddd1] bg-white/65 px-[clamp(10px,1.6vw,30px)] py-[clamp(4px,0.5vh,7px)]">
-          <div className="flex gap-2 overflow-x-auto lg:grid lg:grid-cols-9 lg:overflow-visible [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {SECCIONES_LANDING_COTIZADOR_LIBRE.map((seccion) => (
+        <nav className="px-[clamp(10px,1.6vw,30px)] py-[clamp(5px,0.6vh,9px)]">
+          <div className="flex gap-[clamp(4px,0.5vw,9px)] overflow-x-auto lg:grid lg:grid-cols-9 lg:overflow-visible [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {SECCIONES_LANDING_COTIZADOR_LIBRE.map((seccion, index) => (
               <button
                 key={seccion}
                 onClick={() => irASeccion(seccion)}
-                className="group min-w-[150px] lg:min-w-0 flex items-center gap-2 rounded-xl border border-[#ebe4da] bg-white/80 px-[clamp(10px,0.8vw,14px)] py-[clamp(5px,0.7vh,8px)] text-left hover:border-[#c99b55] hover:bg-[#fffaf2] transition-colors"
+                className="group min-w-[150px] lg:min-w-0 flex items-center gap-[clamp(6px,0.6vw,10px)] rounded-[clamp(10px,0.9vw,16px)] border border-[#e3dccf] bg-white px-[clamp(8px,0.7vw,13px)] py-[clamp(5px,0.7vh,9px)] text-left shadow-[0_2px_6px_rgba(18,43,30,0.06)] hover:border-[#c0913f] hover:shadow-[0_5px_12px_rgba(18,43,30,0.12)] transition-all"
               >
-                <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-[#183c29] text-[15px] text-white">
+                <span
+                  className="flex h-[clamp(26px,2vw,34px)] w-[clamp(26px,2vw,34px)] flex-shrink-0 items-center justify-center rounded-full text-[clamp(13px,1.05vw,17px)] text-white"
+                  style={{ backgroundColor: COLORES_CATEGORIA[index % COLORES_CATEGORIA.length] }}
+                >
                   {SECCIONES_LANDING_META[seccion].icono}
                 </span>
-                <span className="text-[clamp(9px,0.62vw,11px)] leading-[1.12] font-black uppercase text-[#243029]">
+                <span className="text-[clamp(9px,0.62vw,11px)] leading-[1.15] font-black uppercase tracking-[0.03em] text-[#12301f]">
                   {SECCIONES_LANDING_META[seccion].label}
                 </span>
               </button>
@@ -326,26 +364,43 @@ export default function LandingCotizadorLibre({
         {/* ================================================================
             BENEFICIOS
            ================================================================ */}
-        <footer className="bg-[#102d20] px-[clamp(14px,2vw,38px)] py-[clamp(6px,0.7vh,10px)] text-white">
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-y-2">
+        <footer className="bg-[#0e2718] px-[clamp(14px,2vw,38px)] py-[clamp(7px,0.9vh,13px)] text-white">
+          <div className="grid grid-cols-2 md:grid-cols-5 xl:grid-cols-[repeat(5,minmax(0,1fr))_auto] gap-y-2 items-center">
             {BENEFICIOS.map(([icono, titulo, texto], index) => (
               <div
                 key={titulo}
-                className={`flex items-center gap-3 px-[clamp(6px,1.2vw,20px)] ${
-                  index > 0 ? "md:border-l md:border-[#c7923c]/30" : ""
+                className={`flex items-center gap-[clamp(8px,0.9vw,14px)] px-[clamp(6px,1vw,18px)] ${
+                  index > 0 ? "md:border-l md:border-[#c7923c]/25" : ""
                 }`}
               >
-                <span className="text-[clamp(20px,1.6vw,28px)] lg:text-[clamp(18px,2.6vh,24px)] leading-none text-[#c7923c]">{icono}</span>
+                <span className="flex h-[clamp(26px,2.2vw,38px)] w-[clamp(26px,2.2vw,38px)] flex-shrink-0 items-center justify-center rounded-full border border-[#c7923c]/70 text-[clamp(14px,1.2vw,20px)] leading-none text-[#e0b063]">
+                  {icono}
+                </span>
                 <span className="min-w-0">
-                  <span className="block uppercase text-[clamp(10px,0.76vw,13px)] font-black tracking-[0.04em] text-[#f5e1bd]">
+                  <span className="block uppercase text-[clamp(10px,0.76vw,13px)] font-black tracking-[0.07em] text-[#e5bd70]">
                     {titulo}
                   </span>
-                  <span className="block mt-0.5 text-[clamp(9px,0.72vw,12px)] leading-snug text-white/75">
+                  <span className="block mt-0.5 text-[clamp(9px,0.72vw,12px)] leading-snug text-white/70">
                     {texto}
                   </span>
                 </span>
               </div>
             ))}
+
+            {/* Bloque de catálogo. Sustituye el src por la imagen real del QR. */}
+            <div className="col-span-2 md:col-span-5 xl:col-span-1 flex items-center gap-[clamp(8px,0.9vw,14px)] px-[clamp(6px,1vw,18px)] xl:border-l xl:border-[#c7923c]/25">
+              <span className="flex h-[clamp(38px,3.4vw,58px)] w-[clamp(38px,3.4vw,58px)] flex-shrink-0 items-center justify-center rounded-[4px] border border-dashed border-white/45 bg-white/10 text-[8px] font-black uppercase tracking-[0.08em] text-white/70">
+                QR
+              </span>
+              <span className="min-w-0">
+                <span className="block uppercase text-[clamp(9px,0.72vw,12px)] font-bold tracking-[0.07em] text-white/70">
+                  Escanea y conoce
+                </span>
+                <span className="block uppercase text-[clamp(10px,0.8vw,14px)] font-black leading-[1.15] tracking-[0.04em] text-[#e5bd70]">
+                  Nuestro catálogo completo
+                </span>
+              </span>
+            </div>
           </div>
         </footer>
       </div>
@@ -415,7 +470,7 @@ function SlotCard({
   };
 
   const eliminarEspacio = async () => {
-    if (!window.confirm("¿Quitar este espacio por completo? Esto también borra su imagen.")) return;
+    if (!(await showConfirm("¿Quitar este espacio por completo? Esto también borra su imagen."))) return;
     try {
       setOcupado(true);
       await eliminarSlotLandingCotizadorLibre(slot.id);
@@ -454,7 +509,7 @@ function SlotCard({
 
   const titleClass =
     variant === "linea"
-      ? "text-[clamp(10px,0.9vw,15px)] lg:text-[clamp(9px,1.6vh,13px)] min-h-[1.9em]"
+      ? "text-[clamp(13px,1.15vw,20px)] lg:text-[clamp(12px,2.1vh,17px)]"
       : variant === "etiqueta"
       ? (destacado
           ? "text-[clamp(7px,0.66vw,10px)] lg:text-[clamp(7px,1.1vh,9px)]"
@@ -463,10 +518,15 @@ function SlotCard({
       ? "text-[clamp(9px,0.74vw,12px)] lg:text-[clamp(8px,1.3vh,10px)]"
       : "text-[clamp(8px,0.66vw,10px)] lg:text-[clamp(7px,1.2vh,9px)]";
 
+  // En el póster el rótulo de línea se lee como "LÍNEA" + nombre.
+  // Si el título ya trae el prefijo, se separa para conservar esa jerarquía.
+  const tituloLinea = slot.titulo?.trim() ?? "";
+  const nombreLinea = tituloLinea.replace(/^l[íi]nea\s+/i, "");
+
   return (
     <article className={`group relative min-w-0 ${anchoWrapper}`}>
       {variant === "linea" && (
-        <div className="mb-1 text-center">
+        <div className="mb-1.5 text-center min-h-[3.1em]">
           {esAdmin && editandoTitulo ? (
             <TitleInput
               value={tituloBorrador}
@@ -479,15 +539,22 @@ function SlotCard({
               className="text-[clamp(11px,0.92vw,15px)]"
             />
           ) : (
-            <p
+            <div
               onClick={() => esAdmin && setEditandoTitulo(true)}
-              className={`uppercase font-black tracking-[0.02em] leading-[1.08] text-[#162a1f] ${titleClass} ${
-                esAdmin ? "cursor-text hover:text-[#a97732]" : ""
-              }`}
+              className={esAdmin ? "cursor-text" : undefined}
               title={esAdmin ? "Clic para editar el título" : slot.titulo}
             >
-              {slot.titulo || (esAdmin ? "Sin título — clic para editar" : "")}
-            </p>
+              <p className="uppercase font-semibold tracking-[0.16em] leading-none text-[clamp(8px,0.66vw,11px)] lg:text-[clamp(8px,1.25vh,10px)] text-[#5d6259]">
+                Línea
+              </p>
+              <p
+                className={`uppercase font-black tracking-[0.03em] leading-[1.05] mt-1 text-[#12301f] ${titleClass} ${
+                  esAdmin ? "hover:text-[#a97732]" : ""
+                }`}
+              >
+                {nombreLinea || (esAdmin ? "Sin título — clic para editar" : "")}
+              </p>
+            </div>
           )}
         </div>
       )}
@@ -497,11 +564,11 @@ function SlotCard({
       >
         {slot.imagenUrl ? (
           <img
-  src={slot.imagenUrl}
-  alt={slot.titulo}
-  loading="lazy"
-  className="block h-full w-full object-contain object-center select-none drop-shadow-[12px_5px_6px_rgba(18,43,30,0.30)]"
-/>
+            src={slot.imagenUrl}
+            alt={slot.titulo}
+            loading="lazy"
+            className="block h-full w-full object-contain object-center select-none drop-shadow-[10px_6px_10px_rgba(18,43,30,0.24)]"
+          />
         ) : (
           <div className="flex h-full w-full items-center justify-center rounded-lg border border-dashed border-[#cfc6b8] bg-white/35 text-[clamp(22px,2vw,34px)] text-[#a39a8d]">
             ◫
@@ -541,7 +608,7 @@ function SlotCard({
       </div>
 
       {variant !== "linea" && (
-        <div className="pt-0.5 text-center">
+        <div className="pt-1 text-center">
           {esAdmin && editandoTitulo ? (
             <TitleInput
               value={tituloBorrador}
@@ -556,7 +623,7 @@ function SlotCard({
           ) : (
             <p
               onClick={() => esAdmin && setEditandoTitulo(true)}
-              className={`uppercase font-black leading-[1.15] text-[#1c2922] line-clamp-2 ${titleClass} ${
+              className={`uppercase font-black leading-[1.2] tracking-[0.05em] text-[#12301f] line-clamp-2 ${titleClass} ${
                 esAdmin ? "cursor-text hover:text-[#a97732]" : ""
               }`}
               title={esAdmin ? "Clic para editar el título" : slot.titulo}
@@ -593,7 +660,7 @@ function TitleInput({
         if (e.key === "Enter") (e.target as HTMLInputElement).blur();
         if (e.key === "Escape") onCancel();
       }}
-      className={`w-full rounded-md border border-[#b78336] bg-white px-2 py-1 text-center font-bold text-[#173725] outline-none ${className}`}
+      className={`w-full rounded-md border border-[#b07f33] bg-white px-2 py-1 text-center font-bold text-[#12301f] outline-none ${className}`}
     />
   );
 }
@@ -619,7 +686,7 @@ function AdminButton({
       title={label}
       aria-label={label}
       className={`flex h-8 w-8 items-center justify-center rounded-full bg-white text-sm font-black shadow-md transition-transform hover:scale-105 disabled:opacity-50 ${
-        danger ? "text-red-600" : "text-[#173725]"
+        danger ? "text-red-600" : "text-[#12301f]"
       }`}
     >
       {children}
@@ -665,7 +732,7 @@ function NuevoSlotCompacto({
         type="button"
         onClick={() => setAbierto(true)}
         title={`Agregar ${label.toLowerCase()}`}
-        className={`flex flex-shrink-0 items-center justify-center rounded-full border border-[#c8954e]/55 bg-[#fffaf2]/90 font-black text-[#a36f2b] hover:border-[#b78336] hover:bg-white transition-colors ${
+        className={`flex flex-shrink-0 items-center justify-center rounded-full border border-[#c8954e]/55 bg-white font-black text-[#a36f2b] hover:border-[#b07f33] hover:bg-[#fffaf2] transition-colors ${
           compact ? "h-5 w-5 text-[12px]" : "h-6 px-2 text-[9px] uppercase gap-1"
         }`}
       >
@@ -689,13 +756,13 @@ function NuevoSlotCompacto({
           }
         }}
         placeholder="Título"
-        className="min-w-0 flex-1 rounded-md border border-[#ddd4c7] bg-white px-2 py-1 text-[9px] font-semibold outline-none focus:border-[#b78336]"
+        className="min-w-0 flex-1 rounded-md border border-[#ddd4c7] bg-white px-2 py-1 text-[9px] font-semibold outline-none focus:border-[#b07f33]"
       />
       <button
         type="button"
         onClick={crear}
         disabled={guardando || !titulo.trim()}
-        className="rounded-md bg-[#173725] px-2 py-1 text-[9px] font-black text-white disabled:opacity-50"
+        className="rounded-md bg-[#1c3f2a] px-2 py-1 text-[9px] font-black text-white disabled:opacity-50"
       >
         {guardando ? "…" : "OK"}
       </button>

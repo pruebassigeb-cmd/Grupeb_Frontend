@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { showAlert } from "../CustomAlert";
 import api from "../../services/api";
 import type { NombreProcesoPapel } from "../../types/papel/seguimientoPapel.types";
 import { NOMBRES_PROCESO_PAPEL } from "../../types/papel/seguimientoPapel.types";
@@ -44,19 +45,16 @@ export default function ModalVerificarOperador({
 }: ModalVerificarOperadorProps) {
   const [correo,  setCorreo]  = useState("");
   const [codigo,  setCodigo]  = useState("");
-  const [error,   setError]   = useState("");
   const [loading, setLoading] = useState(false);
 
   const handleVerificar = async () => {
-    setError("");
-
     if (!correo || !correo.includes("@")) {
-      setError("Ingresa un correo válido");
+      showAlert("Ingresa un correo válido");
       return;
     }
 
     if (!/^\d{5}$/.test(codigo)) {
-      setError("El código debe tener exactamente 5 dígitos");
+      showAlert("El código debe tener exactamente 5 dígitos");
       return;
     }
 
@@ -76,7 +74,7 @@ export default function ModalVerificarOperador({
     } catch (err: any) {
       const mensaje =
         err.response?.data?.error || "Error al verificar credenciales";
-      setError(mensaje);
+      showAlert(mensaje);
     } finally {
       setLoading(false);
     }
@@ -109,10 +107,7 @@ export default function ModalVerificarOperador({
             <input
               type="email"
               value={correo}
-              onChange={(e) => {
-                setCorreo(e.target.value.trim().toLowerCase());
-                setError("");
-              }}
+              onChange={(e) => setCorreo(e.target.value.trim().toLowerCase())}
               placeholder="operador@grupoeb.com"
               className="w-full px-4 py-2 rounded-lg bg-slate-700 text-white border border-slate-600
                          focus:border-blue-500 focus:outline-none transition-colors placeholder-slate-500"
@@ -131,10 +126,7 @@ export default function ModalVerificarOperador({
               value={codigo}
               inputMode="numeric"
               maxLength={5}
-              onChange={(e) => {
-                setCodigo(e.target.value.replace(/\D/g, ""));
-                setError("");
-              }}
+              onChange={(e) => setCodigo(e.target.value.replace(/\D/g, ""))}
               placeholder="5 dígitos"
               className="w-full px-4 py-2 rounded-lg bg-slate-700 text-white border border-slate-600
                          focus:border-blue-500 focus:outline-none transition-colors placeholder-slate-500"
@@ -143,12 +135,6 @@ export default function ModalVerificarOperador({
             />
           </div>
 
-          {/* Error */}
-          {error && (
-            <div className="text-sm text-red-400 bg-red-400/10 border border-red-400/20 rounded-lg px-3 py-2">
-              {error}
-            </div>
-          )}
         </div>
 
         {/* Botones */}

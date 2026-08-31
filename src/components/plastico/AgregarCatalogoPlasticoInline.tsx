@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { showAlert } from "../CustomAlert";
 import type {
   TipoProductoAdminItem,
   MaterialAdminItem,
@@ -77,7 +78,7 @@ export function AgregarTipoProductoInline({
       setNombre("");
       setAbierto(false);
     } catch (e: any) {
-      alert(e.response?.data?.error ?? "Error al agregar el tipo de producto");
+      showAlert(e.response?.data?.error ?? "Error al agregar el tipo de producto");
     } finally {
       setSaving(false);
     }
@@ -146,7 +147,7 @@ export function AgregarMaterialInline({
     const v = parseFloat(valor);
     if (!t) return;
     if (isNaN(v) || v <= 0) {
-      alert("El valor (factor de cálculo) debe ser un número mayor a 0");
+      showAlert("El valor (factor de cálculo) debe ser un número mayor a 0");
       return;
     }
     setSaving(true);
@@ -156,7 +157,7 @@ export function AgregarMaterialInline({
       setValor("");
       setAbierto(false);
     } catch (e: any) {
-      alert(e.response?.data?.error ?? "Error al agregar el material");
+      showAlert(e.response?.data?.error ?? "Error al agregar el material");
     } finally {
       setSaving(false);
     }
@@ -264,11 +265,11 @@ export function AgregarCalibreInline({
       const cb = parseInt(calibreBopp, 10);
       const g = parseFloat(gramos);
       if (isNaN(cb) || cb <= 0) {
-        alert("El calibre BOPP es obligatorio para este tipo");
+        showAlert("El calibre BOPP es obligatorio para este tipo");
         return;
       }
       if (isNaN(g) || g <= 0) {
-        alert("Los gramos son obligatorios para este tipo");
+        showAlert("Los gramos son obligatorios para este tipo");
         return;
       }
       setSaving(true);
@@ -276,7 +277,7 @@ export function AgregarCalibreInline({
         await onAgregar(cb, cb, g);
         limpiar();
       } catch (e: any) {
-        alert(e.response?.data?.error ?? "Error al agregar el calibre");
+        showAlert(e.response?.data?.error ?? "Error al agregar el calibre");
       } finally {
         setSaving(false);
       }
@@ -286,7 +287,7 @@ export function AgregarCalibreInline({
     // Contexto normal: se captura y valida el calibre normal.
     const c = parseInt(calibre, 10);
     if (isNaN(c) || c <= 0) {
-      alert("El calibre debe ser un número entero mayor a 0");
+      showAlert("El calibre debe ser un número entero mayor a 0");
       return;
     }
     setSaving(true);
@@ -294,7 +295,7 @@ export function AgregarCalibreInline({
       await onAgregar(c, null, null);
       limpiar();
     } catch (e: any) {
-      alert(e.response?.data?.error ?? "Error al agregar el calibre");
+      showAlert(e.response?.data?.error ?? "Error al agregar el calibre");
     } finally {
       setSaving(false);
     }
@@ -440,7 +441,7 @@ export function AgregarTroquelInline({
       setNombre("");
       setAbierto(false);
     } catch (e: any) {
-      alert(e.response?.data?.error ?? "Error al agregar el tipo de troquel");
+      showAlert(e.response?.data?.error ?? "Error al agregar el tipo de troquel");
     } finally {
       setSaving(false);
     }
@@ -501,7 +502,7 @@ export function AgregarSuajeInline({
       setNombre("");
       setAbierto(false);
     } catch (e: any) {
-      alert(e.response?.data?.error ?? "Error al agregar el asa/suaje");
+      showAlert(e.response?.data?.error ?? "Error al agregar el asa/suaje");
     } finally {
       setSaving(false);
     }
@@ -564,7 +565,7 @@ export function AgregarCintaSeguridadInline({
       setMedida("");
       setAbierto(false);
     } catch (e: any) {
-      alert(e.response?.data?.error ?? "Error al agregar la cinta de seguridad");
+      showAlert(e.response?.data?.error ?? "Error al agregar la cinta de seguridad");
     } finally {
       setSaving(false);
     }

@@ -191,20 +191,18 @@ function FormularioPrivilegio({
   const [idmodulo, setIdmodulo]       = useState(privilegio?.idmodulo || 0);
   const [descripcion, setDescripcion] = useState(privilegio?.descripcion || "");
   const [guardando, setGuardando]     = useState(false);
-  const [error, setError]             = useState("");
 
   const esEdicion = !!privilegio;
   const claveValida = /^[a-z0-9]+(\.[a-z0-9_]+)+$/.test(clave.trim());
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!nombre.trim()) { setError("El nombre es requerido"); return; }
+    if (!nombre.trim()) { showAlert("El nombre es requerido"); return; }
     if (!esEdicion && !claveValida) {
-      setError("La clave debe tener el formato modulo.recurso.accion (minúsculas, sin espacios)");
+      showAlert("La clave debe tener el formato modulo.recurso.accion (minúsculas, sin espacios)");
       return;
     }
-    if (!idmodulo) { setError("Debe seleccionar un módulo"); return; }
-    setError("");
+    if (!idmodulo) { showAlert("Debe seleccionar un módulo"); return; }
     setGuardando(true);
     try {
       await onSubmit({ privilegio: nombre.trim(), clave: clave.trim(), idmodulo, descripcion: descripcion.trim() });
@@ -252,7 +250,6 @@ function FormularioPrivilegio({
         <textarea value={descripcion} onChange={e => setDescripcion(e.target.value)} rows={2}
           className="w-full px-4 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
       </div>
-      {error && <p className="text-sm text-red-600">{error}</p>}
       {esEdicion && privilegio?.es_sistema && (
         <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
           Este privilegio ya está conectado a pantallas o endpoints del sistema. Cambiar el módulo o la

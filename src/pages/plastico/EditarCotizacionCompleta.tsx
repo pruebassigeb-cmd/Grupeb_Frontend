@@ -1,5 +1,6 @@
 // src/pages/EditarCotizacionCompleta.tsx
 import { useState, useEffect, useRef, useMemo } from "react";
+import { showAlert } from "../../components/CustomAlert";
 import { useLocation, useParams, useNavigate } from "react-router-dom";
 import Dashboard from "../../layouts/Sidebar";
 import { formatMoney } from "../../utils/formatMoney";
@@ -623,7 +624,6 @@ export default function EditarCotizacionCompleta() {
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [errorGuardar, setErrorGuardar] = useState<string | null>(null);
   const [exito, setExito] = useState(false);
   const [cotOrig, setCotOrig] = useState<Cotizacion | null>(null);
   // Moneda elegida en el selector — solo se aplica al guardar (handleGuardar),
@@ -977,13 +977,12 @@ export default function EditarCotizacionCompleta() {
   // ── Guardar ────────────────────────────────────────────────────────────────
   const handleGuardar = async () => {
     if (!cotOrig) return;
-    setErrorGuardar(null);
 
     const productoNuevoSinConfiguracion = productos.find(
       p => !!p._esNuevo && !p._eliminado && !p.nuevo_configuracion_id
     );
     if (productoNuevoSinConfiguracion) {
-      setErrorGuardar(
+      showAlert(
         `No se pudo determinar la configuración de "${productoNuevoSinConfiguracion.nombre}". Vuelve a seleccionarlo con "Cambiar producto".`
       );
       return;
@@ -994,7 +993,7 @@ export default function EditarCotizacionCompleta() {
       p => !p.detalles.some(d => parseSafe(d.cantidad) > 0 && parseSafe(d.precio_total) > 0)
     );
     if (sinCantidadValida) {
-      setErrorGuardar(`El producto "${sinCantidadValida.nombre}" no tiene cantidades o precios válidos.`);
+      showAlert(`El producto "${sinCantidadValida.nombre}" no tiene cantidades o precios válidos.`);
       return;
     }
 
@@ -1053,7 +1052,7 @@ export default function EditarCotizacionCompleta() {
         try {
           await cambiarMonedaCotizacion(cotOrig.no_cotizacion, monedaSeleccionada);
         } catch (errMoneda: any) {
-          setErrorGuardar(
+          showAlert(
             "Los demás cambios se guardaron, pero no se pudo cambiar la moneda: " +
             (errMoneda.response?.data?.error || errMoneda.message)
           );
@@ -1071,7 +1070,7 @@ export default function EditarCotizacionCompleta() {
       setExito(true);
       setTimeout(() => volverAlOrigen(), 1500);
     } catch (e: any) {
-      setErrorGuardar(e.response?.data?.error || e.message || "Error al guardar");
+      showAlert(e.response?.data?.error || e.message || "Error al guardar");
     } finally {
       setGuardando(false);
     }
@@ -1191,15 +1190,6 @@ export default function EditarCotizacionCompleta() {
         </div>
       )}
 
-      {errorGuardar && (
-        <div className="mb-5 p-4 bg-red-50 border border-red-200 rounded-xl flex items-start gap-3">
-          <svg className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-              d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-          </svg>
-          <p className="text-red-700 text-sm">{errorGuardar}</p>
-        </div>
-      )}
 
       <div className="space-y-5">
         {(() => {

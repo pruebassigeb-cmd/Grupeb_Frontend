@@ -675,13 +675,20 @@ function CantidadPedido({ pedido }: { pedido: PedidoSeguimiento }) {
   );
 }
 
+// El encabezado de la tabla queda fijo (sticky) dentro del contenedor que
+// hace scroll: al bajar por la lista los títulos de las columnas siguen
+// visibles. El fondo va en cada <th> y no solo en el <thead> porque con
+// border-collapse el navegador no pinta el fondo del thead, y las filas se
+// verían por debajo del encabezado.
 const renderThead = (oscuro = false) => (
-  <thead className={oscuro ? "bg-gray-900 text-white" : "bg-gray-100 border-b border-gray-200"}>
+  <thead className={`sticky top-0 z-20 ${oscuro ? "bg-gray-900 text-white" : "bg-gray-100 border-b border-gray-200"}`}>
     <tr>
       {COLUMNAS.map(h => (
         <th key={h}
           title={PROCESOS_PAPEL.find(proceso => proceso.encabezado === h)?.titulo}
-          className={`px-2 py-2 text-xs font-semibold uppercase tracking-wider ${oscuro ? "text-white" : "text-gray-700"
+          className={`sticky top-0 z-20 px-2 py-2 text-xs font-semibold uppercase tracking-wider ${oscuro
+            ? "bg-gray-900 text-white"
+            : "bg-gray-100 text-gray-700 shadow-[inset_0_-1px_0_0_rgb(229,231,235)]"
             } ${COLS_CENTRADAS.has(h) ? "text-center" : "text-left"}`}>
           {h}
         </th>
@@ -814,6 +821,17 @@ export default function Seguimiento() {
   // también", es un filtro aparte, para poder auditar/consultar lo ya
   // cerrado sin que se mezcle con lo que sigue en curso.
   const [soloFinalizados, setSoloFinalizados] = useState(false);
+
+  // ── Alto disponible para el cuerpo de la tabla ─────────────────────────
+  // El encabezado de la página (título, buscador, filtros, leyenda y la
+  // barra de "Lista de Ordenes") se queda fijo y solo se desplazan las
+  // filas. En lugar de adivinar cuánto miden esos bloques con un calc()
+  // fijo, se mide en qué altura empieza el contenedor de la tabla y se le
+  // da todo el espacio que queda hasta abajo de la ventana: así el ajuste
+  // aguanta cambios en el encabezado, filtros que se acomodan en dos
+  // renglones y pantallas de cualquier tamaño.
+  const contenedorTablaRef = useRef<HTMLDivElement | null>(null);
+  const [altoTabla, setAltoTabla] = useState<number | null>(null);
 
   const [modalProceso, setModalProceso] = useState<{ pedido: PedidoSeguimiento; nombreProceso: string } | null>(null);
   const [modalAnticipo, setModalAnticipo] = useState<{ venta: Venta; metodos: MetodoPago[] } | null>(null);
@@ -1053,6 +1071,22 @@ export default function Seguimiento() {
   };
 
   useEffect(() => { cargarCuentasPorCobrar(); }, []);
+
+  // Mide el espacio que queda debajo del encabezado para dárselo al cuerpo
+  // de la tabla (ver comentario en la declaración de `altoTabla`). Se
+  // recalcula al cambiar el tamaño de la ventana y cada vez que algo del
+  // encabezado puede haber cambiado de alto (filtros, resultados, vista).
+  useEffect(() => {
+    const medir = () => {
+      const el = contenedorTablaRef.current;
+      if (!el) return;
+      const top = el.getBoundingClientRect().top;
+      setAltoTabla(Math.max(240, Math.round(window.innerHeight - top - 24)));
+    };
+    medir();
+    window.addEventListener("resize", medir);
+    return () => window.removeEventListener("resize", medir);
+  }, [cargaInicial, pantallaCompleta, busqueda, filtroTipo, soloFinalizados, error]);
 
   const abrirDiseno = (pedido: PedidoSeguimiento) => {
     setModalDiseno({
@@ -1653,7 +1687,7 @@ export default function Seguimiento() {
           Cerrar
         </button>
         <div className="bg-white rounded-lg shadow overflow-hidden">
-          <div className="overflow-x-auto">
+          <div className="overflow-auto max-h-[calc(100vh-9rem)]">
             <table className="w-full">
               {renderThead(true)}
               <tbody>{pedidosFiltrados.map((p, i) => renderFila(p, true, i))}</tbody>
@@ -1828,7 +1862,13 @@ export default function Seguimiento() {
           </div>
         </div>
 
-        <div className="overflow-x-auto">
+        {/* Solo este contenedor hace scroll: el título, los filtros, la
+            leyenda y la barra de "Lista de Ordenes" quedan fijos arriba y
+            únicamente se desplazan las filas de la tabla. */}
+        <div
+          ref={contenedorTablaRef}
+          style={altoTabla ? { maxHeight: altoTabla } : undefined}
+          className="overflow-auto max-h-[calc(100vh-26rem)] min-h-[16rem]">
           <table className="w-full">
             {renderThead()}
             <tbody>{pedidosPagina.map((p, i) => renderFila(p, false, inicio + i))}</tbody>

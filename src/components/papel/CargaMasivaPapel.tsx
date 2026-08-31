@@ -1,5 +1,6 @@
 // src/components/papel/CargaMasivaPapel.tsx
 import { useState, useRef } from "react";
+import { showAlert } from "../CustomAlert";
 import {
   subirCargaMasivaPapel,
   descargarReporteCatalogos,
@@ -13,13 +14,11 @@ export default function CargaMasivaPapel() {
   const [archivo, setArchivo] = useState<File | null>(null);
   const [cargando, setCargando] = useState(false);
   const [resultado, setResultado] = useState<RespuestaCargaMasiva | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const reset = () => {
     setArchivo(null);
     setResultado(null);
-    setError(null);
     if (inputRef.current) inputRef.current.value = "";
   };
 
@@ -31,12 +30,11 @@ export default function CargaMasivaPapel() {
   const handleSubir = async () => {
     if (!archivo) return;
     setCargando(true);
-    setError(null);
     try {
       const data = await subirCargaMasivaPapel(archivo);
       setResultado(data);
     } catch (e: any) {
-      setError(e.message ?? "Error al procesar el archivo");
+      showAlert(e.message ?? "Error al procesar el archivo");
     } finally {
       setCargando(false);
     }
@@ -47,7 +45,7 @@ export default function CargaMasivaPapel() {
     try {
       await descargarReporteCatalogos(resultado.catalogosNuevos);
     } catch (e: any) {
-      alert(e.message ?? "Error al descargar el reporte");
+      showAlert(e.message ?? "Error al descargar el reporte");
     }
   };
 
@@ -99,12 +97,6 @@ export default function CargaMasivaPapel() {
                       className="w-full text-sm text-gray-700 border border-gray-300 rounded-lg px-3 py-2 cursor-pointer"
                     />
                   </div>
-
-                  {error && (
-                    <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
-                      {error}
-                    </div>
-                  )}
 
                   <button
                     type="button"

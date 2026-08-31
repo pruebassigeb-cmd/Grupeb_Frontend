@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { showAlert } from "../CustomAlert";
 import { getProductoPapelDetalle } from "../../services/papel/papelCotizacionService";
 import type { ProductoPapelDetalleCotizacion } from "../../services/papel/papelCotizacionService";
 import type { ProductoCotizacion } from "../../types/cotizaciones.types";
@@ -266,7 +267,6 @@ export default function ModalMaquinariaPedidoPapel({
   const [detalles, setDetalles] = useState<Record<number, ProductoPapelDetalleCotizacion>>({});
   const [selecciones, setSelecciones] = useState<Record<number, MaquinariaSeleccionadaPedidoPapel>>({});
   const [cargando, setCargando] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
   useAutoguardarBorrador(claveBorrador, selecciones, productosPapel.length > 0);
 
@@ -293,7 +293,6 @@ export default function ModalMaquinariaPedidoPapel({
   useEffect(() => {
     let activo = true;
     setCargando(true);
-    setError(null);
 
     Promise.all(
       productosPapel.map(async (producto) => {
@@ -320,7 +319,7 @@ export default function ModalMaquinariaPedidoPapel({
       })
       .catch(() => {
         if (activo) {
-          setError("No se pudieron cargar las máquinas de los productos.");
+          showAlert("No se pudieron cargar las máquinas de los productos.");
         }
       })
       .finally(() => {
@@ -373,7 +372,6 @@ export default function ModalMaquinariaPedidoPapel({
     proceso: string,
     maquinaId: string,
   ) => {
-    setError(null);
     const opciones = opcionesParaProceso(detalles[idsolicitudProducto], proceso);
     const maquina = opciones.find((item) => item.id === Number(maquinaId)) ?? null;
 
@@ -395,7 +393,7 @@ export default function ModalMaquinariaPedidoPapel({
       for (const proceso of procesosProducto(p).filter((proc) => proc.aplica)) {
         const opciones = opcionesParaProceso(detalle, proceso.key);
         if (opciones.length > 0 && !selecciones[id]?.[proceso.key]) {
-          setError(
+          showAlert(
             `Selecciona la máquina de ${proceso.label} para "${p.nombre}".`,
           );
           return;
@@ -439,11 +437,6 @@ export default function ModalMaquinariaPedidoPapel({
             </p>
           )}
 
-          {error && (
-            <div className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-              {error}
-            </div>
-          )}
 
           {!cargando && productosPapel.length === 0 && (
             <div className="rounded-lg border border-gray-200 bg-white p-6 text-center text-sm text-gray-500">

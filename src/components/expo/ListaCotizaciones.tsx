@@ -1,4 +1,6 @@
 import { useState, useEffect } from "react";
+import { showAlert } from "../CustomAlert";
+import { showConfirm } from "../CustomConfirm";
 import { generarPdfCotizacionExpo, cotizacionBackDataAPdfParams } from "../../utils/expo/generarPdfCotizacionExpo";
 import { construirPayloadPdfPedidoDesdeBackData } from "../../utils/expo/construirPayloadPdfPedidoExpo";
 import { generarPdfPedido } from "../../utils/generarPdfPedido";
@@ -538,13 +540,13 @@ export default function ListaCotizaciones({
     const sel = selecciones[cot.id] || {};
     const haySel = Object.values(sel).some(v => v !== null && v !== undefined);
     if (!haySel) {
-      alert("Selecciona al menos una cantidad en algún producto para aprobar el pedido.");
+      showAlert("Selecciona al menos una cantidad en algún producto para aprobar el pedido.");
       return;
     }
     const backData = (cot as any)._backData;
     const clienteId = backData?.cliente_id;
     if (!clienteId) {
-      alert("No se encontró el cliente asociado a esta cotización.");
+      showAlert("No se encontró el cliente asociado a esta cotización.");
       return;
     }
     setCotEnProceso(cot);
@@ -555,7 +557,7 @@ export default function ListaCotizaciones({
       setClienteParaEditar(cliente);
     } catch (e) {
       console.error("No se pudo cargar el cliente:", e);
-      alert("No se pudieron cargar los datos del cliente.");
+      showAlert("No se pudieron cargar los datos del cliente.");
       cancelarTodoElFlujo();
     } finally {
       setCargandoCliente(false);
@@ -595,14 +597,14 @@ export default function ListaCotizaciones({
         // Los datos del cliente ya quedaron en la cola y se sincronizan
         // solos, pero aprobar la cotización (el siguiente paso) sí necesita
         // conexión — no tiene caso continuar hacia ahí todavía.
-        alert(
+        showAlert(
           "Sin conexión: los datos del cliente se guardaron y se sincronizarán automáticamente. Para aprobar la cotización necesitas conexión — intenta de nuevo cuando vuelva la señal.",
         );
         setClienteParaEditar(null);
         return;
       }
       console.error("No se pudo guardar el cliente:", e);
-      alert(e?.response?.data?.error || "No se pudieron guardar los datos del cliente.");
+      showAlert(e?.response?.data?.error || "No se pudieron guardar los datos del cliente.");
     } finally {
       setGuardandoCliente(false);
     }
@@ -648,7 +650,7 @@ export default function ListaCotizaciones({
       const data = await getCotizacionesExpo();
       const backDataFresco = data.find(c => c.no_cotizacion === cot.folio);
       if (!backDataFresco) {
-        alert("El pedido se aprobó, pero no se pudo recuperar para generar su PDF. Puedes generarlo manualmente desde la fila del pedido.");
+        showAlert("El pedido se aprobó, pero no se pudo recuperar para generar su PDF. Puedes generarlo manualmente desde la fila del pedido.");
         return;
       }
 
@@ -722,7 +724,7 @@ export default function ListaCotizaciones({
         onRefresh();
         setExpandidoId(null);
         cancelarTodoElFlujo();
-        alert(
+        showAlert(
           opciones.correo
             ? "Sin conexión: la aprobación se guardó y se aplicará sola cuando vuelva la señal. El correo del pedido se enviará automáticamente en cuanto se sincronice."
             : "Sin conexión: la aprobación se guardó y se aplicará sola cuando vuelva la señal."
@@ -730,7 +732,7 @@ export default function ListaCotizaciones({
         return;
       }
       console.error("❌ Error en aprobación/PDF/correo:", e);
-      alert(e?.response?.data?.error || "Ocurrió un error al aprobar, generar el PDF o enviar el correo.");
+      showAlert(e?.response?.data?.error || "Ocurrió un error al aprobar, generar el PDF o enviar el correo.");
     } finally {
       setEnviandoAprobacion(false);
     }
@@ -738,7 +740,7 @@ export default function ListaCotizaciones({
 
   const handleEliminar = async (cot: CotizacionGuardada) => {
     if (!cot.folio) return;
-    if (!confirm(`¿Eliminar la cotización ${cot.folio}?`)) return;
+    if (!(await showConfirm(`¿Eliminar la cotización ${cot.folio}?`))) return;
     setEliminando(cot.id);
     try {
       await onEliminar(cot.folio);
@@ -789,7 +791,7 @@ export default function ListaCotizaciones({
       );
     } catch (e) {
       console.error("❌ PDF cotización expo:", e);
-      alert("No se pudo generar/enviar el PDF de la cotización.");
+      showAlert("No se pudo generar/enviar el PDF de la cotización.");
     } finally {
       setGenerandoPdf(null);
     }
@@ -827,7 +829,7 @@ export default function ListaCotizaciones({
       );
     } catch (e) {
       console.error("❌ PDF Pedido expo:", e);
-      alert("No se pudo generar el PDF del pedido.");
+      showAlert("No se pudo generar el PDF del pedido.");
     } finally {
       setGenerandoPdf(null);
     }

@@ -50,7 +50,6 @@ export default function Pedidos() {
   const [filtroMaterial, setFiltroMaterial] = useState<"todos" | "plastico" | "papel">("todos");
   const [modalOpen, setModalOpen] = useState(false);
   const [guardando, setGuardando] = useState(false);
-  const [errorGuardar, setErrorGuardar] = useState<string | null>(null);
   const [catalogos, setCatalogos] = useState<CatalogosPlastico>({ tiposProducto: [], materiales: [], calibres: [] });
   const [cargandoCatalogos, setCargandoCatalogos] = useState(false);
   const [errorCatalogos, setErrorCatalogos] = useState("");
@@ -341,7 +340,6 @@ export default function Pedidos() {
 
   const handleSubmit = async (datos: any) => {
     setGuardando(true);
-    setErrorGuardar(null);
     try {
       const respuesta = await crearCotizacion({ ...datos, tipo: "pedido" });
       const noPedido = respuesta.no_pedido ?? "";
@@ -363,7 +361,7 @@ export default function Pedidos() {
 
     } catch (e: any) {
       console.error("❌ Error al guardar pedido:", e);
-      setErrorGuardar(e.response?.data?.error || e.message || "Error al guardar");
+      showAlert(e.response?.data?.error || e.message || "Error al guardar");
     } finally { setGuardando(false); }
   };
 
@@ -654,7 +652,7 @@ export default function Pedidos() {
 
         <div className="flex items-center gap-3">
           <button
-            onClick={() => { setErrorGuardar(null); setModalOpen(true); }}
+            onClick={() => setModalOpen(true)}
             className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-6 rounded-lg shadow transition">
             + Nuevo Pedido
           </button>
@@ -938,11 +936,6 @@ export default function Pedidos() {
           </div>
         ) : (
           <div>
-            {errorGuardar && (
-              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
-                <p className="text-red-700 text-sm">❌ {errorGuardar}</p>
-              </div>
-            )}
             {guardando && (
               <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-center gap-3">
                 <div className="animate-spin rounded-full h-5 w-5 border-2 border-blue-600 border-t-transparent" />

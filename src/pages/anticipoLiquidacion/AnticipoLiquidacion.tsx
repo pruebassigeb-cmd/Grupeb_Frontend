@@ -500,7 +500,6 @@ export function EditarAntLiqReal({
   const [fechaPago,       setFechaPago]       = useState(borradorInicial?.fechaPago ?? "");
   const [guardando,       setGuardando]       = useState(false);
   const [eliminando,      setEliminando]      = useState<number | null>(null);
-  const [error,           setError]           = useState<string | null>(null);
   const [descargandoHist, setDescargandoHist] = useState(false);
   const [autorizando,     setAutorizando]     = useState(false);
   const [alertaPdf,       setAlertaPdf]       = useState<{ visible: boolean; folios: string[] }>({
@@ -581,19 +580,18 @@ export function EditarAntLiqReal({
   const handleRegistrarPago = async () => {
     const montoNum = parseFloat(monto);
     if (!monto || isNaN(montoNum) || montoNum <= 0) {
-      setError("Ingresa un monto válido mayor a 0"); return;
+      showAlert("Ingresa un monto válido mayor a 0"); return;
     }
     if (requiereConversionPago && (!tipoCambioAplicadoNum || tipoCambioAplicadoNum <= 0)) {
-      setError("No hay tipo de cambio vigente disponible para registrar el pago en la moneda contraria"); return;
+      showAlert("No hay tipo de cambio vigente disponible para registrar el pago en la moneda contraria"); return;
     }
     if (montoConvertido == null) {
-      setError("No se pudo calcular el equivalente del pago"); return;
+      showAlert("No se pudo calcular el equivalente del pago"); return;
     }
     if (montoConvertido > saldo + 0.01) {
-      setError(`El monto excede el saldo pendiente (${formatMoney(saldo, monedaVenta)})`); return;
+      showAlert(`El monto excede el saldo pendiente (${formatMoney(saldo, monedaVenta)})`); return;
     }
     setGuardando(true);
-    setError(null);
     try {
       const response = await registrarPago(venta.idventas, {
         metodoPagoId,
@@ -620,7 +618,7 @@ export function EditarAntLiqReal({
         if (foliosDescargados.length > 0) setAlertaPdf({ visible: true, folios: foliosDescargados });
       }
     } catch (e: any) {
-      setError(e.response?.data?.error || "Error al registrar pago");
+      showAlert(e.response?.data?.error || "Error al registrar pago");
     } finally { setGuardando(false); }
   };
 
@@ -632,7 +630,6 @@ export function EditarAntLiqReal({
     )) return;
 
     setAutorizando(true);
-    setError(null);
     try {
       const response = await autorizarAnticipoCredito(venta.idventas);
       await recargar();
@@ -647,7 +644,7 @@ export function EditarAntLiqReal({
         if (foliosDescargados.length > 0) setAlertaPdf({ visible: true, folios: foliosDescargados });
       }
     } catch (e: any) {
-      setError(e.response?.data?.error || "Error al autorizar anticipo por crédito");
+      showAlert(e.response?.data?.error || "Error al autorizar anticipo por crédito");
     } finally { setAutorizando(false); }
   };
 
@@ -916,12 +913,6 @@ export function EditarAntLiqReal({
               ? "Registrar pago — Anticipo a crédito pendiente"
               : "Registrar pago"}
           </h4>
-
-          {error && (
-            <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
-              {error}
-            </div>
-          )}
 
           <div className="grid grid-cols-2 gap-3 mb-3">
             {/* Monto */}

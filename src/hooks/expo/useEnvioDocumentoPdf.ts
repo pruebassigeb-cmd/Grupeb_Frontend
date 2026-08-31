@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { enviarCorreoDocumento, type TipoDocumentoCorreo } from "../../services/expo/correoService";
 import { OperacionEncoladaError } from "../../offline/outbox";
+import { showAlert } from "../../components/CustomAlert";
 
 interface DatosDocumento {
   tipo: TipoDocumentoCorreo;
@@ -74,11 +75,11 @@ const confirmarEnvioCorreo = async (correoDestino: string) => {
     if (e instanceof OperacionEncoladaError) {
       setModalCorreoAbierto(false);
       setContextoPendiente(null);
-      alert("Sin conexión: el correo se guardó y se enviará automáticamente cuando vuelva la señal.");
+      showAlert("Sin conexión: el correo se guardó y se enviará automáticamente cuando vuelva la señal.", "info");
       return;
     }
     console.error("❌ Error al enviar correo:", e);
-    alert(e?.response?.data?.error || "No se pudo enviar el correo.");
+    showAlert(e?.response?.data?.error || "No se pudo enviar el correo.");
   } finally {
     setEnviandoCorreo(false);
   }

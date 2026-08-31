@@ -64,6 +64,24 @@ export interface MaterialEntry {
   rendimiento: string;
   corte: string;
   hojeado: Hojeado;
+
+  // NUEVO (Fase 3, productos especiales): a qué componente se asigna este
+  // material. Se guarda como referencia local (ComponentePapel.id) para que
+  // el formulario pueda resolverla sin ids reales todavía; mapFormToApi la
+  // traduce a "componente_client_key" (String(id)) al armar el payload.
+  // null/undefined = material a nivel producto (caso normal, sin cambios).
+  idComponenteAsignado?: number | null;
+
+  // NUEVO: medidas y método de preparación propios del material — antes
+  // solo existían a nivel producto_papel; ahora detalle_material_papel
+  // también los admite (un producto especial puede tener materiales con
+  // medidas distintas a las del producto padre, p. ej. cada bobina de un
+  // componente).
+  ancho: string;
+  fuelle: string;
+  altura: string;
+  medida: string;
+  metodoPreparacion: string; // "" | "hojeadora" | "guillotina"
 }
 
 export interface GrupoPapel {
@@ -162,6 +180,48 @@ export interface Maquinaria {
   [key: string]: number[] | string[];
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// COMPONENTES (Fase 2/3: productos especiales)
+// ═══════════════════════════════════════════════════════════════════════════
+// Un producto especial se arma con N componentes (ver
+// modulo-productos-especiales.html, sección "Modelo de datos"). Cada
+// componente tiene su propia ruta de procesos y, opcionalmente, su propio
+// suaje/acabados/maquinaria — mismo shape que a nivel producto, solo que
+// aplicado a este componente en vez de al producto completo.
+//
+// "id" es una clave puramente local (nunca se lee del backend tal cual);
+// mapFormToApi la usa como "client_key" para que el backend pueda resolver,
+// dentro de una sola petición, qué materiales y qué procesos pertenecen a
+// un componente que todavía no tiene idcomponente_papel real (ver el
+// comentario sobre client_key en producto_papel.controller.ts).
+export interface ComponenteProceso {
+  id: number;
+  idcomponente_papel_proceso?: number | null;
+  idproceso_cat: number | null;
+  procesoNombre: string;
+  orden: number;
+  observaciones: string;
+
+  // Qué material(es) trabaja este proceso, por MaterialEntry.id (clave
+  // local) — mapFormToApi las traduce a iddetalle_material (si el material
+  // ya existe) o a su client_key (si es nuevo), tal como espera
+  // upsertComponenteProcesos en el backend.
+  materiales: number[];
+}
+
+export interface ComponentePapel {
+  id: number;
+  idcomponente_papel?: number | null;
+  tipo: "unica" | "inicio" | "union";
+  orden: number | null;
+  nombre: string;
+  esUnion: boolean;
+  procesos: ComponenteProceso[];
+  suaje: Suaje;
+  acabados: Acabados;
+  maquinaria: Maquinaria;
+}
+
 export interface ProductoPapelForm {
   idcat_tipo_producto_papel: number | null;
   tipoProductoNombre: string;
@@ -184,6 +244,16 @@ export interface ProductoPapelForm {
   // Resultado calculado en el frontend y guardado en
   // producto_papel.costo_laminado.
   costoLaminado: number | null;
+
+  // NUEVO (Fase 2/3): productos especiales. Con esEspecial = true, el
+  // producto se arma con N componentes (cada uno con su propia ruta de
+  // procesos y, opcionalmente, su propio suaje/acabados/maquinaria) en vez
+  // del suaje/acabados/maquinaria "sueltos" de arriba — ver
+  // modulo-productos-especiales.html, sección "Modelo de datos". Con
+  // esEspecial = false (caso normal, default) componentes se queda vacío y
+  // nada de este bloque cambia el comportamiento existente.
+  esEspecial: boolean;
+  componentes: ComponentePapel[];
 }
 
 export interface ProductoPapelListItem {
@@ -203,6 +273,12 @@ export interface ProductoPapelListItem {
   origen_expo: boolean;
   completitud_pct: number;
   costo_laminado: number | null;
+
+  // NUEVO (reestructura de especiales, Fase 5): antes ningún endpoint de
+  // listado exponía esto — hacía falta para que Papel.tsx y ProductoEspecial.tsx
+  // puedan mostrar cada quien solo lo suyo a partir del mismo GET
+  // /productos-papel. Ver getProductosPapel en producto_papel.controller.ts.
+  es_especial: boolean;
 }
 
 export const newHojeado = (): Hojeado => ({
@@ -224,6 +300,12 @@ export const newMaterial = (): MaterialEntry => ({
   rendimiento: "",
   corte: "",
   hojeado: newHojeado(),
+  idComponenteAsignado: null,
+  ancho: "",
+  fuelle: "",
+  altura: "",
+  medida: "",
+  metodoPreparacion: "",
 });
 
 export const newGrupo = (): GrupoPapel => ({
@@ -311,6 +393,27 @@ export const newMaquinaria = (): Maquinaria => ({
   desbarbe_nombres: [],
 });
 
+export const newComponenteProceso = (): ComponenteProceso => ({
+  id: Date.now() + Math.random(),
+  idproceso_cat: null,
+  procesoNombre: "",
+  orden: 1,
+  observaciones: "",
+  materiales: [],
+});
+
+export const newComponente = (): ComponentePapel => ({
+  id: Date.now() + Math.random(),
+  tipo: "unica",
+  orden: 1,
+  nombre: "",
+  esUnion: false,
+  procesos: [],
+  suaje: newSuaje(),
+  acabados: newAcabados(),
+  maquinaria: newMaquinaria(),
+});
+
 export const newProductoForm = (): ProductoPapelForm => ({
   idcat_tipo_producto_papel: null,
   tipoProductoNombre: "",
@@ -327,4 +430,6 @@ export const newProductoForm = (): ProductoPapelForm => ({
   idcat_tamano_producto: null,
   tamanoProdNombre: "",
   costoLaminado: null,
+  esEspecial: false,
+  componentes: [],
 });
