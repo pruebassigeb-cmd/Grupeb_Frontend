@@ -7,6 +7,11 @@ export interface ProductoPapelBusqueda {
   primer_tipo_papel?: string | null;
   primer_calibre?: string | null;
   origen_expo?: boolean;
+  // NUEVO — integración de productos especiales en cotización/pedido.
+  // Sin esto, el filtro `p.es_especial` en FormularioProductoPapel.tsx /
+  // EditarCotizacionPapelCompleta.tsx / EditarPedidoPapel.tsx compila igual
+  // (JS no valida tipos en runtime) pero TypeScript lo marca como error.
+  es_especial?: boolean;
 }
 
 export interface GrupoOpcion {
@@ -72,7 +77,9 @@ export type MaquinariaSeleccionadaPapel = Record<
 
 export interface ProductoPapelCotizacion {
   tipoCotizacion: "papel";
-  tipo_material?: "papel";
+  // Los especiales guardan tipo_material="especial", no "papel"
+  // (Jose, 2026-09-03).
+  tipo_material?: "papel" | "especial";
   idproducto_papel: number;
   nombre: string;
   descripcion_papel: string | null;
@@ -81,6 +88,14 @@ export interface ProductoPapelCotizacion {
   idgrupo_papel: number | null;
   grupo_descripcion: string;
   precio_sugerido: number | null;
+
+  // NUEVO — integración de productos especiales en cotización/pedido.
+  // La marca FormularioProductoPapel.tsx (soloEspeciales) al agregar la
+  // línea, y el backend la devuelve (papel_es_especial) al recargar una
+  // cotización/pedido ya guardado — ver cotizacionPapel.helper.ts /
+  // pedidos.controller.ts. Opcional para no romper líneas ya guardadas
+  // antes de este cambio (llegarían sin el campo).
+  es_especial?: boolean;
 
   tintasId: number | null;
   tintas: number;

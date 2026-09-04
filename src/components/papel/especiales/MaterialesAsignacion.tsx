@@ -13,7 +13,7 @@
 
 import { useState } from "react";
 import type React from "react";
-import type { CatItem, ComponentePapel, MaterialEntry } from "../../../types/papel/papel.types";
+import type { CatItem, CatKey, ComponentePapel, MaterialEntry } from "../../../types/papel/papel.types";
 import { newComponente, newComponenteProceso, newMaterial } from "../../../types/papel/papel.types";
 import type { ProcesoCatOpcion } from "../../../services/papel/papel.service";
 import {
@@ -21,6 +21,15 @@ import {
   IcoCadena, IcoRamificar, IcoLapiz, IcoBote, IcoPalomita,
   colorMaterial, paletaOP,
 } from "./disenoEspeciales";
+// Mismo combo "elige o agrega" que ya usa el alta de papel/plástico
+// normal (FormularioProductoPapelAlta.tsx) -- especiales vivía sin esto,
+// con un <select> plano que obligaba a ir primero a Catálogos si el tipo
+// de papel o el calibre que se necesitaba todavía no existía (Jose,
+// 2026-09-02: "faltó que en los desplegables se puedan agregar en caso
+// de que no tenga algún dato, tal como sucede en dar de alta productos
+// de papel y plástico"). Mismo componente, mismo hook addItem -- no se
+// reinventa nada, solo se conecta aquí también.
+import SelConAlta from "../SelConAlta";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ETIQUETAS DE COMPONENTE
@@ -60,6 +69,10 @@ const ETIQUETA_PREPARACION: Record<string, string> = {
   "": "—",
   hojeadora: "Hojeado",
   guillotina: "Guillotina",
+  // NUEVO (Jose, 2026-09-02): el material ya llega al tamaño exacto -- lo
+  // compran así o lo entrega quien pidió el producto -- así que no pasa por
+  // Hojeado ni Guillotina (ver filtrarPorPreparacion en RutaProcesos.tsx).
+  proveedor: "Proveedor (ya viene al tamaño)",
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -112,6 +125,7 @@ export default function MaterialesAsignacion({
   catTipoPapel,
   catCalibre,
   procesosCat,
+  addItem,
 }: {
   materiales: MaterialEntry[];
   onUpdateMateriales: (materiales: MaterialEntry[]) => void;
@@ -120,6 +134,11 @@ export default function MaterialesAsignacion({
   catTipoPapel: CatItem[];
   catCalibre: CatItem[];
   procesosCat: ProcesoCatOpcion[];
+  // Mismo addItem de useCatalogosPapel() que ya usa el resto del alta —
+  // FormularioProductoEspecial.tsx ya lo tenía (se lo pasaba solo a
+  // RutaProcesos), aquí solo se recibe para conectarlo también a Tipo de
+  // papel y Calibre.
+  addItem: (key: CatKey, nombre: string) => Promise<unknown>;
 }) {
   const [editandoId, setEditandoId] = useState<number | null>(null);
 
@@ -189,19 +208,16 @@ export default function MaterialesAsignacion({
     const lista: ComponentePapel[] = inicios.length > 0
       ? inicios
       : [{ ...newComponente(), tipo: "inicio", orden: 1 }];
-    // La orden de unión arranca SIEMPRE con el Litolaminado: es el proceso
-    // donde físicamente se juntan las piezas de las órdenes de inicio, así
-    // que se siembra solo (Jose). Si por lo que sea no está en el catálogo,
-    // la orden se crea vacía y el usuario la arma a mano.
-    const lito = procesosCat.find(p => p.tabla === "litolaminado_papel");
-    const primerProceso = lito
-      ? [{
-          ...newComponenteProceso(),
-          idproceso_cat: lito.idproceso_cat,
-          procesoNombre: lito.nombre_proceso,
-          orden: 1,
-        }]
-      : [];
+    // La orden de unión arranca SIN ningún proceso predeterminado (Jose,
+    // 2026-09-02): antes se sembraba sola con Litolaminado, pero eso solo
+    // tiene sentido cuando la unión de verdad fusiona material propio —
+    // aquí, al crearse, la unión todavía no tiene ningún material asignado
+    // (los materiales solo se reparten entre las OP de inicio, ver abajo).
+    // Mientras no haya un producto/material asignado a la OP de unión, lo
+    // correcto es dejarla sin proceso predeterminado y que el usuario arme
+    // la ruta a mano -- RutaProcesos ya avisa en su panel "Reglas" si más
+    // adelante le asignan material y falta Litolaminado, o si lo agregan
+    // sin haberle asignado material.
     const union: ComponentePapel = {
       ...newComponente(),
       id: Date.now() + lista.length + 1,
@@ -209,7 +225,7 @@ export default function MaterialesAsignacion({
       nombre: "",
       orden: lista.length + 1,
       esUnion: true,
-      procesos: primerProceso,
+      procesos: [],
     };
     onUpdateComponentes([...lista, union]);
     onUpdateMateriales(materiales.map((m, i) => ({ ...m, idComponenteAsignado: lista[i]?.id ?? null })));
@@ -243,7 +259,26 @@ export default function MaterialesAsignacion({
     const nuevosMateriales = materiales.map(m =>
       m.id === materialId ? { ...m, idComponenteAsignado: nuevoIdComponente } : m
     );
-    onUpdateComponentes(limpiarComponentesHuerfanos(nuevosMateriales, componentes));
+    // CORREGIDO (Jose, 2026-09-02: "en cuanto le doy a la palomita... me
+    // sigue diciendo describe esta orden" -- y "pasa lo mismo en OP de
+    // unión"): cualquier OP que nace vacía -- la OP INICIO 1 que crea
+    // elegirIndependientes() cuando todavía no hay material, o la OP de
+    // unión, que SIEMPRE nace sin nombre (elegirIndependientes la crea con
+    // `nombre: ""` a propósito, porque normalmente no tiene material propio)
+    // -- se queda sin nombre para siempre si el material se le asigna
+    // DESPUÉS desde este dropdown, porque eso solo tocaba
+    // idComponenteAsignado. Aquí se autoetiqueta la OP con el nombre del
+    // material en cuanto se le asigna uno -- sea de inicio o de unión --
+    // igual que ya hace "＋ Nueva OP de inicio", pero solo si la OP todavía
+    // no tiene nombre propio (uno que el usuario ya haya escrito a mano en
+    // "Describe esta orden" nunca se pisa).
+    const materialAsignado = materiales.find(m => m.id === materialId);
+    const componentesActualizados = componentes.map(c =>
+      c.id === nuevoIdComponente && !c.nombre.trim() && materialAsignado
+        ? { ...c, nombre: nombreMaterial(materialAsignado) }
+        : c
+    );
+    onUpdateComponentes(limpiarComponentesHuerfanos(nuevosMateriales, componentesActualizados));
     onUpdateMateriales(nuevosMateriales);
   };
 
@@ -274,9 +309,15 @@ export default function MaterialesAsignacion({
           subtitulo="Agrega todos los materiales o componentes que intervienen en el producto. Las medidas de esta tabla son las de cada material, no las del producto."
         />
 
+        {/* overflow:hidden (solo para recortar las esquinas de la tabla al
+            border-radius) se quitó a propósito -- estaba recortando también
+            el desplegable de SelConAlta cuando se abre en el último
+            renglón, dejándolo cortado a la mitad (Jose). El precio es que
+            las esquinas de la cabecera ya no se ven perfectamente
+            redondeadas -- mucho menor problema que un desplegable inservible. */}
         <table style={{
           width: "100%", borderCollapse: "separate", borderSpacing: 0,
-          border: `1px solid ${T.border}`, borderRadius: 10, overflow: "hidden",
+          border: `1px solid ${T.border}`, borderRadius: 10,
         }}>
           <thead>
             <tr>
@@ -310,34 +351,32 @@ export default function MaterialesAsignacion({
                         background: colorMaterial(i),
                       }}>M{i + 1}</span>
                       {enEdicion ? (
-                        <Selector
-                          value={m.idcat_tipo_papel ?? ""}
+                        <SelConAlta
+                          catKey="tipo_papel"
+                          options={catTipoPapel.map(c => c.nombre)}
+                          value={m.tipo}
                           onChange={v => {
-                            const item = catTipoPapel.find(c => String(c.id) === v);
-                            parchar(m.id, { idcat_tipo_papel: item?.id ?? null, tipo: item?.nombre ?? "" });
+                            const item = catTipoPapel.find(c => c.nombre === v);
+                            parchar(m.id, { idcat_tipo_papel: item?.id ?? null, tipo: v });
                           }}
-                          style={{ height: 34, fontSize: 12.5 }}
-                        >
-                          <option value="">Selecciona...</option>
-                          {catTipoPapel.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-                        </Selector>
+                          onAdd={addItem}
+                        />
                       ) : nombreMaterial(m)}
                     </div>
                   </td>
 
                   <td style={td}>
                     {enEdicion ? (
-                      <Selector
-                        value={m.idcat_calibre ?? ""}
+                      <SelConAlta
+                        catKey="calibre"
+                        options={catCalibre.map(c => c.nombre)}
+                        value={m.calibre}
                         onChange={v => {
-                          const item = catCalibre.find(c => String(c.id) === v);
-                          parchar(m.id, { idcat_calibre: item?.id ?? null, calibre: item?.nombre ?? "" });
+                          const item = catCalibre.find(c => c.nombre === v);
+                          parchar(m.id, { idcat_calibre: item?.id ?? null, calibre: v });
                         }}
-                        style={{ height: 34, fontSize: 12.5 }}
-                      >
-                        <option value="">—</option>
-                        {catCalibre.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-                      </Selector>
+                        onAdd={addItem}
+                      />
                     ) : (m.calibre.trim() || "—")}
                   </td>
 
@@ -366,6 +405,7 @@ export default function MaterialesAsignacion({
                         <option value="">—</option>
                         <option value="hojeadora">Hojeado</option>
                         <option value="guillotina">Guillotina</option>
+                        <option value="proveedor">Proveedor (ya viene al tamaño)</option>
                       </Selector>
                     ) : (ETIQUETA_PREPARACION[m.metodoPreparacion] ?? "—")}
                   </td>
@@ -378,9 +418,26 @@ export default function MaterialesAsignacion({
                         style={{ height: 34, fontSize: 12.5 }}
                       >
                         <option value="">Sin asignar</option>
-                        {componentes.map(c => (
-                          <option key={c.id} value={c.id}>{etiquetaComponente(c, componentes)}</option>
-                        ))}
+                        {componentes.map(c => {
+                          // Una OP de inicio solo lleva 1 material propio (Jose,
+                          // 2026-09-02: "un material no puede ser asignado a la
+                          // misma OP de inicio, solo puede tener 1 por cada OP de
+                          // inicio") -- si YA tiene uno (de otro material, no de
+                          // este mismo renglón) se deshabilita en vez de
+                          // esconderse, para que se vea que existe pero está
+                          // ocupada; "＋ Nueva OP de inicio" es el camino para
+                          // este material. La OP de unión sí puede llevar más de
+                          // un material propio (para fusionarlos por
+                          // Litolaminado), así que a ella no se le aplica esta
+                          // restricción.
+                          const ocupada = c.tipo === "inicio" &&
+                            materiales.some(mat => mat.idComponenteAsignado === c.id && mat.id !== m.id);
+                          return (
+                            <option key={c.id} value={c.id} disabled={ocupada}>
+                              {etiquetaComponente(c, componentes)}{ocupada ? " (ya tiene material)" : ""}
+                            </option>
+                          );
+                        })}
                         {modo === "independientes" && <option value="__nueva__">＋ Nueva OP de inicio</option>}
                       </Selector>
                     ) : chipDe(m)}

@@ -18,6 +18,16 @@ export const ORDEN_PROCESOS_PAPEL: NombreProcesoOrdenPapel[] = [
   "suaje_produccion_papel",
   "armado_papel",
   "empaque_papel",
+  // NUEVOS (Fase 1/2 -- especiales): ver la nota en ordenProduccionPapel.types.ts.
+  // Van al final del orden visual porque, en el formato impreso, Litolaminado/
+  // Desbarbe/Pegado ya existían como simples casillas ☐ en la franja de
+  // encabezado (nunca tuvieron bloque propio de ficha técnica) -- se respeta
+  // ese mismo lugar, solo que ahora la casilla se marca de verdad (antes
+  // dependía de una bandera que ningún lado del sistema llenaba).
+  "litolaminado_papel",
+  "desbarbe_papel",
+  "pegado_papel",
+  "especial_papel",
 ];
 
 export const ETIQUETAS_PROCESO_PAPEL: Record<NombreProcesoOrdenPapel, string> = {
@@ -32,6 +42,10 @@ export const ETIQUETAS_PROCESO_PAPEL: Record<NombreProcesoOrdenPapel, string> = 
   suaje_produccion_papel: "Suaje",
   armado_papel: "Armado",
   empaque_papel: "Empaque",
+  litolaminado_papel: "Litolaminado",
+  desbarbe_papel: "Desbarbe",
+  pegado_papel: "Pegado",
+  especial_papel: "Especial",
 };
 
 export const ETIQUETAS_CORTAS_PROCESO_PAPEL: Record<NombreProcesoOrdenPapel, string> = {
@@ -46,6 +60,10 @@ export const ETIQUETAS_CORTAS_PROCESO_PAPEL: Record<NombreProcesoOrdenPapel, str
   suaje_produccion_papel: "Suaje",
   armado_papel: "Arm",
   empaque_papel: "Emp",
+  litolaminado_papel: "Lito",
+  desbarbe_papel: "Desb",
+  pegado_papel: "Peg",
+  especial_papel: "Esp",
 };
 
 // CORREGIDO: hojeado_papel y guillotina_papel ya NO comparten una sola
@@ -71,6 +89,10 @@ export const CLAVE_MAQUINA_POR_PROCESO_PAPEL: Record<
   suaje_produccion_papel: "suaje_maquina",
   armado_papel: "armado",
   empaque_papel: "empaque_maquina",
+  litolaminado_papel: "empalme",
+  desbarbe_papel: "desbarbe",
+  pegado_papel: "pegado",
+  especial_papel: "especial",
 };
 
 export const PROCESOS_ORDEN_PAPEL: Array<{
@@ -653,24 +675,26 @@ export function validarProductoPapelParaPdf(data: OrdenProduccionPapelData): voi
     throw new Error("Faltan procesos aplicables para generar el PDF de papel.");
   }
 
-  // NOTA: Hojeado/Guillotina ahora siempre aplican (ver
-  // procesosAplicanDesdeProducto), así que esta validación ya nunca
-  // debería disparar en la práctica. Se deja como red de seguridad por si
-  // algún día procesos_aplican llega vacío de esos dos desde el backend.
-  const tienePreparacion =
-    procesos.includes("hojeado_papel") ||
-    procesos.includes("guillotina_papel");
-
-  if (!tienePreparacion) {
-    throw new Error("Falta seleccionar Hojeado o Guillotina para el producto de papel.");
-  }
+  // QUITADO A PETICIÓN DE JOSE (2026-09-02): antes se exigía Hojeado o
+  // Guillotina en la ruta para poder generar el PDF. Con productos
+  // especiales eso ya no es cierto -- una OP (sobre todo una de unión) puede
+  // válidamente no llevar ninguno de los dos, por ejemplo cuando la pieza ya
+  // llega preparada de su propia OP de inicio y esta OP solo une/litolamina.
+  // dibujarOrdenPapelEnDoc ya lo soporta sin esta validación: la fila de
+  // preparación (bloqueHojeado/bloqueGuillotina) simplemente no se dibuja si
+  // ni "hojeado_papel" ni "guillotina_papel" están en procesos_aplican (ver
+  // `if (hojeado || guillotina)` ahí) -- no hace falta ningún otro cambio.
 }
 
 export function validarMaquinariaPapelParaPdf(data: OrdenProduccionPapelData): string[] {
   const faltantes: string[] = [];
 
   for (const proceso of procesosAplicanDesdeProducto(data)) {
-    if (proceso === "armado_papel") continue;
+    // Armado, Pegado y Especial pueden ser manuales/sin catálogo de máquina
+    // (ver la nota de ClaveMaquinariaPapel en ordenProduccionPapel.types.ts) --
+    // no tiene sentido pedir una máquina configurada que el sistema nunca va
+    // a ofrecer para elegir.
+    if (proceso === "armado_papel" || proceso === "pegado_papel" || proceso === "especial_papel") continue;
 
     const clave = CLAVE_MAQUINA_POR_PROCESO_PAPEL[proceso];
     const maquina = data.maquinaria_seleccionada?.[clave] ?? null;

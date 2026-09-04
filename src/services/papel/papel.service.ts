@@ -385,6 +385,9 @@ const mapSuajeToApi = (suaje: Suaje) => ({
 const mapAcabadosToApi = (acabados: Acabados) => ({
   idcat_tipo_pegado: acabados.idcat_tipo_pegado,
   idcat_pegamento: acabados.idcat_pegamento,
+  // Campos propios del proceso "Pegado" de la ruta -- ver nota en Acabados.
+  idcat_tipo_pegado_pegado: acabados.idcat_tipo_pegado_pegado,
+  que_se_pega: acabados.queSePega?.trim() || null,
   laminados: acabados.laminados,
   // FK real hacia public.rollo_lam(idrollo_lam).
   idrollo_lam: acabados.idrollo_lam,
@@ -468,6 +471,7 @@ const mapComponenteProcesoToApi = (proceso: ComponenteProceso) => ({
   // client_key en el material correspondiente. El backend las resuelve con
   // materialClientKeyToId (ver upsertComponenteProcesos).
   materiales: proceso.materiales.map(String),
+  veces: proceso.veces ?? 1,
 });
 
 const mapComponenteToApi = (comp: ComponentePapel) => ({

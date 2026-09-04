@@ -34,9 +34,13 @@ import { showConfirm } from "../../CustomConfirm";
 import MaterialesAsignacion from "./MaterialesAsignacion";
 import RutaProcesos from "./RutaProcesos";
 import {
-  T, Etiqueta, Campo, Entrada, Selector, Boton,
+  T, Etiqueta, Campo, Entrada, Boton,
   IcoCheckCirculo,
 } from "./disenoEspeciales";
+// Mismo combo "elige o agrega" que el alta de papel/plástico normal
+// (Jose, 2026-09-02: faltaba aquí -- "Tipo de producto" era un <select>
+// plano, sin poder agregar uno nuevo sin ir primero a Catálogos).
+import SelConAlta from "../SelConAlta";
 
 export interface ImagenProductoExistente {
   id_archivo: number;
@@ -61,14 +65,23 @@ export interface ProductoEspecialConId extends ProductoPapelForm {
 // (alta nueva) el archivo se guarda como pendiente y se sube en cuanto
 // ProductoEspecial.tsx tiene el id real, igual que ya hacía SecArchivos en
 // el formulario normal de papel.
-function ImagenProducto({ idproducto, isEdit, inicial, pendiente, onPendiente }: {
+function ImagenProducto({ idproducto, isEdit, inicial, pendiente, onPendiente, onActualChange }: {
   idproducto: number | null;
   isEdit: boolean;
   inicial: ImagenProductoExistente | null;
   pendiente: File | null;
   onPendiente: (file: File | null) => void;
+  // Avisa al padre cuál es la imagen "ya subida" vigente en este momento --
+  // se actualiza sola al subir/quitar en modo edición (donde el cambio es
+  // inmediato, no queda pendiente). El padre la usa para mostrarla en la
+  // tarjeta "Producto terminado" de Ruta de procesos.
+  onActualChange?: (img: ImagenProductoExistente | null) => void;
 }) {
-  const [actual, setActual] = useState<ImagenProductoExistente | null>(inicial);
+  const [actual, setActualState] = useState<ImagenProductoExistente | null>(inicial);
+  const setActual = (img: ImagenProductoExistente | null) => {
+    setActualState(img);
+    onActualChange?.(img);
+  };
   const [subiendo, setSubiendo] = useState(false);
   const [error, setError] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
@@ -214,10 +227,31 @@ export default function FormularioProductoEspecial({ initial, onSave, onCancel, 
     () => sanear(borradorInicial ?? initial ?? newProductoForm())
   );
   const [imagenPendiente, setImagenPendiente] = useState<File | null>(null);
+  // Imagen ya subida vigente (null si el producto todavía no tiene una) --
+  // se usa junto con imagenPendiente para que "Producto terminado" en Ruta
+  // de procesos muestre la foto real del producto en cuanto exista.
+  const [imagenActual, setImagenActual] = useState<ImagenProductoExistente | null>(initial?.imagenExistente ?? null);
   const [notasPendientes, setNotasPendientes] = useState<string[]>([]);
   useAutoguardarBorrador(claveBorrador, form, true);
 
-  const { catalogs } = useCatalogosPapel();
+  // Preview local del archivo todavía no subido (alta nueva, antes de que
+  // exista idproducto_papel) -- mismo patrón que usa ImagenProducto para su
+  // propio thumbnail, pero aquí se necesita también en el padre para
+  // pasárselo a RutaProcesos.
+  const previewPendienteUrlRef = useRef<string | null>(null);
+  const previewPendienteUrl = useMemo(() => {
+    if (previewPendienteUrlRef.current) { URL.revokeObjectURL(previewPendienteUrlRef.current); previewPendienteUrlRef.current = null; }
+    if (!imagenPendiente) return null;
+    const url = URL.createObjectURL(imagenPendiente);
+    previewPendienteUrlRef.current = url;
+    return url;
+  }, [imagenPendiente]);
+  useEffect(() => () => {
+    if (previewPendienteUrlRef.current) URL.revokeObjectURL(previewPendienteUrlRef.current);
+  }, []);
+  const imagenProductoUrl = previewPendienteUrl || imagenActual?.url || null;
+
+  const { catalogs, addItem } = useCatalogosPapel();
   const [errorGuardar, setErrorGuardar] = useState<string | null>(null);
   const [procesosCat, setProcesosCat] = useState<ProcesoCatOpcion[]>([]);
   const [errorProcesos, setErrorProcesos] = useState("");
@@ -296,8 +330,57 @@ export default function FormularioProductoEspecial({ initial, onSave, onCancel, 
   const catCalibre = useMemo(() => listaCat("calibre"), [catalogs]);
   const catTipoProducto = useMemo(() => listaCat("tipo_producto"), [catalogs]);
 
+  // Un producto especial sin ruta de procesos no sirve para nada aguas
+  // abajo: la cotización/pedido decide qué campos ofrecer (impresión,
+  // laminado, asa...) justamente a partir de esos procesos, y la orden de
+  // producción se arma con ellos. Antes se dejaba guardar así y el producto
+  // aparecía "vacío" al cotizarlo (Jose), por eso se valida aquí.
+  const etiquetaOrden = (comp: ComponentePapel): string => {
+    if (comp.tipo === "unica") return "la orden de producción";
+    if (comp.tipo === "union") return "la OP de unión";
+    const inicios = form.componentes.filter(c => c.tipo === "inicio");
+    const i = inicios.findIndex(c => c.id === comp.id);
+    return `OP INICIO ${i >= 0 ? i + 1 : ""}`.trim();
+  };
+
   const guardar = async () => {
     setErrorGuardar(null);
+
+    if (form.componentes.length === 0) {
+      setErrorGuardar("Define la ruta de procesos antes de guardar: elige un modo de asignación y agrega al menos un proceso.");
+      return;
+    }
+    const sinProcesos = form.componentes.filter(c => (c.procesos ?? []).length === 0);
+    if (sinProcesos.length === form.componentes.length) {
+      setErrorGuardar("El producto no tiene ni un proceso en su ruta. Agrega al menos uno (impresión, laminación, armado...) antes de guardar.");
+      return;
+    }
+    if (sinProcesos.length > 0) {
+      setErrorGuardar(`Falta agregar procesos en ${sinProcesos.map(etiquetaOrden).join(", ")}.`);
+      return;
+    }
+
+    // NUEVO (Jose, 2026-09-01): Litolaminado en la OP de unión SIN material
+    // propio asignado no tiene nada que fusionar -- es un junte lógico de
+    // piezas (cajas de regalo, roscas de reyes), no debería llevar ese
+    // proceso. Se bloquea el guardado; el caso inverso (material propio sin
+    // Litolaminado) solo se avisa como sugerencia en el panel "Reglas" de
+    // RutaProcesos, no bloquea.
+    const union = form.componentes.find(c => c.tipo === "union");
+    if (union) {
+      const catLito = procesosCat.find(p => p.tabla === "litolaminado_papel");
+      const litoEnUnion = catLito
+        ? (union.procesos ?? []).some(p => p.idproceso_cat === catLito.idproceso_cat)
+        : false;
+      const materialUnion = materiales.filter(m => m.idComponenteAsignado === union.id);
+      if (litoEnUnion && materialUnion.length === 0) {
+        setErrorGuardar(
+          "La OP de unión lleva Litolaminado en su ruta pero no tiene ningún material propio asignado -- sin material que fusionar, ese proceso no debería estar ahí. Asígnale un material a la unión o quita Litolaminado de su ruta."
+        );
+        return;
+      }
+    }
+
     try {
       await onSave({ ...form, esEspecial: true }, imagenPendiente, notasPendientes);
     } catch (e: any) {
@@ -366,6 +449,7 @@ export default function FormularioProductoEspecial({ initial, onSave, onCancel, 
           inicial={initial?.imagenExistente ?? null}
           pendiente={imagenPendiente}
           onPendiente={setImagenPendiente}
+          onActualChange={setImagenActual}
         />
 
         <Campo>
@@ -375,16 +459,16 @@ export default function FormularioProductoEspecial({ initial, onSave, onCancel, 
 
         <Campo>
           <Etiqueta requerido>Tipo de producto</Etiqueta>
-          <Selector
-            value={form.idcat_tipo_producto_papel ?? ""}
+          <SelConAlta
+            catKey="tipo_producto"
+            options={catTipoProducto.map(c => c.nombre)}
+            value={form.tipoProductoNombre}
             onChange={v => {
-              const item = catTipoProducto.find(c => String(c.id) === v);
-              upd({ idcat_tipo_producto_papel: item?.id ?? null, tipoProductoNombre: item?.nombre ?? "" });
+              const item = catTipoProducto.find(c => c.nombre === v);
+              upd({ idcat_tipo_producto_papel: item?.id ?? null, tipoProductoNombre: v });
             }}
-          >
-            <option value="">Selecciona...</option>
-            {catTipoProducto.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-          </Selector>
+            onAdd={addItem}
+          />
         </Campo>
 
         <div style={{
@@ -440,6 +524,7 @@ export default function FormularioProductoEspecial({ initial, onSave, onCancel, 
         catTipoPapel={catTipoPapel}
         catCalibre={catCalibre}
         procesosCat={procesosCat}
+        addItem={addItem}
       />
 
       {/* ─────────── ruta de procesos ─────────── */}
@@ -449,6 +534,7 @@ export default function FormularioProductoEspecial({ initial, onSave, onCancel, 
         materiales={materiales}
         onUpdateMateriales={setMateriales}
         catalogs={catalogosSeguros}
+        addItem={addItem}
         nombreProducto={form.descripcion}
         procesosCat={procesosCat}
         errorProcesos={errorProcesos}
@@ -457,6 +543,7 @@ export default function FormularioProductoEspecial({ initial, onSave, onCancel, 
         onNotasPendientesChange={setNotasPendientes}
         tamanoAsaDefault={form.tamanoAsaDefault}
         onTamanoAsaDefaultChange={v => upd({ tamanoAsaDefault: v })}
+        imagenProductoUrl={imagenProductoUrl}
       />
 
       {/* ─────────── acciones al pie (como en el diseño) ─────────── */}

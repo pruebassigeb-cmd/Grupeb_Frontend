@@ -75,7 +75,9 @@ export interface ProductoPlasticoActualizar extends ProductoActualizarBase {
 }
 
 export interface ProductoPapelActualizar extends ProductoActualizarBase {
-  tipo_material: "papel";
+  // Los especiales guardan tipo_material="especial", no "papel"
+  // (Jose, 2026-09-03).
+  tipo_material: "papel" | "especial";
   tipoCotizacion: "papel";
   idproducto_papel: number;
   idgrupo_papel: number | null;
@@ -140,7 +142,9 @@ export interface ProductoNuevoPlastico extends ProductoNuevoBase {
 }
 
 export interface ProductoNuevoPapel extends ProductoNuevoBase {
-  tipo_material: "papel";
+  // Los especiales guardan tipo_material="especial", no "papel"
+  // (Jose, 2026-09-03).
+  tipo_material: "papel" | "especial";
   tipoCotizacion: "papel";
   idproducto_papel: number;
   idgrupo_papel: number | null;

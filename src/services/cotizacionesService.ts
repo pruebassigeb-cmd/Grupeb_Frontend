@@ -16,9 +16,14 @@ export const getCotizaciones = async (): Promise<Cotizacion[]> => {
   return response.data;
 };
 
+// Los especiales corren sobre la misma infraestructura de papel (mismas
+// tablas/formulario), así que para efectos de "es esto de la familia
+// papel/especial" cuentan igual -- aunque su tipo_material real ya no sea
+// "papel" sino "especial" (Jose, 2026-09-03).
 const esProductoPapel = (prod: any): boolean =>
   prod?.tipoCotizacion === "papel" ||
   prod?.tipo_material === "papel" ||
+  prod?.tipo_material === "especial" ||
   prod?.idproducto_papel != null ||
   prod?.producto_papel_idproducto_papel != null;
 
@@ -33,7 +38,9 @@ export const crearCotizacion = async (
     if (esProductoPapel(prod)) {
       return {
         tipoCotizacion: "papel",
-        tipo_material: "papel",
+        // Se manda el tipo_material real ("papel" o "especial") en vez de
+        // forzar "papel" siempre (Jose, 2026-09-03).
+        tipo_material: prod.es_especial === true || prod.tipo_material === "especial" ? "especial" : "papel",
         idproducto_papel: prod.idproducto_papel,
         nombre: prod.nombre,
         idgrupo_papel: prod.idgrupo_papel ?? null,
@@ -227,7 +234,9 @@ export interface ProductoPlasticoCotizacionActualizar extends ProductoCotizacion
 }
 
 export interface ProductoPapelCotizacionActualizar extends ProductoCotizacionActualizarBase {
-  tipo_material: "papel";
+  // Los especiales guardan tipo_material="especial", no "papel"
+  // (Jose, 2026-09-03).
+  tipo_material: "papel" | "especial";
   tipoCotizacion: "papel";
   idproducto_papel: number;
   idgrupo_papel: number | null;
@@ -276,7 +285,9 @@ export interface ProductoCotizacionNuevoPlastico extends ProductoCotizacionNuevo
 }
 
 export interface ProductoCotizacionNuevoPapel extends ProductoCotizacionNuevoBase {
-  tipo_material: "papel";
+  // Los especiales guardan tipo_material="especial", no "papel"
+  // (Jose, 2026-09-03).
+  tipo_material: "papel" | "especial";
   tipoCotizacion: "papel";
   idproducto_papel: number;
   idgrupo_papel: number | null;

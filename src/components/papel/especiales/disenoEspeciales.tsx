@@ -328,14 +328,28 @@ export const IcoCheckCirculo = ({ size = 15, color = "currentColor" }: IcoProps)
   </svg>
 );
 
-// Caja de línea del recuadro "PRODUCTO TERMINADO" del diseño.
-export const IlustracionCaja = () => (
-  <svg width={112} height={76} viewBox="0 0 112 76" fill="none" stroke="#22377F" strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round">
-    <path d="M18 32 L54 22 L94 33 L58 44 Z" />
-    <path d="M18 32 V60 L58 72 V44" />
-    <path d="M94 33 V61 L58 72" />
-    <path d="M54 22 L60 6 L86 14 L94 33" />
-    <path d="M18 32 L24 14 L54 22" />
+// Caja de línea del recuadro "PRODUCTO TERMINADO".
+// Es el dibujo por defecto: solo se usa cuando el producto todavía NO tiene
+// una imagen subida (si la tiene, RutaProcesos muestra la foto real). El
+// trazo anterior era una caja cerrada plana que se leía mal a ese tamaño;
+// este es una caja abierta en perspectiva, con las dos solapas levantadas y
+// el fondo interior insinuado, como el dibujo que pidió Jose.
+export const IlustracionCaja = ({ width = 112, height = 98 }: { width?: number; height?: number }) => (
+  <svg
+    width={width} height={height} viewBox="0 0 128 112" fill="none"
+    stroke="#22377F" strokeWidth={1.6} strokeLinejoin="round" strokeLinecap="round"
+  >
+    {/* solapa trasera izquierda (la tapa grande, levantada) */}
+    <path d="M18 56 L66 33 L62 5 Q36 13 12 29 Z" />
+    {/* solapa trasera derecha */}
+    <path d="M66 33 L110 54 L115 33 Q94 23 70 17 Z" />
+    {/* boca de la caja */}
+    <path d="M18 56 L64 78 L110 54 L66 33 Z" />
+    {/* cuerpo: pared izquierda, frente y pared derecha */}
+    <path d="M18 56 L18 84 L64 106 L110 82 L110 54" />
+    <path d="M64 78 L64 106" />
+    {/* fondo interior, apenas insinuado para que se lea como caja abierta */}
+    <path d="M25 58 L66 41 L103 56" strokeWidth={1.2} opacity={0.45} />
   </svg>
 );
 

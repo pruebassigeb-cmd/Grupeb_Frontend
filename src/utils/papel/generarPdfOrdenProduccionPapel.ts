@@ -362,6 +362,13 @@ const CAMPO_ENTREGADA_POR_PROCESO: Record<NombreProcesoOrdenPapel, string> = {
   suaje_produccion_papel: "pliegos_entregados",
   armado_papel: "bolsas_entregadas",
   empaque_papel: "bolsas_entregadas_final",
+  // NUEVOS (Fase 1/2 -- especiales): mismo molde que armado/texturizado/etc,
+  // las 4 tablas nuevas guardan "pliegos_entregados" (ver
+  // fase2_procesos_nuevos_y_repeticion_up.sql / fase1_productos_especiales_up.sql).
+  litolaminado_papel: "pliegos_entregados",
+  desbarbe_papel: "pliegos_entregados",
+  pegado_papel: "pliegos_entregados",
+  especial_papel: "pliegos_entregados",
 };
 
 function obtenerCantidadEntregadaProceso(
@@ -372,7 +379,13 @@ function obtenerCantidadEntregadaProceso(
   return n(reg[CAMPO_ENTREGADA_POR_PROCESO[key]]);
 }
 
-// Orden visual fijo que sigue el formato impreso.
+// Orden visual fijo que sigue el formato impreso. Los 4 procesos nuevos de
+// especiales (Litolaminado/Desbarbe/Pegado/Especial) se pintan como bloque
+// GENÉRICO (bloqueSimple, ver el switch de abajo) al final, después de
+// Empaque -- el formato impreso original nunca les dio una ficha propia, solo
+// la casilla ☐ de la franja de encabezado (ver TAGS_PROCESO), así que un
+// bloque genérico y discreto es justo lo que hace falta para no inventarles
+// un diseño que el papel original no tiene.
 const ORDEN_VISUAL_PROCESOS: NombreProcesoOrdenPapel[] = [
   "hojeado_papel",
   "guillotina_papel",
@@ -385,6 +398,10 @@ const ORDEN_VISUAL_PROCESOS: NombreProcesoOrdenPapel[] = [
   "suaje_produccion_papel",
   "armado_papel",
   "empaque_papel",
+  "litolaminado_papel",
+  "desbarbe_papel",
+  "pegado_papel",
+  "especial_papel",
 ];
 
 function ordenarProcesosParaVisual(procesos: ProcesoOrdenPapelPdf[]): ProcesoOrdenPapelPdf[] {
@@ -539,6 +556,19 @@ function datosProceso(
         merma: fmtNum(reg.revision ?? reg.merma),
         entregadas: fmtNum(reg.bolsas_entregadas_final),
       };
+    // NUEVOS (Fase 1/2 -- especiales): mismo molde que los procesos "simples"
+    // de arriba (entrada/merma/entregadas en pliegos, ver
+    // CAMPO_ENTREGADA_POR_PROCESO). "Hojas Pegado" y "Hojas Especial" llevan
+    // además su propio dato en extrasPorProceso() (material_pegado /
+    // nombre_proceso), porque esos dos SÍ varían pasada a pasada.
+    case "litolaminado_papel":
+      return { tituloEntrada: "Hojas Litolaminado", entrada: fmtNum(reg.pliegos_entrada), merma, entregadas: fmtNum(reg.pliegos_entregados) };
+    case "desbarbe_papel":
+      return { tituloEntrada: "Hojas Desbarbe", entrada: fmtNum(reg.pliegos_entrada), merma, entregadas: fmtNum(reg.pliegos_entregados) };
+    case "pegado_papel":
+      return { tituloEntrada: "Hojas Pegado", entrada: fmtNum(reg.pliegos_entrada), merma, entregadas: fmtNum(reg.pliegos_entregados) };
+    case "especial_papel":
+      return { tituloEntrada: "Hojas", entrada: fmtNum(reg.pliegos_entrada), merma, entregadas: fmtNum(reg.pliegos_entregados) };
   }
 }
 
@@ -627,10 +657,31 @@ async function dibujarPaginaImagenPapel(
 // ENCABEZADO
 // ════════════════════════════════════════════════════════════════════════
 
-// Catálogo completo de la franja de procesos del formato impreso. Los
-// cuatro que no tienen `key` (Rev, Litolami, Desbarbe, Pegado) no son
-// procesos del sistema todavía: existen en el papel y se marcan con las
-// banderas opcionales indicadas en `flag`.
+// Catálogo completo de la franja de procesos del formato impreso. "Rev" es
+// el único que sigue sin ser un proceso del sistema (se marca con la
+// bandera opcional `flag`, que hoy nunca llega desde el backend -- se deja
+// tal cual, sin inventar de dónde saldría). Litolami/Desbarbe/Especial SÍ
+// son procesos reales (litolaminado_papel/desbarbe_papel/especial_papel) y
+// se marcan por `key`, igual que el resto.
+//
+// ⚠️ REORDENADO (Jose, 2026-09-03): "Armado" y "Empaque" quedaban mal
+// posicionados -- son de los ÚLTIMOS procesos del flujo real, no de en
+// medio. Orden correcto de aquí en adelante: ...Suaje, Desbarbe, Armado,
+// Especial (penúltimo de los procesos reales), Empaque (el último de
+// verdad -- empacar es lo último que se hace antes de despachar), y Rev
+// hasta el fondo del todo porque ni siquiera es un proceso real, es la
+// revisión final del producto ya armado y empacado. Litolaminado se
+// coloca antes de Suaje -- mismo criterio que la regla dura ya existente
+// en RutaProcesos.tsx (ahora ORDEN_CANONICO_TABLAS/ordenarCanonico): es
+// donde se juntan las piezas de la OP de unión, suajear antes de
+// litolaminar no tiene sentido físico. "Pegado" SE QUITÓ: resultó ser el
+// mismo proceso que Empaque en la práctica -- lo que valía la pena de ahí
+// ("qué se pega") ahora se captura directo en Armado. El orden de aquí
+// DEBE coincidir con ORDEN_CANONICO_TABLAS en RutaProcesos.tsx (salvo Rev,
+// que no es un proceso real seleccionable y por eso no está ahí) y con
+// ORDEN_CLAVES_PAPEL en procesosPapel.controller.ts (que tampoco incluye
+// Litolaminado ni Rev, por las razones que ya explica ese archivo) -- si
+// se vuelve a tocar el orden, hay que tocar los tres juntos.
 const TAGS_PROCESO: Array<{ label: string; key?: NombreProcesoOrdenPapel; flag?: string }> = [
   { label: "Hojeo", key: "hojeado_papel" },
   { label: "Guillo", key: "guillotina_papel" },
@@ -640,13 +691,13 @@ const TAGS_PROCESO: Array<{ label: string; key?: NombreProcesoOrdenPapel; flag?:
   { label: "AR", key: "alto_relieve_papel" },
   { label: "UV", key: "barniz_uv_papel" },
   { label: "Textu", key: "texturizado_papel" },
+  { label: "Litolami", key: "litolaminado_papel" },
   { label: "Suaje", key: "suaje_produccion_papel" },
+  { label: "Desbarbe", key: "desbarbe_papel" },
   { label: "Armado", key: "armado_papel" },
-  { label: "Rev", flag: "revision" },
+  { label: "Especial", key: "especial_papel" },
   { label: "Empaque", key: "empaque_papel" },
-  { label: "Litolami", flag: "litolaminado" },
-  { label: "Desbarbe", flag: "desbarbe" },
-  { label: "Pegado", flag: "pegado" },
+  { label: "Rev", flag: "revision" },
 ];
 
 function franjaProcesos(
@@ -921,6 +972,90 @@ function filaAtributos(doc: jsPDF, data: OrdenProduccionPapelData, y: number) {
     const cw = w * peso;
     celda(doc, label, valor, cx, y, cw, H.ATRIBUTOS, { size, maxLines: 2 });
     cx += cw;
+  });
+}
+
+// ── Piezas de las OP de inicio (solo UNIÓN) ──────────────────────────────
+// Jose, 2026-09-03: "necesito que ponga las cantidades anteriores, o sea de
+// cada material, material+cantidad entregada para saber cual es la
+// cantidad final a entregar" -- después pidió que se viera "más vistosa"
+// y "que tenga su espacio para que tenga un buen espacio". Antes esto era
+// una sola línea chica metida dentro de la tarjeta del primer proceso
+// propio de la unión (ver el viejo caso dentro de extrasPorProceso, ya
+// quitado); ahora es su propio bloque, con recuadro, encabezado en negro
+// y el total resaltado en grande -- mismo lenguaje visual que la banda
+// "ORDEN" del encabezado, para que se note que es información importante,
+// no un dato menor.
+const ROW_H_HERMANA = 6.2;
+const HEADER_H_HERMANAS = 5.0;
+function altoFilaPiezasHermanas(n: number): number {
+  return HEADER_H_HERMANAS + Math.max(n, 1) * ROW_H_HERMANA + 1.6;
+}
+
+function filaPiezasHermanas(
+  doc: jsPDF,
+  hermanas: {
+    no_produccion: string | null;
+    componente_nombre: string | null;
+    cantidad_entregada: number | null;
+    terminado: boolean;
+  }[],
+  total: number | null,
+  x: number,
+  y: number,
+  w: number
+) {
+  const h = altoFilaPiezasHermanas(hermanas.length);
+
+  caja(doc, x, y, w, h, { lw: LW_MARCO, fill: GRAY_LIGHT });
+
+  // Banda de encabezado, mismo negro que la banda "ORDEN" del encabezado.
+  doc.setFillColor(BLACK[0], BLACK[1], BLACK[2]);
+  doc.rect(x, y, w, HEADER_H_HERMANAS, "F");
+  txt(doc, "PIEZAS DE LAS OP DE INICIO", x + 2.2, y + HEADER_H_HERMANAS - 1.5, {
+    size: 7.5,
+    bold: true,
+    color: WHITE,
+  });
+
+  // Columna del total, resaltada a la derecha en todo el alto restante.
+  const wTotal = Math.max(w * 0.22, 30);
+  const wLista = w - wTotal;
+  linea(doc, x + wLista, y, x + wLista, y + h, LW_MARCO);
+
+  hermanas.forEach((hna, i) => {
+    const fy = y + HEADER_H_HERMANAS + i * ROW_H_HERMANA;
+    if (i > 0) linea(doc, x, fy, x + wLista, fy);
+
+    const nombre = f(primeraLinea(hna.componente_nombre, hna.no_produccion)) || "Material";
+    const cant = hna.cantidad_entregada != null ? fmtNum(hna.cantidad_entregada) : "—";
+    const estado = hna.terminado ? "" : "  (en proceso)";
+
+    txt(doc, nombre, x + 2.2, fy + 3.4, { size: 8.5, bold: true, maxW: wLista - 32, maxLines: 1 });
+    if (hna.no_produccion && hna.componente_nombre) {
+      txt(doc, f(hna.no_produccion), x + 2.2, fy + 5.6, { size: 6, color: GRAY_LABEL });
+    }
+    txt(doc, `${cant} pzas${estado}`, x + wLista - 2.2, fy + ROW_H_HERMANA / 2 + 1.6, {
+      size: 9.5,
+      bold: true,
+      align: "right",
+    });
+  });
+
+  // NO es la suma de las hermanas: van emparejadas 1 a 1 (ej. cuerpo + asa
+  // de una misma bolsa), así que lo entregable queda limitado por la que
+  // menos lleva -- ver piezasFinalesTotal en seguimiento.controller.ts
+  // (Jose, 2026-09-03).
+  etiqueta(doc, "Total a entregar", x + wLista, y + HEADER_H_HERMANAS, 5.4);
+  txt(doc, total != null ? fmtNum(total) : "—", x + wLista + wTotal / 2, y + h - 3.5, {
+    size: 17,
+    bold: true,
+    align: "center",
+  });
+  txt(doc, "piezas (mínimo)", x + wLista + wTotal / 2, y + h - 1.3, {
+    size: 6,
+    align: "center",
+    color: GRAY_LABEL,
   });
 }
 
@@ -1550,23 +1685,28 @@ function bloqueAlmacenDer(doc: jsPDF, data: OrdenProduccionPapelData, x: number,
 }
 
 // ════════════════════════════════════════════════════════════════════════
-// GENERADOR
+// MOTOR DE UNA HOJA DE ORDEN (reutilizable)
 // ════════════════════════════════════════════════════════════════════════
-export async function generarPdfOrdenProduccionPapel(
-  dataEntrada: OrdenProduccionPapelData,
-  guardarEnS3 = false
-): Promise<void> {
-  // Normaliza en cliente ANTES de validar/dibujar: rellena material_impresion,
-  // asa_descripcion, refuerzo y recalcula estimados (pliegos, desarrollo,
-  // metros, rollos, bolsas, bobina, ctes/mod) si el backend no los mandó.
-  const data = normalizarOrdenProduccionPapelData(dataEntrada);
-  validarProductoPapelParaPdf(data);
-
+// Dibuja UNA orden completa (marco, encabezado, filas de info/producto,
+// firmas, la lista de procesos que traiga `data` -- ya paginando solo si no
+// caben en una hoja -- y el almacén) dentro de un doc jsPDF ya creado, en la
+// posición actual (Y_INICIO). No crea el doc, no agrega páginas extra de
+// render/master, no llama entregarPdf/S3 -- eso lo decide quien la use.
+//
+// Se separó de generarPdfOrdenProduccionPapel (que sigue siendo el punto de
+// entrada normal, sin cambios de comportamiento) para que
+// generarPdfOrdenProduccionEspecial.ts pueda dibujar UNA hoja por cada OP de
+// la ruta de un producto especial (OP de inicio, OP de unión...) con el
+// mismo motor -- ese ya sabe pintar cualquier lista de procesos en cualquier
+// orden, con la máquina/registro de cada uno, así que no hace falta
+// reinventar nada: solo alimentarlo con los datos de CADA OP por separado.
+export function dibujarOrdenPapelEnDoc(
+  doc: jsPDF,
+  data: OrdenProduccionPapelData,
+  logoBase64: string | null
+): void {
   const procesos = ordenarProcesosParaVisual(construirProcesosOrdenPapelPdf(data));
   const aplican = new Set(procesos.map((p) => p.key));
-  const logoBase64 = await cargarLogoBase64(logoUrl);
-
-  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "letter" });
 
   const marcoHoja = () => caja(doc, X0, Y_INICIO, CW, PH - Y_INICIO - M, { lw: LW_MARCO });
   marcoHoja();
@@ -1623,6 +1763,38 @@ export async function generarPdfOrdenProduccionPapel(
   // ── Resto de los procesos ─────────────────────────────────────────────
   const rendimientoPrep = n((data as any).rendimiento) ?? n((data as any).hoj_rendimiento);
 
+  // ── Especiales, sólo UNIÓN: piezas finales de las OP de inicio hermanas ──
+  // Una OP de unión no tiene "proceso anterior" dentro de su propia cadena
+  // (no lleva Hojeado/Guillotina si ya le llegan piezas preparadas de otra
+  // OP), así que su primer proceso se queda sin "entrada" a menos que se
+  // tome de afuera: de lo que entregó el ÚLTIMO proceso de cada OP de
+  // inicio hermana (piezas_finales_hermanas/piezas_finales_total, calculado
+  // en seguimiento.controller.ts::getOrdenProduccion). (Jose, 2026-09-02)
+  const esUnionPdf = (data as any).componente?.tipo === "union";
+  const piezasFinalesHermanas = (data as any).piezas_finales_hermanas as
+    | { no_produccion: string | null; componente_nombre: string | null; cantidad_entregada: number | null; terminado: boolean }[]
+    | undefined;
+  const piezasFinalesTotal = (data as any).piezas_finales_total as number | null | undefined;
+  const primerProcesoRestanteKey = procesos.find(
+    (p) => p.key !== "hojeado_papel" && p.key !== "guillotina_papel"
+  )?.key;
+
+  // Bloque propio y vistoso, en vez de la línea chica que iba antes dentro
+  // de la tarjeta del primer proceso (ver comentario en filaPiezasHermanas
+  // más arriba). Solo aparece en la unión, y solo si de verdad hay algo que
+  // mostrar.
+  if (esUnionPdf && piezasFinalesHermanas && piezasFinalesHermanas.length > 0) {
+    const w = X_FIRMA_L - X0;
+    const altoHermanas = altoFilaPiezasHermanas(piezasFinalesHermanas.length);
+    if (y + altoHermanas > PH - M - 2) {
+      doc.addPage();
+      marcoHoja();
+      y = Y_INICIO + 2;
+    }
+    filaPiezasHermanas(doc, piezasFinalesHermanas, piezasFinalesTotal ?? null, X0, y, w);
+    y += altoHermanas + GAP_FILA;
+  }
+
   const extrasPorProceso = (key: NombreProcesoOrdenPapel, registro: ProcesoPapelRuntime | null): ExtraSimple[] => {
     const reg = (registro ?? {}) as Record<string, any>;
     switch (key) {
@@ -1638,6 +1810,14 @@ export async function generarPdfOrdenProduccionPapel(
         if (matrix) extras.push({ label: "Matrix", value: matrix });
         return extras;
       }
+      // "Qué se pega" varía en cada pasada (asa a cuerpo, solapa...) --
+      // ver pegado_papel.material_pegado en fase2_procesos_nuevos_y_repeticion_up.sql.
+      case "pegado_papel":
+        return [{ label: "", value: primeraLinea(reg.material_pegado) }].filter((e) => e.value);
+      // El nombre del proceso "comodín" lo captura cada pasada, no hay
+      // catálogo fijo -- ver especial_papel.nombre_proceso.
+      case "especial_papel":
+        return [{ label: "", value: primeraLinea(reg.nombre_proceso) }].filter((e) => e.value);
       default:
         return [];
     }
@@ -1666,6 +1846,10 @@ export async function generarPdfOrdenProduccionPapel(
     if (indiceGlobal > 0) {
       const anterior = procesos[indiceGlobal - 1];
       entradaNum = obtenerCantidadEntregadaProceso(anterior.key, obtenerRegistroProcesoPapel(data, anterior.key));
+    } else if (esUnionPdf && proceso.key === primerProcesoRestanteKey && piezasFinalesTotal != null) {
+      // Primer proceso de una UNIÓN sin preparación propia: su "entrada" es
+      // lo que ya entregaron, en total, las OP de inicio hermanas.
+      entradaNum = piezasFinalesTotal;
     }
 
     // Empaque es el único punto donde se necesita el resultado REAL: se
@@ -1710,6 +1894,25 @@ export async function generarPdfOrdenProduccionPapel(
   }
   bloqueAlmacenIzq(doc, data, X0, y, W_IZQ_ANCHA, ALTO_ALMACEN);
   bloqueAlmacenDer(doc, data, X_DER, y, W_DER, ALTO_ALMACEN);
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// GENERADOR (orden normal, no especial)
+// ════════════════════════════════════════════════════════════════════════
+export async function generarPdfOrdenProduccionPapel(
+  dataEntrada: OrdenProduccionPapelData,
+  guardarEnS3 = false
+): Promise<void> {
+  // Normaliza en cliente ANTES de validar/dibujar: rellena material_impresion,
+  // asa_descripcion, refuerzo y recalcula estimados (pliegos, desarrollo,
+  // metros, rollos, bolsas, bobina, ctes/mod) si el backend no los mandó.
+  const data = normalizarOrdenProduccionPapelData(dataEntrada);
+  validarProductoPapelParaPdf(data);
+
+  const logoBase64 = await cargarLogoBase64(logoUrl);
+  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "letter" });
+
+  dibujarOrdenPapelEnDoc(doc, data, logoBase64);
 
   // ── Hojas extra: Render Cliente / Master Graphic ──────────────────────
   const urlRenderPapel = (data as any).url_render as string | null | undefined;

@@ -85,6 +85,8 @@ export interface FormularioCotizacionProps {
     calibres: any[];
   };
   modo?: "cotizacion" | "pedido";
+  // Cotización Libre — documento aparte, no pasa por onSubmit/DatosCotizacion.
+  onSubmitLibre?: (datos: DatosCotizacion, renglones: import("./cotizacion-libre.types").ItemCotizacionLibre[]) => Promise<void>;
 }
 
 export type OpcionCP = {

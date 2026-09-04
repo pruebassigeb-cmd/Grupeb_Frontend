@@ -280,7 +280,9 @@ function BotonPdfPedido({ pedido, puedePdf }: { pedido: PedidoSeguimiento; puede
       .join(" / ") || "";
 
     return {
-      tipo_material: "papel",
+      // Se respeta el tipo_material real ("papel" o "especial") en vez de
+      // forzar "papel" siempre (Jose, 2026-09-03).
+      tipo_material: p.es_especial === true ? "especial" : (p.tipo_material ?? "papel"),
       tipoCotizacion: "papel",
       nombre: p.nombre,
       material: materialStr,
@@ -533,7 +535,40 @@ function BotonPdfDirecto({ pedido }: { pedido: PedidoSeguimiento }) {
   );
 }
 
-function RenderOrdenProduccion({ pedido }: { pedido: PedidoSeguimiento }) {
+function RenderOrdenProduccion({
+  pedido,
+  bloqueado = false,
+  motivoBloqueo = null,
+}: {
+  pedido: PedidoSeguimiento;
+  bloqueado?: boolean;
+  motivoBloqueo?: string | null;
+}) {
+  // Especiales: unión esperando a que terminen TODAS sus OP de inicio
+  // hermanas (litolaminado) -- no debe poder descargarse el PDF de la orden
+  // de producción de la unión todavía, aunque ya tenga no_produccion/idproduccion
+  // asignados (Jose, 2026-09-02: "aun no he terminado los procesos de cada
+  // uno de las OPIn"). Mismo criterio que ya se aplica en la columna de
+  // BotonPdfPedido (ver esUnionBloqueada en renderFila) -- este es un botón
+  // de PDF DISTINTO (orden de producción, no pedido) que se había quedado
+  // sin bloquear.
+  if (bloqueado) {
+    return (
+      <div className="inline-flex flex-col items-center gap-1">
+        {pedido.no_produccion && (
+          <span className="whitespace-nowrap text-xs font-medium text-gray-400">
+            {pedido.no_produccion}
+          </span>
+        )}
+        <span
+          title={motivoBloqueo ?? "Esperando a que terminen las OP de inicio de este especial"}
+          className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-amber-50 text-amber-700 border border-amber-300 text-xs rounded cursor-not-allowed">
+          🔒 PDF
+        </span>
+      </div>
+    );
+  }
+
   if (!pedido.puede_pdf || !pedido.no_produccion) {
     const tooltip = !pedido.anticipo_cubierto && !pedido.diseno_aprobado
       ? "Falta anticipo y diseno"
@@ -550,6 +585,12 @@ function RenderOrdenProduccion({ pedido }: { pedido: PedidoSeguimiento }) {
 
 
 
+// ⚠️ AMPLIADO (Jose, 2026-09-03): Litolaminado, Desbarbe y Especial son
+// procesos reales (de especiales) que ya se podían capturar en producción
+// pero no tenían columna aquí -- se agregan en su posición del orden
+// canónico (ver ORDEN_CASCADA_PAPEL en seguimientoPapel.types.ts). Pegado
+// NO se agrega: se quitó como proceso seleccionable (era lo mismo que
+// Empaque, ver RutaProcesos.tsx).
 const PROCESOS_PAPEL: { key: NombreProcesoPapel; encabezado: string; titulo: string }[] = [
   { key: "hojeado_papel", encabezado: "Hoj", titulo: "Hojeado" },
   { key: "guillotina_papel", encabezado: "Gui", titulo: "Guillotina" },
@@ -559,8 +600,11 @@ const PROCESOS_PAPEL: { key: NombreProcesoPapel; encabezado: string; titulo: str
   { key: "hot_stamping_papel", encabezado: "Hot", titulo: "Hot stamping" },
   { key: "texturizado_papel", encabezado: "Tex", titulo: "Texturizado" },
   { key: "alto_relieve_papel", encabezado: "Rel", titulo: "Alto relieve" },
+  { key: "litolaminado_papel", encabezado: "Lito", titulo: "Litolaminado" },
   { key: "suaje_produccion_papel", encabezado: "Sua", titulo: "Suaje" },
+  { key: "desbarbe_papel", encabezado: "Desb", titulo: "Desbarbe" },
   { key: "armado_papel", encabezado: "Arm", titulo: "Armado" },
+  { key: "especial_papel", encabezado: "Esp", titulo: "Especial" },
   { key: "empaque_papel", encabezado: "Emp", titulo: "Empaque" },
 ];
 
@@ -577,8 +621,11 @@ const PRIVILEGIO_PROCESO_PAPEL: Record<NombreProcesoPapel, string> = {
   hot_stamping_papel: "produccion.papel.hot_stamping.operar",
   texturizado_papel: "produccion.papel.texturizado.operar",
   alto_relieve_papel: "produccion.papel.alto_relieve.operar",
+  litolaminado_papel: "produccion.papel.litolaminado.operar",
   suaje_produccion_papel: "produccion.papel.suaje.operar",
+  desbarbe_papel: "produccion.papel.desbarbe.operar",
   armado_papel: "produccion.papel.armado.operar",
+  especial_papel: "produccion.papel.especial.operar",
   empaque_papel: "produccion.papel.empaque.operar",
 };
 
@@ -821,6 +868,24 @@ export default function Seguimiento() {
   // también", es un filtro aparte, para poder auditar/consultar lo ya
   // cerrado sin que se mezcle con lo que sigue en curso.
   const [soloFinalizados, setSoloFinalizados] = useState(false);
+
+  // ── NUEVO: productos especiales con más de una OP real (una o varias de
+  // inicio + una de unión, ver fase1_productos_especiales_up.sql). El
+  // backend ya manda una fila por cada OP (idcomponente_papel distingue
+  // cuál es cuál); esta fila se muestra colapsada por default (la OP más
+  // representativa, ver principalDeGrupoEspecial abajo) y se expande al
+  // hacer clic para ver cada OP de inicio y la de unión por separado —
+  // la de unión trae espera_union/espera_union_motivo cuando todavía debe
+  // esperar a que sus hermanas terminen (ver unionEsperandoHermanasPapel).
+  const [especialesExpandidos, setEspecialesExpandidos] = useState<Set<number>>(new Set());
+  const toggleEspecialExpandido = (idsolicitud_producto: number) => {
+    setEspecialesExpandidos(prev => {
+      const next = new Set(prev);
+      if (next.has(idsolicitud_producto)) next.delete(idsolicitud_producto);
+      else next.add(idsolicitud_producto);
+      return next;
+    });
+  };
 
   // ── Alto disponible para el cuerpo de la tabla ─────────────────────────
   // El encabezado de la página (título, buscador, filtros, leyenda y la
@@ -1206,8 +1271,16 @@ export default function Seguimiento() {
       ? pedidosTerminadosPorCompleto.has(p.no_pedido)
       : (hayBusquedaActiva || !pedidosTerminadosPorCompleto.has(p.no_pedido)))
     .filter(p => {
+      // "especiales" no es un tipo_producto de verdad (papel/plástico/cartón)
+      // -- es_especial es una bandera aparte sobre productos de papel (ver
+      // el badge morado "Especial" en la columna Tipo), así que este filtro
+      // no puede resolverse con el mismo match de texto que los demás
+      // (Jose, 2026-09-03: se quitó el filtro de Cartón -- ya no se usa -- y
+      // se puso este en su lugar).
       const pasaTipo = filtroTipo === "todos"
-        || norm(p.tipo_producto ?? "").includes(norm(filtroTipo));
+        || (filtroTipo === "especiales"
+          ? Boolean((p as any).es_especial)
+          : norm(p.tipo_producto ?? "").includes(norm(filtroTipo)));
       if (!pasaTipo) return false;
       if (!busqueda.trim()) return true;
       const q = norm(busqueda);
@@ -1217,11 +1290,19 @@ export default function Seguimiento() {
         norm(p.impresion ?? "").includes(q)
       );
     })
-    // El backend entrega una fila agregada por producto. El id estable evita
-    // ocultar por accidente dos productos distintos con el mismo texto.
+    // El backend entrega una fila agregada por producto -- y desde
+    // productos especiales, hasta una fila POR CADA OP real del producto
+    // (una o varias de inicio + una de unión, distintas por
+    // idcomponente_papel). El id estable evita ocultar por accidente dos
+    // productos distintos con el mismo texto; ahora también exige el mismo
+    // idcomponente_papel, así que ya NO colapsa las OP de un especial entre
+    // sí (antes se quedaba solo con la primera que llegara del backend).
     .filter((p, idx, arr) => arr.findIndex(x => {
       if (p.idsolicitud_producto != null && x.idsolicitud_producto != null) {
-        return x.idsolicitud_producto === p.idsolicitud_producto;
+        const mismoProducto = x.idsolicitud_producto === p.idsolicitud_producto;
+        const mismoComponente =
+          ((x as any).idcomponente_papel ?? null) === ((p as any).idcomponente_papel ?? null);
+        return mismoProducto && mismoComponente;
       }
 
       // Compatibilidad temporal con respuestas de un backend anterior.
@@ -1236,13 +1317,69 @@ export default function Seguimiento() {
       return ordenFecha === "reciente" ? diff : -diff;
     });
 
+  // ── Especiales con más de una OP real: agrupar por idsolicitud_producto.
+  // filasPorSolicitud guarda TODAS las filas (una por OP) de cada producto;
+  // un producto normal (o un especial en modo "misma orden") solo tiene una,
+  // así que su comportamiento no cambia en nada. principalDeGrupoEspecial
+  // elige cuál de esas OP se muestra colapsada en la fila principal --
+  // se prefiere la de unión porque representa la pieza final ya ensamblada
+  // (si todavía no existe, la de menor componente_orden).
+  const filasPorSolicitud = new Map<number, PedidoSeguimiento[]>();
+  pedidosFiltrados.forEach(p => {
+    if (p.idsolicitud_producto == null) return;
+    const arr = filasPorSolicitud.get(p.idsolicitud_producto) ?? [];
+    arr.push(p);
+    filasPorSolicitud.set(p.idsolicitud_producto, arr);
+  });
+
+  const principalDeGrupoEspecial = (filas: PedidoSeguimiento[]): PedidoSeguimiento => {
+    if (filas.length === 1) return filas[0];
+    const union = filas.find(f => (f as any).componente_tipo === "union");
+    if (union) return union;
+    return [...filas].sort((a, b) =>
+      (((a as any).componente_orden ?? 999) - ((b as any).componente_orden ?? 999))
+    )[0];
+  };
+
+  // Una sola fila "principal" por producto -- si tiene varias OP reales, el
+  // resto queda disponible como sub-filas expandibles (ver filasPorSolicitud
+  // + especialesExpandidos) en vez de mostrarse todas de entrada.
+  const yaElegidoPrincipal = new Set<string>();
+  const filasPrincipales = pedidosFiltrados.filter(p => {
+    const key = p.idsolicitud_producto != null
+      ? String(p.idsolicitud_producto)
+      : `${p.no_pedido}-${p.no_produccion ?? "sin-op"}`;
+    if (yaElegidoPrincipal.has(key)) return false;
+    yaElegidoPrincipal.add(key);
+    return true;
+  }).map(p => {
+    if (p.idsolicitud_producto == null) return p;
+    const filas = filasPorSolicitud.get(p.idsolicitud_producto);
+    return filas && filas.length > 1 ? principalDeGrupoEspecial(filas) : p;
+  });
+
   // REEMPLAZA por:
   const inicio = 0;
-  const pedidosPagina = pedidosFiltrados;
+  const pedidosPagina = filasPrincipales;
 
-  const renderFila = (pedido: PedidoSeguimiento, grande = false, idx = 0) => {
-    const px = grande ? "px-3 py-3" : "px-2 py-2";
-    const txt = grande ? "text-sm" : "text-xs";
+  interface OpcionesFilaEspecial {
+    esSubfila?: boolean;
+    grupo?: { expandido: boolean; totalOps: number; onToggle: () => void };
+  }
+
+  const renderFila = (
+    pedido: PedidoSeguimiento,
+    grande = false,
+    idx = 0,
+    opcionesEspecial: OpcionesFilaEspecial = {},
+  ) => {
+    const { esSubfila = false, grupo } = opcionesEspecial;
+    // Las sub-filas de un especial (inicio/unión, desplegadas con el badge
+    // "N OP") van un poco más compactas que las filas normales -- si no, un
+    // especial con 3-4 OP se ve tan alto como 3-4 renglones completos y el
+    // grupo se pierde de vista dentro de la tabla.
+    const px = esSubfila ? "px-2 py-1" : grande ? "px-3 py-3" : "px-2 py-2";
+    const txt = esSubfila ? "text-[11px]" : grande ? "text-sm" : "text-xs";
 
     const estadoAnticipo = pedido.anticipo_cubierto ? "pagado" : "pendiente";
     const estadoDiseño = pedido.diseno_aprobado ? "aprobado" : "pendiente";
@@ -1311,20 +1448,79 @@ export default function Seguimiento() {
       : [];
     const siguienteProcesoPapel = esPapel ? calcularProcesoSiguiente(estadosPapelDeLaFila) : null;
 
+    // ── NUEVO: especiales con más de una OP real ────────────────────────
+    // componente_tipo/componente_nombre/espera_union llegan del backend
+    // (ver getSeguimiento en seguimiento.controller.ts) SOLO en filas que
+    // pertenecen a un componente real de un especial -- en papel normal y
+    // en plástico vienen null/false y no cambian nada de lo de siempre.
+    const componenteTipo = (pedido as any).componente_tipo as string | null;
+    const componenteNombre = (pedido as any).componente_nombre as string | null;
+    const esperaUnion = Boolean((pedido as any).espera_union);
+    const esperaUnionMotivo = (pedido as any).espera_union_motivo as string | null;
+    // No se limita a esSubfila a propósito: si el grupo eligió la unión
+    // como fila principal (ver principalDeGrupoEspecial) y esa unión
+    // todavía debe esperar a sus OP de inicio, el candado tiene que verse
+    // ahí también, no solo cuando está expandida como sub-fila.
+    const esUnionBloqueada = componenteTipo === "union" && esperaUnion;
+
     return (
-      <tr key={`${pedido.no_pedido}-${pedido.no_produccion ?? "sin-op"}-${idx}`}
-        className="hover:bg-gray-50 transition-colors border-t border-gray-200">
+      <tr key={`${pedido.no_pedido}-${pedido.no_produccion ?? "sin-op"}-${(pedido as any).idcomponente_papel ?? "sin-comp"}-${idx}`}
+        className={`transition-colors border-t ${
+          // Unión bloqueada (esperando a sus OP de inicio): en gris, a
+          // propósito, para que se distinga de un vistazo que ESTA OP
+          // todavía no se puede descargar/trabajar -- solo las de inicio
+          // sí dejan (ver esUnionBloqueada / BotonPdfPedido abajo).
+          esUnionBloqueada
+            ? "bg-gray-100 text-gray-400 border-gray-200"
+            : esSubfila
+              ? "bg-gray-50/70 border-gray-100 hover:bg-gray-100"
+              : "hover:bg-gray-50 border-gray-200"
+        }`}>
 
         <td className={`${px} ${txt} text-gray-900 whitespace-nowrap`}>
-          {fmtFechaCorta(pedido.fecha)}
+          {grupo ? (
+            <button
+              type="button"
+              onClick={grupo.onToggle}
+              title={grupo.expandido ? "Ocultar las OP de este especial" : "Ver las OP de este especial (inicio + unión)"}
+              className="inline-flex items-center gap-1 mb-1 px-1.5 py-0.5 rounded-md border border-indigo-200 bg-indigo-50 text-indigo-700 text-[10px] font-semibold hover:bg-indigo-100"
+            >
+              <span className={`transition-transform ${grupo.expandido ? "rotate-90" : ""}`}>▶</span>
+              {grupo.totalOps} OP
+            </button>
+          ) : esSubfila ? (
+            <span className="inline-block w-3 text-gray-300 mr-1">↳</span>
+          ) : null}
+          <div>{fmtFechaCorta(pedido.fecha)}</div>
         </td>
 
         <td className={`${px} whitespace-nowrap`}>
+          {/* Este botón descarga el PDF del PEDIDO (cotización/venta), no el
+              de la orden de producción -- no depende de si ya terminaron los
+              procesos de las OP de inicio, así que NO se bloquea aquí aunque
+              la unión esté esperando (Jose, 2026-09-02: "el botón azul no
+              tiene sentido que lo bloquees pues es el del pedido no el de
+              orden de producción"). El candado de la unión va sólo en
+              RenderOrdenProduccion (columna de la orden de producción, más
+              adelante en la fila). */}
           <BotonPdfPedido pedido={pedido} puedePdf={puedePdfPedido} />
         </td>
 
         {/* ── IMPRESION + PRODUCTO + MEDIDAS + PIGMENTO ── */}
         <td className={`${px} ${txt} text-gray-900 text-center min-w-[25px]`}>
+          {esSubfila && (componenteTipo || componenteNombre) && (
+            <div className="mb-0.5">
+              <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                componenteTipo === "union"
+                  ? "bg-purple-100 text-purple-800"
+                  : "bg-teal-100 text-teal-800"
+              }`}>
+                {componenteTipo === "union" ? "Unión" : "Inicio"}
+                {componenteNombre ? ` · ${componenteNombre}` : ""}
+                {esUnionBloqueada && " 🔒"}
+              </span>
+            </div>
+          )}
           <div className="font-medium leading-tight text-[12px]">{pedido.impresion || "—"}
             {pedido.descripcion && (
               <span className="text-gray-400 text-[11px] italic ml-1">{pedido.descripcion}</span>
@@ -1341,11 +1537,22 @@ export default function Seguimiento() {
 
         {/* TIPO ← FALTABA ESTE */}
         <td className={`${px}`}>
-          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium capitalize ${
-            esPapel ? "bg-yellow-100 text-yellow-800" : "bg-indigo-100 text-indigo-800"
-          }`}>
-            {pedido.tipo_producto || "—"}
-          </span>
+          {/* es_especial (backend, ver getSeguimiento) marca el producto
+              completo -- se pinta aparte y en morado para que el usuario
+              identifique de un vistazo que es un especial (varias OP reales
+              detrás) y por eso el renglón es clickeable, sin depender solo
+              del badge chico "N OP" de la celda de fecha. */}
+          {Boolean((pedido as any).es_especial) ? (
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+              Especial
+            </span>
+          ) : (
+            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium capitalize ${
+              esPapel ? "bg-yellow-100 text-yellow-800" : "bg-indigo-100 text-indigo-800"
+            }`}>
+              {pedido.tipo_producto || "—"}
+            </span>
+          )}
         </td>
 
         {/* CANTIDAD (unidades + kilogramos) */}
@@ -1398,7 +1605,9 @@ export default function Seguimiento() {
           <FechaAprobacion fecha={(pedido as any).diseno_fecha_aprobacion ?? null} />
         </td>
 
-        <td className={`${px} text-center`}><RenderOrdenProduccion pedido={pedido} /></td>
+        <td className={`${px} text-center`}>
+          <RenderOrdenProduccion pedido={pedido} bloqueado={esUnionBloqueada} motivoBloqueo={esperaUnionMotivo} />
+        </td>
 
         <td className={`${px} text-center`}><ContadorDiasHabiles pedido={pedido} vigente={ordenVigente} /></td>
 
@@ -1532,6 +1741,42 @@ export default function Seguimiento() {
         </td>
       </tr>
     );
+  };
+
+  // ── Renderiza una lista de filas "principales", intercalando las
+  // sub-filas de cada especial expandido justo debajo de su fila. Se usa en
+  // los dos <tbody> (vista normal y pantalla completa) para no repetir la
+  // misma lógica de expansión dos veces.
+  const renderFilasConGrupos = (filas: PedidoSeguimiento[], grande: boolean, offset = 0) => {
+    let contador = offset;
+    return filas.flatMap((p) => {
+      const idx = contador++;
+      const filasGrupo = p.idsolicitud_producto != null
+        ? filasPorSolicitud.get(p.idsolicitud_producto)
+        : undefined;
+      const esGrupo = !!filasGrupo && filasGrupo.length > 1;
+      const expandido = esGrupo && p.idsolicitud_producto != null
+        && especialesExpandidos.has(p.idsolicitud_producto);
+
+      const filaPrincipal = renderFila(p, grande, idx, esGrupo ? {
+        grupo: {
+          expandido,
+          totalOps: filasGrupo!.length,
+          onToggle: () => {
+            if (p.idsolicitud_producto != null) toggleEspecialExpandido(p.idsolicitud_producto);
+          },
+        },
+      } : {});
+
+      if (!expandido || !filasGrupo) return [filaPrincipal];
+
+      const hijos = filasGrupo
+        .filter(f => f !== p)
+        .sort((a, b) => (((a as any).componente_orden ?? 999) - ((b as any).componente_orden ?? 999)))
+        .map((hijo) => renderFila(hijo, grande, contador++, { esSubfila: true }));
+
+      return [filaPrincipal, ...hijos];
+    });
   };
 
   const modales = (
@@ -1690,7 +1935,7 @@ export default function Seguimiento() {
           <div className="overflow-auto max-h-[calc(100vh-9rem)]">
             <table className="w-full">
               {renderThead(true)}
-              <tbody>{pedidosFiltrados.map((p, i) => renderFila(p, true, i))}</tbody>
+              <tbody>{renderFilasConGrupos(filasPrincipales, true)}</tbody>
             </table>
           </div>
         </div>
@@ -1764,7 +2009,7 @@ export default function Seguimiento() {
               { key: "todos", label: "Todos" },
               { key: "plastico", label: "Plástico" },
               { key: "papel", label: "Papel" },
-              { key: "carton", label: "Cartón" },
+              { key: "especiales", label: "Especiales" },
             ].map(f => (
               <button key={f.key} onClick={() => setFiltroTipo(f.key)}
                 className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${filtroTipo === f.key ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"
@@ -1810,7 +2055,7 @@ export default function Seguimiento() {
 
           {(busqueda || filtroTipo !== "todos" || soloFinalizados) && (
             <span className="text-sm text-gray-500 ml-auto">
-              {pedidosFiltrados.length} resultado{pedidosFiltrados.length !== 1 ? "s" : ""}
+              {filasPrincipales.length} resultado{filasPrincipales.length !== 1 ? "s" : ""}
             </span>
           )}
         </div>
@@ -1841,7 +2086,7 @@ export default function Seguimiento() {
           <h2 className="text-lg font-semibold text-gray-900">
             Lista de Ordenes
             <span className="ml-2 text-sm font-normal text-gray-500">
-              ({pedidosFiltrados.length} orden{pedidosFiltrados.length !== 1 ? "es" : ""})
+              ({filasPrincipales.length} orden{filasPrincipales.length !== 1 ? "es" : ""})
             </span>
           </h2>
           <div className="flex items-center gap-2">
@@ -1871,11 +2116,11 @@ export default function Seguimiento() {
           className="overflow-auto max-h-[calc(100vh-26rem)] min-h-[16rem]">
           <table className="w-full">
             {renderThead()}
-            <tbody>{pedidosPagina.map((p, i) => renderFila(p, false, inicio + i))}</tbody>
+            <tbody>{renderFilasConGrupos(pedidosPagina, false, inicio)}</tbody>
           </table>
         </div>
 
-        {pedidosFiltrados.length === 0 && (
+        {filasPrincipales.length === 0 && (
           <div className="p-8 text-center">
             <p className="text-lg font-medium text-gray-900">Sin resultados</p>
             <p className="text-sm text-gray-500 mt-1">

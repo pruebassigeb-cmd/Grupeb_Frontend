@@ -9,7 +9,17 @@ export type NombreProcesoOrdenPapel =
   | "alto_relieve_papel"
   | "suaje_produccion_papel"
   | "armado_papel"
-  | "empaque_papel";
+  | "empaque_papel"
+  // NUEVOS (Fase 1/2, productos especiales -- ver fase1_productos_especiales_up.sql
+  // y fase2_procesos_nuevos_y_repeticion_up.sql). Se agregan aquí porque
+  // procesosAplicanDesdeProducto() (ordenProduccionPapelPdf.helpers.ts) filtra
+  // CUALQUIER clave que no esté en este union type -- sin esto, la ruta real de
+  // una OP de unión con Litolaminado llegaba vacía al PDF (a veces vaciando
+  // procesos_aplican por completo y tumbando validarProductoPapelParaPdf).
+  | "litolaminado_papel"
+  | "desbarbe_papel"
+  | "pegado_papel"
+  | "especial_papel";
 
 // CORREGIDO: "hojeado_guillotina" se partió en dos claves independientes
 // ("hojeadora" y "guillotina") desde que el producto puede registrar una
@@ -26,7 +36,20 @@ export type ClaveMaquinariaPapel =
   | "texturizadora"
   | "suaje_maquina"
   | "armado"
-  | "empaque_maquina";
+  | "empaque_maquina"
+  // NUEVOS: litolaminado y desbarbe sí tienen catálogo de máquina propio
+  // (maquinaria_empalme / maquinaria_desbarbe -- ver
+  // MAQUINARIA_COMPONENTE_POR_TABLA en procesosPapel.controller.ts). Pegado y
+  // Especial NO tienen catálogo (pegado_papel.maquina es texto libre capturado
+  // en planta; especial_papel no lleva máquina) -- se dejan las claves de
+  // todos modos para que CLAVE_MAQUINA_POR_PROCESO_PAPEL tenga un valor por
+  // cada proceso; maquinaria_seleccionada nunca trae esas dos claves desde el
+  // backend, así que obtenerMaquinaProcesoPapel() regresa null sin problema y
+  // el PDF cae al valor capturado en vivo (registro.maquina).
+  | "empalme"
+  | "desbarbe"
+  | "pegado"
+  | "especial";
 
 export interface MaquinaSeleccionadaPapel {
   id: number;
@@ -253,6 +276,22 @@ export interface OrdenProduccionPapelData {
 
   url_render?: string | null;
   url_master?: string | null;
+
+  // ── Especiales, sólo OP de UNIÓN: piezas finales de cada OP de inicio
+  // hermana (último proceso de cada una), calculadas en
+  // seguimiento.controller.ts vía piezasFinalesHermanasPapel(). Se usan
+  // para mostrar/entrar como "entrada" del primer proceso de la unión.
+  piezas_finales_hermanas?: {
+    idproduccion: number;
+    no_produccion: string | null;
+    idcomponente_papel: number | null;
+    componente_nombre: string | null;
+    proceso_final_tabla: string | null;
+    proceso_final_nombre: string | null;
+    cantidad_entregada: number | null;
+    terminado: boolean;
+  }[];
+  piezas_finales_total?: number | null;
 
   [key: string]: unknown;
 }

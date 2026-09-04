@@ -138,12 +138,49 @@ export interface PedidoSeguimientoPapel {
   diseno_aprobado: boolean;
   idorden_diseno: number | null;
   od_estado: "en_revision" | "aprobado" | "rechazado" | null;
+
+  // ── Especiales: a qué componente pertenece esta OP (null en papel
+  // normal) -- el backend ya lo devuelve desde 2026-09-02/03 pero faltaba
+  // declararlo aquí, así que el modal nunca podía leerlo (Jose, 2026-09-03).
+  es_especial: boolean;
+  idcomponente_papel: number | null;
+  componente: {
+    id: number;
+    tipo: "inicio" | "union" | string | null;
+    nombre: string | null;
+    orden: number | null;
+  } | null;
+
+  // ── Especiales, sólo UNIÓN: piezas finales de cada OP de inicio hermana
+  // (último proceso de cada una) y el mínimo entre todas -- es la
+  // "entrada" del primer proceso de la unión (normalmente Litolaminado),
+  // que de otra forma queda en blanco porque no hay ningún proceso
+  // "anterior" dentro de la propia ruta de la unión. NO es la suma: las
+  // hermanas se emparejan 1 a 1, limitado por la que menos lleva
+  // entregado (ver seguimiento.controller.ts) (Jose, 2026-09-03).
+  piezas_finales_hermanas: {
+    idproduccion: number;
+    no_produccion: string | null;
+    idcomponente_papel: number | null;
+    componente_nombre: string | null;
+    proceso_final_tabla: string | null;
+    proceso_final_nombre: string | null;
+    cantidad_entregada: number | null;
+    terminado: boolean;
+  }[];
+  piezas_finales_total: number | null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────
 // PROCESOS DE PAPEL
 // ─────────────────────────────────────────────────────────────────────────
 
+// ⚠️ AMPLIADO (Jose, 2026-09-03): se agregaron litolaminado_papel,
+// desbarbe_papel y especial_papel -- los tres ya existían como procesos
+// reales del lado de especiales (ver procesosPapel.controller.ts /
+// RutaProcesos.tsx) pero no estaban dados de alta aquí, así que Seguimiento
+// nunca les mostraba columna. pegado_papel NO se agrega: se quitó como
+// proceso seleccionable (era el mismo que Empaque, ver RutaProcesos.tsx).
 export type NombreProcesoPapel =
   | "hojeado_papel"
   | "guillotina_papel"
@@ -153,12 +190,18 @@ export type NombreProcesoPapel =
   | "hot_stamping_papel"
   | "texturizado_papel"
   | "alto_relieve_papel"
+  | "litolaminado_papel"
   | "suaje_produccion_papel"
+  | "desbarbe_papel"
   | "armado_papel"
+  | "especial_papel"
   | "empaque_papel";
 
 // Orden de cascada fijo de referencia (el backend filtra a los procesos
 // que realmente aplican a cada orden, preservando este orden relativo).
+// Debe coincidir con ORDEN_CANONICO_TABLAS en RutaProcesos.tsx y con
+// ORDEN_CLAVES_PAPEL en procesosPapel.controller.ts (que no incluye
+// Litolaminado, exclusivo de especiales -- ver la nota en ese archivo).
 export const ORDEN_CASCADA_PAPEL: NombreProcesoPapel[] = [
   "hojeado_papel",
   "guillotina_papel",
@@ -168,8 +211,11 @@ export const ORDEN_CASCADA_PAPEL: NombreProcesoPapel[] = [
   "hot_stamping_papel",
   "texturizado_papel",
   "alto_relieve_papel",
+  "litolaminado_papel",
   "suaje_produccion_papel",
+  "desbarbe_papel",
   "armado_papel",
+  "especial_papel",
   "empaque_papel",
 ];
 
@@ -182,8 +228,11 @@ export const NOMBRES_PROCESO_PAPEL: Record<NombreProcesoPapel, string> = {
   hot_stamping_papel: "Hot Stamping",
   texturizado_papel: "Texturizado",
   alto_relieve_papel: "Alto Relieve",
+  litolaminado_papel: "Litolaminado",
   suaje_produccion_papel: "Suaje",
+  desbarbe_papel: "Desbarbe",
   armado_papel: "Armado",
+  especial_papel: "Especial",
   empaque_papel: "Empaque",
 };
 

@@ -9,7 +9,7 @@
 // formulario: el layout, el hook de productos, los tipos (que son el
 // contrato con el backend) y el servicio.
 
-import { useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import type React from "react";
 import { useAuth } from "../../context/AuthContext";
 import Dashboard from "../../layouts/Sidebar";
@@ -27,7 +27,8 @@ import { limpiarBorrador } from "../../hooks/useBorradorFormulario";
 import { claveBorradorProductoPapel } from "../../utils/clavesBorrador";
 import FormularioProductoEspecial from "../../components/papel/especiales/FormularioProductoEspecial";
 import type { ProductoEspecialConId } from "../../components/papel/especiales/FormularioProductoEspecial";
-import { T, Boton, Entrada, IcoLapiz, IcoBote } from "../../components/papel/especiales/disenoEspeciales";
+import { T, Boton, Entrada, IcoLapiz, IcoBote, Chip, paletaOP } from "../../components/papel/especiales/disenoEspeciales";
+import { etiquetaComponente, indiceInicio, nombreComponente } from "../../components/papel/especiales/MaterialesAsignacion";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // MAPEOS API → FORM
@@ -106,6 +107,277 @@ function mapApiMaquinariaToForm(api: any): Maquinaria {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// DETALLE (fila expandida) — igual en espíritu al DetalleProducto de
+// Papel.tsx, pero reorganizado por COMPONENTE: un especial no tiene un solo
+// material/suaje/acabados/maquinaria a nivel producto (esas tres viven
+// vacías a nivel producto a propósito, ver getProductoPapelById), sino uno
+// por cada OP (inicio/unión/misma OP) -- así que aquí se agrupa por
+// idcomponente_papel en vez de mostrar "Opciones de material" a secas.
+//
+// NOTA (Jose, 2026-09-02): "Tamaño" no aplica a un producto especial (una
+// combinación de piezas no tiene un tamaño único de catálogo con sentido) --
+// se omite a propósito tanto aquí como en la fila colapsada de la tabla.
+// ═══════════════════════════════════════════════════════════════════════════
+function filaDetalle(label: string, val: string | number | null | undefined) {
+  return val !== null && val !== undefined && val !== "" ? (
+    <div key={label} style={{ display: "flex", gap: 6, fontSize: 12, marginBottom: 2 }}>
+      <span style={{ color: "#6B7280", minWidth: 140, flexShrink: 0 }}>{label}</span>
+      <span style={{ color: "#111827", fontWeight: 500 }}>{String(val)}</span>
+    </div>
+  ) : null;
+}
+
+function seccionSuaje(suaje: any) {
+  if (!suaje) return null;
+  const corteTxt = [suaje.corte1_tipo, suaje.corte1_medida].filter(Boolean).join(" — ") +
+    (suaje.puntos_corte != null ? ` (${suaje.puntos_corte} pts)` : "");
+  const doblesTxt = [suaje.dobles1_tipo, suaje.dobles1_medida].filter(Boolean).join(" — ") +
+    (suaje.puntos_doble != null ? ` (${suaje.puntos_doble} pts)` : "");
+  const filas = [
+    filaDetalle("Numero", suaje.numero),
+    filaDetalle("PZS", suaje.pzs),
+    filaDetalle("Tamano", suaje.tamano),
+    filaDetalle("Metros", suaje.metros),
+    filaDetalle("Matrix", suaje.matrix_nombre),
+    filaDetalle("T. arreglo", suaje.tiempo_arreglo ? `${suaje.tiempo_arreglo} min` : null),
+    filaDetalle("Corte", corteTxt.trim() ? corteTxt : null),
+    filaDetalle("Dobles", doblesTxt.trim() ? doblesTxt : null),
+    suaje.sacabocado_nombre ? filaDetalle("Sacabocado", `${suaje.sacabocado_nombre}${suaje.sacabocado_medida ? " -- " + suaje.sacabocado_medida : ""} x ${suaje.cantidad_sacabocado ?? "--"}`) : null,
+    suaje.perforado_nombre ? filaDetalle("Perforado", `${suaje.perforado_nombre}${suaje.perforado_medida ? " -- " + suaje.perforado_medida : ""} x ${suaje.cantidad_perforado ?? "--"}`) : null,
+    suaje.herramental_desbarbe === true ? filaDetalle("Herramental desbarbe", suaje.no_desbarbe != null ? `Sí — No. ${suaje.no_desbarbe}` : "Sí") : null,
+  ].filter(Boolean);
+  if (filas.length === 0) return null;
+  return (
+    <div style={{ marginBottom: 10 }}>
+      <p style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#0F766E", margin: "0 0 5px" }}>Suaje</p>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2px 24px" }}>{filas}</div>
+    </div>
+  );
+}
+
+function seccionAcabados(acabados: any) {
+  if (!acabados) return null;
+  const filas = [
+    filaDetalle("Tipo de pegado", acabados.tipo_pegado),
+    filaDetalle("Pegamento", acabados.pegamento),
+    acabados.laminados?.length > 0 ? filaDetalle("Laminado", acabados.laminados.map((l: any) => l.nombre).join(", ")) : null,
+    filaDetalle("Rollo de laminado", acabados.rollo_lam),
+    acabados.rollo_lam_medida_ancho != null ? filaDetalle("Ancho del rollo", `${Number(acabados.rollo_lam_medida_ancho)} cm`) : null,
+    acabados.desarrollo_laminado != null ? filaDetalle("Desarrollo laminado", `${Number(acabados.desarrollo_laminado)} cm`) : null,
+    filaDetalle("Refuerzo material", acabados.refuerzo_material),
+    filaDetalle("Refuerzo medida", acabados.refuerzo_medida),
+    filaDetalle("Base material", acabados.base_material),
+    filaDetalle("Base medida", acabados.base_medida),
+    filaDetalle("Empaque", acabados.empaque),
+    filaDetalle("Pzs / caja", acabados.pzs_caja),
+    acabados.asas?.length > 0 ? filaDetalle("Asas", acabados.asas.map((a: any) => a.tipo_asa).join(", ")) : null,
+    acabados.lleva_uv === true ? filaDetalle("UV", "Sí") : null,
+    acabados.lleva_alto_relieve === true ? filaDetalle("Alto relieve", "Sí") : null,
+    acabados.lleva_textura === true ? filaDetalle("Textura", "Sí") : null,
+    acabados.lleva_hot_stamping === true ? filaDetalle("Hot stamping (Foil)", "Sí") : null,
+  ].filter(Boolean);
+  if (filas.length === 0) return null;
+  return (
+    <div style={{ marginBottom: 10 }}>
+      <p style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#92400E", margin: "0 0 5px" }}>Acabados</p>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2px 24px" }}>{filas}</div>
+    </div>
+  );
+}
+
+const MAQUINARIA_LABELS: [string, string][] = [
+  ["hojeado_guillotina", "Hojeado / Guill."], ["impresora", "Impresora"], ["hs_ar", "Hs y AR"],
+  ["suaje_maquina", "Suaje"], ["uv", "UV"], ["laminado_maquina", "Laminadora"],
+  ["texturizadora", "Texturizadora"], ["empaque_maquina", "Empaque"], ["empalme", "Empalme"],
+  ["armado", "Armado"], ["asas_maquina", "Asas"], ["desbarbe", "Desbarbe"],
+];
+
+function seccionMaquinaria(maquinaria: any) {
+  if (!maquinaria) return null;
+  const filas = MAQUINARIA_LABELS.map(([key, label]) => {
+    const items: { id: number; nombre: string }[] = maquinaria[key] ?? [];
+    return items.length > 0 ? filaDetalle(label, items.map((i) => i.nombre).join(", ")) : null;
+  }).filter(Boolean);
+  if (filas.length === 0) return null;
+  return (
+    <div style={{ marginBottom: 10 }}>
+      <p style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#334155", margin: "0 0 5px" }}>Maquinaria</p>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2px 24px" }}>{filas}</div>
+    </div>
+  );
+}
+
+function seccionMateriales(materiales: any[]) {
+  if (!materiales || materiales.length === 0) return null;
+  return (
+    <div style={{ marginBottom: 10 }}>
+      <p style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#3730A3", margin: "0 0 5px" }}>
+        Material{materiales.length > 1 ? "es" : ""}
+      </p>
+      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        {materiales.map((m: any, mi: number) => (
+          <div key={m.iddetalle_material ?? mi} style={{ border: "1px solid #E2E8F0", borderRadius: 6, padding: "5px 8px" }}>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 5, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 9, fontWeight: 700, color: "#6366F1", minWidth: 12 }}>{mi + 1}.</span>
+              {m.tipo_papel && <span style={{ fontSize: 11.5, fontWeight: 700, color: "#111827" }}>{m.tipo_papel}</span>}
+              {m.calibre && <span style={{ fontSize: 10, background: "#EEF2FF", color: "#4338CA", borderRadius: 3, padding: "0 4px", fontWeight: 600 }}>{m.calibre}</span>}
+              {m.medida && <span style={{ fontSize: 10.5, color: "#6B7280" }}>{m.medida}</span>}
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "1px 10px", marginTop: 2 }}>
+              {[["Pliego", m.pliego], ["Rend.", m.rendimiento], ["Corte", m.corte], ["Prep.", m.metodo_preparacion]].filter(([, v]) => v).map(([lbl, val]) => (
+                <span key={lbl as string} style={{ fontSize: 10.5 }}>
+                  <span style={{ color: "#9CA3AF" }}>{lbl}: </span>
+                  <span style={{ color: "#374151", fontWeight: 500 }}>{val as string}</span>
+                </span>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function seccionProcesos(procesos: any[]) {
+  if (!procesos || procesos.length === 0) {
+    return (
+      <p style={{ fontSize: 11.5, color: "#B45309", background: "#FEF3E2", border: "1px dashed #FBBF77", borderRadius: 6, padding: "6px 9px", margin: "0 0 10px" }}>
+        Esta OP todavía no tiene procesos en su ruta.
+      </p>
+    );
+  }
+  return (
+    <div style={{ marginBottom: 10 }}>
+      <p style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#1D4ED8", margin: "0 0 5px" }}>
+        Ruta de procesos
+      </p>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+        {procesos.map((p: any, pi: number) => (
+          <span key={p.idcomponente_papel_proceso ?? pi}
+            style={{ display: "inline-flex", alignItems: "center", gap: 4, background: "#EFF6FF", border: "1px solid #BFDBFE", borderRadius: 6, padding: "3px 8px", fontSize: 11 }}>
+            <span style={{ fontWeight: 700, color: "#1D4ED8" }}>{pi + 1}.</span>
+            <span style={{ color: "#1E3A8A", fontWeight: 600 }}>{p.nombre_proceso}</span>
+            {p.veces > 1 && <span style={{ color: "#1D4ED8", fontWeight: 700 }}>×{p.veces}</span>}
+            {p.observaciones && <span style={{ color: "#64748B", fontStyle: "italic" }}>— {p.observaciones}</span>}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function DetalleProductoEspecial({ id }: { id: number }) {
+  const [detalle, setDetalle] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    let vivo = true;
+    setLoading(true);
+    setError(false);
+    fetchProductoPapelById(id)
+      .then(d => { if (vivo) setDetalle(d); })
+      .catch(() => { if (vivo) setError(true); })
+      .finally(() => { if (vivo) setLoading(false); });
+    return () => { vivo = false; };
+  }, [id]);
+
+  if (loading) return <div style={{ padding: 16, background: "#F9FAFB", fontSize: 12, color: "#9CA3AF" }}>Cargando detalle...</div>;
+  if (error || !detalle) return <div style={{ padding: 16, background: "#F9FAFB", fontSize: 12, color: "#DC2626" }}>Error al cargar el detalle.</div>;
+
+  const componentes: any[] = detalle.componentes ?? [];
+  const materialesTodos: any[] = (detalle.grupos ?? []).flatMap((g: any) => g.materiales ?? []);
+  const materialesPorComponente = (idcomponente_papel: number) =>
+    materialesTodos.filter(m => m.idcomponente_papel === idcomponente_papel);
+
+  return (
+    <div style={{ padding: "14px 18px 18px", background: "#F9FAFB" }}>
+      {/* ── Información general del producto ── */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "3px 32px", marginBottom: 14 }}>
+        {filaDetalle("Tipo", detalle.tipo_producto)}
+        {filaDetalle("Descripción", detalle.descripcion_papel)}
+        {filaDetalle("Ancho", detalle.ancho)}
+        {filaDetalle("Fuelle", detalle.fuelle)}
+        {filaDetalle("Altura", detalle.altura)}
+        {filaDetalle("Medida", detalle.medida)}
+        {filaDetalle("Tamaño de asa sugerido", detalle.tamano_asa_default)}
+        {filaDetalle(
+          "Costo de laminado",
+          detalle.costo_laminado == null
+            ? null
+            : Number(detalle.costo_laminado).toLocaleString("es-MX", {
+                style: "currency", currency: "MXN", minimumFractionDigits: 4, maximumFractionDigits: 4,
+              })
+        )}
+      </div>
+
+      {/* ── Una tarjeta por cada OP (inicio / unión / misma OP) ── */}
+      {componentes.length === 0 ? (
+        <p style={{ fontSize: 12, color: "#9CA3AF", fontStyle: "italic" }}>
+          Este producto todavía no tiene su ruta de producción armada.
+        </p>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: componentes.length > 0 ? 14 : 0 }}>
+          {componentes.map((comp) => {
+            // nombre: comp.nombre ?? "" -- getComponentes() lo trae tal cual
+            // vive en la BD, y ahí puede ser NULL (mapComponenteToApi manda
+            // `nombre: comp.nombre || null` al guardar una OP sin nombre
+            // propio). nombreComponente() hace comp.nombre.trim(), así que
+            // un null aquí tronaba toda la fila expandida (Cannot read
+            // properties of null (reading 'trim')).
+            const compParaEtiqueta = { id: comp.idcomponente_papel, tipo: comp.tipo, orden: comp.orden, nombre: comp.nombre ?? "" } as any;
+            // as any: aquí solo se arma un objeto "compatible" con
+            // ComponentePapel para reutilizar las mismas etiquetas/colores de
+            // MaterialesAsignacion.tsx -- no trae procesos/suaje/acabados/
+            // maquinaria (esos ya se muestran aparte, tal cual vienen de
+            // getComponentes) porque ComponentePapel es el tipo del FORM de
+            // alta, no el de esta vista de solo lectura. tsc infiere un shape
+            // propio para el resultado de .map() aun partiendo de un any[],
+            // así que sin este cast exige las propiedades completas.
+            const componentesParaEtiqueta = componentes.map(c => ({ id: c.idcomponente_papel, tipo: c.tipo, orden: c.orden, nombre: c.nombre ?? "" })) as any;
+            const pal = paletaOP(comp.tipo, indiceInicio(compParaEtiqueta, componentesParaEtiqueta));
+            const materiales = materialesPorComponente(comp.idcomponente_papel);
+            return (
+              <div key={comp.idcomponente_papel} style={{ border: "1px solid #E5E7EB", borderRadius: 8, overflow: "hidden", background: "#fff" }}>
+                <div style={{ background: pal.headBg, padding: "7px 12px", display: "flex", alignItems: "center", gap: 8 }}>
+                  <Chip texto={etiquetaComponente(compParaEtiqueta, componentesParaEtiqueta)} bg={pal.chipBg} color={pal.chipText} />
+                  <span style={{ fontSize: 12.5, fontWeight: 600, color: pal.headText }}>
+                    {nombreComponente(compParaEtiqueta, componentesParaEtiqueta)}
+                  </span>
+                </div>
+                <div style={{ padding: "10px 12px" }}>
+                  {seccionMateriales(materiales)}
+                  {seccionProcesos(comp.procesos)}
+                  {seccionSuaje(comp.suaje)}
+                  {seccionAcabados(comp.acabados)}
+                  {seccionMaquinaria(comp.maquinaria)}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ── Archivos ── */}
+      {detalle.archivos?.length > 0 && (
+        <div>
+          <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#6B7280", margin: "0 0 8px" }}>Archivos</p>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {detalle.archivos.map((a: any) => (
+              <a key={a.id_archivo} href={a.url} target="_blank" rel="noreferrer"
+                style={{ display: "flex", alignItems: "center", gap: 6, background: "#F3F4F6", border: "1px solid #E5E7EB", borderRadius: 6, padding: "5px 10px", fontSize: 12, color: "#1D4ED8", textDecoration: "none" }}>
+                <span style={{ maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={a.nombre}>{a.nombre}</span>
+                <span style={{ fontSize: 10, color: "#9CA3AF", flexShrink: 0 }}>{a.categoria}</span>
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // LISTADO
 // ═══════════════════════════════════════════════════════════════════════════
 function Listado({ productos, loading, onNuevo, onEditar, onEliminar }: {
@@ -117,6 +389,13 @@ function Listado({ productos, loading, onNuevo, onEditar, onEliminar }: {
 }) {
   const [busqueda, setBusqueda] = useState("");
   const [porBorrar, setPorBorrar] = useState<number | null>(null);
+  // Fila expandida: al presionarla muestra toda la información del
+  // producto (materiales, ruta de procesos, suaje, acabados, maquinaria y
+  // archivos por cada OP), igual que ya funciona en Papel.tsx (Jose,
+  // 2026-09-02: "que muestre toda la información del producto tal y como
+  // funciona papel y plastico").
+  const [expandidoId, setExpandidoId] = useState<number | null>(null);
+  const toggleExpandido = (id: number) => setExpandidoId(prev => (prev === id ? null : id));
 
   const filtrados = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
@@ -176,50 +455,73 @@ function Listado({ productos, loading, onNuevo, onEditar, onEliminar }: {
               <th style={th}>Producto</th>
               <th style={th}>Tipo</th>
               <th style={th}>Medida</th>
-              <th style={th}>Tamaño</th>
               <th style={{ ...th, textAlign: "center" }}>Completitud</th>
               <th style={{ ...th, textAlign: "center", width: 110 }}>Acciones</th>
             </tr>
           </thead>
           <tbody>
             {loading && (
-              <tr><td style={{ ...td, color: T.muted, fontWeight: 500 }} colSpan={6}>Cargando productos...</td></tr>
+              <tr><td style={{ ...td, color: T.muted, fontWeight: 500 }} colSpan={5}>Cargando productos...</td></tr>
             )}
             {!loading && filtrados.length === 0 && (
-              <tr><td style={{ ...td, color: T.muted, fontWeight: 500 }} colSpan={6}>
+              <tr><td style={{ ...td, color: T.muted, fontWeight: 500 }} colSpan={5}>
                 {productos.length === 0
                   ? "Todavía no hay productos especiales registrados."
                   : "Ningún producto coincide con la búsqueda."}
               </td></tr>
             )}
-            {filtrados.map(p => (
-              <tr key={p.idproducto_papel}>
-                <td style={td}>{p.descripcion_papel || "(sin nombre)"}</td>
-                <td style={{ ...td, fontWeight: 500, color: T.inkSoft }}>{p.tipo_producto || "—"}</td>
-                <td style={{ ...td, fontWeight: 500, color: T.inkSoft }}>{p.medida || "—"}</td>
-                <td style={{ ...td, fontWeight: 500, color: T.inkSoft }}>{p.tamano_prod_nombre || "—"}</td>
-                <td style={{ ...td, textAlign: "center" }}>
-                  <span style={{
-                    display: "inline-block", minWidth: 44, padding: "4px 9px", borderRadius: 7,
-                    fontSize: 11.5, fontWeight: 700,
-                    background: p.completitud_pct >= 90 ? "#E7F5EC" : p.completitud_pct >= 65 ? T.orangeBg : "#FEF2F2",
-                    color: p.completitud_pct >= 90 ? T.greenDeep : p.completitud_pct >= 65 ? T.orangeText : "#B91C1C",
-                  }}>{p.completitud_pct}%</span>
-                </td>
-                <td style={{ ...td, textAlign: "center" }}>
-                  <span style={{ display: "inline-flex", gap: 14, alignItems: "center" }}>
-                    <button type="button" title="Editar" onClick={() => onEditar(p)}
-                      style={{ border: "none", background: "none", cursor: "pointer", padding: 0, display: "grid", placeItems: "center" }}>
-                      <IcoLapiz />
-                    </button>
-                    <button type="button" title="Eliminar" onClick={() => setPorBorrar(p.idproducto_papel)}
-                      style={{ border: "none", background: "none", cursor: "pointer", padding: 0, display: "grid", placeItems: "center" }}>
-                      <IcoBote size={17} color={T.danger} />
-                    </button>
-                  </span>
-                </td>
-              </tr>
-            ))}
+            {filtrados.map(p => {
+              const expandido = expandidoId === p.idproducto_papel;
+              return (
+                <Fragment key={p.idproducto_papel}>
+                  <tr
+                    onClick={() => toggleExpandido(p.idproducto_papel)}
+                    style={{ cursor: "pointer", background: expandido ? "#EFF6FF" : undefined }}
+                  >
+                    <td style={{ ...td, borderBottom: expandido ? "none" : td.borderBottom }}>
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                        <span style={{
+                          display: "inline-flex", alignItems: "center", justifyContent: "center",
+                          width: 18, height: 18, borderRadius: 4, background: "#EFF6FF",
+                          border: "1px solid #BFDBFE", fontSize: 10, color: "#1D4ED8", flexShrink: 0,
+                          transition: "transform .12s", transform: expandido ? "rotate(90deg)" : "none",
+                        }}>▶</span>
+                        {p.descripcion_papel || "(sin nombre)"}
+                      </span>
+                    </td>
+                    <td style={{ ...td, fontWeight: 500, color: T.inkSoft, borderBottom: expandido ? "none" : td.borderBottom }}>{p.tipo_producto || "—"}</td>
+                    <td style={{ ...td, fontWeight: 500, color: T.inkSoft, borderBottom: expandido ? "none" : td.borderBottom }}>{p.medida || "—"}</td>
+                    <td style={{ ...td, textAlign: "center", borderBottom: expandido ? "none" : td.borderBottom }}>
+                      <span style={{
+                        display: "inline-block", minWidth: 44, padding: "4px 9px", borderRadius: 7,
+                        fontSize: 11.5, fontWeight: 700,
+                        background: p.completitud_pct >= 90 ? "#E7F5EC" : p.completitud_pct >= 65 ? T.orangeBg : "#FEF2F2",
+                        color: p.completitud_pct >= 90 ? T.greenDeep : p.completitud_pct >= 65 ? T.orangeText : "#B91C1C",
+                      }}>{p.completitud_pct}%</span>
+                    </td>
+                    <td style={{ ...td, textAlign: "center", borderBottom: expandido ? "none" : td.borderBottom }} onClick={e => e.stopPropagation()}>
+                      <span style={{ display: "inline-flex", gap: 14, alignItems: "center" }}>
+                        <button type="button" title="Editar" onClick={() => onEditar(p)}
+                          style={{ border: "none", background: "none", cursor: "pointer", padding: 0, display: "grid", placeItems: "center" }}>
+                          <IcoLapiz />
+                        </button>
+                        <button type="button" title="Eliminar" onClick={() => setPorBorrar(p.idproducto_papel)}
+                          style={{ border: "none", background: "none", cursor: "pointer", padding: 0, display: "grid", placeItems: "center" }}>
+                          <IcoBote size={17} color={T.danger} />
+                        </button>
+                      </span>
+                    </td>
+                  </tr>
+                  {expandido && (
+                    <tr>
+                      <td colSpan={5} style={{ padding: 0, borderBottom: `1px solid ${T.borderSoft}` }}>
+                        <DetalleProductoEspecial id={p.idproducto_papel} />
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              );
+            })}
           </tbody>
         </table>
       </div>

@@ -35,10 +35,17 @@ import { formatMoney } from "../../utils/formatMoney";
 import { useAuth } from "../../context/AuthContext";
 import { leerBorrador, useAutoguardarBorrador, limpiarBorrador } from "../../hooks/useBorradorFormulario";
 import { claveBorradorCliente } from "../../utils/clavesBorrador";
+import FormularioProductoLibre from "../libre/FormularioProductoLibre";
+import type { ItemCotizacionLibre } from "../../types/cotizacion-libre.types";
 
+// Los especiales corren sobre la infraestructura de papel (mismas tablas,
+// mismo formulario), así que para efectos de "es esto un producto de la
+// familia papel/especial" cuentan igual -- aunque su tipo_material real ya
+// no sea "papel" sino "especial" (Jose, 2026-09-03).
 const esProductoPapel = (p: any): boolean =>
   p?.tipoCotizacion === "papel" ||
   p?.tipo_material === "papel" ||
+  p?.tipo_material === "especial" ||
   p?.idproducto_papel != null ||
   p?.producto_papel_idproducto_papel != null;
 
@@ -58,6 +65,11 @@ interface BorradorSolicitud {
   datos: DatosCotizacion;
   paso: number;
   tipoMaterial: "plastico" | "papel";
+  // NUEVO — sub-modo de "papel": normal vs producto especial. Se guarda
+  // aparte de tipoMaterial para no tocar los muchos `tipoMaterial === "..."`
+  // ya existentes en este archivo (siguen siendo válidos: un especial sigue
+  // siendo tipoMaterial "papel").
+  soloEspeciales?: boolean;
   modoProducto: "registrado" | "nuevo";
   productoActual: Producto;
   datosProductoNuevo: DatosProducto;
@@ -82,6 +94,7 @@ export default function FormularioSolicitud({
   onCancel,
   catalogos,
   modo = "cotizacion",
+  onSubmitLibre,
 }: FormularioCotizacionProps) {
 
   // Cotización y pedido son dos flujos de alta independientes: cada uno
@@ -123,6 +136,17 @@ export default function FormularioSolicitud({
   const isMounted = useRef(false);
 
   const [tipoMaterial, setTipoMaterial] = useState<"plastico" | "papel">(borradorInicial?.tipoMaterial ?? "plastico");
+  const [soloEspeciales, setSoloEspeciales] = useState<boolean>(borradorInicial?.soloEspeciales ?? false);
+  // Igual patrón que soloEspeciales: bandera aparte de tipoMaterial para no
+  // tocar los `tipoMaterial === "..."` existentes. modoLibre=true oculta los
+  // paneles normales y muestra FormularioProductoLibre; internamente el
+  // usuario sigue eligiendo plástico/papel/especial DENTRO de ese formulario
+  // (tipoLibre), pero eso no es tipoMaterial — es un documento aparte.
+  const [modoLibre, setModoLibre] = useState<boolean>(false);
+  // Cotización libre no se mezcla con productos normales en el mismo
+  // documento: si ya hay productos normales cargados, no se puede activar.
+  const puedeActivarModoLibre = datos.productos.length === 0;
+  const [renglonesLibres, setRenglonesLibres] = useState<ItemCotizacionLibre[]>([]);
   const [editandoPapelIndex, setEditandoPapelIndex] = useState<number | null>(borradorInicial?.editandoPapelIndex ?? null);
 
   const [caras, setCaras] = useState<Cara[]>([]);
@@ -215,7 +239,7 @@ export default function FormularioSolicitud({
   });
 
   useAutoguardarBorrador<BorradorSolicitud>(claveBorrador, {
-    datos, paso, tipoMaterial, modoProducto, productoActual, datosProductoNuevo,
+    datos, paso, tipoMaterial, soloEspeciales, modoProducto, productoActual, datosProductoNuevo,
     editandoProductoIndex, editandoPapelIndex, preciosEditadosManualmente, preciosTexto,
     modoColor, inputsPantones, idTipoPigmento, idTipoPanton, modoCantidad, cantidadesTexto,
     herramentalExpandido, herramentalDescripcion, herramentalPrecioTexto, productoNuevoListo,
@@ -811,9 +835,10 @@ const cargarProductos = async (query?: string) => {
     const tipo = modoProducto === "nuevo" ? datosProductoNuevo.tipoProducto : productoActual.nombre;
     // Bobina / Rollo perforado: se venden por unidad (pieza), de 1 a N, sin mínimo.
     if (esTipoSinCalculoPrecio(tipo)) return null;
-    // Bolsa de envío: solo un administrador puede registrar cualquier cantidad
-    // (desde 1), sin el mínimo general de 30 kg.
-    if (esBolsaEnvio(tipo) && esAdmin) return null;
+    // Administradores / super usuarios (acceso_total): sin restricción de
+    // mínimo para ningún producto de plástico, puede registrar cualquier
+    // cantidad (desde 1) sin importar el mínimo general de 30 kg.
+    if (esAdmin) return null;
     const n = cantidadesTexto[index] === "" ? 0 : Number(cantidadesTexto[index]);
     if (n <= 0) return null;
     const pk = productoActual.porKilo ? Number(productoActual.porKilo) : 0;
@@ -879,7 +904,16 @@ const cargarProductos = async (query?: string) => {
   };
 
   const handleAgregarProductoPapel = (prod: ProductoPapelCotizacion) => {
-    const productoPapel = { ...prod, tipoCotizacion: "papel", tipo_material: "papel" } as any;
+    // CORREGIDO (Jose, 2026-09-03): los especiales no son "papel" -- son su
+    // propio tipo_material "especial". tipoCotizacion se deja en "papel"
+    // porque sigue siendo el sub-formulario/plumbing correcto (especiales
+    // corren sobre la infraestructura de papel); solo tipo_material (el
+    // dato que se guarda en BD y clasifica el producto) cambia.
+    const productoPapel = {
+      ...prod,
+      tipoCotizacion: "papel",
+      tipo_material: (prod as any)?.es_especial === true ? "especial" : "papel",
+    } as any;
     if (editandoPapelIndex !== null) {
       setDatos(prev => ({ ...prev, productos: prev.productos.map((p, i) => i === editandoPapelIndex ? productoPapel : p) }));
       setEditandoPapelIndex(null);
@@ -892,6 +926,7 @@ const cargarProductos = async (query?: string) => {
     const prod = datos.productos[index] as any;
     if (esProductoPapel(prod)) {
       setEditandoPapelIndex(index); setTipoMaterial("papel");
+      setSoloEspeciales(prod.es_especial === true);
       window.scrollTo({ top: 0, behavior: "smooth" }); return;
     }
     setEditandoProductoIndex(index); setTipoMaterial("plastico"); setModoProducto("registrado");
@@ -970,7 +1005,23 @@ const cargarProductos = async (query?: string) => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (datos.productos.length === 0 || enviando) return;
+    if (enviando) return;
+
+    if (modoLibre) {
+      if (renglonesLibres.length === 0) return;
+      if (!onSubmitLibre) {
+        showAlert("Falta conectar onSubmitLibre en el componente padre");
+        return;
+      }
+      setEnviando(true);
+      try {
+        await onSubmitLibre(datos, renglonesLibres);
+        limpiarBorrador(claveBorrador);
+      } finally { setEnviando(false); }
+      return;
+    }
+
+    if (datos.productos.length === 0) return;
     if (datos.moneda === "USD" && (!datos.tipoCambio || datos.tipoCambio <= 0)) {
       showAlert("Captura un tipo de cambio válido para cotizar en USD");
       return;
@@ -991,7 +1042,10 @@ const cargarProductos = async (query?: string) => {
 
   const tipoActualCantidad = modoProducto === "nuevo" ? datosProductoNuevo.tipoProducto : productoActual.nombre;
   const esVentaPorUnidadSinMinimo = esTipoSinCalculoPrecio(tipoActualCantidad);
-  const esBolsaEnvioSinMinimo = esBolsaEnvio(tipoActualCantidad) && esAdmin;
+  // Administradores / super usuarios (acceso_total): sin mínimo de 30 kg para
+  // ningún producto de plástico. Se excluye el caso de venta por unidad
+  // (Bobina/Rollo) porque ese ya muestra su propio mensaje de "sin mínimo".
+  const esAdminSinMinimo = esAdmin && !esVentaPorUnidadSinMinimo;
 
   const esBopp = productoActual.material?.toUpperCase().includes("BOPP") ||
     productoActual.material?.toUpperCase().includes("CELOFAN") ||
@@ -1186,18 +1240,81 @@ const cargarProductos = async (query?: string) => {
           </button>
           <button
             type="button"
-            onClick={() => { setTipoMaterial("papel"); setEditandoProductoIndex(null); resetearFormularioProducto(); }}
-            className={`flex items-center gap-2 px-5 py-2 rounded-md font-medium text-sm transition-all ${tipoMaterial === "papel" ? "bg-white text-amber-600 shadow" : "text-gray-600 hover:text-gray-900"}`}
+            onClick={() => { setTipoMaterial("papel"); setSoloEspeciales(false); setEditandoProductoIndex(null); resetearFormularioProducto(); }}
+            className={`flex items-center gap-2 px-5 py-2 rounded-md font-medium text-sm transition-all ${tipoMaterial === "papel" && !soloEspeciales ? "bg-white text-amber-600 shadow" : "text-gray-600 hover:text-gray-900"}`}
           >
             📄 Papel
           </button>
+          <button
+            type="button"
+            onClick={() => { setTipoMaterial("papel"); setSoloEspeciales(true); setEditandoProductoIndex(null); resetearFormularioProducto(); }}
+            className={`flex items-center gap-2 px-5 py-2 rounded-md font-medium text-sm transition-all ${tipoMaterial === "papel" && soloEspeciales ? "bg-white text-emerald-600 shadow" : "text-gray-600 hover:text-gray-900"}`}
+          >
+            🎁 Especial
+          </button>
+          <button
+            type="button"
+            disabled={!puedeActivarModoLibre}
+            title={!puedeActivarModoLibre ? "No se puede mezclar con productos normales ya agregados" : undefined}
+            onClick={() => setModoLibre(true)}
+            className={`flex items-center gap-2 px-5 py-2 rounded-md font-medium text-sm transition-all ${modoLibre ? "bg-white text-purple-600 shadow" : "text-gray-600 hover:text-gray-900"} ${!puedeActivarModoLibre ? "opacity-40 cursor-not-allowed" : ""}`}
+          >
+            🆓 Libre
+          </button>
         </div>
+
+        {modoLibre && (
+          <div className="mb-3 flex items-center justify-between bg-purple-100 border border-purple-300 rounded-md px-3 py-2 text-sm text-purple-800">
+            <span>🆓 Modo Cotización Libre — este documento no se mezcla con productos de catálogo.</span>
+            <button type="button" onClick={() => setModoLibre(false)} className="underline">
+              Salir del modo libre
+            </button>
+          </div>
+        )}
+
+        {modoLibre && (
+          <div className="mb-4">
+            <FormularioProductoLibre
+              catalogosPlastico={{
+                tiposProducto: (catalogos.tiposProducto ?? []).map((t: any) => ({ id: t.id, nombre: t.nombre })),
+                materiales: (catalogos.materiales ?? []).map((m: any) => ({ id: m.id, nombre: m.nombre })),
+                calibres: (catalogos.calibres ?? []).map((c: any) => ({ id: c.id, nombre: String(c.valor) })),
+                coloresAsa: (coloresAsa ?? []).map((c: any) => ({ id: c.id_color, nombre: c.color })),
+                medidasTroquel: (medidasTroquel ?? []).map((m: any) => ({ id: m.id_medidatro, nombre: m.medida })),
+                cintasSeguridad: (cintasSeguridad ?? []).map((c: any) => ({ id: c.id, nombre: c.medida ? `${c.nombre} (${c.medida})` : c.nombre })),
+              }}
+              onAgregar={(item) => setRenglonesLibres((prev) => [...prev, item])}
+            />
+
+            {renglonesLibres.length > 0 && (
+              <div className="bg-white border border-purple-200 rounded-lg divide-y">
+                {renglonesLibres.map((r, i) => (
+                  <div key={i} className="flex items-center justify-between px-4 py-2 text-sm">
+                    <span>
+                      <strong>{r.producto_texto || (r.producto_id ? `código: ${r.producto_id}` : "(sin nombre)")}</strong>{" "}
+                      <span className="text-gray-400">
+                        ({r.tipo === "plastico" ? "🧴" : r.tipo === "papel" ? "📄" : "🎁"} {r.tipo})
+                      </span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setRenglonesLibres((prev) => prev.filter((_, idx) => idx !== i))}
+                      className="text-red-500 hover:text-red-700 text-xs"
+                    >
+                      Quitar
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* ══════════════════════════════════════════════════════════════
             FORMULARIO PAPEL
         ══════════════════════════════════════════════════════════════ */}
-        {tipoMaterial === "papel" && (
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-6 mb-4">
+        {!modoLibre && tipoMaterial === "papel" && (
+          <div className={`${soloEspeciales ? "bg-emerald-50 border-emerald-200" : "bg-amber-50 border-amber-200"} border rounded-lg p-6 mb-4`}>
             <FormularioProductoPapel
               modo={modo}
               onAgregar={handleAgregarProductoPapel}
@@ -1208,6 +1325,7 @@ const cargarProductos = async (query?: string) => {
               idTipoPanton={idTipoPanton}
               moneda={datos.moneda ?? "MXN"}
               tipoCambio={datos.tipoCambio}
+              soloEspeciales={soloEspeciales}
             />
           </div>
         )}
@@ -1215,7 +1333,7 @@ const cargarProductos = async (query?: string) => {
         {/* ══════════════════════════════════════════════════════════════
             FORMULARIO PLÁSTICO — un solo contenedor con todo adentro
         ══════════════════════════════════════════════════════════════ */}
-        {tipoMaterial === "plastico" && (
+        {!modoLibre && tipoMaterial === "plastico" && (
           <div className="bg-gray-50 p-6 rounded-lg mb-4">
 
             {/* ── Tabs Existente / Nuevo ── */}
@@ -1699,7 +1817,7 @@ const cargarProductos = async (query?: string) => {
                   {esVentaPorUnidadSinMinimo && (
                     <p className="mt-1 text-xs text-emerald-600 font-medium">✓ Se vende por pieza — de 1 a N, sin mínimo</p>
                   )}
-                  {esBolsaEnvioSinMinimo && (
+                  {esAdminSinMinimo && (
                     <p className="mt-1 text-xs text-emerald-600 font-medium">✓ Modo administrador: cualquier cantidad, sin el mínimo de 30 kg</p>
                   )}
                 </div>
@@ -1857,12 +1975,20 @@ const cargarProductos = async (query?: string) => {
               {datos.productos.map((prod, index) => {
                 const p = prod as any;
                 const esPapel = esProductoPapel(p);
+                // Los especiales usan su propia insignia/color, no la de
+                // papel, aunque compartan el mismo formulario (Jose,
+                // 2026-09-03).
+                const esEspecial = p?.es_especial === true;
                 return (
-                  <div key={index} className={`flex items-start justify-between p-4 rounded-lg border shadow-sm ${esPapel ? "bg-amber-50 border-amber-200" : "bg-white border-gray-200"}`}>
+                  <div key={index} className={`flex items-start justify-between p-4 rounded-lg border shadow-sm ${esEspecial ? "bg-emerald-50 border-emerald-200" : esPapel ? "bg-amber-50 border-amber-200" : "bg-white border-gray-200"}`}>
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-1 flex-wrap">
                         {esPapel && (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-200 text-amber-800 border border-amber-300">📄 Papel</span>
+                          esEspecial ? (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800 border border-purple-200">✨ Especial</span>
+                          ) : (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-200 text-amber-800 border border-amber-300">📄 Papel</span>
+                          )
                         )}
                         <p className="font-semibold text-gray-900">{p.nombre}</p>
                         {p.descripcion && (
@@ -2056,12 +2182,12 @@ const cargarProductos = async (query?: string) => {
               {verificandoDuplicado ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Verificando...</> : "Confirmar producto →"}
             </button>
           )}
-          {datos.productos.length > 0 && (
+          {(datos.productos.length > 0 || (modoLibre && renglonesLibres.length > 0)) && (
             <button type="button" onClick={handleSubmit} disabled={enviando}
               className={`px-6 py-2 rounded-lg font-semibold transition flex items-center gap-2 ${enviando ? "bg-gray-400 text-white cursor-not-allowed" : "bg-green-600 hover:bg-green-700 text-white"}`}>
               {enviando
                 ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Guardando...</>
-                : modo === "pedido" ? "Crear Pedido" : "Crear Cotización"
+                : modoLibre ? "Generar Propuesta Libre" : modo === "pedido" ? "Crear Pedido" : "Crear Cotización"
               }
             </button>
           )}

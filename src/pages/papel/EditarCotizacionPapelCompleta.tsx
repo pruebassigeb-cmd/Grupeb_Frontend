@@ -51,7 +51,9 @@ interface DetalleEdit {
 
 interface ProductoPapelEdit {
   idsolicitud_producto: number;
-  tipo_material: "papel";
+  // Los especiales guardan tipo_material="especial", no "papel"
+  // (Jose, 2026-09-03).
+  tipo_material: "papel" | "especial";
   _eliminado: boolean;
   _esNuevo?: boolean;
 
@@ -175,7 +177,14 @@ function BuscadorProductoPapel({
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    getProductosPapel().then(data => { setLista(data); setCargando(false); });
+    // Los productos especiales (es_especial === true) no se ofrecen en este
+    // buscador genérico de "cambiar producto de papel" — para no mezclarlos
+    // por accidente en una cotización que no fue armada como especial. Se
+    // agregan/editan desde su propio flujo (pestaña "Especial").
+    getProductosPapel().then(data => {
+      setLista(data.filter(p => p.es_especial !== true));
+      setCargando(false);
+    });
   }, []);
 
   const filtrados = lista.filter(p =>
@@ -876,7 +885,8 @@ export default function EditarCotizacionPapelCompleta() {
 
             return {
               idsolicitud_producto: p.idsolicitud_producto ?? p.idcotizacion_producto,
-              tipo_material: "papel" as const,
+              // Se respeta el tipo_material real (Jose, 2026-09-03).
+              tipo_material: (p.es_especial === true ? "especial" : "papel") as "papel" | "especial",
               _eliminado: false,
 
               idproducto_papel: p.idproducto_papel,
@@ -998,7 +1008,7 @@ export default function EditarCotizacionPapelCompleta() {
     setModalBuscador({ abierto: true, piOrigen: -1, modo: "agregar" });
 
   const aplicarProductoAlPi = async (
-    pi: number, idproducto_papel: number, nombre: string, medida: string
+    pi: number, idproducto_papel: number, nombre: string, medida: string, esEspecial: boolean = false
   ) => {
     try {
       const opciones = await getOpcionesProductoPapel(idproducto_papel);
@@ -1007,6 +1017,9 @@ export default function EditarCotizacionPapelCompleta() {
         return {
           ...p,
           idproducto_papel, nombre, medida,
+          // Se respeta si el producto seleccionado es especial, por si
+          // "cambiar" cruza entre papel normal y especial (Jose, 2026-09-03).
+          tipo_material: esEspecial ? "especial" : "papel",
           idgrupo_papel: opciones.grupos[0]?.idgrupo_papel ?? null,
           grupo_descripcion: opciones.grupos[0]?.etiqueta ?? "",
           opcionesGrupos: opciones.grupos,
@@ -1024,7 +1037,7 @@ export default function EditarCotizacionPapelCompleta() {
   };
 
   const crearProductoPapelDesdeSeleccion = async (
-    idproducto_papel: number, nombre: string, medida: string
+    idproducto_papel: number, nombre: string, medida: string, esEspecial: boolean = false
   ): Promise<ProductoPapelEdit> => {
     let opcionesGrupos: GrupoOpcion[] = [];
     let opcionesAsas: AsaOpcion[] = [];
@@ -1041,7 +1054,9 @@ export default function EditarCotizacionPapelCompleta() {
 
     return {
       idsolicitud_producto: tempId,
-      tipo_material: "papel",
+      // Se respeta si el producto seleccionado es especial
+      // (Jose, 2026-09-03).
+      tipo_material: esEspecial ? "especial" : "papel",
       _eliminado: false,
       _esNuevo: true,
 
@@ -1087,10 +1102,12 @@ export default function EditarCotizacionPapelCompleta() {
     setModalBuscador({ abierto: false, piOrigen: -1, modo: "cambiar" });
 
     if (modo === "agregar") {
-      const nuevo = await crearProductoPapelDesdeSeleccion(prod.idproducto_papel, prod.tipo_producto, prod.medida ?? "");
+      const nuevo = await crearProductoPapelDesdeSeleccion(
+        prod.idproducto_papel, prod.tipo_producto, prod.medida ?? "", prod.es_especial === true
+      );
       setProductos(prev => [...prev, nuevo]);
     } else {
-      await aplicarProductoAlPi(piOrigen, prod.idproducto_papel, prod.tipo_producto, prod.medida ?? "");
+      await aplicarProductoAlPi(piOrigen, prod.idproducto_papel, prod.tipo_producto, prod.medida ?? "", prod.es_especial === true);
     }
   };
 
@@ -1114,7 +1131,8 @@ export default function EditarCotizacionPapelCompleta() {
 
   const regenerarPdfCotizacion = async (cotFresca: Cotizacion) => {
     const productosPdf = cotFresca.productos.map((p: any) => ({
-      tipo_material: "papel",
+      // Se respeta el tipo_material real (Jose, 2026-09-03).
+      tipo_material: p.es_especial === true ? "especial" : (p.tipo_material ?? "papel"),
       tipoCotizacion: "papel",
       nombre: p.nombre,
       material: p.grupo_descripcion || "",
@@ -1208,7 +1226,9 @@ export default function EditarCotizacionPapelCompleta() {
         .map(p => ({
           idsolicitud_producto: p.idsolicitud_producto,
           eliminado: p._eliminado,
-          tipo_material: "papel" as const,
+          // Se manda el tipo_material real ("papel" o "especial") en vez de
+          // forzar "papel" siempre (Jose, 2026-09-03).
+          tipo_material: p.tipo_material,
           tipoCotizacion: "papel" as const,
           idproducto_papel: p.idproducto_papel,
           idgrupo_papel: p.idgrupo_papel ?? null,
@@ -1242,7 +1262,9 @@ export default function EditarCotizacionPapelCompleta() {
       const productosNuevos: ProductoCotizacionNuevoPapel[] = productos
         .filter(p => !!p._esNuevo && !p._eliminado)
         .map(p => ({
-          tipo_material: "papel" as const,
+          // Se manda el tipo_material real ("papel" o "especial") en vez de
+          // forzar "papel" siempre (Jose, 2026-09-03).
+          tipo_material: p.tipo_material,
           tipoCotizacion: "papel" as const,
           idproducto_papel: p.idproducto_papel,
           idgrupo_papel: p.idgrupo_papel ?? null,

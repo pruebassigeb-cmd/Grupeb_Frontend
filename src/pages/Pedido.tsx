@@ -41,13 +41,17 @@ const ITEMS_POR_PAGINA = 7;
 const esLineaPapel = (p: any): boolean =>
   p?.tipo_material === "papel" || p?.tipoCotizacion === "papel";
 
+// Producto especial (papel): el backend ya expone `es_especial` en la línea
+// (ver papel_es_especial en pedidos.controller.ts).
+const esLineaEspecial = (p: any): boolean => p?.es_especial === true;
+
 export default function Pedidos() {
   const navigate = useNavigate();
 
   const [pedidos, setPedidos] = useState<Pedido[]>([]);
   const [loadingPeds, setLoadingPeds] = useState(false);
   const [busqueda, setBusqueda] = useState("");
-  const [filtroMaterial, setFiltroMaterial] = useState<"todos" | "plastico" | "papel">("todos");
+  const [filtroMaterial, setFiltroMaterial] = useState<"todos" | "plastico" | "papel" | "especial">("todos");
   const [modalOpen, setModalOpen] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [catalogos, setCatalogos] = useState<CatalogosPlastico>({ tiposProducto: [], materiales: [], calibres: [] });
@@ -134,9 +138,11 @@ export default function Pedidos() {
     }
 
     if (filtroMaterial === "todos") return true;
-    return p.productos.some((prod: any) =>
-      filtroMaterial === "papel" ? esLineaPapel(prod) : !esLineaPapel(prod)
-    );
+    return p.productos.some((prod: any) => {
+      if (filtroMaterial === "especial") return esLineaEspecial(prod);
+      if (filtroMaterial === "papel") return esLineaPapel(prod);
+      return !esLineaPapel(prod);
+    });
   });
 
   const totalPaginas = Math.max(1, Math.ceil(pedidosFiltrados.length / ITEMS_POR_PAGINA));
@@ -178,7 +184,10 @@ export default function Pedidos() {
       .join(" / ") || "";
 
     return {
-      tipo_material: "papel",      // ← AGREGAR
+      // Se respeta el tipo_material real ("papel" o "especial") en vez de
+      // forzar "papel" siempre -- así el PDF del pedido/cotización deja de
+      // mostrar los especiales como si fueran papel normal (Jose, 2026-09-03).
+      tipo_material: p.es_especial === true ? "especial" : (p.tipo_material ?? "papel"),
       tipoCotizacion: "papel",
       nombre: p.nombre,
       material: materialStr,
@@ -614,6 +623,7 @@ export default function Pedidos() {
             { key: "todos", label: "Todos", icon: "📋" },
             { key: "plastico", label: "Plástico", icon: "🧴" },
             { key: "papel", label: "Papel", icon: "📄" },
+            { key: "especial", label: "Especiales", icon: "✨" },
           ] as const).map(({ key, label, icon }) => (
             <button
               key={key}
@@ -624,7 +634,9 @@ export default function Pedidos() {
                   ? "bg-white text-amber-600 shadow"
                   : key === "plastico"
                     ? "bg-white text-blue-600 shadow"
-                    : "bg-white text-gray-700 shadow"
+                    : key === "especial"
+                      ? "bg-white text-purple-600 shadow"
+                      : "bg-white text-gray-700 shadow"
                 : "text-gray-600 hover:text-gray-900"
                 }`}
             >
@@ -634,14 +646,18 @@ export default function Pedidos() {
                   ? "bg-amber-100 text-amber-700"
                   : key === "plastico"
                     ? "bg-blue-100 text-blue-700"
-                    : "bg-gray-200 text-gray-600"
+                    : key === "especial"
+                      ? "bg-purple-100 text-purple-700"
+                      : "bg-gray-200 text-gray-600"
                 : "bg-gray-200 text-gray-500"
                 }`}>
                 {key === "todos"
                   ? pedidos.length
                   : pedidos.filter(p =>
                     p.productos.some((prod: any) =>
-                      key === "papel" ? esLineaPapel(prod) : !esLineaPapel(prod)
+                      key === "especial" ? esLineaEspecial(prod)
+                        : key === "papel" ? esLineaPapel(prod)
+                          : !esLineaPapel(prod)
                     )
                   ).length
                 }
@@ -807,6 +823,7 @@ export default function Pedidos() {
                           </div>
                           {ped.productos.map((p: any, i: number) => {
                             const papel = esLineaPapel(p);
+                            const especial = esLineaEspecial(p);
                             return (
                               <div key={i} className="flex items-start gap-4 bg-white rounded-lg px-4 py-3 shadow-sm border border-gray-100">
                                 <span className={`flex-shrink-0 w-6 h-6 rounded-full text-xs font-bold flex items-center justify-center mt-0.5 ${papel ? "bg-amber-100 text-amber-700" : "bg-blue-100 text-blue-700"}`}>{i + 1}</span>
@@ -814,7 +831,11 @@ export default function Pedidos() {
                                   <div className="flex items-center gap-2 flex-wrap">
                                     <p className="text-sm font-medium text-gray-800 truncate">{p.nombre}</p>
                                     {papel && (
-                                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-700 border border-amber-200">📄 Papel</span>
+                                      especial ? (
+                                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-700 border border-purple-200">✨ Especial</span>
+                                      ) : (
+                                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-700 border border-amber-200">📄 Papel</span>
+                                      )
                                     )}
                                     {p.descripcion && (
                                       <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800 border border-purple-200">{p.descripcion}</span>

@@ -78,7 +78,10 @@ export interface ProductoPlasticoCotizacion extends ProductoBaseCotizacion {
 
 export interface ProductoPapelCotizacionLeido extends ProductoBaseCotizacion {
   tipoCotizacion: "papel";
-  tipo_material: "papel";
+  // Los especiales guardan tipo_material="especial", no "papel"
+  // (Jose, 2026-09-03).
+  tipo_material: "papel" | "especial";
+  es_especial?: boolean;
 
   idproducto_papel: number;
   descripcion_papel: string | null;
@@ -209,7 +212,9 @@ export interface ProductoPlasticoEnviarCotizacion {
 
 export interface ProductoPapelEnviarCotizacion {
   tipoCotizacion: "papel";
-  tipo_material: "papel";
+  // Los especiales guardan tipo_material="especial", no "papel"
+  // (Jose, 2026-09-03).
+  tipo_material: "papel" | "especial";
   idproducto_papel: number;
   nombre: string;
   idgrupo_papel: number | null;

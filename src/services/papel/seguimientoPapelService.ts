@@ -62,6 +62,30 @@ export interface ProcesosOrdenPapelRespuesta {
   // índice -1 del modal de papel funcione igual que en plástico, sin
   // tener que asumir una cadena fija de 10).
   procesos: ProcesoRegistroPapel[];
+  // Sólo puede venir en true para la OP de UNIÓN de un especial que
+  // fusiona por Litolaminado: significa que todavía le faltan por
+  // terminar una o más de sus OP de inicio hermanas y por eso su primer
+  // proceso está bloqueado (ver unionEsperandoHermanasPapel en el
+  // backend). false/undefined en cualquier otro caso -- normal papel,
+  // OP de inicio, OP "única", o unión que no lleva Litolaminado.
+  espera_union?: boolean;
+  espera_union_motivo?: string | null;
+  // Especiales, sólo UNIÓN: piezas finales de cada OP de inicio hermana y
+  // el mínimo entre todas -- alimenta tanto el límite del primer proceso
+  // de la unión (normalmente Litolaminado) como la "entrada" que se le
+  // precarga al finalizar (ver procesosPapel.controller.ts) (Jose,
+  // 2026-09-03). [] / null en cualquier caso que no sea unión.
+  piezas_finales_hermanas?: {
+    idproduccion: number;
+    no_produccion: string | null;
+    idcomponente_papel: number | null;
+    componente_nombre: string | null;
+    proceso_final_tabla: string | null;
+    proceso_final_nombre: string | null;
+    cantidad_entregada: number | null;
+    terminado: boolean;
+  }[];
+  piezas_finales_total?: number | null;
 }
 
 export const getProcesosOrdenPapel = async (

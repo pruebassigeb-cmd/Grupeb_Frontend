@@ -59,7 +59,9 @@ type MetodoHojeadoPapel = "hojeado" | "guillotina";
 
 interface ProductoPapelEdit {
   idsolicitud_producto: number;
-  tipo_material: "papel";
+  // Los especiales guardan tipo_material="especial", no "papel"
+  // (Jose, 2026-09-03).
+  tipo_material: "papel" | "especial";
   _eliminado: boolean;
   // Marca productos agregados en esta sesión de edición (aún no existen en BD)
   _esNuevo?: boolean;
@@ -206,7 +208,14 @@ function BuscadorProductoPapel({
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    getProductosPapel().then(data => { setLista(data); setCargando(false); });
+    // Los productos especiales (es_especial === true) no se ofrecen en este
+    // buscador genérico de "cambiar producto de papel" — para no mezclarlos
+    // por accidente en un pedido que no fue armado como especial. Se
+    // agregan/editan desde su propio flujo (pestaña "Especial").
+    getProductosPapel().then(data => {
+      setLista(data.filter(p => p.es_especial !== true));
+      setCargando(false);
+    });
   }, []);
 
   const filtrados = lista.filter(p =>
@@ -1019,7 +1028,8 @@ export default function EditarPedidoPapel() {
 
             return {
               idsolicitud_producto: p.idsolicitud_producto ?? p.idcotizacion_producto,
-              tipo_material: "papel" as const,
+              // Se respeta el tipo_material real (Jose, 2026-09-03).
+              tipo_material: (p.es_especial === true ? "especial" : "papel") as "papel" | "especial",
               _eliminado: false,
 
               idproducto_papel: p.idproducto_papel,
@@ -1183,7 +1193,8 @@ export default function EditarPedidoPapel() {
     pi: number,
     idproducto_papel: number,
     nombre: string,
-    medida: string
+    medida: string,
+    esEspecial: boolean = false
   ) => {
     try {
       const opciones = await getOpcionesProductoPapel(idproducto_papel);
@@ -1192,6 +1203,9 @@ export default function EditarPedidoPapel() {
         return {
           ...p,
           idproducto_papel,
+          // Se respeta si el producto seleccionado es especial, por si
+          // "cambiar" cruza entre papel normal y especial (Jose, 2026-09-03).
+          tipo_material: esEspecial ? "especial" : "papel",
           nombre,
           medida,
           idgrupo_papel: opciones.grupos[0]?.idgrupo_papel ?? null,
@@ -1216,7 +1230,8 @@ export default function EditarPedidoPapel() {
   const crearProductoPapelDesdeSeleccion = async (
     idproducto_papel: number,
     nombre: string,
-    medida: string
+    medida: string,
+    esEspecial: boolean = false
   ): Promise<ProductoPapelEdit> => {
     let opcionesGrupos: GrupoOpcion[] = [];
     let opcionesAsas: AsaOpcion[] = [];
@@ -1234,7 +1249,9 @@ export default function EditarPedidoPapel() {
 
     return {
       idsolicitud_producto: tempId,
-      tipo_material: "papel",
+      // Se respeta si el producto seleccionado es especial
+      // (Jose, 2026-09-03).
+      tipo_material: esEspecial ? "especial" : "papel",
       _eliminado: false,
       _esNuevo: true,
 
@@ -1306,7 +1323,7 @@ export default function EditarPedidoPapel() {
 
     if (modo === "agregar") {
       const creado = await crearProductoPapelDesdeSeleccion(
-        prod.idproducto_papel, prod.tipo_producto, prod.medida ?? ""
+        prod.idproducto_papel, prod.tipo_producto, prod.medida ?? "", prod.es_especial === true
       );
       const { producto: nuevo, necesitaModal } = await resolverMaquinariaSiNoAmbigua(creado);
       setProductos(prev => {
@@ -1318,7 +1335,7 @@ export default function EditarPedidoPapel() {
         return actualizados;
       });
     } else {
-      await aplicarProductoAlPi(piOrigen, prod.idproducto_papel, prod.tipo_producto, prod.medida ?? "");
+      await aplicarProductoAlPi(piOrigen, prod.idproducto_papel, prod.tipo_producto, prod.medida ?? "", prod.es_especial === true);
     }
   };
 
@@ -1453,7 +1470,9 @@ export default function EditarPedidoPapel() {
         .map(p => ({
           idsolicitud_producto: p.idsolicitud_producto,
           eliminado: p._eliminado,
-          tipo_material: "papel" as const,
+          // Se manda el tipo_material real ("papel" o "especial") en vez de
+          // forzar "papel" siempre (Jose, 2026-09-03).
+          tipo_material: p.tipo_material,
           tipoCotizacion: "papel" as const,
           idproducto_papel: p.idproducto_papel,
           idgrupo_papel: p.idgrupo_papel ?? null,
@@ -1493,7 +1512,9 @@ export default function EditarPedidoPapel() {
       const productosNuevos: ProductoNuevoPapel[] = productos
         .filter(p => !!p._esNuevo && !p._eliminado)
         .map(p => ({
-          tipo_material: "papel" as const,
+          // Se manda el tipo_material real ("papel" o "especial") en vez de
+          // forzar "papel" siempre (Jose, 2026-09-03).
+          tipo_material: p.tipo_material,
           tipoCotizacion: "papel" as const,
           idproducto_papel: p.idproducto_papel,
           idgrupo_papel: p.idgrupo_papel ?? null,

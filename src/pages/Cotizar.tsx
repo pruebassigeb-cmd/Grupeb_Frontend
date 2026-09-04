@@ -10,6 +10,11 @@ import {
   eliminarCotizacion,
 } from "../services/cotizacionesService";
 import { generarPdfCotizacion } from "../utils/generarPdfCotizacion";
+import { generarPdfCotizacionLibre, type ItemCotizacionLibrePdf } from "../utils/generarPdfCotizacionLibre";
+import { useAuth } from "../context/AuthContext";
+import { getCotizacionesLibres, crearCotizacionLibre, getCotizacionLibreDetalle, eliminarCotizacionLibre } from "../services/cotizacionLibreService";
+import type { CotizacionLibreResumen, ItemCotizacionLibre, CotizacionLibreDetalle } from "../types/cotizacion-libre.types";
+import ModalEditarCotizacionLibre from "../components/libre/ModalEditarCotizacionLibre";
 import { preguntarGuardarS3 } from "../services/pdfS3.service";
 import type { CatalogosPlastico } from "../types/plastico/productos-plastico.types";
 import type { Cotizacion } from "../types/cotizaciones.types";
@@ -45,11 +50,18 @@ const ITEMS_POR_PAGINA = 7;
 // Identifica si una línea es de papel (viene de getCotizaciones / del form)
 const esLineaPapel = (p: any): boolean =>
   p?.tipo_material === "papel" ||
+  p?.tipo_material === "especial" ||
   p?.tipoCotizacion === "papel" ||
   p?.idproducto_papel != null ||
   p?.producto_papel_idproducto_papel != null;
 
+// Producto especial (papel): el backend ya expone `es_especial` en la línea
+// (ver papel_es_especial en cotizaciones.controller.ts) (Jose, 2026-09-03).
+const esLineaEspecial = (p: any): boolean =>
+  p?.es_especial === true || p?.tipo_material === "especial";
+
 export default function Cotizaciones() {
+  const { user } = useAuth();
   const [cotizaciones, setCotizaciones] = useState<Cotizacion[]>([]);
   const navigate = useNavigate();
   const [loadingCots, setLoadingCots] = useState(false);
@@ -65,16 +77,22 @@ export default function Cotizaciones() {
   const [errorCatalogos, setErrorCatalogos] = useState("");
   const [expandidas, setExpandidas] = useState<Set<string>>(new Set());
   const [paginaActual, setPaginaActual] = useState(1);
-  const [filtroMaterial, setFiltroMaterial] = useState<"todos" | "plastico" | "papel">("todos");
+  const [filtroMaterial, setFiltroMaterial] = useState<"todos" | "plastico" | "papel" | "especial" | "libre">("todos");
 
   // ── Envío por correo ──────────────────────────────────────────────────
   const [modalCorreoOpen, setModalCorreoOpen] = useState(false);
+  const [modalCorreoLibreOpen, setModalCorreoLibreOpen] = useState(false);
+  const [libreParaCorreo, setLibreParaCorreo] = useState<CotizacionLibreResumen | null>(null);
+  const [correoLibreDestino, setCorreoLibreDestino] = useState("");
+  const [enviandoCorreoLibre, setEnviandoCorreoLibre] = useState(false);
+  const [errorCorreoLibre, setErrorCorreoLibre] = useState<string | null>(null);
+  const [folioEditandoLibre, setFolioEditandoLibre] = useState<string | null>(null);
   const [cotizacionParaCorreo, setCotizacionParaCorreo] = useState<Cotizacion | null>(null);
   const [correoDestino, setCorreoDestino] = useState("");
   const [enviandoCorreo, setEnviandoCorreo] = useState(false);
   const [errorCorreo, setErrorCorreo] = useState<string | null>(null);
 
-  useEffect(() => { cargarCatalogos(); cargarCotizaciones(); }, []);
+  useEffect(() => { cargarCatalogos(); cargarCotizaciones(); cargarCotizacionesLibres(); }, []);
   useEffect(() => { setPaginaActual(1); }, [busqueda]);
 
   const toggleExpandida = (folio: string) => {
@@ -83,6 +101,30 @@ export default function Cotizaciones() {
       s.has(folio) ? s.delete(folio) : s.add(folio);
       return s;
     });
+  };
+
+  // ── Expandir Cotización Libre ──────────────────────────────────────────
+  const [expandidasLibres, setExpandidasLibres] = useState<Set<string>>(new Set());
+  const [detallesLibres, setDetallesLibres] = useState<Record<string, CotizacionLibreDetalle>>({});
+  const [cargandoDetalleLibre, setCargandoDetalleLibre] = useState<string | null>(null);
+
+  const toggleExpandidaLibre = async (folio: string) => {
+    setExpandidasLibres((prev) => {
+      const s = new Set(prev);
+      s.has(folio) ? s.delete(folio) : s.add(folio);
+      return s;
+    });
+    if (!detallesLibres[folio]) {
+      setCargandoDetalleLibre(folio);
+      try {
+        const detalle = await getCotizacionLibreDetalle(folio);
+        setDetallesLibres((prev) => ({ ...prev, [folio]: detalle }));
+      } catch (e: any) {
+        console.error("❌ Error al cargar detalle de cotización libre:", e);
+      } finally {
+        setCargandoDetalleLibre(null);
+      }
+    }
   };
 
   const cargarCatalogos = async () => {
@@ -94,13 +136,45 @@ export default function Cotizaciones() {
     } finally { setCargandoCatalogos(false); }
   };
 
+  // El folio ya no es un orden confiable: los nuevos usan "CO26110" y los
+  // viejos "COT26017" (distinto prefijo de letras) — ordenar por el texto
+  // completo del folio deja las cotizaciones nuevas por debajo de las viejas
+  // alfabéticamente. Se ordena por el número real (ignorando las letras),
+  // de mayor a menor, para que lo más reciente quede siempre arriba.
+  const numeroFolio = (folio: string): number => {
+    const m = folio.match(/(\d+)$/);
+    return m ? Number(m[1]) : 0;
+  };
+
   const cargarCotizaciones = async () => {
     try {
       setLoadingCots(true);
-      setCotizaciones(await getCotizaciones());
+      const datos = await getCotizaciones();
+      datos.sort((a, b) => numeroFolio(b.no_cotizacion) - numeroFolio(a.no_cotizacion));
+      setCotizaciones(datos);
     } catch (e: any) { console.error("❌", e); }
     finally { setLoadingCots(false); }
   };
+
+  // ── Cotizaciones Libres ──────────────────────────────────────────────
+  // Se traen aparte (endpoint propio, GET /cotizaciones-libres) en vez de
+  // meterlas en el query gigante de getCotizaciones — ese query ya tiene
+  // demasiados JOIN como para arriesgarlo. Se mezclan solo para PINTAR la
+  // tabla (ver TODO abajo); al hacer click en una fila libre hay que abrir
+  // una vista de solo lectura distinta a `cotizacionEditando`, porque una
+  // cotización libre no tiene estado_id, no se aprueba ni se convierte a
+  // pedido igual que una normal.
+  const [cotizacionesLibres, setCotizacionesLibres] = useState<CotizacionLibreResumen[]>([]);
+  const cargarCotizacionesLibres = async () => {
+    try {
+      setCotizacionesLibres(await getCotizacionesLibres());
+    } catch (e: any) { console.error("❌", e); }
+  };
+  // TODO: agregar cargarCotizacionesLibres() al useEffect inicial (junto a
+  // cargarCatalogos()/cargarCotizaciones()), y construir un arreglo de
+  // "filas para pintar" que combine `cotizaciones` + `cotizacionesLibres`
+  // ordenado por fecha, con un chip 🆓 Libre (mismo estilo que el chip
+  // ámbar de "📄 Papel") cuando la fila trae es_libre=true.
 
   const normalizar = (t: string) =>
     t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
@@ -114,7 +188,7 @@ export default function Cotizaciones() {
   // encuentra sin límite de tiempo.
   const hayBusquedaActiva = busqueda.trim().length > 0;
   const esCotizacionAprobada = (c: Cotizacion) =>
-    (c as any).tipo_documento === "pedido" || c.no_pedido != null;
+    (c as any).tipo_documento === "pedido" || !!c.no_pedido;
 
   const cotizacionesFiltradas = cotizaciones.filter(c => {
     if (!hayBusquedaActiva && esCotizacionAprobada(c)) return false;
@@ -138,17 +212,193 @@ export default function Cotizaciones() {
     // Verificar si TODOS los productos de la cotización son del material filtrado
     // o si AL MENOS UNO coincide (usamos "al menos uno" para mixtas)
     return c.productos.some((p: any) => {
+      if (filtroMaterial === "especial") return esLineaEspecial(p);
       if (filtroMaterial === "papel") return esLineaPapel(p);
       if (filtroMaterial === "plastico") return !esLineaPapel(p);
       return true;
     });
   });
 
-  const totalPaginas = Math.max(1, Math.ceil(cotizacionesFiltradas.length / ITEMS_POR_PAGINA));
+  // Cotizaciones Libres — mismo buscador que las normales. Se combinan más
+  // abajo con las normales solo para ordenarlas y paginarlas juntas por
+  // fecha real de creación — cada una conserva su propia forma de pintarse.
+  const cotizacionesLibresFiltradas = cotizacionesLibres.filter((c) => {
+    if (!busqueda) return true;
+    const t = normalizar(busqueda);
+    return (
+      normalizar(c.cliente ?? "").includes(t) ||
+      normalizar(c.empresa ?? "").includes(t) ||
+      c.folio.toLowerCase().includes(t)
+    );
+  });
+
+  // Orden de creación real = número de folio (ver numeroFolio arriba): con
+  // "COT26017" y "CO26110" mezclados, es la única forma confiable de saber
+  // qué es más nuevo — ordenar por texto los separaría mal.
+  type FilaTabla =
+    | { tipo: "normal"; folio: string; data: Cotizacion }
+    | { tipo: "libre"; folio: string; data: CotizacionLibreResumen };
+
+  const filasTodas: FilaTabla[] = [
+    ...cotizacionesFiltradas.map((c): FilaTabla => ({ tipo: "normal", folio: c.no_cotizacion, data: c })),
+    // Las libres solo se mezclan en "Todos" — en Plástico/Papel no aplican,
+    // y en la pestaña Libre ya se muestran aparte (ver más abajo).
+    ...(filtroMaterial === "todos"
+      ? cotizacionesLibresFiltradas.map((c): FilaTabla => ({ tipo: "libre", folio: c.folio, data: c }))
+      : []),
+  ].sort((a, b) => numeroFolio(b.folio) - numeroFolio(a.folio));
+
+  const totalPaginas = Math.max(1, Math.ceil(filasTodas.length / ITEMS_POR_PAGINA));
   const paginaSegura = Math.min(paginaActual, totalPaginas);
   const inicio = (paginaSegura - 1) * ITEMS_POR_PAGINA;
-  const cotizacionesPagina = cotizacionesFiltradas.slice(inicio, inicio + ITEMS_POR_PAGINA);
+  const filaCombinadaPagina = filasTodas.slice(inicio, inicio + ITEMS_POR_PAGINA);
   const irAPagina = (p: number) => setPaginaActual(Math.max(1, Math.min(p, totalPaginas)));
+
+  // id/texto → lo que haya. Si solo hay id (se eligió de catálogo), por ahora
+  // se muestra "código: N" — resolver el nombre real requiere JOIN contra el
+  // catálogo correspondiente en el backend (getCotizacionLibrePorFolio),
+  // que todavía no está hecho.
+  const mostrarCampoLibre = (id?: number | null, texto?: string | null): string | null => {
+    if (texto) return texto;
+    if (id != null) return `código: ${id}`;
+    return null;
+  };
+
+  const renderFilaLibre = (c: CotizacionLibreResumen) => {
+    const expandida = expandidasLibres.has(c.folio);
+    const detalle = detallesLibres[c.folio];
+    return (
+      <>
+        <tr key={c.folio} className="hover:bg-purple-50/40">
+          <td className="px-6 py-4 whitespace-nowrap">
+            <span className="font-semibold text-gray-900">{c.folio}</span>{" "}
+            <span className="inline-flex items-center gap-1 ml-1 text-xs font-bold px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-700">
+              🆓 Libre
+            </span>
+          </td>
+          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+            {new Date(c.fecha).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric", timeZone: "UTC" })}
+          </td>
+          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">—</td>
+          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{c.empresa || c.cliente || "—"}</td>
+          <td className="px-6 py-4 text-sm text-gray-600">
+            <button onClick={() => toggleExpandidaLibre(c.folio)} className="flex items-center gap-2 group">
+              <span className="font-medium text-gray-700 group-hover:text-purple-600">
+                {c.total_productos} producto(s)
+              </span>
+              <svg className={`w-4 h-4 text-gray-400 transition-transform ${expandida ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+          </td>
+          <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
+            ${c.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+          </td>
+          <td className="px-6 py-4 whitespace-nowrap">
+            <span className="px-2 py-1 text-xs font-medium rounded-full bg-purple-50 text-purple-700 capitalize">
+              {c.estatus}
+            </span>
+          </td>
+          <td className="px-6 py-4 whitespace-nowrap">
+            <div className="flex items-center gap-2">
+              <button onClick={() => handleDescargarPdfLibre(c)} title="Descargar PDF"
+                className="p-1.5 rounded-md text-green-600 hover:bg-green-50">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+              </button>
+              <button onClick={() => handleAbrirModalCorreoLibre(c)} title="Enviar por correo"
+                className="p-1.5 rounded-md text-purple-500 hover:bg-purple-50">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <circle cx="12" cy="12" r="4" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M16 8v5a3 3 0 0 0 6 0v-1a10 9 0 1 0-6 9" />
+                </svg>
+              </button>
+              <button onClick={() => setFolioEditandoLibre(c.folio)} title="Editar"
+                className="p-1.5 rounded-md text-blue-600 hover:bg-blue-50">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+              </button>
+              <button onClick={() => handleEliminarLibre(c)} title="Eliminar"
+                className="p-1.5 rounded-md text-red-500 hover:bg-red-50">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3M4 7h16" />
+                </svg>
+              </button>
+            </div>
+          </td>
+        </tr>
+        {expandida && (
+          <tr key={`det-${c.folio}`} className="bg-purple-50 border-t border-purple-100">
+            <td colSpan={8} className="px-8 py-4">
+              {cargandoDetalleLibre === c.folio ? (
+                <p className="text-sm text-gray-500">Cargando detalle...</p>
+              ) : !detalle ? (
+                <p className="text-sm text-gray-500">No se pudo cargar el detalle.</p>
+              ) : (
+                <div className="space-y-3">
+                  {detalle.comentarios && (
+                    <p className="text-sm text-gray-600 italic bg-white rounded-lg px-4 py-2 border border-gray-100">
+                      "{detalle.comentarios}"
+                    </p>
+                  )}
+                  {detalle.items.map((it: any, i: number) => (
+                    <div key={i} className="flex items-start gap-4 bg-white rounded-lg px-4 py-3 shadow-sm border border-gray-100">
+                      <span className="flex-shrink-0 w-6 h-6 rounded-full text-xs font-bold flex items-center justify-center mt-0.5 bg-purple-100 text-purple-700">
+                        {i + 1}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="font-medium text-gray-900">{mostrarCampoLibre(it.producto_id, it.producto_texto) ?? "(sin nombre)"}</p>
+                          <span className="text-xs font-medium px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">
+                            {it.tipo === "plastico" ? "🧴 Plástico" : it.tipo === "papel" ? "📄 Papel" : "🎁 Especial"}
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1 space-x-3">
+                          {it.medida_texto && <span>Medida: {it.medida_texto}</span>}
+                          {mostrarCampoLibre(it.material_id, it.material_texto) && <span>Material: {mostrarCampoLibre(it.material_id, it.material_texto)}</span>}
+                          {mostrarCampoLibre(it.calibre_id, it.calibre_texto) && <span>Calibre: {mostrarCampoLibre(it.calibre_id, it.calibre_texto)}</span>}
+                          {mostrarCampoLibre(it.tintas_frente_id, it.tintas_frente_texto) && (
+                            <span>Tintas{it.tipo !== "plastico" ? " frente" : ""}: {mostrarCampoLibre(it.tintas_frente_id, it.tintas_frente_texto)}</span>
+                          )}
+                          {it.pantones_texto && <span>Pantones: {it.pantones_texto}</span>}
+                          {it.tipo === "plastico" && mostrarCampoLibre(it.caras_id, it.caras_texto) && (
+                            <span>Caras: {mostrarCampoLibre(it.caras_id, it.caras_texto)}</span>
+                          )}
+                          {it.tipo !== "plastico" && mostrarCampoLibre(it.tintas_dentro_id, it.tintas_dentro_texto) && (
+                            <span>Tintas dentro: {mostrarCampoLibre(it.tintas_dentro_id, it.tintas_dentro_texto)}</span>
+                          )}
+                          {it.pantones_dentro_texto && <span>Pantones dentro: {it.pantones_dentro_texto}</span>}
+                          {mostrarCampoLibre(it.laminado_id, it.laminado_texto) && <span>Laminado: {mostrarCampoLibre(it.laminado_id, it.laminado_texto)}</span>}
+                          {mostrarCampoLibre(it.hs_id, it.hs_texto) && <span>HS: {mostrarCampoLibre(it.hs_id, it.hs_texto)}</span>}
+                          {mostrarCampoLibre(it.textura_id, it.textura_texto) && <span>Textura: {mostrarCampoLibre(it.textura_id, it.textura_texto)}</span>}
+                          {mostrarCampoLibre(it.asa_id, it.asa_texto) && <span>Asa: {mostrarCampoLibre(it.asa_id, it.asa_texto)}</span>}
+                          {mostrarCampoLibre(it.color_asa_id, it.color_asa_texto) && <span>Color de asa: {mostrarCampoLibre(it.color_asa_id, it.color_asa_texto)}</span>}
+                          {mostrarCampoLibre(it.medida_troquel_id, it.medida_troquel_texto) && <span>Medida de troquel: {mostrarCampoLibre(it.medida_troquel_id, it.medida_troquel_texto)}</span>}
+                          {mostrarCampoLibre(it.cinta_seguridad_id, it.cinta_seguridad_texto) && <span>Cinta de seguridad: {mostrarCampoLibre(it.cinta_seguridad_id, it.cinta_seguridad_texto)}</span>}
+                          {it.perforacion_bool && <span>✔️ Perforación</span>}
+                          {it.pigmentos_texto && <span>Pigmentos: {it.pigmentos_texto}</span>}
+                          {it.alto_relieve_bool && <span>✨ Alto relieve</span>}
+                          {it.uv_bool && <span>☀️ UV</span>}
+                          {it.notas && <span>Notas: {it.notas}</span>}
+                        </p>
+                      </div>
+                      <div className="text-right text-xs text-gray-600 space-y-0.5">
+                        {[1, 2, 3].map((n) => it[`cantidad_${n}`] && (
+                          <p key={n}>{Number(it[`cantidad_${n}`]).toLocaleString("es-MX")} pz — ${Number(it[`precio_${n}`]).toFixed(2)}/pz</p>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </td>
+          </tr>
+        )}
+      </>
+    );
+  };
 
   const resolverCalibre = (p: any): string => {
     const mat = (p.material || "").toUpperCase();
@@ -188,7 +438,10 @@ export default function Cotizaciones() {
       .join(" / ") || "";
 
     return {
-      tipo_material: "papel",      // ← AGREGAR
+      // Se respeta el tipo_material real ("papel" o "especial") en vez de
+      // forzar "papel" siempre -- así el PDF de la cotización deja de
+      // mostrar los especiales como si fueran papel normal (Jose, 2026-09-03).
+      tipo_material: p.es_especial === true ? "especial" : (p.tipo_material ?? "papel"),
       tipoCotizacion: "papel",
       nombre: p.nombre,
       material: materialStr,          // ← solo nombres: "Couché + Cartulina"
@@ -266,6 +519,172 @@ export default function Cotizaciones() {
         })),
       };
     });
+
+  // ItemCotizacionLibre (recién capturado en el formulario, con sub-objetos
+  // {id, texto}) → shape plano, igual a las columnas reales de
+  // cotizacion_libre_item — así el PDF usa un solo formato sin importar si
+  // viene de una cotización recién creada o de una ya guardada (getCotizacionLibreDetalle).
+  const aplanarItemLibre = (it: ItemCotizacionLibre): ItemCotizacionLibrePdf => ({
+    tipo: it.tipo,
+    producto_id: it.producto_id, producto_texto: it.producto_texto,
+    medida_texto: it.medida_texto,
+    material_id: it.material?.id, material_texto: it.material?.texto,
+    calibre_id: it.calibre?.id, calibre_texto: it.calibre?.texto,
+    tintas_frente_id: it.tintas_frente?.id, tintas_frente_texto: it.tintas_frente?.texto,
+    tintas_dentro_id: it.tintas_dentro?.id, tintas_dentro_texto: it.tintas_dentro?.texto,
+    pantones_texto: it.pantones_texto, pantones_dentro_texto: it.pantones_dentro_texto,
+    laminado_id: it.laminado?.id, laminado_texto: it.laminado?.texto,
+    hs_id: it.hs?.id, hs_texto: it.hs?.texto,
+    alto_relieve_bool: it.alto_relieve?.bool ?? null,
+    textura_id: it.textura?.id, textura_texto: it.textura?.texto,
+    uv_bool: it.uv?.bool ?? null,
+    asa_id: it.asa?.id, asa_texto: it.asa?.texto,
+    color_asa_id: it.color_asa?.id, color_asa_texto: it.color_asa?.texto,
+    medida_troquel_id: it.medida_troquel?.id, medida_troquel_texto: it.medida_troquel?.texto,
+    cinta_seguridad_id: it.cinta_seguridad?.id, cinta_seguridad_texto: it.cinta_seguridad?.texto,
+    perforacion_bool: it.perforacion ?? null,
+    pigmentos_texto: it.pigmentos_texto,
+    caras_id: it.caras?.id, caras_texto: it.caras?.texto,
+    cantidad_1: it.cantidades?.[0], precio_1: it.precios?.[0],
+    cantidad_2: it.cantidades?.[1], precio_2: it.precios?.[1],
+    cantidad_3: it.cantidades?.[2], precio_3: it.precios?.[2],
+    notas: it.notas,
+  });
+
+  // Cotización Libre: documento aparte. Al guardar, genera y descarga el PDF
+  // "Propuesta Personalizada" de una vez — igual que el flujo normal.
+  const handleGuardarLibre = async (datosHeader: any, renglones: ItemCotizacionLibre[]) => {
+    setGuardando(true);
+    try {
+      const respuesta = await crearCotizacionLibre({
+        clienteId: datosHeader?.clienteId ?? null,
+        clienteTexto: datosHeader?.cliente ?? null,
+        empresaTexto: datosHeader?.empresa ?? null,
+        moneda: datosHeader?.moneda ?? "MXN",
+        comentarios: datosHeader?.observaciones ?? null,
+        items: renglones,
+      });
+      await cargarCotizacionesLibres();
+      setModalOpen(false);
+
+      try {
+        await generarPdfCotizacionLibre({
+          folio: respuesta.folio,
+          fecha: new Date().toLocaleDateString("en-CA", { timeZone: "America/Mexico_City" }), // YYYY-MM-DD en hora de México
+          cliente: datosHeader?.cliente ?? null,
+          empresa: datosHeader?.empresa ?? null,
+          asesor: user?.nombre || null,
+          comentarios: datosHeader?.observaciones ?? null,
+          moneda: datosHeader?.moneda ?? "MXN",
+          items: renglones.map(aplanarItemLibre),
+        }, true);
+      } catch (pdfErr) { console.warn("⚠️ PDF libre:", pdfErr); }
+
+      showAlert(`Cotización libre ${respuesta.folio} creada correctamente.`);
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  // ── Descargar / reenviar PDF de una Cotización Libre ya guardada ────────
+  // Reusa el caché de detallesLibres (llenado al expandir la fila) si ya
+  // existe, para no pedirle al backend el mismo folio dos veces.
+  const obtenerDetalleLibre = async (folio: string): Promise<CotizacionLibreDetalle> => {
+    if (detallesLibres[folio]) return detallesLibres[folio];
+    const detalle = await getCotizacionLibreDetalle(folio);
+    setDetallesLibres((prev) => ({ ...prev, [folio]: detalle }));
+    return detalle;
+  };
+
+  const handleDescargarPdfLibre = async (c: CotizacionLibreResumen) => {
+    try {
+      const detalle = await obtenerDetalleLibre(c.folio);
+      const guardarS3 = await preguntarGuardarS3("cotización libre");
+      await generarPdfCotizacionLibre({
+        folio: detalle.folio,
+        fecha: detalle.fecha,
+        cliente: detalle.cliente_nombre ?? detalle.cliente_texto,
+        empresa: detalle.cliente_empresa_real ?? detalle.empresa_texto,
+        asesor: user?.nombre || null, // el usuario logueado, no quien originalmente creó la cotización
+        comentarios: detalle.comentarios,
+        moneda: detalle.moneda,
+        items: detalle.items,
+      }, guardarS3);
+    } catch (e: any) {
+      console.error("❌ Error al descargar PDF libre:", e);
+      showAlert("No se pudo generar el PDF de esta cotización libre");
+    }
+  };
+
+  const handleEliminarLibre = async (c: CotizacionLibreResumen) => {
+    if (!await showConfirm(`¿Eliminar la cotización libre ${c.folio}? Esta acción no se puede deshacer.`)) return;
+    try {
+      await eliminarCotizacionLibre(c.folio);
+      await cargarCotizacionesLibres();
+      showAlert(`Cotización libre ${c.folio} eliminada.`);
+    } catch (e: any) {
+      console.error("❌ Error al eliminar cotización libre:", e);
+      showAlert(e.response?.data?.error || "No se pudo eliminar la cotización libre");
+    }
+  };
+
+  const handleAbrirModalCorreoLibre = (c: CotizacionLibreResumen) => {
+    setLibreParaCorreo(c);
+    setCorreoLibreDestino("");
+    setErrorCorreoLibre(null);
+    setModalCorreoLibreOpen(true);
+  };
+
+  const handleCerrarModalCorreoLibre = () => {
+    if (enviandoCorreoLibre) return;
+    setModalCorreoLibreOpen(false);
+    setLibreParaCorreo(null);
+    setCorreoLibreDestino("");
+    setErrorCorreoLibre(null);
+  };
+
+  const handleConfirmarEnvioCorreoLibre = async () => {
+    if (!libreParaCorreo) return;
+    const correo = correoLibreDestino.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo)) {
+      setErrorCorreoLibre("Ingresa un correo válido");
+      return;
+    }
+    setEnviandoCorreoLibre(true);
+    setErrorCorreoLibre(null);
+    try {
+      const detalle = await obtenerDetalleLibre(libreParaCorreo.folio);
+      const blob = await generarPdfCotizacionLibre({
+        folio: detalle.folio,
+        fecha: detalle.fecha,
+        cliente: detalle.cliente_nombre ?? detalle.cliente_texto,
+        empresa: detalle.cliente_empresa_real ?? detalle.empresa_texto,
+        asesor: user?.nombre || null, // el usuario logueado, no quien originalmente creó la cotización
+        comentarios: detalle.comentarios,
+        moneda: detalle.moneda,
+        items: detalle.items,
+      }, false, false);
+
+      const pdfBase64 = await blobABase64(blob);
+      await api.post("/correos/documento", {
+        tipo: "cotizacion",
+        folio: detalle.folio,
+        cliente: detalle.cliente_nombre ?? detalle.cliente_texto ?? "",
+        empresa: detalle.cliente_empresa_real ?? detalle.empresa_texto ?? null,
+        destinatario: correo,
+        pdfBase64,
+        nombreArchivo: `PropuestaLibre_${detalle.folio}.pdf`,
+      });
+
+      showAlert("✅ Correo enviado correctamente");
+      handleCerrarModalCorreoLibre();
+    } catch (e: any) {
+      console.error("❌ Error al enviar correo de libre:", e);
+      setErrorCorreoLibre(e.response?.data?.error || "No se pudo enviar el correo");
+    } finally {
+      setEnviandoCorreoLibre(false);
+    }
+  };
 
   const handleSubmit = async (datos: any) => {
     setGuardando(true);
@@ -588,9 +1007,9 @@ export default function Cotizaciones() {
         <p className="text-sm text-gray-500">
           Mostrando <span className="font-medium text-gray-700">{inicio + 1}</span>
           {" – "}
-          <span className="font-medium text-gray-700">{Math.min(inicio + ITEMS_POR_PAGINA, cotizacionesFiltradas.length)}</span>
+          <span className="font-medium text-gray-700">{Math.min(inicio + ITEMS_POR_PAGINA, filasTodas.length)}</span>
           {" de "}
-          <span className="font-medium text-gray-700">{cotizacionesFiltradas.length}</span> cotizaciones
+          <span className="font-medium text-gray-700">{filasTodas.length}</span> cotizaciones
         </p>
         <div className="flex items-center gap-1">
           <button onClick={() => irAPagina(paginaSegura - 1)} disabled={paginaSegura === 1}
@@ -633,7 +1052,7 @@ export default function Cotizaciones() {
         <svg className="w-5 h-5 text-gray-400 absolute left-4 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
         </svg>
-        {busqueda && <p className="mt-2 text-sm text-gray-500">{cotizacionesFiltradas.length} resultado(s)</p>}
+        {busqueda && <p className="mt-2 text-sm text-gray-500">{filasTodas.length} resultado(s)</p>}
       </div>
 
       {/* Filtro material + botón nueva */}
@@ -643,6 +1062,8 @@ export default function Cotizaciones() {
             { key: "todos", label: "Todos", icon: "📋" },
             { key: "plastico", label: "Plástico", icon: "🧴" },
             { key: "papel", label: "Papel", icon: "📄" },
+            { key: "especial", label: "Especiales", icon: "✨" },
+            { key: "libre", label: "Libre", icon: "🆓" },
           ] as const).map(({ key, label, icon }) => (
             <button
               key={key}
@@ -653,7 +1074,11 @@ export default function Cotizaciones() {
                   ? "bg-white text-amber-600 shadow"
                   : key === "plastico"
                     ? "bg-white text-blue-600 shadow"
-                    : "bg-white text-gray-700 shadow"
+                    : key === "especial"
+                      ? "bg-white text-purple-600 shadow"
+                      : key === "libre"
+                        ? "bg-white text-purple-600 shadow"
+                        : "bg-white text-gray-700 shadow"
                 : "text-gray-600 hover:text-gray-900"
                 }`}
             >
@@ -663,16 +1088,24 @@ export default function Cotizaciones() {
                   ? "bg-amber-100 text-amber-700"
                   : key === "plastico"
                     ? "bg-blue-100 text-blue-700"
-                    : "bg-gray-200 text-gray-600"
+                    : key === "especial"
+                      ? "bg-purple-100 text-purple-700"
+                      : key === "libre"
+                        ? "bg-purple-100 text-purple-700"
+                        : "bg-gray-200 text-gray-600"
                 : "bg-gray-200 text-gray-500"
                 }`}>
                 {key === "todos"
                   ? cotizaciones.length
-                  : cotizaciones.filter(c =>
-                    c.productos.some((p: any) =>
-                      key === "papel" ? esLineaPapel(p) : !esLineaPapel(p)
-                    )
-                  ).length
+                  : key === "libre"
+                    ? cotizacionesLibres.length
+                    : key === "especial"
+                      ? cotizaciones.filter(c => c.productos.some((p: any) => esLineaEspecial(p))).length
+                      : cotizaciones.filter(c =>
+                        c.productos.some((p: any) =>
+                          key === "papel" ? esLineaPapel(p) : !esLineaPapel(p)
+                        )
+                      ).length
                 }
               </span>
             </button>
@@ -701,7 +1134,15 @@ export default function Cotizaciones() {
                 <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-blue-500 border-t-transparent" />
                 <p className="mt-3 text-gray-500">Cargando cotizaciones...</p>
               </td></tr>
-            ) : cotizacionesPagina.length > 0 ? cotizacionesPagina.map(cot => {
+            ) : filtroMaterial === "libre" ? (
+              cotizacionesLibresFiltradas.length > 0 ? cotizacionesLibresFiltradas.map(renderFilaLibre) : (
+                <tr><td colSpan={8} className="px-6 py-12 text-center text-gray-500">No hay cotizaciones libres todavía.</td></tr>
+              )
+            ) : filaCombinadaPagina.length > 0 ? (
+              <>
+                {filaCombinadaPagina.map((fila) => {
+                  if (fila.tipo === "libre") return renderFilaLibre(fila.data);
+                  const cot = fila.data;
               const expandida = expandidas.has(cot.no_cotizacion);
               const puedeEliminar = cot.estado !== "Aprobada";
               return (
@@ -803,6 +1244,7 @@ export default function Cotizaciones() {
                               : p.detalles;
                             if (detallesMostrar.length === 0) return null;
                             const papel = esLineaPapel(p);
+                            const especial = p?.es_especial === true;
                             return (
                               <div key={i} className="flex items-start gap-4 bg-white rounded-lg px-4 py-3 shadow-sm border border-gray-100">
                                 <span className={`flex-shrink-0 w-6 h-6 rounded-full text-xs font-bold flex items-center justify-center mt-0.5 ${papel ? "bg-amber-100 text-amber-700" : "bg-blue-100 text-blue-700"}`}>{i + 1}</span>
@@ -810,7 +1252,11 @@ export default function Cotizaciones() {
                                   <div className="flex items-center gap-2 flex-wrap">
                                     <p className="text-sm font-medium text-gray-800 truncate">{p.nombre}</p>
                                     {papel && (
-                                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-700 border border-amber-200">📄 Papel</span>
+                                      especial ? (
+                                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-700 border border-purple-200">✨ Especial</span>
+                                      ) : (
+                                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-700 border border-amber-200">📄 Papel</span>
+                                      )
                                     )}
                                     {(cot.origen_expo || p.tipo_material === "expo") && (
                                       <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-yellow-50 text-yellow-700 border border-yellow-200">⭐ Expo</span>
@@ -903,14 +1349,16 @@ export default function Cotizaciones() {
                   )}
                 </>
               );
-            }) : (
+            })}
+              </>
+            ) : (
               <tr><td colSpan={8} className="px-6 py-12 text-center text-gray-500">
                 {busqueda ? `No se encontraron cotizaciones para "${busqueda}"` : "No hay cotizaciones registradas"}
               </td></tr>
             )}
           </tbody>
         </table>
-        {!loadingCots && cotizacionesFiltradas.length > 0 && <Paginador />}
+        {!loadingCots && filtroMaterial !== "libre" && filasTodas.length > 0 && <Paginador />}
       </div>
 
 
@@ -937,7 +1385,7 @@ export default function Cotizaciones() {
             )}
 
             <FormularioCotizacion
-              onSubmit={handleSubmit} onCancel={() => setModalOpen(false)} catalogos={catalogos} />
+              onSubmit={handleSubmit} onSubmitLibre={handleGuardarLibre} onCancel={() => setModalOpen(false)} catalogos={catalogos} />
           </div>
         )}
       </Modal>
@@ -989,6 +1437,49 @@ export default function Cotizaciones() {
           </div>
         )}
       </Modal>
+
+      {/* ── Enviar por correo — Cotización Libre (modal aparte, mismo estilo) ── */}
+      <Modal isOpen={modalCorreoLibreOpen} onClose={handleCerrarModalCorreoLibre} title="Enviar por correo">
+        {libreParaCorreo && (
+          <div className="space-y-4">
+            <p className="text-sm text-gray-600">
+              Se enviará la propuesta libre{" "}
+              <span className="font-semibold text-gray-800">{libreParaCorreo.folio}</span> a:
+            </p>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Correo del destinatario</label>
+              <input
+                type="email"
+                value={correoLibreDestino}
+                onChange={e => setCorreoLibreDestino(e.target.value)}
+                placeholder="cliente@correo.com"
+                disabled={enviandoCorreoLibre}
+                autoFocus
+                onKeyDown={e => { if (e.key === "Enter") handleConfirmarEnvioCorreoLibre(); }}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100"
+              />
+              {errorCorreoLibre && <p className="mt-1 text-sm text-red-600">{errorCorreoLibre}</p>}
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <button onClick={handleCerrarModalCorreoLibre} disabled={enviandoCorreoLibre}
+                className="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 rounded-lg disabled:opacity-50">
+                Cancelar
+              </button>
+              <button onClick={handleConfirmarEnvioCorreoLibre} disabled={enviandoCorreoLibre}
+                className="px-4 py-2 text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 rounded-lg shadow disabled:opacity-50 flex items-center gap-2">
+                {enviandoCorreoLibre && <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+                {enviandoCorreoLibre ? "Enviando..." : "Enviar correo"}
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <ModalEditarCotizacionLibre
+        folio={folioEditandoLibre}
+        onClose={() => setFolioEditandoLibre(null)}
+        onGuardado={cargarCotizacionesLibres}
+      />
     </Dashboard>
   );
 }

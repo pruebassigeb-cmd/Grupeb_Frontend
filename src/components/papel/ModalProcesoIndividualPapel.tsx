@@ -88,11 +88,38 @@ const CAMPOS_PROCESO_PAPEL: Record<NombreProcesoPapel, CampoProceso[]> = {
     { key: "merma", label: "Merma" },
     { key: "pliegos_entregados", label: "Entregadas" },
   ],
+  // NUEVOS (Jose, 2026-09-03): Desbarbe, Litolaminado y Especial ya
+  // existían como procesos reales del lado de especiales/backend
+  // (procesosPapel.controller.ts) pero les faltaba entrada aquí. Mismo
+  // patrón simple de cascada que UV/HS/Texturizado/Alto relieve --
+  // Litolaminado va antes de Suaje y Desbarbe después (ver
+  // ORDEN_CASCADA_PAPEL en seguimientoPapel.types.ts), pero eso no cambia
+  // la forma de sus campos, solo el orden en que aparecen las columnas.
+  litolaminado_papel: [
+    { key: "pliegos_entrada", label: "Hojas litolaminado (entrada)", readOnly: true },
+    { key: "merma", label: "Merma" },
+    { key: "pliegos_entregados", label: "Entregadas" },
+  ],
+  desbarbe_papel: [
+    { key: "pliegos_entrada", label: "Hojas desbarbe (entrada)", readOnly: true },
+    { key: "merma", label: "Merma" },
+    { key: "pliegos_entregados", label: "Entregadas" },
+  ],
   armado_papel: [
     { key: "pliegos_entrada", label: "Pliegos (entrada)", readOnly: true },
     { key: "bolsas_armadas", label: "Bolsas armadas" },
     { key: "merma", label: "Merma" },
     { key: "bolsas_entregadas", label: "Bolsas entregadas" },
+  ],
+  // Especial es el proceso "genérico"/personalizado (nombre_proceso y
+  // notas de texto libre) -- esos dos campos NO van aquí, sino en
+  // CAMPOS_REGISTRO_PROPIO_PAPEL más abajo, mismo criterio que
+  // suaje_idsuaje_papel o bobina_cm de Laminación: son propios de la
+  // corrida, no parte de la cascada entrada→merma→salida.
+  especial_papel: [
+    { key: "pliegos_entrada", label: "Hojas (entrada)", readOnly: true },
+    { key: "merma", label: "Merma" },
+    { key: "pliegos_entregados", label: "Entregadas" },
   ],
   empaque_papel: [
     { key: "bolsas_entrada", label: "Bolsas (entrada)", readOnly: true },
@@ -131,7 +158,15 @@ const CAMPOS_REGISTRO_PROPIO_PAPEL: Record<NombreProcesoPapel, CampoProceso[]> =
   suaje_produccion_papel: [
     { key: "suaje_idsuaje_papel", label: "Suaje (folio)" },
   ],
+  litolaminado_papel: [],
+  desbarbe_papel: [],
   armado_papel: [],
+  // nombre_proceso/notas: lo que hace a Especial un proceso "genérico" --
+  // texto libre capturado por corrida, no de ficha ni de la cascada.
+  especial_papel: [
+    { key: "nombre_proceso", label: "Nombre del proceso" },
+    { key: "notas", label: "Notas" },
+  ],
   empaque_papel: [],
 };
 
@@ -182,6 +217,9 @@ const CAMPOS_FICHA_PAPEL: Record<NombreProcesoPapel, CampoFicha[]> = {
   ],
   alto_relieve_papel: [],
   suaje_produccion_papel: [], // suaje_idsuaje_papel sigue en el registro del proceso, no es de ficha
+  litolaminado_papel: [],
+  desbarbe_papel: [],
+  especial_papel: [], // nombre_proceso/notas son del registro del proceso, no de ficha
   armado_papel: [
     { key: "asa_tipo", label: "Tipo de asa" },
     { key: "asa_color", label: "Color de asa" },
@@ -217,8 +255,16 @@ const AVANCE_UNIDAD_PAPEL: Record<NombreProcesoPapel, { label: string; unidad: s
   hot_stamping_papel: { label: "Pliegos estampados hoy", unidad: "pliegos", placeholder: "Ej: 6090" },
   texturizado_papel: { label: "Pliegos texturizados hoy", unidad: "pliegos", placeholder: "Ej: 6080" },
   alto_relieve_papel: { label: "Pliegos con alto relieve hoy", unidad: "pliegos", placeholder: "Ej: 6070" },
+  // Litolaminado va antes de Suaje en el orden real (ahí se juntan las
+  // piezas de la OP de unión); Desbarbe va después de Suaje. Especial
+  // sigue en "pliegos" tal cual lo define el backend (TABLA_UNIDAD_PAPEL
+  // en procesosPapel.controller.ts) aunque en la cascada quede junto a
+  // Armado/Empaque, que ya trabajan en bolsas.
+  litolaminado_papel: { label: "Pliegos litolaminados hoy", unidad: "pliegos", placeholder: "Ej: 6065" },
   suaje_produccion_papel: { label: "Pliegos suajados hoy", unidad: "pliegos", placeholder: "Ej: 6055" },
+  desbarbe_papel: { label: "Pliegos desbarbados hoy", unidad: "pliegos", placeholder: "Ej: 6045" },
   armado_papel: { label: "Bolsas armadas hoy", unidad: "bolsas", placeholder: "Ej: 3027" },
+  especial_papel: { label: "Pliegos procesados hoy", unidad: "pliegos", placeholder: "Ej: 6030" },
   empaque_papel: { label: "Bolsas empacadas hoy", unidad: "bolsas", placeholder: "Ej: 3012" },
 };
 
@@ -235,7 +281,10 @@ const CAMPO_PRINCIPAL_FINAL_PAPEL: Record<NombreProcesoPapel, { key: string; lab
   texturizado_papel: { key: "pliegos_entregados", label: "Pliegos entregados", unidad: "pliegos" },
   alto_relieve_papel: { key: "pliegos_entregados", label: "Pliegos entregados", unidad: "pliegos" },
   suaje_produccion_papel: { key: "pliegos_entregados", label: "Pliegos entregados", unidad: "pliegos" },
+  litolaminado_papel: { key: "pliegos_entregados", label: "Pliegos entregados", unidad: "pliegos" },
+  desbarbe_papel: { key: "pliegos_entregados", label: "Pliegos entregados", unidad: "pliegos" },
   armado_papel: { key: "bolsas_entregadas", label: "Bolsas entregadas", unidad: "bolsas" },
+  especial_papel: { key: "pliegos_entregados", label: "Pliegos entregados", unidad: "pliegos" },
   empaque_papel: { key: "bolsas_entregadas_final", label: "Bolsas entregadas (final)", unidad: "bolsas" },
 };
 
@@ -254,10 +303,13 @@ const CAMPOS_FINALES_ADICIONALES_PAPEL: Record<NombreProcesoPapel, { key: string
   texturizado_papel: [{ key: "merma", label: "Merma", unidad: "pliegos" }],
   alto_relieve_papel: [{ key: "merma", label: "Merma", unidad: "pliegos" }],
   suaje_produccion_papel: [{ key: "merma", label: "Merma", unidad: "pliegos" }],
+  litolaminado_papel: [{ key: "merma", label: "Merma", unidad: "pliegos" }],
+  desbarbe_papel: [{ key: "merma", label: "Merma", unidad: "pliegos" }],
   armado_papel: [
     { key: "merma", label: "Merma", unidad: "bolsas" },
     { key: "bolsas_armadas", label: "Bolsas armadas (referencia)", unidad: "bolsas" },
   ],
+  especial_papel: [{ key: "merma", label: "Merma", unidad: "pliegos" }],
   empaque_papel: [{ key: "merma", label: "Merma", unidad: "bolsas" }],
 };
 
@@ -509,10 +561,22 @@ interface SeccionAvancesPapelProps {
   // tiene ningún avance real -- una vez que sí lo tenga, limiteAnterior
   // deja de ser null y este estimado ya no se muestra (el real manda).
   estimadoAnterior: number | null;
+  // Primer proceso de una OP de unión (normalmente Litolaminado): en vez
+  // de "límite del proceso anterior" (no existe ninguno dentro de su
+  // propia ruta), limiteAnterior sale del mínimo entregado entre sus OP
+  // de inicio hermanas -- se pasa el detalle por hermana para mostrarlo
+  // igual que en el PDF de la unión (Jose, 2026-09-03).
+  piezasFinalesHermanas?: {
+    no_produccion: string | null;
+    componente_nombre: string | null;
+    cantidad_entregada: number | null;
+    terminado: boolean;
+  }[] | null;
 }
 
 function SeccionAvancesPapel({
   idproduccion, nombreProceso, avances, totalAvances, onAvanceRegistrado, limiteAnterior, estimadoAnterior,
+  piezasFinalesHermanas,
 }: SeccionAvancesPapelProps) {
   interface BorradorAvancePapel {
     cantidad: string; observaciones: string; esAvanceFinal: boolean;
@@ -660,11 +724,33 @@ function SeccionAvancesPapel({
         <div className="px-4 py-3 bg-white border-b border-blue-100">
           <div className="flex items-center justify-between mb-1.5">
             <p className="text-xs font-semibold text-gray-700">
-              Límite del proceso anterior
-              <span className="ml-1.5 text-[10px] font-normal text-gray-400">(máx. que puede avanzar este proceso)</span>
+              {piezasFinalesHermanas && piezasFinalesHermanas.length > 0
+                ? "✨ Piezas de las OP de inicio"
+                : "Límite del proceso anterior"}
+              <span className="ml-1.5 text-[10px] font-normal text-gray-400">
+                {piezasFinalesHermanas && piezasFinalesHermanas.length > 0
+                  ? "(mínimo entregado entre las hermanas — van emparejadas, no sumadas)"
+                  : "(máx. que puede avanzar este proceso)"}
+              </span>
             </p>
             <p className="text-xs font-bold text-gray-800">{pctLimite != null ? `${Math.round(pctLimite)}%` : "—"}</p>
           </div>
+          {piezasFinalesHermanas && piezasFinalesHermanas.length > 0 && (
+            <div className="mb-2 space-y-1">
+              {piezasFinalesHermanas.map((h, i) => (
+                <div key={i} className="flex items-center justify-between text-[11px] bg-purple-50 border border-purple-100 rounded px-2 py-1">
+                  <span className="text-purple-700 font-medium">
+                    {h.componente_nombre || h.no_produccion || `OP de inicio ${i + 1}`}
+                    {h.no_produccion && h.componente_nombre ? ` · ${h.no_produccion}` : ""}
+                  </span>
+                  <span className="text-purple-800 font-bold">
+                    {h.cantidad_entregada != null ? h.cantidad_entregada.toLocaleString("es-MX") : "—"}
+                    {h.terminado && <span className="ml-1 font-normal text-green-600">✓</span>}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
           <div className="w-full bg-gray-100 rounded-full h-2 mb-2">
             <div className={`h-2 rounded-full transition-all ${pctLimite != null && pctLimite >= 100 ? "bg-green-500" : "bg-orange-400"}`}
               style={{ width: `${pctLimite ?? 0}%` }} />
@@ -1591,6 +1677,52 @@ function SeccionBultosPapel({
 }
 
 // ─────────────────────────────────────────────
+// Cálculo del/de los campo(s) "entrada" (readOnly) al finalizar un
+// proceso. Factorizado para poder usarse tanto al abrir "Finalizar" a
+// mano (handleAbrirFinalizar) como al restaurar un borrador guardado
+// (cargar): un borrador viejo puede traer atrapado un 0 capturado antes
+// de que existiera el cálculo de piezasFinalesTotal para la unión, así
+// que ese campo NUNCA se debe tomar tal cual del borrador -- siempre se
+// recalcula fresco contra los datos actuales (Jose, 2026-09-03).
+// ─────────────────────────────────────────────
+function calcularPreFillEntradaPapel(
+  procesos: ProcesosOrdenPapelRespuesta["procesos"],
+  nombreProceso: NombreProcesoPapel,
+  camposEntrada: CampoProceso[],
+  pedido: PedidoSeguimientoPapel,
+  piezasFinalesTotal: number | null | undefined,
+): Record<string, any> {
+  const esTablaPreparacion = (tabla?: string) => tabla === "hojeado_papel" || tabla === "guillotina_papel";
+  const procIndex = procesos.findIndex((p) => p.tabla === nombreProceso);
+  const proc = procIndex >= 0 ? procesos[procIndex] : undefined;
+  const procInmediatoAnterior = procIndex > 0 ? procesos[procIndex - 1] : null;
+  let procAnterior = procInmediatoAnterior;
+  if (procInmediatoAnterior && esTablaPreparacion(procInmediatoAnterior.tabla)) {
+    const candidatoDosAntes = procIndex > 1 ? procesos[procIndex - 2] : null;
+    const parCandidatos = [procInmediatoAnterior, candidatoDosAntes].filter(
+      (p): p is NonNullable<typeof p> => !!p && esTablaPreparacion(p.tabla)
+    );
+    procAnterior = parCandidatos.find((p) => p.registro != null) ?? null;
+  }
+  const calculadoFicha =
+    nombreProceso === "hojeado_papel" ? pedido.pliegos_hojeado_calculado
+    : nombreProceso === "guillotina_papel" ? pedido.pliegos_guillotina_calculado
+    : undefined;
+  const preFill: Record<string, any> = {};
+  camposEntrada.forEach((c) => {
+    preFill[c.key] = proc?.registro?.[c.key] ?? calculadoFicha
+      ?? procAnterior?.registro?.pliegos_entregados
+      ?? procAnterior?.registro?.cantidad_entregada ?? procAnterior?.registro?.bolsas_entregadas
+      // Primer proceso de una OP de unión (normalmente Litolaminado): no
+      // hay procAnterior real dentro de su propia ruta -- la "entrada"
+      // sale del mínimo entregado entre sus OP de inicio hermanas.
+      ?? piezasFinalesTotal
+      ?? 0;
+  });
+  return preFill;
+}
+
+// ─────────────────────────────────────────────
 // MODAL PROCESO INDIVIDUAL — PAPEL
 // ─────────────────────────────────────────────
 interface PropsPapel {
@@ -1633,7 +1765,17 @@ export default function ModalProcesoIndividualPapel({ pedido, nombreProceso, onC
         borradorFinalizarAplicado.current = true;
         const borrador = leerBorrador<{ formDatos: Record<string, unknown>; observaciones: string }>(claveBorradorFinalizar);
         if (borrador) {
-          setFormDatos(borrador.formDatos);
+          // El/los campo(s) "entrada" (readOnly) del borrador NUNCA se
+          // usan tal cual: un borrador viejo puede traer atrapado un 0
+          // capturado antes de que existiera piezasFinalesTotal para la
+          // unión (o simplemente antes de que la hermana entregara más),
+          // así que siempre se recalculan frescos y pisan lo guardado
+          // (Jose, 2026-09-03).
+          const camposEntradaFrescos = (CAMPOS_PROCESO_PAPEL[nombreProceso] ?? []).filter((c) => c.readOnly);
+          const entradaFresca = calcularPreFillEntradaPapel(
+            res.procesos, nombreProceso, camposEntradaFrescos, pedido, res.piezas_finales_total
+          );
+          setFormDatos({ ...(borrador.formDatos as Record<string, any>), ...entradaFresca });
           setObservaciones(borrador.observaciones);
           setAccion("finalizar");
           setCargando(false);
@@ -1773,22 +1915,20 @@ export default function ModalProcesoIndividualPapel({ pedido, nombreProceso, onC
   };
 
   const handleAbrirFinalizar = () => {
-    const preFill: Record<string, any> = {};
-    const camposEntrada = campos.filter(c => c.readOnly);
     // Hojeado y Guillotina son puntos de entrada de la cascada (no tienen
     // procAnterior real que les herede una cantidad) -- su campo "objetivo"
     // sale del estimado calculado en la ficha (el mismo que se muestra en
     // BloqueVisualHojeadoGuillotina como "Pliegos calculados"), no de un
-    // proceso anterior. Sin este caso especial siempre caía en 0.
-    const calculadoFicha =
-      nombreProceso === "hojeado_papel" ? pedido.pliegos_hojeado_calculado
-      : nombreProceso === "guillotina_papel" ? pedido.pliegos_guillotina_calculado
-      : undefined;
-    camposEntrada.forEach(c => {
-      preFill[c.key] = proc?.registro?.[c.key] ?? calculadoFicha
-        ?? procAnterior?.registro?.pliegos_entregados
-        ?? procAnterior?.registro?.cantidad_entregada ?? procAnterior?.registro?.bolsas_entregadas ?? 0;
-    });
+    // proceso anterior. Cualquier otro proceso que sea el primero de SU
+    // PROPIA ruta (el caso real: el primer proceso de una OP de unión,
+    // sea cual sea) cae en piezasFinalesTotal -- ver
+    // calcularPreFillEntradaPapel arriba, mismo cálculo que usa `cargar`
+    // al restaurar un borrador, para que ambos caminos den siempre el
+    // mismo resultado (Jose, 2026-09-03).
+    const camposEntrada = campos.filter(c => c.readOnly);
+    const preFill = calcularPreFillEntradaPapel(
+      datos?.procesos ?? [], nombreProceso, camposEntrada, pedido, datos?.piezas_finales_total
+    );
     setFormDatos(preFill); setAccion("finalizar");
   };
 
@@ -2032,6 +2172,7 @@ export default function ModalProcesoIndividualPapel({ pedido, nombreProceso, onC
               onAvanceRegistrado={async () => { await cargar(); onActualizar(); }}
               limiteAnterior={limiteAnterior}
               estimadoAnterior={estimadoAnterior}
+              piezasFinalesHermanas={procAnterior == null ? (datos?.piezas_finales_hermanas ?? null) : null}
             />
           )}
 

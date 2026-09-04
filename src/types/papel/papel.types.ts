@@ -81,7 +81,7 @@ export interface MaterialEntry {
   fuelle: string;
   altura: string;
   medida: string;
-  metodoPreparacion: string; // "" | "hojeadora" | "guillotina"
+  metodoPreparacion: string; // "" | "hojeadora" | "guillotina" | "proveedor"
 }
 
 export interface GrupoPapel {
@@ -123,6 +123,15 @@ export interface Suaje {
 export interface Acabados {
   idcat_tipo_pegado: number | null;
   idcat_pegamento: number | null;
+
+  // NUEVO (Fase 2, Jose 2026-09-02): campos propios del proceso "Pegado" de
+  // la ruta (capturados en el ALTA del especial, no en producción) --
+  // deliberadamente separados de idcat_tipo_pegado/idcat_pegamento de
+  // arriba, que son de Armado. Un componente puede llevar los dos procesos
+  // en su ruta a la vez.
+  idcat_tipo_pegado_pegado: number | null;
+  queSePega: string;
+
   laminados: number[];
   laminadosNombres: string[];
 
@@ -207,6 +216,11 @@ export interface ComponenteProceso {
   // ya existe) o a su client_key (si es nuevo), tal como espera
   // upsertComponenteProcesos en el backend.
   materiales: number[];
+
+  // NUEVO (Fase 2, Jose 2026-09-01): cuántas veces se repite este proceso
+  // en la ruta ("Laminación x2"), capturado aquí al armar la ruta. 1 = sin
+  // repetición (default, igual que el comportamiento de siempre).
+  veces: number;
 }
 
 export interface ComponentePapel {
@@ -346,6 +360,8 @@ export const newSuaje = (): Suaje => ({
 export const newAcabados = (): Acabados => ({
   idcat_tipo_pegado: null,
   idcat_pegamento: null,
+  idcat_tipo_pegado_pegado: null,
+  queSePega: "",
   laminados: [],
   laminadosNombres: [],
   idrollo_lam: null,
@@ -400,6 +416,7 @@ export const newComponenteProceso = (): ComponenteProceso => ({
   orden: 1,
   observaciones: "",
   materiales: [],
+  veces: 1,
 });
 
 export const newComponente = (): ComponentePapel => ({

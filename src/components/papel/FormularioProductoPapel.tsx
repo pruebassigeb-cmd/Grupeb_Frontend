@@ -11,7 +11,11 @@ import {
   getTexturas,
   getColoresAsa,
 } from "../../services/papel/papelCotizacionService";
-import { crearProductoPapel } from "../../services/papel/papel.service";
+import {
+  crearProductoPapel,
+  subirImagenProducto,
+  crearNotaProducto,
+} from "../../services/papel/papel.service";
 import type {
   ProductoPapelBusqueda,
   GrupoOpcion,
@@ -25,6 +29,7 @@ import type {
 import type { Insumo } from "../../services/proveedoresService";
 import FormularioProductoPapelAlta from "./FormularioProductoPapelAlta";
 import type { ArchivoPendiente } from "./FormularioProductoPapelAlta";
+import FormularioProductoEspecial from "./especiales/FormularioProductoEspecial";
 import type { ProductoPapelForm } from "../../types/papel/papel.types";
 import { coincideBusquedaProductoPapel } from "../../utils/papel/buscarProductoPapel";
 import { convertirDesdeMXN } from "../../utils/moneda.utils";
@@ -52,6 +57,14 @@ interface Props {
   // catálogo siempre es MXN — se convierte aquí antes de mostrarlo/usarlo.
   moneda?: Moneda;
   tipoCambio?: number | null;
+  // NUEVO — integración de productos especiales en cotización/pedido.
+  // false/undefined (default): comportamiento de siempre, solo productos de
+  // papel normales (es_especial !== true), igual que ya se excluye origen_expo.
+  // true: pestaña "Especial" — muestra únicamente productos con
+  // es_especial === true. El resto del formulario (tintas, laminado, asa,
+  // foil, textura, cantidades/precios, herramental) funciona idéntico, ya
+  // que el backend (insertarProductoPapel) es agnóstico a es_especial.
+  soloEspeciales?: boolean;
 }
 
 const nuevoSpecs = () => ({
@@ -112,13 +125,16 @@ export default function FormularioProductoPapel({
   onRegistrarPanton,
   moneda = "MXN",
   tipoCambio = null,
+  soloEspeciales = false,
 }: Props) {
   // Punto de guardado (ver src/hooks/useBorradorFormulario.ts) — solo cuando
   // se está agregando un producto NUEVO (productoEditando == null). Editar
   // una línea ya agregada se identifica por su índice en el arreglo del
   // padre, no por un id estable, así que no se cubre aquí (mismo criterio
   // que en otros paneles de "editar" de bajo riesgo de este proyecto).
-  const claveBorrador = `papel-producto-en-solicitud-${modo}`;
+  // Se separa el borrador de "papel" y "especial" para que no se mezclen
+  // entre pestañas (ej. dejar a medias un especial y luego abrir papel).
+  const claveBorrador = `papel-producto-en-solicitud-${modo}${soloEspeciales ? "-especial" : ""}`;
   const [borradorInicial] = useState(() =>
     productoEditando ? null : leerBorrador<BorradorProductoPapel>(claveBorrador)
   );
@@ -154,6 +170,15 @@ export default function FormularioProductoPapel({
     lleva_textura: boolean;
     lleva_hot_stamping: boolean;
   } | null>(null);
+  // ── Procesos reales del producto (solo productos ESPECIALES) ─────────────
+  // Un producto especial define su ruta de procesos por componente (Impresión,
+  // Laminación, Armado, UV, Hot stamping...). Aquí solo debe poder capturarse
+  // lo que corresponde a esos procesos: si el producto no lleva Laminación, no
+  // tiene sentido ofrecer un laminado en la cotización (Jose). Se guardan las
+  // claves `tabla` de proceso_cat (impresion_papel, laminacion_papel, ...),
+  // que es la llave estable del catálogo, no el nombre.
+  const [procesosProducto, setProcesosProducto] = useState<string[] | null>(null);
+  const [esEspecialSel, setEsEspecialSel] = useState(false);
   const [coloresAsa, setColoresAsa] = useState<ColorAsaOpcion[]>([]);
   const [loadingColores, setLoadingColores] = useState(true);
   const [specs, setSpecs] = useState(borradorInicial?.specs ?? nuevoSpecs());
@@ -192,6 +217,33 @@ export default function FormularioProductoPapel({
   const herramentalTieneData =
     !!herramentalDescripcion.trim() ||
     (herramentalPrecioTexto !== "" && parseFloat(herramentalPrecioTexto) > 0);
+
+  // ── Qué se puede capturar de este producto ───────────────────────────────
+  // Producto de papel NORMAL: todo como siempre (Foil y Texturizado ya se
+  // ocultaban según los acabados del producto, eso no cambia).
+  // Producto ESPECIAL: solo lo que su ruta de procesos realmente incluye —
+  // si no lleva Impresión no se piden tintas, si no lleva Laminación no se
+  // ofrece laminado, si no lleva Armado no se pide asa, etc. (Jose). Mientras
+  // el detalle no haya cargado (procesosProducto === null) se comporta como
+  // antes, para no esconder campos por un error de red.
+  const llevaProceso = (tabla: string) =>
+    !esEspecialSel || procesosProducto == null || procesosProducto.includes(tabla);
+  const campos = {
+    impresion: llevaProceso("impresion_papel"),
+    laminado: llevaProceso("laminacion_papel"),
+    asa: llevaProceso("armado_papel"),
+    armado: llevaProceso("armado_papel"),
+    foil: (acabadosProducto === null || acabadosProducto.lleva_hot_stamping)
+      && llevaProceso("hot_stamping_papel"),
+    textura: (acabadosProducto === null || acabadosProducto.lleva_textura)
+      && llevaProceso("texturizado_papel"),
+    uv: llevaProceso("barniz_uv_papel"),
+    altoRelieve: llevaProceso("alto_relieve_papel"),
+  };
+  // Un especial al que todavía no le capturaron ni un proceso: se avisa en
+  // vez de dejar la pantalla en blanco sin explicación.
+  const especialSinProcesos =
+    esEspecialSel && procesosProducto != null && procesosProducto.length === 0;
 
   const indices = modo === "pedido" ? [0] : [0, 1, 2];
   const tintasPapel = tintas
@@ -446,6 +498,9 @@ export default function FormularioProductoPapel({
     setGrupos([]);
     setAsas([]);
     setLaminados([]);
+    setProcesosProducto(null);
+    setEsEspecialSel(false);
+    setAcabadosProducto(null);
     setSpecs(nuevoSpecs());
     setInputsPantones([]);
     setUsaTintasDentro(false);
@@ -480,6 +535,7 @@ export default function FormularioProductoPapel({
 
 const productos = productosTodos
   .filter((p) => p.origen_expo !== true)
+  .filter((p) => (soloEspeciales ? p.es_especial === true : p.es_especial !== true))
   .filter((p) => coincideBusquedaProductoPapel(p, busqueda));
 
   const cargarDetalleProducto = async (
@@ -490,18 +546,78 @@ const productos = productosTodos
       const det = await getProductoPapelDetalle(id);
       const { grupos: g, asas: a, laminados: l } = mapearOpciones(det);
       setGrupos(g);
-      setAsas(a);
-      setLaminados(l);
 
-      const defaults = {
-        lleva_uv: det.acabados?.lleva_uv === true,
-        lleva_alto_relieve: det.acabados?.lleva_alto_relieve === true,
-        lleva_textura: det.acabados?.lleva_textura === true,
-        lleva_hot_stamping: det.acabados?.lleva_hot_stamping === true,
-      };
+      // ── Producto especial: sus acabados NO viven a nivel producto ────────
+      // En un especial, acabados_papel se guarda por COMPONENTE (ver
+      // getComponentes en producto_papel.controller.ts), así que
+      // det.acabados llega vacío y mapearOpciones no encuentra ni asas ni
+      // laminados. Se juntan aquí los de todos los componentes, que es la
+      // lista real de lo que ese producto puede llevar.
+      const componentes: any[] = Array.isArray((det as any).componentes)
+        ? (det as any).componentes
+        : [];
+      const esEsp = (det as any).es_especial === true || componentes.length > 0;
+      setEsEspecialSel(esEsp);
+
+      if (esEsp) {
+        const asasComp = new Map<number, string>();
+        const lamsComp = new Map<number, string>();
+        for (const comp of componentes) {
+          for (const item of comp?.acabados?.asas ?? []) {
+            const idAsa = Number(item?.id ?? item);
+            if (Number.isFinite(idAsa)) asasComp.set(idAsa, String(item?.nombre ?? ""));
+          }
+          for (const item of comp?.acabados?.laminados ?? []) {
+            const idLam = Number(item?.id ?? item);
+            if (Number.isFinite(idLam)) lamsComp.set(idLam, String(item?.nombre ?? ""));
+          }
+        }
+        for (const opt of a) asasComp.set(opt.idcat_tipo_asa, opt.nombre);
+        for (const opt of l) lamsComp.set(opt.idcat_laminado, opt.nombre);
+        setAsas([...asasComp].map(([idcat_tipo_asa, nombre]) => ({ idcat_tipo_asa, nombre })));
+        setLaminados([...lamsComp].map(([idcat_laminado, nombre]) => ({ idcat_laminado, nombre })));
+      } else {
+        setAsas(a);
+        setLaminados(l);
+      }
+
+      // Claves `tabla` de todos los procesos de la ruta (solo especiales).
+      const tablas = esEsp
+        ? [...new Set(
+            componentes
+              .flatMap((c: any) => c?.procesos ?? [])
+              .map((p: any) => String(p?.tabla ?? ""))
+              .filter(Boolean),
+          )]
+        : null;
+      setProcesosProducto(tablas);
+
+      // En un producto normal los acabados salen del producto; en un especial
+      // salen de la ruta: si el proceso está en la ruta, el acabado aplica.
+      const defaults = esEsp && tablas
+        ? {
+            lleva_uv: tablas.includes("barniz_uv_papel"),
+            lleva_alto_relieve: tablas.includes("alto_relieve_papel"),
+            lleva_textura: tablas.includes("texturizado_papel"),
+            lleva_hot_stamping: tablas.includes("hot_stamping_papel"),
+          }
+        : {
+            lleva_uv: det.acabados?.lleva_uv === true,
+            lleva_alto_relieve: det.acabados?.lleva_alto_relieve === true,
+            lleva_textura: det.acabados?.lleva_textura === true,
+            lleva_hot_stamping: det.acabados?.lleva_hot_stamping === true,
+          };
       setAcabadosProducto(defaults);
 
       if (aplicarTamanoAsaDefault) {
+        // Si el especial no lleva Impresión, no se le pide al vendedor elegir
+        // tintas: se deja fijada la opción "Sin tintas" del catálogo para que
+        // la línea se guarde con un valor válido igual que siempre.
+        const sinTintas = tintasPapel.find((t) => Number(t.cantidad) === 0) ?? null;
+        const sinImpresion = esEsp && tablas != null && !tablas.includes("impresion_papel");
+        const llevaAsa = !esEsp || (tablas != null && tablas.includes("armado_papel"));
+        const llevaLaminado = !esEsp || (tablas != null && tablas.includes("laminacion_papel"));
+
         setSpecs((prev) => ({
           ...prev,
           tamano_asa: det.tamano_asa_default?.trim() ?? "",
@@ -509,7 +625,27 @@ const productos = productosTodos
           alto_relieve: defaults.lleva_alto_relieve,
           idcat_textura: defaults.lleva_textura ? prev.idcat_textura : null,
           idfoil: defaults.lleva_hot_stamping ? prev.idfoil : null,
+          lleva_armado: llevaAsa ? prev.lleva_armado : false,
+          id_asa: llevaAsa ? prev.id_asa : null,
+          id_color: llevaAsa ? prev.id_color : null,
+          color_asa_nombre: llevaAsa ? prev.color_asa_nombre : null,
+          idcat_laminado: llevaLaminado ? prev.idcat_laminado : null,
+          ...(sinImpresion
+            ? {
+                tintasId: sinTintas?.id ?? null,
+                tintas: 0,
+                pantones: "",
+                tintasDentroId: null,
+                tintasDentro: 0,
+                pantonesDentro: "",
+              }
+            : {}),
         }));
+        if (sinImpresion) {
+          setInputsPantones([]);
+          setUsaTintasDentro(false);
+          setInputsPantonesDentro([]);
+        }
       }
       return g;
     } catch {
@@ -517,6 +653,8 @@ const productos = productosTodos
       setAsas([]);
       setLaminados([]);
       setAcabadosProducto(null);
+      setProcesosProducto(null);
+      setEsEspecialSel(false);
       return [];
     }
   };
@@ -645,6 +783,76 @@ const productos = productosTodos
     }
   };
 
+  // Alta de un producto ESPECIAL nuevo desde la cotización/pedido — mismo
+  // flujo que ya usa la pantalla dedicada (ver ProductoEspecial.tsx):
+  // crearProductoPapel (mismo endpoint, generico en es_especial) + subir
+  // imagen/notas pendientes si las hay. Al terminar, se comporta igual que
+  // handleGuardarNuevo: deja el producto recién creado ya seleccionado.
+  const handleGuardarNuevoEspecial = async (
+    form: ProductoPapelForm,
+    imagenPendiente: File | null,
+    notasPendientes: string[],
+  ) => {
+    setSavingNuevo(true);
+    try {
+      const creado = await crearProductoPapel({ ...form, esEspecial: true } as ProductoPapelForm);
+
+      if (imagenPendiente) {
+        try {
+          await subirImagenProducto(creado.idproducto_papel, imagenPendiente);
+        } catch {
+          // El producto ya se guardó bien; que falle solo la imagen no debe
+          // bloquear el alta.
+        }
+      }
+      for (const texto of notasPendientes) {
+        try {
+          await crearNotaProducto(creado.idproducto_papel, texto);
+        } catch {
+          // Igual que la imagen: una nota que falle no bloquea el alta.
+        }
+      }
+
+      const productoBase: ProductoPapelBusqueda = {
+        idproducto_papel: creado.idproducto_papel,
+        tipo_producto: form.tipoProductoNombre,
+        descripcion_papel: form.descripcion || null,
+        medida: form.medida || null,
+        tamano_asa_default: form.tamanoAsaDefault?.trim() || null,
+        es_especial: true,
+      };
+      setProductoSel(productoBase);
+      setProductosTodos([]);
+      setMostrarModalNuevo(false);
+      setModoProductoPapel("registrado");
+      setSpecs(nuevoSpecs());
+      setInputsPantones([]);
+      setUsaTintasDentro(false);
+      setInputsPantonesDentro([]);
+      setCantidadesTexto(["", "", ""]);
+      setPreciosTexto(["", "", ""]);
+
+      const gruposParsed = await cargarDetalleProducto(
+        creado.idproducto_papel,
+        true,
+      );
+      if (gruposParsed.length > 0) {
+        const g = gruposParsed[0];
+        setSpecs((prev) => ({
+          ...prev,
+          idgrupo_papel: g.idgrupo_papel,
+          grupo_descripcion: g.etiqueta,
+          precio_sugerido: g.precio_sugerido,
+        }));
+        aplicarSugerido(g.precio_sugerido);
+      }
+    } catch (e: any) {
+      showAlert(e.message ?? "Error al registrar el producto especial");
+    } finally {
+      setSavingNuevo(false);
+    }
+  };
+
   const handleGrupo = (idStr: string) => {
     const g = grupos.find((x) => x.idgrupo_papel === Number(idStr));
     if (!g) return;
@@ -767,7 +975,10 @@ const productos = productosTodos
       showAlert("Ingresa al menos una cantidad y precio válidos");
       return;
     }
-    if (!specs.tintasId) {
+    // Solo se exige elegir tintas cuando el producto realmente imprime: un
+    // especial cuya ruta no incluye Impresión ni siquiera muestra el campo
+    // (ya se le fijó "Sin tintas" al cargar el producto).
+    if (campos.impresion && !specs.tintasId) {
       showAlert("Selecciona una opción de Impresión (o 'Sin tintas' si no lleva)");
       return;
     }
@@ -808,6 +1019,12 @@ const productos = productosTodos
 
     const producto: ProductoPapelCotizacion = {
       tipoCotizacion: "papel",
+      // NUEVO — permite a las pantallas de listado/edición (Cotizar.tsx,
+      // Pedido.tsx, PDFs, editores) distinguir una línea de producto
+      // especial de una línea de papel normal sin tener que volver a
+      // consultar el catálogo. No afecta al backend: insertarProductoPapel
+      // ignora cualquier campo que no reconozca.
+      es_especial: soloEspeciales,
       idproducto_papel: productoSel.idproducto_papel,
       nombre: productoSel.tipo_producto,
       descripcion_papel: productoSel.descripcion_papel,
@@ -859,11 +1076,15 @@ const productos = productosTodos
   };
 
   const hayProducto = !!productoSel;
-  const inputCls =
-    "w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-amber-400 focus:border-amber-400";
+  // El tema de color sigue al tipo real de producto: emerald para
+  // especiales, amber para papel (Jose, 2026-09-03).
+  const inputCls = soloEspeciales
+    ? "w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-emerald-400 focus:border-emerald-400"
+    : "w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-amber-400 focus:border-amber-400";
   const selectCls = inputCls + " cursor-pointer";
-  const checkCls =
-    "w-4 h-4 rounded border-gray-400 text-amber-600 focus:ring-amber-400 cursor-pointer";
+  const checkCls = soloEspeciales
+    ? "w-4 h-4 rounded border-gray-400 text-emerald-600 focus:ring-emerald-400 cursor-pointer"
+    : "w-4 h-4 rounded border-gray-400 text-amber-600 focus:ring-amber-400 cursor-pointer";
 
   const celdasPantone = (
     lista: string[],
@@ -910,7 +1131,7 @@ const productos = productosTodos
             <div className="p-5 border-b border-gray-200">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-lg font-semibold text-gray-900">
-                  Buscar Producto de Papel
+                  {soloEspeciales ? "Buscar Producto Especial" : "Buscar Producto de Papel"}
                 </h3>
                 <button
                   onClick={() => {
@@ -940,7 +1161,7 @@ const productos = productosTodos
                   value={busqueda}
                   onChange={(e) => setBusqueda(e.target.value)}
                   placeholder="Buscar por tipo, medida, descripción o material..."
-                  className="w-full px-4 py-2.5 pl-10 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-amber-400"
+                  className={`w-full px-4 py-2.5 pl-10 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 ${soloEspeciales ? "focus:ring-emerald-400" : "focus:ring-amber-400"}`}
                   autoFocus
                 />
                 <svg
@@ -961,7 +1182,7 @@ const productos = productosTodos
             <div className="overflow-y-auto max-h-96">
               {loadingProductos ? (
                 <div className="p-8 text-center">
-                  <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-amber-500 border-t-transparent" />
+                  <div className={`inline-block animate-spin rounded-full h-8 w-8 border-4 border-t-transparent ${soloEspeciales ? "border-emerald-500" : "border-amber-500"}`} />
                   <p className="mt-3 text-gray-500 text-sm">Cargando...</p>
                 </div>
               ) : productos.length > 0 ? (
@@ -970,7 +1191,7 @@ const productos = productosTodos
                     <div
                       key={p.idproducto_papel}
                       onClick={() => seleccionarProducto(p)}
-                      className="p-4 hover:bg-amber-50 cursor-pointer transition-colors"
+                      className={`p-4 cursor-pointer transition-colors ${soloEspeciales ? "hover:bg-emerald-50" : "hover:bg-amber-50"}`}
                     >
                       <div className="flex items-center gap-2 flex-wrap mb-1">
                         <span className="font-semibold text-gray-900 text-sm">
@@ -1007,46 +1228,59 @@ const productos = productosTodos
         </div>
       )}
 
-      {/* ── Modal alta de nuevo producto ── */}
+      {/* ── Modal alta de nuevo producto ──
+          Para especiales se usa FormularioProductoEspecial (materiales /
+          componentes / ruta de procesos) en vez de FormularioProductoPapelAlta
+          — es un formulario más grande, así que el modal es más ancho. */}
       {mostrarModalNuevo && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-start justify-center overflow-hidden p-6">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl mx-4 relative max-h-[calc(100vh-3rem)] flex flex-col overflow-hidden">
-            <div className="flex-none flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-white z-10 rounded-t-xl">
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900">
-                  Registrar nuevo producto de papel
-                </h3>
-                <p className="text-xs text-gray-400 mt-0.5">
-                  Todos los campos son opcionales — guarda lo que tengas
-                  disponible
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setMostrarModalNuevo(false)}
-                className="text-gray-400 hover:text-gray-600 p-1"
-              >
-                <svg
-                  className="w-6 h-6"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
+          <div className={`bg-white rounded-xl shadow-2xl w-full mx-4 relative max-h-[calc(100vh-3rem)] flex flex-col overflow-hidden ${soloEspeciales ? "max-w-7xl" : "max-w-5xl"}`}>
+            {!soloEspeciales && (
+              <div className="flex-none flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-white z-10 rounded-t-xl">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    Registrar nuevo producto de papel
+                  </h3>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    Todos los campos son opcionales — guarda lo que tengas
+                    disponible
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setMostrarModalNuevo(false)}
+                  className="text-gray-400 hover:text-gray-600 p-1"
                 >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M6 18L18 6M6 6l12 12"
-                  />
-                </svg>
-              </button>
-            </div>
+                  <svg
+                    className="w-6 h-6"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M6 18L18 6M6 6l12 12"
+                    />
+                  </svg>
+                </button>
+              </div>
+            )}
             <div className="flex-1 min-h-0 overflow-y-auto">
-              <FormularioProductoPapelAlta
-                onSave={handleGuardarNuevo}
-                onCancel={() => setMostrarModalNuevo(false)}
-                saving={savingNuevo}
-              />
+              {soloEspeciales ? (
+                <FormularioProductoEspecial
+                  onSave={handleGuardarNuevoEspecial}
+                  onCancel={() => setMostrarModalNuevo(false)}
+                  saving={savingNuevo}
+                />
+              ) : (
+                <FormularioProductoPapelAlta
+                  onSave={handleGuardarNuevo}
+                  onCancel={() => setMostrarModalNuevo(false)}
+                  saving={savingNuevo}
+                />
+              )}
             </div>
           </div>
         </div>
@@ -1067,17 +1301,17 @@ const productos = productosTodos
       <div className="pr-1">
         {/* ── Banner edición ── */}
         {productoEditando && (
-          <div className="mb-4 flex items-center justify-between px-4 py-3 bg-amber-50 border border-amber-200 rounded-lg">
+          <div className={`mb-4 flex items-center justify-between px-4 py-3 border rounded-lg ${soloEspeciales ? "bg-emerald-50 border-emerald-200" : "bg-amber-50 border-amber-200"}`}>
             <div className="flex items-center gap-2">
-              <span className="text-amber-600">✏️</span>
-              <span className="text-sm font-semibold text-amber-800">
+              <span className={soloEspeciales ? "text-emerald-600" : "text-amber-600"}>✏️</span>
+              <span className={`text-sm font-semibold ${soloEspeciales ? "text-emerald-800" : "text-amber-800"}`}>
                 Editando: {productoEditando.nombre}
               </span>
             </div>
             <button
               type="button"
               onClick={onCancelarEdicion}
-              className="text-xs text-amber-500 hover:text-amber-700 underline"
+              className={`text-xs underline ${soloEspeciales ? "text-emerald-500 hover:text-emerald-700" : "text-amber-500 hover:text-amber-700"}`}
             >
               Cancelar edición
             </button>
@@ -1089,7 +1323,7 @@ const productos = productosTodos
           <button
             type="button"
             onClick={() => setModoProductoPapel("registrado")}
-            className={`flex items-center gap-2 px-5 py-2 rounded-md font-medium text-sm transition-all ${modoProductoPapel === "registrado" ? "bg-white text-amber-600 shadow" : "text-gray-600 hover:text-gray-900"}`}
+            className={`flex items-center gap-2 px-5 py-2 rounded-md font-medium text-sm transition-all ${modoProductoPapel === "registrado" ? (soloEspeciales ? "bg-white text-emerald-600 shadow" : "bg-white text-amber-600 shadow") : "text-gray-600 hover:text-gray-900"}`}
           >
             📄 Existente
           </button>
@@ -1108,7 +1342,7 @@ const productos = productosTodos
             <button
               type="button"
               onClick={() => setMostrarModal(true)}
-              className="w-full px-4 py-3 border-2 border-dashed border-amber-300 rounded-lg text-gray-600 hover:border-amber-500 hover:text-amber-700 flex items-center justify-center gap-2 transition-colors"
+              className={`w-full px-4 py-3 border-2 border-dashed rounded-lg text-gray-600 flex items-center justify-center gap-2 transition-colors ${soloEspeciales ? "border-emerald-300 hover:border-emerald-500 hover:text-emerald-700" : "border-amber-300 hover:border-amber-500 hover:text-amber-700"}`}
             >
               <svg
                 className="w-5 h-5"
@@ -1125,6 +1359,8 @@ const productos = productosTodos
               </svg>
               {productoSel
                 ? "Cambiar producto"
+                : soloEspeciales
+                ? "Click para buscar producto especial"
                 : "Click para buscar producto de papel"}
             </button>
           ) : (
@@ -1147,13 +1383,17 @@ const productos = productosTodos
                 />
               </svg>
               {productoSel
-                ? "Registrar otro producto nuevo"
+                ? soloEspeciales
+                  ? "Registrar otro producto especial"
+                  : "Registrar otro producto nuevo"
+                : soloEspeciales
+                ? "Click para registrar producto especial"
                 : "Click para registrar producto nuevo"}
             </button>
           )}
 
           {productoSel && (
-            <div className="mt-2 bg-amber-50 border border-amber-200 rounded-lg p-4">
+            <div className={`mt-2 border rounded-lg p-4 ${soloEspeciales ? "bg-emerald-50 border-emerald-200" : "bg-amber-50 border-amber-200"}`}>
               <div className="flex items-start justify-between gap-2">
                 <div>
                   <p className="font-semibold text-gray-900 text-sm">
@@ -1181,6 +1421,21 @@ const productos = productosTodos
         {/* ── Specs ── */}
         {hayProducto && (
           <div className="space-y-4 border-t border-gray-200 pt-4">
+            {/* Un especial sin ruta de procesos capturada: no hay nada que
+                configurar más allá del precio, y conviene decirlo. */}
+            {especialSinProcesos && (
+              <div className="px-4 py-3 bg-orange-50 border border-orange-200 rounded-lg">
+                <p className="text-sm font-semibold text-orange-800">
+                  Este producto especial todavía no tiene procesos en su ruta.
+                </p>
+                <p className="text-xs text-orange-700 mt-1">
+                  Edítalo en «Productos especiales» y arma su ruta de procesos
+                  (impresión, laminación, armado...). Aquí solo aparecen los
+                  campos de los procesos que el producto realmente lleva.
+                </p>
+              </div>
+            )}
+
             {/* Grupo / material */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -1210,7 +1465,7 @@ const productos = productosTodos
                 </p>
               )}
               {specs.precio_sugerido != null && (
-                <p className="text-xs text-amber-600 mt-1">
+                <p className={`text-xs mt-1 ${soloEspeciales ? "text-emerald-600" : "text-amber-600"}`}>
                   💡 Precio sugerido aplicado:{" "}
                   <strong>{formatMoney(convertirDesdeMXN(specs.precio_sugerido, moneda, tipoCambio) ?? specs.precio_sugerido, moneda)}</strong>
                   {moneda === "USD" && tipoCambio == null && (
@@ -1274,7 +1529,8 @@ const productos = productosTodos
               </div>
             </div>
 
-            {/* Tintas y Caras */}
+            {/* Tintas y Caras — solo si el producto lleva Impresión */}
+            {campos.impresion && (
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -1309,9 +1565,10 @@ const productos = productosTodos
                 </p>
               </div>
             </div>
+            )}
 
             {/* Pantones exteriores */}
-            {specs.tintas > 0 && (
+            {campos.impresion && specs.tintas > 0 && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Pantones{" "}
@@ -1332,6 +1589,7 @@ const productos = productosTodos
             )}
 
             {/* Tintas por dentro */}
+            {campos.impresion && (
             <div>
               <label className="flex items-center gap-2 cursor-pointer select-none">
                 <input
@@ -1356,7 +1614,7 @@ const productos = productosTodos
                 </span>
               </label>
               {usaTintasDentro && (
-                <div className="mt-3 space-y-3 pl-4 border-l-2 border-amber-200">
+                <div className={`mt-3 space-y-3 pl-4 border-l-2 ${soloEspeciales ? "border-emerald-200" : "border-amber-200"}`}>
                   <div className="max-w-xs">
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Tintas (interior)
@@ -1402,9 +1660,13 @@ const productos = productosTodos
                 </div>
               )}
             </div>
+            )}
 
-            {/* Asa, Color de Asa y Laminado */}
+            {/* Asa, Color de Asa y Laminado — cada columna solo si el
+                producto lleva ese proceso (Armado / Laminación). */}
+            {(campos.asa || campos.laminado) && (
             <div className="grid grid-cols-2 gap-4">
+              {campos.asa && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Asa{" "}
@@ -1465,7 +1727,7 @@ const productos = productosTodos
                 {/* FIX: indicador visual del color seleccionado para confirmar
                     que el estado se actualizó correctamente antes de agregar. */}
                 {specs.id_asa && specs.color_asa_nombre && (
-                  <p className="text-xs text-amber-600 mt-1">
+                  <p className={`text-xs mt-1 ${soloEspeciales ? "text-emerald-600" : "text-amber-600"}`}>
                     ✓ Color: <strong>{specs.color_asa_nombre}</strong>
                   </p>
                 )}
@@ -1494,6 +1756,8 @@ const productos = productosTodos
                     : "—"}
                 </div>
               </div>
+              )}
+              {campos.laminado && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Laminado{" "}
@@ -1526,14 +1790,17 @@ const productos = productosTodos
                   ))}
                 </select>
               </div>
+              )}
             </div>
+            )}
 
             {/* Foil y Textura — solo se muestran si el producto los lleva
-                (acabados_papel.lleva_hot_stamping / lleva_textura), definido
-                una sola vez al dar de alta el producto. */}
-            {(acabadosProducto === null || acabadosProducto.lleva_hot_stamping || acabadosProducto.lleva_textura) && (
+                (acabados_papel.lleva_hot_stamping / lleva_textura en un
+                producto normal; el proceso correspondiente en la ruta de un
+                producto especial). */}
+            {(campos.foil || campos.textura) && (
               <div className="grid grid-cols-2 gap-4">
-                {(acabadosProducto === null || acabadosProducto.lleva_hot_stamping) && (
+                {campos.foil && (
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Foil{" "}
@@ -1561,7 +1828,7 @@ const productos = productosTodos
                     </select>
                   </div>
                 )}
-                {(acabadosProducto === null || acabadosProducto.lleva_textura) && (
+                {campos.textura && (
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Texturizado{" "}
@@ -1593,7 +1860,10 @@ const productos = productosTodos
               </div>
             )}
 
-            {/* UV, Alto relieve y Armado */}
+            {/* UV, Alto relieve y Armado — cada uno solo si el producto
+                lleva ese proceso (en un especial; en uno normal salen los
+                tres como siempre). */}
+            {(campos.uv || campos.altoRelieve || campos.armado) && (
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Acabados especiales
@@ -1601,19 +1871,19 @@ const productos = productosTodos
               <div className="grid grid-cols-3 gap-3">
                 {(
                   [
-                    ["uv", "🔆 UV"],
-                    ["alto_relieve", "🔳 Alto relieve"],
+                    ...(campos.uv ? [["uv", "🔆 UV"]] : []),
+                    ...(campos.altoRelieve ? [["alto_relieve", "🔳 Alto relieve"]] : []),
                     // NUEVO: Armado se captura aquí, como parte de la
                     // cotización/pedido, en vez de en ModalMaquinariaPedidoPapel.
                     // La máquina de armado (si aplica) ya se define una sola
                     // vez al dar de alta el producto — aquí solo se decide si
                     // ESTE pedido específico necesita el proceso o no.
-                    ["lleva_armado", "📦 Armado"],
+                    ...(campos.armado ? [["lleva_armado", "📦 Armado"]] : []),
                   ] as [keyof typeof specs, string][]
                 ).map(([key, label]) => (
                   <label
                     key={key}
-                    className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer select-none transition-colors ${specs[key] ? "bg-amber-50 border-amber-300" : "bg-gray-50 border-gray-200 hover:bg-gray-100"}`}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer select-none transition-colors ${specs[key] ? (soloEspeciales ? "bg-emerald-50 border-emerald-300" : "bg-amber-50 border-amber-300") : "bg-gray-50 border-gray-200 hover:bg-gray-100"}`}
                   >
                     <input
                       type="checkbox"
@@ -1631,6 +1901,7 @@ const productos = productosTodos
                 ))}
               </div>
             </div>
+            )}
 
             {/* Descripción */}
             <div>
@@ -1796,11 +2067,13 @@ const productos = productosTodos
               <button
                 type="button"
                 onClick={handleAgregar}
-                className={`h-10 px-5 rounded-lg font-semibold text-white transition-colors ${productoEditando ? "bg-blue-600 hover:bg-blue-700" : "bg-amber-600 hover:bg-amber-700"}`}
+                className={`h-10 px-5 rounded-lg font-semibold text-white transition-colors ${productoEditando ? "bg-blue-600 hover:bg-blue-700" : soloEspeciales ? "bg-emerald-600 hover:bg-emerald-700" : "bg-amber-600 hover:bg-amber-700"}`}
               >
                 {productoEditando
                   ? "Guardar cambios"
-                  : "+ Agregar Producto de Papel"}
+                  : soloEspeciales
+                    ? "+ Agregar Producto Especial"
+                    : "+ Agregar Producto de Papel"}
               </button>
             </div>
           </div>
