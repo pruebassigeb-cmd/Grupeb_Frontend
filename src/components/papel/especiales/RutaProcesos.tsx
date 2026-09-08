@@ -1377,6 +1377,23 @@ function DetalleProceso({
   const tipoMaquina = TIPO_MAQUINA_POR_TABLA[tabla];
   const refs = refsDeComponente(materiales, comp.id);
 
+  // ✅ NUEVO (Jose, 2026-09-08): si esta orden lleva Litolaminado en su
+  // ruta, de ahí en adelante (Litolaminado incluido) todos sus procesos
+  // trabajan con TODOS los materiales de la orden -- ya se fusionaron ahí,
+  // no tiene sentido volver a preguntar cuál usa cada proceso siguiente.
+  // Antes de Litolaminado (o si la orden no lo lleva) se sigue preguntando
+  // proceso por proceso, igual que siempre. El forzado real (que lo que se
+  // guarde de verdad sean todos los materiales, sin depender de que el
+  // usuario haya abierto cada tarjeta) vive en el guardado
+  // (FormularioProductoEspecial.tsx, guardar()) -- aquí solo se refleja
+  // visualmente para no pedirle al operador algo que de todos modos se va
+  // a sobreescribir.
+  const procesoLito = comp.procesos.find(p => {
+    const t = procesosCat.find(c => c.idproceso_cat === p.idproceso_cat)?.tabla;
+    return t === "litolaminado_papel";
+  }) ?? null;
+  const materialesForzadosPorLito = !!procesoLito && proceso.orden >= procesoLito.orden;
+
   const suaje = (patch: Partial<Suaje>) => onComp({ suaje: { ...comp.suaje, ...patch } });
   const acab = (patch: Partial<Acabados>) => onComp({ acabados: { ...comp.acabados, ...patch } });
 
@@ -1647,6 +1664,16 @@ function DetalleProceso({
           <p style={nota}>Esta orden todavía no tiene materiales asignados.</p>
         ) : refs.length === 1 ? (
           <span style={{ fontSize: 12, color: T.inkStrong, fontWeight: 600 }}>{refs[0].etiqueta}</span>
+        ) : materialesForzadosPorLito ? (
+          // ✅ NUEVO (Jose, 2026-09-08): ya no se pregunta -- Litolaminado
+          // fusionó los materiales, así que este proceso (y todos los que
+          // siguen) trabajan con todos.
+          <>
+            <span style={{ fontSize: 12, color: T.inkStrong, fontWeight: 600 }}>
+              {refs.map(r => r.etiqueta).join(" + ")}
+            </span>
+            <p style={nota}>Litolaminado fusiona todos los materiales de esta orden — de aquí en adelante todos los procesos los llevan todos.</p>
+          </>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             {refs.map(r => (
@@ -2347,6 +2374,18 @@ function VistaMismaOrden({
               const usados = proceso.materiales.length > 0
                 ? proceso.materiales.map(id => refDeMaterial(materiales, id))
                 : refsDeComponente(materiales, comp.id).map(r => r.etiqueta);
+              // ✅ NUEVO (Jose, 2026-09-08): "Corte" de vuelta en la tarjeta
+              // compacta de Hojeado/Guillotina (antes solo se veía al
+              // expandir la tarjeta, en DetalleProceso) -- mismo material
+              // que ya resuelve DetalleProceso (el marcado en el proceso, o
+              // el único de la orden si no hay marca).
+              const idMatCompacto = proceso.materiales[0] ?? refsDeComponente(materiales, comp.id)[0]?.id ?? null;
+              const matCompacto = idMatCompacto != null ? materiales.find(m => m.id === idMatCompacto) ?? null : null;
+              const corteCompacto = cat?.tabla === "hojeado_papel"
+                ? matCompacto?.hojeado?.corte || null
+                : cat?.tabla === "guillotina_papel"
+                  ? matCompacto?.corte || null
+                  : null;
               const expandido = !pantallaCompleta && !enModoMover && abierto === proceso.id;
               const seleccionada = reord.tomado === proceso.id;
               return (
@@ -2396,6 +2435,7 @@ function VistaMismaOrden({
                       <>
                         <Fld k={usados.length > 1 ? "Materiales:" : "Material principal:"} v={usados.length ? usados.join(" · ") : "—"} />
                         <Fld k="Máquina:" v={maquina || "—"} />
+                        {corteCompacto && <Fld k="Corte:" v={corteCompacto} />}
                       </>
                     )}
 

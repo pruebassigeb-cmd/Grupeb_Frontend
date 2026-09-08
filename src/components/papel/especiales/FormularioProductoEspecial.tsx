@@ -409,8 +409,39 @@ export default function FormularioProductoEspecial({ initial, onSave, onCancel, 
       return;
     }
 
+    // ✅ NUEVO (Jose, 2026-09-08): si una orden lleva Litolaminado en su
+    // ruta, de ahí en adelante (Litolaminado incluido) todos sus procesos
+    // trabajan con TODOS los materiales de esa orden -- ya se fusionaron
+    // ahí, así que no tiene caso limitarlos a lo que se haya marcado a
+    // mano en el checklist de "Materiales" de cada proceso (que, además,
+    // DetalleProceso en RutaProcesos.tsx ya deja de mostrar para esos
+    // procesos -- ver materialesForzadosPorLito ahí). Esto se resuelve
+    // aquí, justo antes de guardar, en vez de solo en el render, para que
+    // aplique aunque el usuario nunca haya abierto la tarjeta de algún
+    // proceso posterior a Litolaminado. Antes de Litolaminado (o si la
+    // orden no lo lleva) se respeta tal cual lo que el usuario marcó.
+    const catLitoParaMateriales = procesosCat.find(p => p.tabla === "litolaminado_papel");
+    const componentesConMaterialesCorregidos = form.componentes.map(comp => {
+      if (!catLitoParaMateriales) return comp;
+      const procesoLito = comp.procesos.find(p => p.idproceso_cat === catLitoParaMateriales.idproceso_cat);
+      if (!procesoLito) return comp;
+      const idsTodosLosMateriales = materiales
+        .filter(m => m.idComponenteAsignado === comp.id)
+        .map(m => m.id);
+      if (idsTodosLosMateriales.length === 0) return comp;
+      return {
+        ...comp,
+        procesos: comp.procesos.map(p =>
+          p.orden >= procesoLito.orden ? { ...p, materiales: idsTodosLosMateriales } : p
+        ),
+      };
+    });
+
     try {
-      await onSave({ ...form, esEspecial: true }, imagenPendiente, notasPendientes);
+      await onSave(
+        { ...form, esEspecial: true, componentes: componentesConMaterialesCorregidos },
+        imagenPendiente, notasPendientes
+      );
     } catch (e: any) {
       setErrorGuardar(e?.message || "No se pudo guardar el producto.");
     }
