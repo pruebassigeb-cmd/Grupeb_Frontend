@@ -338,6 +338,14 @@ export default function FormularioProductoEspecial({ initial, onSave, onCancel, 
   const etiquetaOrden = (comp: ComponentePapel): string => {
     if (comp.tipo === "unica") return "la orden de producción";
     if (comp.tipo === "union") return "la OP de unión";
+    // 🔁 FASE 4: 'complementaria' (OPC) necesitaba su propia rama -- sin
+    // esto caía al cálculo de "inicios" de abajo, que la busca en el
+    // arreglo equivocado y siempre da -1 (mensaje vacío "OP INICIO ").
+    if (comp.tipo === "complementaria") {
+      const opcs = form.componentes.filter(c => c.tipo === "complementaria");
+      const i = opcs.findIndex(c => c.id === comp.id);
+      return `la OPC ${i >= 0 ? i + 1 : ""}`.trim();
+    }
     const inicios = form.componentes.filter(c => c.tipo === "inicio");
     const i = inicios.findIndex(c => c.id === comp.id);
     return `OP INICIO ${i >= 0 ? i + 1 : ""}`.trim();
@@ -360,25 +368,45 @@ export default function FormularioProductoEspecial({ initial, onSave, onCancel, 
       return;
     }
 
-    // NUEVO (Jose, 2026-09-01): Litolaminado en la OP de unión SIN material
-    // propio asignado no tiene nada que fusionar -- es un junte lógico de
-    // piezas (cajas de regalo, roscas de reyes), no debería llevar ese
-    // proceso. Se bloquea el guardado; el caso inverso (material propio sin
-    // Litolaminado) solo se avisa como sugerencia en el panel "Reglas" de
-    // RutaProcesos, no bloquea.
-    const union = form.componentes.find(c => c.tipo === "union");
-    if (union) {
-      const catLito = procesosCat.find(p => p.tabla === "litolaminado_papel");
-      const litoEnUnion = catLito
-        ? (union.procesos ?? []).some(p => p.idproceso_cat === catLito.idproceso_cat)
+    // NUEVO (Jose, 2026-09-01): Litolaminado en un nodo que junta insumos
+    // (la OP de unión) SIN material propio asignado no tiene nada que
+    // fusionar -- es un junte lógico de piezas (cajas de regalo, roscas de
+    // reyes), no debería llevar ese proceso. Se bloquea el guardado; el caso
+    // inverso (material propio sin Litolaminado) solo se avisa como
+    // sugerencia en el panel "Reglas" de RutaProcesos, no bloquea.
+    //
+    // 🔁 FASE 4 (Jose, 2026-09-07): una OPC es estructuralmente igual a la
+    // unión para este propósito (también junta insumos), así que la misma
+    // regla se revisa para CADA nodo que junta insumos -- unión Y cualquier
+    // OPC -- no solo la unión.
+    const catLito = procesosCat.find(p => p.tabla === "litolaminado_papel");
+    const nodosQueJuntan = form.componentes.filter(c => c.tipo === "union" || c.tipo === "complementaria");
+    for (const nodo of nodosQueJuntan) {
+      const litoEnNodo = catLito
+        ? (nodo.procesos ?? []).some(p => p.idproceso_cat === catLito.idproceso_cat)
         : false;
-      const materialUnion = materiales.filter(m => m.idComponenteAsignado === union.id);
-      if (litoEnUnion && materialUnion.length === 0) {
+      const materialNodo = materiales.filter(m => m.idComponenteAsignado === nodo.id);
+      if (litoEnNodo && materialNodo.length === 0) {
         setErrorGuardar(
-          "La OP de unión lleva Litolaminado en su ruta pero no tiene ningún material propio asignado -- sin material que fusionar, ese proceso no debería estar ahí. Asígnale un material a la unión o quita Litolaminado de su ruta."
+          `${etiquetaOrden(nodo)} lleva Litolaminado en su ruta pero no tiene ningún material propio asignado -- sin material que fusionar, ese proceso no debería estar ahí. Asígnale un material o quita Litolaminado de su ruta.`
         );
         return;
       }
+    }
+
+    // 🔁 FASE 4: toda OP de inicio y toda OPC debe declarar a quién alimenta
+    // (idComponentePadre) -- la unión, o otra OPC. Sin esto el guardado
+    // igual fallaría en el backend (componente_papel_tipo_padre_check /
+    // el trigger de validación), pero con un error de base de datos en vez
+    // de uno que el usuario entienda -- se valida aquí primero.
+    const sinPadre = form.componentes.filter(
+      c => (c.tipo === "inicio" || c.tipo === "complementaria") && c.idComponentePadre == null
+    );
+    if (sinPadre.length > 0) {
+      setErrorGuardar(
+        `Falta indicar a qué orden alimenta ${sinPadre.map(etiquetaOrden).join(", ")} -- ve a "Estructura del árbol", en Asignación de materiales.`
+      );
+      return;
     }
 
     try {
@@ -544,6 +572,12 @@ export default function FormularioProductoEspecial({ initial, onSave, onCancel, 
         tamanoAsaDefault={form.tamanoAsaDefault}
         onTamanoAsaDefaultChange={v => upd({ tamanoAsaDefault: v })}
         imagenProductoUrl={imagenProductoUrl}
+        // Para exportar el diagrama hace falta LEER los bytes de la imagen, y
+        // contra la URL firmada de S3 eso lo bloquea CORS. Con el id_archivo,
+        // RutaProcesos la baja por la API (que sí puede) en vez de por S3.
+        // Solo aplica a la imagen ya guardada: la que apenas se eligió y no se
+        // ha subido se lee de su blob: local, que no tiene ese problema.
+        imagenProductoIdArchivo={imagenActual?.id_archivo ?? null}
       />
 
       {/* ─────────── acciones al pie (como en el diseño) ─────────── */}

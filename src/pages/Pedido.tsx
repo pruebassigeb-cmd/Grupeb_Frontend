@@ -4,7 +4,9 @@ import FormularioCotizacion from "../components/plastico/FormularioSolicitud";
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { getCatalogosPlastico } from "../services/plastico/productosPlasticoService";
-import { getPedidos, eliminarPedido } from "../services/pedidosService";
+import { getPedidos, eliminarPedido, getArchivosOrdenCompra, subirArchivoOrdenCompra } from "../services/pedidosService";
+import type { ArchivoOrdenCompra } from "../services/pedidosService";
+import ArchivosOrdenCompra from "../components/pedidos/ArchivosOrdenCompra";
 import { crearCotizacion } from "../services/cotizacionesService";
 import { generarPdfPedido } from "../utils/generarPdfPedido";
 import type { FormatoPedidoPdf } from "../utils/generarPdfPedido";
@@ -58,6 +60,9 @@ export default function Pedidos() {
   const [cargandoCatalogos, setCargandoCatalogos] = useState(false);
   const [errorCatalogos, setErrorCatalogos] = useState("");
   const [expandidas, setExpandidas] = useState<Set<string>>(new Set());
+  // Archivos de la Orden de Compra por pedido — se piden solo la primera vez
+  // que se expande cada fila (no de golpe para toda la lista).
+  const [archivosOCPorPedido, setArchivosOCPorPedido] = useState<Record<string, ArchivoOrdenCompra[]>>({});
   const [paginaActual, setPaginaActual] = useState(1);
   const [modalRepetirOpen, setModalRepetirOpen] = useState(false);
   const [menuPdfAbierto, setMenuPdfAbierto] = useState<string | null>(null);
@@ -76,7 +81,16 @@ export default function Pedidos() {
   const toggleExpandida = (folio: string) => {
     setExpandidas(prev => {
       const s = new Set(prev);
-      s.has(folio) ? s.delete(folio) : s.add(folio);
+      if (s.has(folio)) {
+        s.delete(folio);
+      } else {
+        s.add(folio);
+        if (!archivosOCPorPedido[folio]) {
+          getArchivosOrdenCompra(folio)
+            .then(archivos => setArchivosOCPorPedido(prevArch => ({ ...prevArch, [folio]: archivos })))
+            .catch(() => {});
+        }
+      }
       return s;
     });
   };
@@ -321,6 +335,7 @@ export default function Pedidos() {
     cliente_id: pedidoCompleto.cliente_id ?? null,
     identificar: pedidoCompleto.identificar ?? null,
     sin_iva: pedidoCompleto.sin_iva ?? false,
+    orden_compra_folio: pedidoCompleto.orden_compra_folio ?? null,
     subtotal: Number(venta.subtotal),
     iva: Number(venta.iva),
     total: Number(venta.total),
@@ -362,6 +377,22 @@ export default function Pedidos() {
         throw new Error("No se pudo recuperar el pedido recién creado");
       }
 
+      // El archivo de la OC (si se seleccionó en el formulario) se sube hasta
+      // ahora porque necesita el no_pedido, que solo existe una vez creado.
+      // No se hace fallar la creación si esto falla — el pedido ya quedó
+      // guardado; se avisa aparte para que el usuario lo suba manualmente
+      // desde Editar Pedido.
+      if (datos.archivoOrdenCompra instanceof File) {
+        try {
+          await subirArchivoOrdenCompra(noPedido, datos.archivoOrdenCompra);
+        } catch (errArchivo: any) {
+          showAlert(
+            `El pedido ${noPedido} se creó, pero no se pudo subir el archivo de la Orden de Compra. ` +
+            `Puedes agregarlo desde Editar Pedido.`
+          );
+        }
+      }
+
       // NUEVO: la maquinaria de los productos de papel ya se fija
       // automáticamente en el backend (crearCotizacion → insertarProductoPapel)
       // al crear el pedido, leyendo el default registrado en cada producto.
@@ -401,6 +432,7 @@ export default function Pedidos() {
         cliente_id: ped.cliente_id ?? null,
         identificar: ped.identificar ?? null,
         sin_iva: ped.sin_iva ?? false,
+        orden_compra_folio: ped.orden_compra_folio ?? null,
         subtotal: Number(venta.subtotal),
         iva: Number(venta.iva),
         total: Number(venta.total),
@@ -471,6 +503,7 @@ export default function Pedidos() {
         cliente_id: ped.cliente_id ?? null,
         identificar: ped.identificar ?? null,
         sin_iva: ped.sin_iva ?? false,
+        orden_compra_folio: ped.orden_compra_folio ?? null,
         subtotal: Number(venta.subtotal),
         iva: Number(venta.iva),
         total: Number(venta.total),
@@ -821,6 +854,24 @@ export default function Pedidos() {
                             {ped.correo && <p className="text-xs text-gray-500">📧 {ped.correo}</p>}
                             {ped.telefono && <p className="text-xs text-gray-500">📞 {ped.telefono}</p>}
                           </div>
+                          {(ped.orden_compra_folio || (archivosOCPorPedido[ped.no_pedido]?.length ?? 0) > 0) && (
+                            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex flex-col sm:flex-row sm:items-start gap-3">
+                              <div className="sm:flex-shrink-0">
+                                <h4 className="text-xs font-semibold text-amber-800 uppercase tracking-wide mb-1">
+                                  Orden de Compra
+                                </h4>
+                                {ped.orden_compra_folio && (
+                                  <p className="text-xs text-gray-700">
+                                    Folio: <span className="font-semibold">{ped.orden_compra_folio}</span>
+                                  </p>
+                                )}
+                              </div>
+                              <ArchivosOrdenCompra
+                                archivos={archivosOCPorPedido[ped.no_pedido] ?? []}
+                                vacioTexto="Sin archivo cargado."
+                              />
+                            </div>
+                          )}
                           {ped.productos.map((p: any, i: number) => {
                             const papel = esLineaPapel(p);
                             const especial = esLineaEspecial(p);

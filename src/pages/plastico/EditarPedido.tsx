@@ -4,10 +4,11 @@ import { showAlert } from "../../components/CustomAlert";
 import { useParams, useNavigate } from "react-router-dom";
 import Dashboard from "../../layouts/Sidebar";
 import { formatMoney } from "../../utils/formatMoney";
-import { getPedidos, actualizarPedido, cambiarMonedaPedido } from "../../services/pedidosService";
+import { getPedidos, actualizarPedido, cambiarMonedaPedido, subirArchivoOrdenCompra, getArchivosOrdenCompra, eliminarArchivoOrdenCompra } from "../../services/pedidosService";
 import type {
   ProductoPlasticoActualizar,
   ProductoNuevoPlastico,
+  ArchivoOrdenCompra,
 } from "../../services/pedidosService";
 import type { Pedido } from "../../types/cotizaciones.types";
 import { usePreciosBatch } from "../../hooks/plastico/usePrecioCalculado";
@@ -19,6 +20,7 @@ import ModalRegistrarInsumo from "../../components/proveedores/ModalRegistrarIns
 import { getTiposInsumo } from "../../services/proveedoresService";
 import type { Insumo } from "../../services/proveedoresService";
 import { leerBorrador, useAutoguardarBorrador, limpiarBorrador } from "../../hooks/useBorradorFormulario";
+import ArchivosOrdenCompra from "../../components/pedidos/ArchivosOrdenCompra";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 interface DetalleEdit {
@@ -776,6 +778,10 @@ export default function EditarPedido() {
   const [pedidoMixto, setPedidoMixto] = useState(false);
   const [prioridad, setPrioridad] = useState(false);
   const [sinIva, setSinIva] = useState(false);
+  // Orden de Compra del cliente (a nivel pedido, no producto).
+  const [ordenCompraFolio, setOrdenCompraFolio] = useState("");
+  const [archivosOC, setArchivosOC] = useState<ArchivoOrdenCompra[]>([]);
+  const [subiendoOC, setSubiendoOC] = useState(false);
 
   interface BorradorEditarPedido {
     monedaSeleccionada: "MXN" | "USD";
@@ -783,13 +789,14 @@ export default function EditarPedido() {
     pedidoMixto: boolean;
     prioridad: boolean;
     sinIva: boolean;
+    ordenCompraFolio: string;
   }
   // v2 descarta borradores legacy que podían recrearse después de un guardado
   // exitoso y conservar productos nuevos como si aún no existieran en BD.
   const claveBorrador = `pedido-editar-v2-${noPedido}`;
   const borradorAplicado = useRef(false);
   useAutoguardarBorrador<BorradorEditarPedido>(claveBorrador, {
-    monedaSeleccionada, productos, pedidoMixto, prioridad, sinIva,
+    monedaSeleccionada, productos, pedidoMixto, prioridad, sinIva, ordenCompraFolio,
   }, productos.length > 0 && !guardando && !exito);
 
   const [suajes, setSuajes] = useState<any[]>([]);
@@ -884,6 +891,7 @@ export default function EditarPedido() {
             setPedidoMixto(borrador.pedidoMixto);
             setPrioridad(borrador.prioridad);
             setSinIva(borrador.sinIva);
+            setOrdenCompraFolio(borrador.ordenCompraFolio ?? "");
             return;
           }
         }
@@ -892,6 +900,14 @@ export default function EditarPedido() {
 
         setPrioridad((ped as any).prioridad ?? false);
         setSinIva((ped as any).sin_iva ?? false);
+        setOrdenCompraFolio((ped as any).orden_compra_folio ?? "");
+
+        // No va en el borrador ni depende de él: son archivos ya subidos en
+        // BD, se recargan siempre contra el pedido real. Se identifican por
+        // no_pedido (ya lo tenemos del useParams), no hace falta idsolicitud.
+        getArchivosOrdenCompra(noPedido)
+          .then(setArchivosOC)
+          .catch(() => {});
 
         setMonedaSeleccionada((ped.moneda as "MXN" | "USD") ?? "MXN");
         setProductos((ped.productos as any[])
@@ -1214,6 +1230,29 @@ export default function EditarPedido() {
     return resto;
   };
 
+  // ── Orden de Compra: subir/eliminar archivo ────────────────────────────────
+  const handleSubirArchivoOC = async (archivo: File) => {
+    if (!noPedido) return;
+    setSubiendoOC(true);
+    try {
+      const nuevo = await subirArchivoOrdenCompra(noPedido, archivo);
+      setArchivosOC(prev => [nuevo, ...prev]);
+    } catch (e: any) {
+      showAlert(e.response?.data?.error || e.message || "Error al subir el archivo");
+    } finally {
+      setSubiendoOC(false);
+    }
+  };
+
+  const handleEliminarArchivoOC = async (idArchivo: number) => {
+    try {
+      await eliminarArchivoOrdenCompra(idArchivo);
+      setArchivosOC(prev => prev.filter(a => a.id_archivo !== idArchivo));
+    } catch (e: any) {
+      showAlert(e.response?.data?.error || e.message || "Error al eliminar el archivo");
+    }
+  };
+
   const handleGuardar = async () => {
     if (!pedidoOrig) return;
 
@@ -1301,6 +1340,7 @@ export default function EditarPedido() {
         productos_nuevos: productosNuevos,
         prioridad,
         sin_iva: sinIva,
+        orden_compra_folio: ordenCompraFolio.trim() || null,
       };
 
       await actualizarPedido(pedidoOrig.no_pedido, payload);
@@ -1580,6 +1620,33 @@ export default function EditarPedido() {
               + IVA 16%: ${fmt(totalGeneral * 0.16)} →{" "}
               <span className="font-semibold text-gray-600">${fmt(totalGeneral * 1.16)}</span>
             </p>
+          </div>
+        </div>
+
+        {/* Orden de Compra del cliente */}
+        <div className="bg-white rounded-xl border border-amber-200 shadow-sm p-5">
+          <h3 className="text-sm font-semibold text-amber-800 mb-3">Orden de Compra</h3>
+
+          <div className="flex flex-col sm:flex-row sm:items-start gap-4">
+            <div className="w-full sm:w-56 sm:flex-shrink-0">
+              <label className="block text-xs font-medium text-gray-500 mb-1">
+                Folio de la orden de compra
+              </label>
+              <input
+                type="text"
+                value={ordenCompraFolio}
+                onChange={e => setOrdenCompraFolio(e.target.value)}
+                placeholder="Ej. OC-4521 (opcional)"
+                className="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-amber-500 focus:border-amber-500"
+              />
+            </div>
+
+            <ArchivosOrdenCompra
+              archivos={archivosOC}
+              onSubir={handleSubirArchivoOC}
+              onEliminar={handleEliminarArchivoOC}
+              subiendo={subiendoOC}
+            />
           </div>
         </div>
 

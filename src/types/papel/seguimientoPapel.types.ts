@@ -236,6 +236,12 @@ export const NOMBRES_PROCESO_PAPEL: Record<NombreProcesoPapel, string> = {
   empaque_papel: "Empaque",
 };
 
-// Último proceso de papel: siempre Empaque (sin excepción, a diferencia de
-// plástico que alterna entre bolseo/asa_flexible).
+// Último proceso de la cascada interna de papel: sigue siendo Empaque, sin
+// excepción -- el motor de avances/finalización no cambió. Pero desde
+// 2026-09-05 "Empaquetado" ya NO es un proceso visible/seleccionable en el
+// frontend (ver ModalProcesoIndividualPapel.tsx/Seguimiento.tsx: el
+// apartado de empaquetado ahora cuelga del proceso que de verdad resulte
+// ser el último VISIBLE de la ruta, calculado dinámicamente ahí). Esta
+// constante ya no se usa del lado del frontend -- se deja solo como
+// referencia de la regla de negocio interna (Jose, 2026-09-04/05).
 export const ULTIMO_PROCESO_PAPEL: NombreProcesoPapel = "empaque_papel";

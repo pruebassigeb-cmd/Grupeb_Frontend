@@ -1,5 +1,5 @@
 // src/pages/cotizadorLibre/CotizadorLibre.tsx
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import {
@@ -37,6 +37,28 @@ import type {
 
 type Vista = "landing" | "wizard";
 type AccionFinal = "cotizacion" | "pedido";
+
+// Snapshot completo de la selección del wizard para un producto del
+// carrito — se guarda aparte de ItemCarrito (que solo trae lo ya
+// calculado/descriptivo) para poder "Editar": restaurar todo tal cual
+// estaba seleccionado y dejar que el usuario lo modifique.
+type ConfiguracionCarritoGuardada = {
+  categoria: CategoriaCotizadorLibre;
+  idTipoSeleccionado: number;
+  idMedidaSeleccionada: number;
+  idGrupoSeleccionado: number | null;
+  idAsaSeleccionada: number | null;
+  idLaminadoSeleccionado: number | null;
+  idTexturaSeleccionada: number | null;
+  idFoilSeleccionado: number | null;
+  altoRelieve: boolean;
+  uv: boolean;
+  tintasFrente: number;
+  tintasDentro: number;
+  idTintasPlastico: number | null;
+  idCintaSeguridadSeleccionada: number | null;
+  cantidad: number | null;
+};
 
 // El cargo por asa solo aplica si el nombre de la opción contiene "listón"
 // — misma regla de negocio ya usada en la herramienta interna
@@ -268,6 +290,11 @@ export default function CotizadorLibre() {
 
   // ---- Carrito (Fase 4.5) ----
   const [carrito, setCarrito] = useState<ItemCarrito[]>([]);
+  // Snapshot de selección por producto del carrito (idLocal → config),
+  // para poder "Editar": restaurar todo el wizard tal como estaba.
+  const [configuracionesCarrito, setConfiguracionesCarrito] = useState<
+    Record<string, ConfiguracionCarritoGuardada>
+  >({});
 
   // ---- Identificación de cliente ----
   const [panelIdentificacionAbierto, setPanelIdentificacionAbierto] = useState(false);
@@ -292,6 +319,22 @@ export default function CotizadorLibre() {
   // ============================================================
   // Cargar tipos al elegir categoría
   // ============================================================
+  // ✅ NUEVO — idTipoAtajoPendiente: cuando se entra por un atajo de la
+  // landing, este efecto de todos modos resetea idTipoSeleccionado a null
+  // en cuanto cambia `categoria` (para el flujo manual normal). Por eso el
+  // tipo del atajo no se fija de una vez en entrarAlCotizadorConAtajo —
+  // se guarda aquí y se aplica hasta que el catálogo real ya haya cargado,
+  // validando además que ese id sí exista en la lista (por si el tipo se
+  // desactivó o se borró después de configurar el atajo en la landing).
+  const idTipoAtajoPendiente = useRef<number | null>(null);
+
+  // ✅ NUEVO — mismo mecanismo que idTipoAtajoPendiente, pero para poder
+  // "Editar" un producto ya agregado al carrito: se restauran medida y
+  // acabados en cuanto cada catálogo dependiente termine de cargar (ver
+  // los tres efectos de abajo).
+  const idMedidaEdicionPendiente = useRef<number | null>(null);
+  const configuracionRestanteEdicionPendiente = useRef<ConfiguracionCarritoGuardada | null>(null);
+
   useEffect(() => {
     if (!categoria) return;
 
@@ -303,7 +346,15 @@ export default function CotizadorLibre() {
     setTiposLoading(true);
 
     getTiposCotizadorLibre(categoria)
-      .then(setTipos)
+      .then((data) => {
+        setTipos(data);
+
+        const idPendiente = idTipoAtajoPendiente.current;
+        idTipoAtajoPendiente.current = null;
+        if (idPendiente !== null && data.some((t) => t.id === idPendiente)) {
+          setIdTipoSeleccionado(idPendiente);
+        }
+      })
       .catch((err) => {
         console.error("Error al cargar tipos:", err);
         setTiposError("No se pudo cargar el catálogo. Intenta de nuevo.");
@@ -328,7 +379,15 @@ export default function CotizadorLibre() {
         : getMedidasPlasticoCotizadorLibre(idTipoSeleccionado);
 
     promesa
-      .then(setMedidas)
+      .then((data) => {
+        setMedidas(data);
+
+        const idPendiente = idMedidaEdicionPendiente.current;
+        idMedidaEdicionPendiente.current = null;
+        if (idPendiente !== null && data.some((m) => m.id === idPendiente)) {
+          setIdMedidaSeleccionada(idPendiente);
+        }
+      })
       .catch((err) => {
         console.error("Error al cargar medidas:", err);
         setMedidasError("No se pudieron cargar las medidas. Intenta de nuevo.");
@@ -363,7 +422,55 @@ export default function CotizadorLibre() {
       getDetalleProductoPapelCotizadorLibre(idMedidaSeleccionada)
         .then((data) => {
           setDetallePapel(data);
-          if (data.grupos.length === 1) setIdGrupoSeleccionado(data.grupos[0].idgrupo_papel);
+
+          // Si venimos de "Editar" un producto del carrito, aquí es donde
+          // ya se puede restaurar el resto de la personalización — recién
+          // ahora existen los catálogos (asas, laminados, etc.) contra los
+          // que validar que esos ids todavía sean válidos.
+          const pendiente = configuracionRestanteEdicionPendiente.current;
+          if (pendiente) {
+            configuracionRestanteEdicionPendiente.current = null;
+            setIdGrupoSeleccionado(
+              pendiente.idGrupoSeleccionado !== null &&
+                data.grupos.some((g) => g.idgrupo_papel === pendiente.idGrupoSeleccionado)
+                ? pendiente.idGrupoSeleccionado
+                : data.grupos.length === 1
+                ? data.grupos[0].idgrupo_papel
+                : null
+            );
+            setIdAsaSeleccionada(
+              pendiente.idAsaSeleccionada !== null &&
+                data.asas.some((a) => a.id === pendiente.idAsaSeleccionada)
+                ? pendiente.idAsaSeleccionada
+                : null
+            );
+            setIdLaminadoSeleccionado(
+              pendiente.idLaminadoSeleccionado !== null &&
+                data.laminados.some((l) => l.id === pendiente.idLaminadoSeleccionado)
+                ? pendiente.idLaminadoSeleccionado
+                : null
+            );
+            setIdTexturaSeleccionada(
+              pendiente.idTexturaSeleccionada !== null &&
+                data.texturas.some((t) => t.id === pendiente.idTexturaSeleccionada)
+                ? pendiente.idTexturaSeleccionada
+                : null
+            );
+            setIdFoilSeleccionado(
+              pendiente.idFoilSeleccionado !== null &&
+                data.foils.some((f) => f.id === pendiente.idFoilSeleccionado)
+                ? pendiente.idFoilSeleccionado
+                : null
+            );
+            setAltoRelieve(pendiente.altoRelieve);
+            setUv(pendiente.uv);
+            setTintasFrente(pendiente.tintasFrente);
+            setTintasDentro(pendiente.tintasDentro);
+            setIdCintaSeguridadSeleccionada(pendiente.idCintaSeguridadSeleccionada);
+            setCantidad(pendiente.cantidad);
+          } else if (data.grupos.length === 1) {
+            setIdGrupoSeleccionado(data.grupos[0].idgrupo_papel);
+          }
         })
         .catch((err) => {
           console.error("Error al cargar detalle:", err);
@@ -372,7 +479,22 @@ export default function CotizadorLibre() {
         .finally(() => setDetalleLoading(false));
     } else {
       getDetalleProductoPlasticoCotizadorLibre(idMedidaSeleccionada)
-        .then(setDetallePlastico)
+        .then((data) => {
+          setDetallePlastico(data);
+
+          const pendiente = configuracionRestanteEdicionPendiente.current;
+          if (pendiente) {
+            configuracionRestanteEdicionPendiente.current = null;
+            setIdTintasPlastico(
+              pendiente.idTintasPlastico !== null &&
+                data.tintas.some((t) => t.id === pendiente.idTintasPlastico)
+                ? pendiente.idTintasPlastico
+                : null
+            );
+            setIdCintaSeguridadSeleccionada(pendiente.idCintaSeguridadSeleccionada);
+            setCantidad(pendiente.cantidad);
+          }
+        })
         .catch((err) => {
           console.error("Error al cargar detalle:", err);
           setDetalleError("No se pudo cargar el detalle del producto.");
@@ -518,8 +640,11 @@ export default function CotizadorLibre() {
     setCantidad(null);
   };
 
-  const handleAgregarAlCarrito = () => {
-    if (!puedeAgregarAlCarrito || !payloadPrecio || !precio?.precio_unitario) return;
+  const construirItemDesdeConfiguracionActual = (): {
+    item: ItemCarrito;
+    configuracion: ConfiguracionCarritoGuardada;
+  } | null => {
+    if (!puedeAgregarAlCarrito || !payloadPrecio || !precio?.precio_unitario || !categoria) return null;
 
     let payload: ProductoGuardadoInput;
     let descripcion: string;
@@ -565,38 +690,107 @@ export default function CotizadorLibre() {
     const foilNombre = detallePapel?.foils.find((f) => f.id === idFoilSeleccionado)?.nombre ?? null;
     const tintasCantidad = detallePlastico?.tintas.find((t) => t.id === idTintasPlastico)?.cantidad ?? null;
 
-    const nuevoItem: ItemCarrito = {
-      idLocal: generarIdLocal(),
-      descripcion,
-      cantidad: cantidad as number,
-      precioUnitario: precio.precio_unitario,
-      payload,
-      materialNombre,
-      asaNombre,
-      laminadoNombre,
-      texturaNombre,
-      foilNombre,
-      tintasCantidad,
-    };
+    const idLocal = generarIdLocal();
 
-    setCarrito((prev) => [...prev, nuevoItem]);
+    return {
+      item: {
+        idLocal,
+        descripcion,
+        cantidad: cantidad as number,
+        precioUnitario: precio.precio_unitario,
+        payload,
+        materialNombre,
+        asaNombre,
+        laminadoNombre,
+        texturaNombre,
+        foilNombre,
+        tintasCantidad,
+      },
+      configuracion: {
+        categoria,
+        idTipoSeleccionado: idTipoSeleccionado as number,
+        idMedidaSeleccionada: idMedidaSeleccionada as number,
+        idGrupoSeleccionado,
+        idAsaSeleccionada,
+        idLaminadoSeleccionado,
+        idTexturaSeleccionada,
+        idFoilSeleccionado,
+        altoRelieve,
+        uv,
+        tintasFrente,
+        tintasDentro,
+        idTintasPlastico,
+        idCintaSeguridadSeleccionada,
+        cantidad,
+      },
+    };
+  };
+
+  const handleAgregarAlCarrito = () => {
+    const resultado = construirItemDesdeConfiguracionActual();
+    if (!resultado) return;
+    const { item, configuracion } = resultado;
+    setCarrito((prev) => [...prev, item]);
+    setConfiguracionesCarrito((prev) => ({ ...prev, [item.idLocal]: configuracion }));
     resetearConfiguracion();
   };
 
   const quitarDelCarrito = (idLocal: string) => {
     setCarrito((prev) => prev.filter((item) => item.idLocal !== idLocal));
+    setConfiguracionesCarrito((prev) => {
+      const { [idLocal]: _quitado, ...resto } = prev;
+      return resto;
+    });
+  };
+
+  // Restaura en el wizard, tal cual, la selección con la que se agregó este
+  // producto — para poder corregir cantidad, tintas, acabados, etc. — y lo
+  // quita del carrito mientras tanto (se vuelve a agregar al terminar).
+  const editarItemCarrito = (idLocal: string) => {
+    const configuracion = configuracionesCarrito[idLocal];
+    if (!configuracion) return;
+
+    setCarrito((prev) => prev.filter((item) => item.idLocal !== idLocal));
+    setConfiguracionesCarrito((prev) => {
+      const { [idLocal]: _quitado, ...resto } = prev;
+      return resto;
+    });
+
+    // Se limpia cualquier otra configuración a medio hacer antes de
+    // restaurar esta — así, aunque la categoría termine siendo la misma,
+    // el efecto de "cargar tipos" (dependiente de `categoria`) sí se
+    // vuelve a disparar al pasar por null.
+    resetearConfiguracion();
+    idTipoAtajoPendiente.current = configuracion.idTipoSeleccionado;
+    idMedidaEdicionPendiente.current = configuracion.idMedidaSeleccionada;
+    configuracionRestanteEdicionPendiente.current = configuracion;
+
+    setCarritoAbierto(false);
+    setCategoria(configuracion.categoria);
   };
 
   const totalCarrito = carrito.reduce((acc, item) => acc + item.precioUnitario * item.cantidad, 0);
+
+  // ---- Carrito flotante (Fase 4.5) ----
+  const [carritoAbierto, setCarritoAbierto] = useState(false);
 
   // ============================================================
   // Acciones finales — Generar cotización / Convertir a pedido
   // ============================================================
   const [confirmacionAccionPendiente, setConfirmacionAccionPendiente] = useState<AccionFinal | null>(null);
+  // Los productos sobre los que realmente se va a ejecutar la acción final —
+  // normalmente es el carrito completo, pero en el flujo rápido (un solo
+  // producto, sin pasar por el carrito) puede ser carrito + el producto que
+  // se está configurando en ese momento. Se guarda en un ref porque la
+  // identificación del cliente es un paso async intermedio (modal), y
+  // `carrito` como state puede no reflejar todavía el producto recién
+  // agregado cuando se lee justo después de un setCarrito.
+  const itemsAccionFinalRef = useRef<ItemCarrito[]>([]);
 
-  const iniciarAccionFinal = (accion: AccionFinal) => {
+  const iniciarAccionFinal = (accion: AccionFinal, itemsOverride?: ItemCarrito[]) => {
+    const items = itemsOverride ?? carrito;
     setGuardadoError(null);
-    if (carrito.length === 0) {
+    if (items.length === 0) {
       setGuardadoError(
         accion === "pedido"
           ? "Agrega al menos un producto a tu pedido antes de continuar."
@@ -604,6 +798,7 @@ export default function CotizadorLibre() {
       );
       return;
     }
+    itemsAccionFinalRef.current = items;
 
     // Si ya está identificado, no hace falta pasar por el panel de nuevo —
     // se pide confirmación de una vez, justo antes de crear.
@@ -620,11 +815,26 @@ export default function CotizadorLibre() {
     setPanelIdentificacionAbierto(true);
   };
 
+  // Atajo: agrega el producto que se está configurando ahora mismo (junto
+  // con lo que ya hubiera en el carrito) y de una vez arranca la acción
+  // final — así, cotizar un solo producto no obliga a pasar por el carrito
+  // como paso extra.
+  const iniciarAccionRapida = (accion: AccionFinal) => {
+    const resultado = construirItemDesdeConfiguracionActual();
+    if (!resultado) return;
+    const { item, configuracion } = resultado;
+    const itemsFinal = [...carrito, item];
+    setCarrito(itemsFinal);
+    setConfiguracionesCarrito((prev) => ({ ...prev, [item.idLocal]: configuracion }));
+    resetearConfiguracion();
+    iniciarAccionFinal(accion, itemsFinal);
+  };
+
   const confirmarAccionFinal = () => {
     const accion = confirmacionAccionPendiente;
     setConfirmacionAccionPendiente(null);
     if (!accion || !clienteIdentificado) return;
-    ejecutarGuardado(accion, clienteIdentificado);
+    ejecutarGuardado(accion, clienteIdentificado, itemsAccionFinalRef.current);
   };
 
   const ejecutarGuardado = async (
@@ -633,14 +843,15 @@ export default function CotizadorLibre() {
       clienteId: number;
       verificado: boolean;
       datosContacto: { empresa: string; telefono: string; correoMostrar: string };
-    }
+    },
+    items: ItemCarrito[]
   ) => {
     setGuardando(true);
     setGuardadoError(null);
 
     // El carrito se limpia al terminar, así que lo guardamos aparte antes
     // de que eso pase — el PDF se arma con estos mismos productos.
-    const carritoUsado = carrito;
+    const carritoUsado = items;
 
     try {
       const resultado = await crearCotizacionCotizadorLibre({
@@ -657,7 +868,17 @@ export default function CotizadorLibre() {
         correoDestino: resultado.cliente?.correo ?? null,
         correoEnviado: false,
       });
-      setCarrito([]);
+      // Solo se quitan del carrito los productos que de verdad se acaban de
+      // guardar — si algo se agregó al carrito durante el trámite de
+      // identificación, no se pierde.
+      const idsUsados = new Set(carritoUsado.map((item) => item.idLocal));
+      setCarrito((prev) => prev.filter((item) => !idsUsados.has(item.idLocal)));
+      setConfiguracionesCarrito((prev) => {
+        const resto = { ...prev };
+        idsUsados.forEach((id) => delete resto[id]);
+        return resto;
+      });
+      setCarritoAbierto(false);
 
       // ---- Generar PDF (en el navegador) + descargar + enviar por correo ----
       // Si algo falla aquí, NO se revierte el guardado (ya está hecho y es lo
@@ -739,10 +960,22 @@ export default function CotizadorLibre() {
 
   const entrarAlCotizador = () => setVista("wizard");
 
+  // ✅ NUEVO — atajo desde la landing: fija la categoría y deja el tipo
+  // "pendiente" (ver idTipoAtajoPendiente arriba) para que se aplique justo
+  // cuando el catálogo real de esa categoría termine de cargar — fijarlo
+  // aquí directo se perdería, porque el efecto de "cargar tipos al elegir
+  // categoría" resetea idTipoSeleccionado a null en cuanto cambia categoria.
+  const entrarAlCotizadorConAtajo = (categoriaDestino: CategoriaCotizadorLibre, idTipo: number) => {
+    idTipoAtajoPendiente.current = idTipo;
+    setCategoria(categoriaDestino);
+    setVista("wizard");
+  };
+
   const volverAlInicio = () => {
     setVista("landing");
     resetearConfiguracion();
     setCarrito([]);
+    setConfiguracionesCarrito({});
     setResultadoGuardado(null);
     setClienteIdentificado(null);
   };
@@ -756,6 +989,7 @@ export default function CotizadorLibre() {
         esClienteExterno={esClienteExterno}
         onComenzar={entrarAlCotizador}
         onSalir={salirDelCotizador}
+        onSeleccionarAtajo={entrarAlCotizadorConAtajo}
       />
     );
   }
@@ -844,7 +1078,7 @@ export default function CotizadorLibre() {
   ].filter(Boolean) as string[];
 
   return (
-    <div className="min-h-screen bg-[#f4f4f4] pb-32 sm:pb-28 lg:h-dvh lg:min-h-0 lg:overflow-hidden lg:flex lg:flex-col lg:pb-0">
+    <div className="min-h-screen bg-[#f4f4f4] pb-24 sm:pb-24 lg:h-dvh lg:min-h-0 lg:overflow-hidden lg:flex lg:flex-col lg:pb-0">
       {/* Barra superior: migas de pan */}
       <div className="shrink-0 sticky top-0 z-20 bg-white border-b border-[#e4e4e4] px-4 sm:px-6 py-3 flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2 text-[15px]">
@@ -919,10 +1153,8 @@ export default function CotizadorLibre() {
         </div>
       )}
 
-      <div className={`px-4 sm:px-6 py-4 lg:py-5 lg:flex-1 lg:min-h-0 lg:overflow-hidden ${
-        carrito.length > 0 ? "lg:pb-20" : ""
-      }`}>
-        <div className="flex flex-col gap-4 lg:grid lg:grid-cols-3 lg:grid-rows-[minmax(0,1fr)_auto] lg:gap-4 lg:h-full lg:min-h-0">
+      <div className="px-4 sm:px-6 py-4 lg:py-5 lg:flex-1 lg:min-h-0 lg:overflow-hidden">
+        <div className="flex flex-col gap-4 lg:grid lg:grid-cols-3 lg:gap-4 lg:h-full lg:min-h-0">
           {/* ---------- Columna 1 ---------- */}
           <div className={`flex flex-col gap-4 lg:col-start-1 lg:row-start-1 [&>*]:shrink-0 ${SCROLL_COL}`}>
             {/* Producto: categoría + tipo (pasos previos, sin numerar) */}
@@ -1107,7 +1339,7 @@ export default function CotizadorLibre() {
           </div>
 
           {/* ---------- Columna 3: personalización + resumen ---------- */}
-          <div className={`flex flex-col gap-4 lg:col-start-3 lg:row-start-1 lg:row-span-2 [&>*]:shrink-0 ${SCROLL_COL}`}>
+          <div className={`flex flex-col gap-4 lg:col-start-3 lg:row-start-1 [&>*]:shrink-0 ${SCROLL_COL}`}>
             {/* 3. Personaliza */}
             {idMedidaSeleccionada && (
               <div className={`${TARJETA} p-5`}>
@@ -1415,6 +1647,66 @@ export default function CotizadorLibre() {
               </div>
             )}
 
+            {/* 4. Cantidad — junto al resumen, dentro de la columna 3 */}
+            {idMedidaSeleccionada && (
+              <div className={`${TARJETA} p-5`}>
+                <h2 className={TITULO}>4. Selecciona la cantidad</h2>
+                <div className="flex flex-col gap-4">
+                  <div className="min-w-0">
+                    <p className={ETIQUETA}>Cantidades sugeridas</p>
+                    <div className="flex flex-wrap gap-2.5">
+                      {(categoria === "plastico" && cantidadMinimaPlastico
+                        ? [0, 500, 1000, 1500, 2000].map((extra) => cantidadMinimaPlastico + extra)
+                        : [500, 1000, 3000, 5000, 10000]
+                      ).map((c) => (
+                        <button
+                          key={c}
+                          onClick={() => setCantidad(c)}
+                          className={`rounded-md border px-4 py-2.5 text-[13px] transition-colors ${
+                            cantidad === c
+                              ? "border-[#b8823c] bg-white text-[#2f2f2f] font-bold"
+                              : "border-[#e4e4e4] bg-white text-[#4a4a4a] font-medium hover:border-[#c9b18d]"
+                          }`}
+                        >
+                          {c.toLocaleString()} pzas
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <p className={ETIQUETA}>Cantidad personalizada</p>
+                    <div className="relative w-full sm:w-56">
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        placeholder="Ej. 2,500"
+                        value={cantidad ?? ""}
+                        onChange={(e) => {
+                          const soloDigitos = e.target.value.replace(/[^0-9]/g, "");
+                          setCantidad(soloDigitos === "" ? null : Number(soloDigitos));
+                        }}
+                        className={`${CAMPO} w-full pr-12`}
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[12px] text-[#a5a5a5]">
+                        pzas
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                {categoria === "plastico" && cantidadMinimaPlastico && (
+                  <p className="text-[11px] text-[#8a8a8a] mt-3">
+                    Este producto requiere un mínimo de {cantidadMinimaPlastico.toLocaleString()} piezas
+                    (equivalente a {PESO_MINIMO_KG_PLASTICO} kg) para poder cotizarse.
+                  </p>
+                )}
+                {cantidad !== null && !cantidadValida && (
+                  <p className={`${TEXTO_ERROR} mt-2`}>
+                    La cantidad mínima para este producto es {cantidadMinimaActual?.toLocaleString()} piezas.
+                  </p>
+                )}
+              </div>
+            )}
+
             {/* Resumen de tu cotización */}
             {idMedidaSeleccionada && (
               <div className={`${TARJETA} p-5`}>
@@ -1490,12 +1782,50 @@ export default function CotizadorLibre() {
                           <p className="text-[11px] text-[#a08a68] mt-2">
                             *Precio estimado, puede variar según diseño y acabados.
                           </p>
-                          <button
-                            onClick={handleAgregarAlCarrito}
-                            className="mt-4 w-full bg-[#b8823c] text-white font-semibold px-6 py-3 rounded-md hover:bg-[#a5732f] transition-colors"
-                          >
-                            + Agregar a cotización
-                          </button>
+                          {esClienteExterno ? (
+                            <div className="mt-4 flex flex-col gap-2">
+                              <button
+                                onClick={handleAgregarAlCarrito}
+                                disabled={guardando}
+                                className="w-full bg-[#177f0e] hover:bg-[#136b0c] text-white font-semibold px-6 py-3 rounded-md transition-colors disabled:opacity-50"
+                              >
+                                + Añadir a cotización
+                              </button>
+                              <button
+                                onClick={() => iniciarAccionRapida("cotizacion")}
+                                disabled={guardando}
+                                className="w-full border border-[#b8823c] text-[#8a5f1c] font-semibold px-6 py-2.5 rounded-md hover:bg-[#fdf8f1] transition-colors disabled:opacity-50"
+                              >
+                                {guardando ? "Guardando..." : "Crear cotización"}
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="mt-4 flex flex-col gap-2">
+                              <button
+                                onClick={handleAgregarAlCarrito}
+                                disabled={guardando}
+                                className="w-full bg-[#177f0e] hover:bg-[#136b0c] text-white font-semibold px-6 py-3 rounded-md transition-colors disabled:opacity-50"
+                              >
+                                + Añadir a cotización o pedido
+                              </button>
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => iniciarAccionRapida("cotizacion")}
+                                  disabled={guardando}
+                                  className="flex-1 border border-[#b8823c] text-[#8a5f1c] font-semibold px-4 py-2.5 rounded-md text-[13px] hover:bg-[#fdf8f1] transition-colors disabled:opacity-50"
+                                >
+                                  {guardando ? "Guardando..." : "Crear cotización"}
+                                </button>
+                                <button
+                                  onClick={() => iniciarAccionRapida("pedido")}
+                                  disabled={guardando}
+                                  className="flex-1 bg-[#b8823c] text-white font-semibold px-4 py-2.5 rounded-md text-[13px] hover:bg-[#a5732f] transition-colors disabled:opacity-50"
+                                >
+                                  {guardando ? "Guardando..." : "Crear pedido"}
+                                </button>
+                              </div>
+                            </div>
+                          )}
                         </>
                       ) : (
                         <p className="text-[13px] text-[#8a5f1c] bg-[#fdf8f1] border border-[#e8d9bd] rounded-md px-3 py-2">
@@ -1508,131 +1838,121 @@ export default function CotizadorLibre() {
               </div>
             )}
 
-            {/* Carrito */}
-            {carrito.length > 0 && (
-              <div className={`${TARJETA} p-5`}>
-                <h2 className={TITULO}>Tu cotización ({carrito.length})</h2>
-                <div className="flex flex-col gap-2">
-                  {carrito.map((item) => (
-                    <div
-                      key={item.idLocal}
-                      className="flex items-center justify-between border border-[#e4e4e4] rounded-md px-3.5 py-2.5"
-                    >
-                      <div className="min-w-0">
-                        <p className="text-[13px] font-semibold text-[#2f2f2f] truncate">
-                          {item.descripcion}
-                        </p>
-                        <p className="text-[11px] text-[#8a8a8a]">
-                          {item.cantidad.toLocaleString()} pzas × ${item.precioUnitario.toFixed(2)} = $
-                          {(item.cantidad * item.precioUnitario).toFixed(2)}
-                        </p>
-                      </div>
-                      <button
-                        onClick={() => quitarDelCarrito(item.idLocal)}
-                        className="text-[12px] font-semibold text-[#b04a3a] hover:underline flex-shrink-0 ml-3"
-                      >
-                        Quitar
-                      </button>
-                    </div>
-                  ))}
-                </div>
-                <div className="mt-4 pt-3 border-t border-[#eeeeee] text-right">
-                  <span className="text-[13px] text-[#6a6a6a] mr-2">Total:</span>
-                  <span className="text-[18px] font-bold text-[#2f2f2f]">
-                    ${totalCarrito.toFixed(2)} MXN
-                  </span>
-                </div>
-              </div>
-            )}
-
             {guardadoError && (
               <div className="bg-[#fdf3f2] border border-[#e8c4bf] rounded-md p-4 text-[13px] text-[#a3392a]">
                 {guardadoError}
               </div>
             )}
           </div>
-
-          {/* ---------- 4. Cantidad (ancho: columnas 1 y 2) ---------- */}
-          {idMedidaSeleccionada && (
-            <div className={`${TARJETA} p-5 lg:col-start-1 lg:col-span-2 lg:row-start-2 lg:self-end`}>
-              <h2 className={TITULO}>4. Selecciona la cantidad</h2>
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-                <div className="min-w-0">
-                  <p className={ETIQUETA}>Cantidades sugeridas</p>
-                  <div className="flex flex-wrap gap-2.5">
-                    {(categoria === "plastico" && cantidadMinimaPlastico
-                      ? [0, 500, 1000, 1500, 2000].map((extra) => cantidadMinimaPlastico + extra)
-                      : [500, 1000, 3000, 5000, 10000]
-                    ).map((c) => (
-                      <button
-                        key={c}
-                        onClick={() => setCantidad(c)}
-                        className={`rounded-md border px-4 py-2.5 text-[13px] transition-colors ${
-                          cantidad === c
-                            ? "border-[#b8823c] bg-white text-[#2f2f2f] font-bold"
-                            : "border-[#e4e4e4] bg-white text-[#4a4a4a] font-medium hover:border-[#c9b18d]"
-                        }`}
-                      >
-                        {c.toLocaleString()} pzas
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div className="sm:pl-6 sm:border-l sm:border-[#eeeeee]">
-                  <p className={ETIQUETA}>Cantidad personalizada</p>
-                  <div className="relative w-56">
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      placeholder="Ej. 2,500"
-                      value={cantidad ?? ""}
-                      onChange={(e) => {
-                        const soloDigitos = e.target.value.replace(/[^0-9]/g, "");
-                        setCantidad(soloDigitos === "" ? null : Number(soloDigitos));
-                      }}
-                      className={`${CAMPO} w-full pr-12`}
-                    />
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[12px] text-[#a5a5a5]">
-                      pzas
-                    </span>
-                  </div>
-                </div>
-              </div>
-              {categoria === "plastico" && cantidadMinimaPlastico && (
-                <p className="text-[11px] text-[#8a8a8a] mt-3">
-                  Este producto requiere un mínimo de {cantidadMinimaPlastico.toLocaleString()} piezas
-                  (equivalente a {PESO_MINIMO_KG_PLASTICO} kg) para poder cotizarse.
-                </p>
-              )}
-              {cantidad !== null && !cantidadValida && (
-                <p className={`${TEXTO_ERROR} mt-2`}>
-                  La cantidad mínima para este producto es {cantidadMinimaActual?.toLocaleString()} piezas.
-                </p>
-              )}
-            </div>
-          )}
         </div>
       </div>
 
-      {/* Barra de acciones finales */}
-      {carrito.length > 0 && (
-        <div className="fixed bottom-0 left-0 right-0 z-30 bg-white border-t border-[#e4e4e4] px-4 sm:px-6 py-3 flex flex-col sm:flex-row sm:justify-end gap-2 sm:gap-3">
-          <button
-            onClick={() => iniciarAccionFinal("cotizacion")}
-            disabled={guardando}
-            className="w-full sm:w-auto border border-[#b8823c] text-[#8a5f1c] font-semibold px-6 py-2.5 rounded-md text-[14px] hover:bg-[#fdf8f1] transition-colors disabled:opacity-50"
-          >
-            {guardando ? "Guardando..." : "Generar cotización"}
-          </button>
-          {!esClienteExterno && (
-            <button
-              onClick={() => iniciarAccionFinal("pedido")}
-              disabled={guardando}
-              className="w-full sm:w-auto bg-[#b8823c] text-white font-semibold px-6 py-2.5 rounded-md text-[14px] hover:bg-[#a5732f] transition-colors disabled:opacity-50"
-            >
-              {guardando ? "Guardando..." : "Convertir a pedido"}
-            </button>
-          )}
+      {/* Carrito flotante — botón con el número de productos añadidos.
+          Sustituye a la tarjeta fija + barra inferior de antes: al tener
+          más de un producto, ya no ocupa espacio permanente en la
+          columna 3, solo aparece cuando el usuario quiere revisarlo. */}
+      {carrito.length > 0 && !carritoAbierto && (
+        <button
+          onClick={() => setCarritoAbierto(true)}
+          className="fixed bottom-5 right-5 z-30 flex items-center gap-2.5 bg-[#b8823c] hover:bg-[#a5732f] text-white font-semibold pl-4 pr-5 py-3 rounded-full shadow-lg transition-colors"
+        >
+          <span className="relative flex items-center justify-center w-6 h-6 rounded-full bg-white text-[#8a5f1c] text-[12px] font-bold">
+            {carrito.length}
+          </span>
+          <span className="text-[14px]">Ver cotización</span>
+        </button>
+      )}
+
+      {/* Panel del carrito — se abre al tocar el botón flotante. Aquí viven
+          la lista de productos agregados y las acciones finales
+          (Generar cotización / Convertir a pedido), que antes vivían en
+          una barra fija siempre visible. */}
+      {carritoAbierto && (
+        <div className="fixed inset-0 z-40 flex items-end sm:items-center justify-center bg-black/40 px-0 sm:px-4">
+          <div className={`${TARJETA} w-full sm:max-w-md max-h-[85vh] flex flex-col rounded-b-none sm:rounded-b-lg`}>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-[#eeeeee]">
+              <h2 className={`${TITULO} mb-0`}>Tu cotización ({carrito.length})</h2>
+              <button
+                onClick={() => setCarritoAbierto(false)}
+                className="text-[13px] font-semibold text-[#8a8a8a] hover:text-[#4a4a4a]"
+              >
+                Cerrar
+              </button>
+            </div>
+
+            <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4">
+              <div className="flex flex-col gap-2">
+                {carrito.map((item) => (
+                  <div
+                    key={item.idLocal}
+                    className="flex items-center justify-between border border-[#e4e4e4] rounded-md px-3.5 py-2.5"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-[13px] font-semibold text-[#2f2f2f] truncate">
+                        {item.descripcion}
+                      </p>
+                      <p className="text-[11px] text-[#8a8a8a]">
+                        {item.cantidad.toLocaleString()} pzas × ${item.precioUnitario.toFixed(2)} = $
+                        {(item.cantidad * item.precioUnitario).toFixed(2)}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-3 flex-shrink-0 ml-3">
+                      {configuracionesCarrito[item.idLocal] && (
+                        <button
+                          onClick={() => editarItemCarrito(item.idLocal)}
+                          className="text-[12px] font-semibold text-[#8a5f1c] hover:underline"
+                        >
+                          Editar
+                        </button>
+                      )}
+                      <button
+                        onClick={() => quitarDelCarrito(item.idLocal)}
+                        className="text-[12px] font-semibold text-[#b04a3a] hover:underline"
+                      >
+                        Quitar
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                {carrito.length === 0 && (
+                  <p className={TEXTO_MUDO}>Tu cotización está vacía.</p>
+                )}
+              </div>
+
+              {guardadoError && (
+                <div className="mt-3 bg-[#fdf3f2] border border-[#e8c4bf] rounded-md p-3 text-[13px] text-[#a3392a]">
+                  {guardadoError}
+                </div>
+              )}
+            </div>
+
+            <div className="px-5 py-4 border-t border-[#eeeeee]">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-[13px] text-[#6a6a6a]">Total:</span>
+                <span className="text-[18px] font-bold text-[#2f2f2f]">
+                  ${totalCarrito.toFixed(2)} MXN
+                </span>
+              </div>
+              <div className="flex flex-col sm:flex-row gap-2.5">
+                <button
+                  onClick={() => iniciarAccionFinal("cotizacion")}
+                  disabled={guardando}
+                  className="w-full border border-[#b8823c] text-[#8a5f1c] font-semibold px-6 py-2.5 rounded-md text-[14px] hover:bg-[#fdf8f1] transition-colors disabled:opacity-50"
+                >
+                  {guardando ? "Guardando..." : "Generar cotización"}
+                </button>
+                {!esClienteExterno && (
+                  <button
+                    onClick={() => iniciarAccionFinal("pedido")}
+                    disabled={guardando}
+                    className="w-full bg-[#b8823c] text-white font-semibold px-6 py-2.5 rounded-md text-[14px] hover:bg-[#a5732f] transition-colors disabled:opacity-50"
+                  >
+                    {guardando ? "Guardando..." : "Convertir a pedido"}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
       )}
 

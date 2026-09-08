@@ -50,15 +50,9 @@ const ITEMS_POR_PAGINA = 7;
 // Identifica si una línea es de papel (viene de getCotizaciones / del form)
 const esLineaPapel = (p: any): boolean =>
   p?.tipo_material === "papel" ||
-  p?.tipo_material === "especial" ||
   p?.tipoCotizacion === "papel" ||
   p?.idproducto_papel != null ||
   p?.producto_papel_idproducto_papel != null;
-
-// Producto especial (papel): el backend ya expone `es_especial` en la línea
-// (ver papel_es_especial en cotizaciones.controller.ts) (Jose, 2026-09-03).
-const esLineaEspecial = (p: any): boolean =>
-  p?.es_especial === true || p?.tipo_material === "especial";
 
 export default function Cotizaciones() {
   const { user } = useAuth();
@@ -77,7 +71,7 @@ export default function Cotizaciones() {
   const [errorCatalogos, setErrorCatalogos] = useState("");
   const [expandidas, setExpandidas] = useState<Set<string>>(new Set());
   const [paginaActual, setPaginaActual] = useState(1);
-  const [filtroMaterial, setFiltroMaterial] = useState<"todos" | "plastico" | "papel" | "especial" | "libre">("todos");
+  const [filtroMaterial, setFiltroMaterial] = useState<"todos" | "plastico" | "papel" | "libre">("todos");
 
   // ── Envío por correo ──────────────────────────────────────────────────
   const [modalCorreoOpen, setModalCorreoOpen] = useState(false);
@@ -212,7 +206,6 @@ export default function Cotizaciones() {
     // Verificar si TODOS los productos de la cotización son del material filtrado
     // o si AL MENOS UNO coincide (usamos "al menos uno" para mixtas)
     return c.productos.some((p: any) => {
-      if (filtroMaterial === "especial") return esLineaEspecial(p);
       if (filtroMaterial === "papel") return esLineaPapel(p);
       if (filtroMaterial === "plastico") return !esLineaPapel(p);
       return true;
@@ -438,10 +431,7 @@ export default function Cotizaciones() {
       .join(" / ") || "";
 
     return {
-      // Se respeta el tipo_material real ("papel" o "especial") en vez de
-      // forzar "papel" siempre -- así el PDF de la cotización deja de
-      // mostrar los especiales como si fueran papel normal (Jose, 2026-09-03).
-      tipo_material: p.es_especial === true ? "especial" : (p.tipo_material ?? "papel"),
+      tipo_material: "papel",      // ← AGREGAR
       tipoCotizacion: "papel",
       nombre: p.nombre,
       material: materialStr,          // ← solo nombres: "Couché + Cartulina"
@@ -573,7 +563,7 @@ export default function Cotizaciones() {
           fecha: new Date().toLocaleDateString("en-CA", { timeZone: "America/Mexico_City" }), // YYYY-MM-DD en hora de México
           cliente: datosHeader?.cliente ?? null,
           empresa: datosHeader?.empresa ?? null,
-          asesor: user?.nombre || null,
+          asesor: user?.nombre || null, // aquí sí es el usuario logueado: se está creando ahora mismo, es el creador
           comentarios: datosHeader?.observaciones ?? null,
           moneda: datosHeader?.moneda ?? "MXN",
           items: renglones.map(aplanarItemLibre),
@@ -605,7 +595,7 @@ export default function Cotizaciones() {
         fecha: detalle.fecha,
         cliente: detalle.cliente_nombre ?? detalle.cliente_texto,
         empresa: detalle.cliente_empresa_real ?? detalle.empresa_texto,
-        asesor: user?.nombre || null, // el usuario logueado, no quien originalmente creó la cotización
+        asesor: detalle.asesor_nombre ? `${detalle.asesor_nombre} ${detalle.asesor_apellido ?? ""}`.trim() : null, // quien la creó, no quien la descarga/reenvía
         comentarios: detalle.comentarios,
         moneda: detalle.moneda,
         items: detalle.items,
@@ -659,7 +649,7 @@ export default function Cotizaciones() {
         fecha: detalle.fecha,
         cliente: detalle.cliente_nombre ?? detalle.cliente_texto,
         empresa: detalle.cliente_empresa_real ?? detalle.empresa_texto,
-        asesor: user?.nombre || null, // el usuario logueado, no quien originalmente creó la cotización
+        asesor: detalle.asesor_nombre ? `${detalle.asesor_nombre} ${detalle.asesor_apellido ?? ""}`.trim() : null, // quien la creó, no quien la descarga/reenvía
         comentarios: detalle.comentarios,
         moneda: detalle.moneda,
         items: detalle.items,
@@ -1062,7 +1052,6 @@ export default function Cotizaciones() {
             { key: "todos", label: "Todos", icon: "📋" },
             { key: "plastico", label: "Plástico", icon: "🧴" },
             { key: "papel", label: "Papel", icon: "📄" },
-            { key: "especial", label: "Especiales", icon: "✨" },
             { key: "libre", label: "Libre", icon: "🆓" },
           ] as const).map(({ key, label, icon }) => (
             <button
@@ -1074,11 +1063,9 @@ export default function Cotizaciones() {
                   ? "bg-white text-amber-600 shadow"
                   : key === "plastico"
                     ? "bg-white text-blue-600 shadow"
-                    : key === "especial"
+                    : key === "libre"
                       ? "bg-white text-purple-600 shadow"
-                      : key === "libre"
-                        ? "bg-white text-purple-600 shadow"
-                        : "bg-white text-gray-700 shadow"
+                      : "bg-white text-gray-700 shadow"
                 : "text-gray-600 hover:text-gray-900"
                 }`}
             >
@@ -1088,24 +1075,20 @@ export default function Cotizaciones() {
                   ? "bg-amber-100 text-amber-700"
                   : key === "plastico"
                     ? "bg-blue-100 text-blue-700"
-                    : key === "especial"
+                    : key === "libre"
                       ? "bg-purple-100 text-purple-700"
-                      : key === "libre"
-                        ? "bg-purple-100 text-purple-700"
-                        : "bg-gray-200 text-gray-600"
+                      : "bg-gray-200 text-gray-600"
                 : "bg-gray-200 text-gray-500"
                 }`}>
                 {key === "todos"
                   ? cotizaciones.length
                   : key === "libre"
                     ? cotizacionesLibres.length
-                    : key === "especial"
-                      ? cotizaciones.filter(c => c.productos.some((p: any) => esLineaEspecial(p))).length
-                      : cotizaciones.filter(c =>
-                        c.productos.some((p: any) =>
-                          key === "papel" ? esLineaPapel(p) : !esLineaPapel(p)
-                        )
-                      ).length
+                    : cotizaciones.filter(c =>
+                      c.productos.some((p: any) =>
+                        key === "papel" ? esLineaPapel(p) : !esLineaPapel(p)
+                      )
+                    ).length
                 }
               </span>
             </button>
@@ -1244,7 +1227,6 @@ export default function Cotizaciones() {
                               : p.detalles;
                             if (detallesMostrar.length === 0) return null;
                             const papel = esLineaPapel(p);
-                            const especial = p?.es_especial === true;
                             return (
                               <div key={i} className="flex items-start gap-4 bg-white rounded-lg px-4 py-3 shadow-sm border border-gray-100">
                                 <span className={`flex-shrink-0 w-6 h-6 rounded-full text-xs font-bold flex items-center justify-center mt-0.5 ${papel ? "bg-amber-100 text-amber-700" : "bg-blue-100 text-blue-700"}`}>{i + 1}</span>
@@ -1252,11 +1234,7 @@ export default function Cotizaciones() {
                                   <div className="flex items-center gap-2 flex-wrap">
                                     <p className="text-sm font-medium text-gray-800 truncate">{p.nombre}</p>
                                     {papel && (
-                                      especial ? (
-                                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-700 border border-purple-200">✨ Especial</span>
-                                      ) : (
-                                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-700 border border-amber-200">📄 Papel</span>
-                                      )
+                                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-700 border border-amber-200">📄 Papel</span>
                                     )}
                                     {(cot.origen_expo || p.tipo_material === "expo") && (
                                       <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-yellow-50 text-yellow-700 border border-yellow-200">⭐ Expo</span>

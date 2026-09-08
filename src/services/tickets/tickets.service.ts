@@ -60,6 +60,13 @@ export interface Ticket {
   motivo_rebote: string | null;
   rebotado_en: string | null;
   tomado_en: string | null;
+  // Cuándo arrancó el compromiso de verdad (puede ser distinto de
+  // tomado_en si hubo fase de valoración antes). Igual que
+  // tiempo_valoracion_horas: el backend NO manda estos campos si quien
+  // pregunta no es Super Usuario — por eso son opcionales, no solo
+  // nullable.
+  iniciado_en?: string | null;
+  tiempo_valoracion_horas?: number | null;
   duracion_estimada_horas: number | null;
   fecha_compromiso: string | null;
   tiempo_real_horas: number | null;
@@ -91,6 +98,10 @@ export interface EquipoActivoItem {
 export interface TicketDetalle extends Ticket {
   comentarios: TicketComentario[];
   archivos: TicketArchivo[];
+  // Cuánto lleva en fase de valoración AHORITA MISMO (calculado al vuelo,
+  // no guardado) — solo presente si está en curso y quien pregunta es
+  // Super Usuario. El resto ni lo recibe.
+  valoracion_en_curso_horas?: number | null;
 }
 
 export interface CrearTicketPayload {
@@ -110,6 +121,20 @@ export const crearTicket = async (payload: CrearTicketPayload): Promise<Ticket> 
 
 export const getUsuariosAsignables = async (): Promise<UsuarioAsignable[]> => {
   const { data } = await api.get<UsuarioAsignable[]>('/tickets/usuarios-asignables');
+  return data;
+};
+
+export interface ResolutorTickets {
+  idusuario: number;
+  nombre: string;
+  apellido: string;
+  foto_url: string | null;
+}
+
+// Todos los que tienen el privilegio real de resolver — para que su
+// columna en el tablero siempre aparezca, tengan o no algo asignado.
+export const getResolutores = async (): Promise<ResolutorTickets[]> => {
+  const { data } = await api.get<ResolutorTickets[]>('/tickets/resolutores');
   return data;
 };
 
@@ -213,6 +238,16 @@ export const cambiarEstadoTicket = async (id: number, estado: EstadoTicket): Pro
 
 export const tomarTicket = async (id: number, duracion?: { dias_habiles?: number; horas_habiles?: number; minutos_habiles?: number }): Promise<Ticket> => {
   const { data } = await api.post<Ticket>(`/tickets/${id}/tomar`, duracion ?? {});
+  return data;
+};
+
+// Cierra la fase de valoración — le pone por fin una duración a un ticket
+// que se tomó "a ciegas". El compromiso arranca desde este momento.
+export const iniciarTicket = async (
+  id: number,
+  duracion: { dias_habiles?: number; horas_habiles?: number; minutos_habiles?: number }
+): Promise<Ticket> => {
+  const { data } = await api.post<Ticket>(`/tickets/${id}/iniciar`, duracion);
   return data;
 };
 

@@ -45,6 +45,9 @@ interface PedidoPdf {
   estado_cliente?: string | null;
   cliente_id?: number | null;
   identificar?: string | null;
+  // Folio de la Orden de Compra del cliente — se imprime debajo del recuadro
+  // de folio/fecha del pedido, si viene capturado.
+  orden_compra_folio?: string | null;
 }
 
 // ── Formato de hoja ───────────────────────────────────────────────────────────
@@ -552,6 +555,7 @@ export async function generarPdfPedido(
     codigo_postal: pedido.codigo_postal ?? null, poblacion: pedido.poblacion ?? null,
     estado_cliente: pedido.estado_cliente ?? null, cliente_id: pedido.cliente_id ?? null,
     identificar: pedido.identificar ?? null,
+    ordenCompraFolio: pedido.orden_compra_folio ?? null,
     moneda,
   });
 

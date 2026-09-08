@@ -48,6 +48,32 @@ export interface ProcesoRegistroPapel {
   avances: AvanceParcialPapel[];
   total_avances: number;
   limite_avance?: number | null;
+  // Cuál repetición de este proceso es este renglón, y cuántas van en total
+  // (Jose, 2026-09-04). Un proceso que va una sola vez trae pasada 1 de 1.
+  // `pasada` es lo que hay que mandar de vuelta al iniciar / avanzar /
+  // finalizar: sin ella el backend asume la 1a y se registraría en la
+  // corrida equivocada cuando el proceso se repite.
+  pasada: number;
+  total_pasadas: number;
+  posicion: number;        // lugar en la ruta, 0-based
+  // ✅ NUEVO (Jose, 2026-09-08): máquina configurada en la ficha del
+  // producto para ESTE proceso (solicitud_producto_papel_maquinaria), para
+  // mostrarla directo en el modal en vez de pedirle al operador que la
+  // escriba a mano en "Editar datos del proceso". null cuando la ficha no
+  // tiene ninguna máquina asignada a este proceso.
+  maquina_configurada: string | null;
+}
+
+// El paso de la ruta que toca AHORA, derivado del avance real. Es lo que
+// debe pintar "el que sigue" en Seguimiento: sale de la ruta que registró
+// el producto, no de una lista fija.
+export interface PasoActualPapel {
+  posicion: number;
+  idproceso_cat: number;
+  tabla: NombreProcesoPapel;
+  nombre_proceso: string;
+  pasada: number;
+  total_pasadas: number;
 }
 
 export interface ProcesosOrdenPapelRespuesta {
@@ -55,6 +81,10 @@ export interface ProcesosOrdenPapelRespuesta {
   no_produccion: string;
   no_pedido: string;
   proceso_actual: number | null;
+  // Igual que proceso_actual pero completo: incluye QUÉ pasada toca. Úsalo
+  // en vez de proceso_actual cuando el proceso se pueda repetir -- ese campo
+  // es solo el idproceso_cat y no distingue entre la 1a y la 2a vuelta.
+  paso_actual: PasoActualPapel | null;
   estado_id: number;
   estado_nombre: string;
   // Procesos que SÍ aplican a esta orden, ya filtrados y en orden de
@@ -98,10 +128,14 @@ export const getProcesosOrdenPapel = async (
 export const iniciarProcesoPapel = async (
   idproduccion: number,
   tablaProceso: NombreProcesoPapel,
-  datos?: Record<string, any>
+  datos?: Record<string, any>,
+  pasada?: number
 ) => {
   const response = await api.post(`/procesos-papel/${idproduccion}/iniciar`, {
     tabla_proceso: tablaProceso,
+    // Se manda aparte de `datos` para que no se pierda si quien llama arma
+    // el objeto a mano. Sin pasada el backend asume la 1a.
+    ...(pasada != null ? { pasada } : {}),
     ...(datos ?? {}),
   });
   return response.data;
@@ -127,6 +161,9 @@ export interface RegistrarAvancePapelPayload {
   cantidad: number;
   observaciones?: string;
   tabla_proceso: NombreProcesoPapel;
+  // A qué repetición del proceso pertenece este avance. Si se omite, el
+  // backend asume la 1a.
+  pasada?: number;
 }
 
 export interface RegistrarAvancePapelRespuesta {

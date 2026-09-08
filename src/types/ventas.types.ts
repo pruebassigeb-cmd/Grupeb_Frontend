@@ -44,6 +44,12 @@ export interface Venta {
   no_pedido:             string;
   no_cotizacion:         string | null;
   fecha_pedido:          string;
+  // Folio de la orden de compra del cliente, capturado en Editar Pedido.
+  // Solo lectura aquí — Anticipo y Liquidación no lo edita.
+  orden_compra_folio?:   string | null;
+  // Solo viene en el listado (getVentas), para poder mostrar el indicador en
+  // la tabla sin pedir los archivos de cada fila.
+  tiene_archivo_oc?:     boolean;
   cliente:               string;
   cliente_id?:           number | null;
   empresa:               string;

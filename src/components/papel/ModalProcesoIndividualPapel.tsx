@@ -25,7 +25,7 @@ import type { Bulto, NuevoBultoPayload, NuevoBultoBatchPayload } from "../../ser
 import { generarPdfEtiquetas } from "../../utils/generarPdfEtiquetas";
 import { preguntarGuardarS3 } from "../../services/pdfS3.service";
 import type { PedidoSeguimientoPapel, NombreProcesoPapel } from "../../types/papel/seguimientoPapel.types";
-import { NOMBRES_PROCESO_PAPEL, ULTIMO_PROCESO_PAPEL } from "../../types/papel/seguimientoPapel.types";
+import { NOMBRES_PROCESO_PAPEL } from "../../types/papel/seguimientoPapel.types";
 import AuditoriaDesplegable from "../auditoria/AuditoriaDesplegable";
 import { leerBorrador, useAutoguardarBorrador, limpiarBorrador } from "../../hooks/useBorradorFormulario";
 
@@ -35,13 +35,18 @@ import { deInputFechaHora, fmtFechaHora, fmtFechaHoraCorta, fmtHora, paraInputFe
 // Tomado literalmente de la tabla en contexto_frontend_seguimiento_papel.md,
 // que a su vez viene del DDL ddl_papel_produccion.sql.
 // ─────────────────────────────────────────────
-interface CampoProceso {
+export interface CampoProceso {
   key: string;
   label: string;
   readOnly?: boolean;
 }
 
-const CAMPOS_PROCESO_PAPEL: Record<NombreProcesoPapel, CampoProceso[]> = {
+// Se EXPORTA (Jose, 2026-09-04) para que ModalProcesoIndividualEspecial lo
+// reutilice en vez de mantener una segunda copia. El modal de especiales es
+// independiente en estructura y flujo, pero los campos de cada proceso son
+// los mismos de la tabla en BD: duplicarlos aquí y allá sería garantizar que
+// tarde o temprano se desincronicen.
+export const CAMPOS_PROCESO_PAPEL: Record<NombreProcesoPapel, CampoProceso[]> = {
   hojeado_papel: [
     { key: "cantidad_hojeado", label: "Cantidad hojeado (objetivo)", readOnly: true },
     { key: "merma", label: "Merma" },
@@ -105,9 +110,12 @@ const CAMPOS_PROCESO_PAPEL: Record<NombreProcesoPapel, CampoProceso[]> = {
     { key: "merma", label: "Merma" },
     { key: "pliegos_entregados", label: "Entregadas" },
   ],
+  // ✅ CORREGIDO (Jose, 2026-09-08): "Bolsas armadas" se quitó de aquí --
+  // duplicaba "Bolsas entregadas" (a fin de cuentas son el mismo dato: lo
+  // que salió de este proceso). La cascada queda simplemente
+  // entrada → merma → entregadas, igual que el resto de los procesos.
   armado_papel: [
     { key: "pliegos_entrada", label: "Pliegos (entrada)", readOnly: true },
-    { key: "bolsas_armadas", label: "Bolsas armadas" },
     { key: "merma", label: "Merma" },
     { key: "bolsas_entregadas", label: "Bolsas entregadas" },
   ],
@@ -131,33 +139,34 @@ const CAMPOS_PROCESO_PAPEL: Record<NombreProcesoPapel, CampoProceso[]> = {
 // ─────────────────────────────────────────────
 // CAMPOS PROPIOS DEL REGISTRO (no son de ficha, no son cascada
 // entrada/merma/salida — son cálculos reales de ESA corrida que sí viven
-// en la tabla del proceso). A diferencia de "acabado" en laminación (que
-// SÍ es de ficha), bobina_cm/metros/rollos/desarrollo_mm/ctes_mod se
-// capturan por corrida porque pueden variar orden a orden -- pero desde
-// 2026-08-13 el modal SÍ muestra una referencia calculada de estos mismos
-// valores (BloqueVisualHojeadoGuillotina, rama laminacion_papel), igual
-// que ya hacía Hojeado/Guillotina con "Pliegos calculados": son estimados
-// de ficha para que el operador no capture a ciegas, no reemplazan lo que
-// se guarda aquí.
+// en la tabla del proceso).
+//
+// ✅ CORREGIDO (Jose, 2026-09-08): laminacion_papel y suaje_produccion_papel
+// se vaciaron aquí. Antes se le pedía al operador CAPTURAR a mano
+// bobina_cm/metros/rollos/desarrollo_mm/ctes_mod y el folio de suaje en el
+// modal de "Editar datos del proceso" -- pero esos valores YA se pueden
+// calcular y mostrar (BloqueVisualHojeadoGuillotina, rama laminacion_papel,
+// ahora también activada para este proceso vía esBloqueVisual) o ya viven
+// en la ficha del producto (pedido.suaje, mostrado en TarjetaProductoPapel).
+// Pedirlos de nuevo aquí era trabajo duplicado y una segunda fuente de
+// verdad que podía desincronizarse de la real. Si en el futuro hiciera
+// falta volver a capturar alguno de estos por corrida (no solo mostrarlo),
+// se debe regresar aquí explícitamente -- no restaurar "por si acaso".
 // ─────────────────────────────────────────────
-const CAMPOS_REGISTRO_PROPIO_PAPEL: Record<NombreProcesoPapel, CampoProceso[]> = {
+// Se EXPORTA (Jose, 2026-09-04) por el mismo motivo que CAMPOS_PROCESO_PAPEL:
+// ModalProcesoIndividualEspecial reutiliza el mismo diseño y los mismos
+// campos "propios de la corrida", y una segunda copia se desincronizaría
+// tarde o temprano.
+export const CAMPOS_REGISTRO_PROPIO_PAPEL: Record<NombreProcesoPapel, CampoProceso[]> = {
   hojeado_papel: [],
   guillotina_papel: [],
   impresion_papel: [],
-  laminacion_papel: [
-    { key: "bobina_cm", label: "Bobina (cm)" },
-    { key: "metros", label: "Metros" },
-    { key: "rollos", label: "Rollos" },
-    { key: "desarrollo_mm", label: "Desarrollo (mm)" },
-    { key: "ctes_mod", label: "CTES/Mod" },
-  ],
+  laminacion_papel: [],
   barniz_uv_papel: [],
   hot_stamping_papel: [],
   texturizado_papel: [],
   alto_relieve_papel: [],
-  suaje_produccion_papel: [
-    { key: "suaje_idsuaje_papel", label: "Suaje (folio)" },
-  ],
+  suaje_produccion_papel: [],
   litolaminado_papel: [],
   desbarbe_papel: [],
   armado_papel: [],
@@ -189,7 +198,9 @@ interface CampoFicha {
   label: string;
 }
 
-const CAMPOS_FICHA_PAPEL: Record<NombreProcesoPapel, CampoFicha[]> = {
+// Exportado (Jose, 2026-09-04) — mismo criterio: el modal de especiales
+// muestra el mismo panel "Ficha del producto" con el mismo diseño.
+export const CAMPOS_FICHA_PAPEL: Record<NombreProcesoPapel, CampoFicha[]> = {
   // Hojeado y Guillotina ya se muestran completos y con las fuentes
   // correctas en BloqueVisualHojeadoGuillotina (arriba) -- se dejan vacíos
   // aquí a propósito para no duplicar el panel "Ficha del producto" con
@@ -216,7 +227,9 @@ const CAMPOS_FICHA_PAPEL: Record<NombreProcesoPapel, CampoFicha[]> = {
     { key: "textura_nombre", label: "Textura" },
   ],
   alto_relieve_papel: [],
-  suaje_produccion_papel: [], // suaje_idsuaje_papel sigue en el registro del proceso, no es de ficha
+  // El folio de suaje se muestra en TarjetaProductoPapel (pedido.suaje) --
+  // ya no se vuelve a pedir/mostrar aquí (Jose, 2026-09-08).
+  suaje_produccion_papel: [],
   litolaminado_papel: [],
   desbarbe_papel: [],
   especial_papel: [], // nombre_proceso/notas son del registro del proceso, no de ficha
@@ -236,8 +249,9 @@ const CAMPOS_FICHA_PAPEL: Record<NombreProcesoPapel, CampoFicha[]> = {
 };
 
 // Helper para formatear el valor de un campo de ficha (arrays de pantones
-// se unen con coma, el resto se muestra tal cual).
-function formatearValorFicha(valor: any): string | null {
+// se unen con coma, el resto se muestra tal cual). Exportado por el mismo
+// motivo que CAMPOS_FICHA_PAPEL.
+export function formatearValorFicha(valor: any): string | null {
   if (valor === null || valor === undefined || valor === "") return null;
   if (Array.isArray(valor)) return valor.length > 0 ? valor.join(", ") : null;
   return String(valor);
@@ -246,7 +260,7 @@ function formatearValorFicha(valor: any): string | null {
 // Unidad de avance por proceso: "pliegos" para todos salvo Armado y
 // Empaque, donde ya se trabaja en "bolsas" (cambio de unidad confirmado
 // en el PDF real: 6,055 pliegos → 3,027 bolsas).
-const AVANCE_UNIDAD_PAPEL: Record<NombreProcesoPapel, { label: string; unidad: string; placeholder: string }> = {
+export const AVANCE_UNIDAD_PAPEL: Record<NombreProcesoPapel, { label: string; unidad: string; placeholder: string }> = {
   hojeado_papel: { label: "Pliegos hojeados hoy", unidad: "pliegos", placeholder: "Ej: 6300" },
   guillotina_papel: { label: "Cortes hechos hoy", unidad: "pliegos", placeholder: "Ej: 6300" },
   impresion_papel: { label: "Pliegos impresos hoy", unidad: "pliegos", placeholder: "Ej: 6200" },
@@ -271,7 +285,7 @@ const AVANCE_UNIDAD_PAPEL: Record<NombreProcesoPapel, { label: string; unidad: s
 // Campo "principal" que se llena automático al finalizar con el total de
 // avances acumulado (equivalente a k_para_impresion / pzas_finales en
 // plástico).
-const CAMPO_PRINCIPAL_FINAL_PAPEL: Record<NombreProcesoPapel, { key: string; label: string; unidad: string } | null> = {
+export const CAMPO_PRINCIPAL_FINAL_PAPEL: Record<NombreProcesoPapel, { key: string; label: string; unidad: string } | null> = {
   hojeado_papel: { key: "cantidad_entregada", label: "Cantidad entregada", unidad: "pliegos" },
   guillotina_papel: { key: "cantidad_entregada", label: "Cantidad entregada", unidad: "pliegos" },
   impresion_papel: { key: "pliegos_entregados", label: "Pliegos entregados", unidad: "pliegos" },
@@ -290,7 +304,7 @@ const CAMPO_PRINCIPAL_FINAL_PAPEL: Record<NombreProcesoPapel, { key: string; lab
 
 // Campos de merma adicionales que se piden al finalizar (aparte del
 // campo principal calculado automático).
-const CAMPOS_FINALES_ADICIONALES_PAPEL: Record<NombreProcesoPapel, { key: string; label: string; unidad: string }[]> = {
+export const CAMPOS_FINALES_ADICIONALES_PAPEL: Record<NombreProcesoPapel, { key: string; label: string; unidad: string }[]> = {
   hojeado_papel: [{ key: "merma", label: "Merma", unidad: "pliegos" }],
   guillotina_papel: [
     { key: "merma", label: "Merma", unidad: "pliegos" },
@@ -305,9 +319,11 @@ const CAMPOS_FINALES_ADICIONALES_PAPEL: Record<NombreProcesoPapel, { key: string
   suaje_produccion_papel: [{ key: "merma", label: "Merma", unidad: "pliegos" }],
   litolaminado_papel: [{ key: "merma", label: "Merma", unidad: "pliegos" }],
   desbarbe_papel: [{ key: "merma", label: "Merma", unidad: "pliegos" }],
+  // ✅ CORREGIDO (Jose, 2026-09-08): se quitó "Bolsas armadas (referencia)"
+  // -- duplicaba el campo principal (bolsas_entregadas, ver
+  // CAMPO_PRINCIPAL_FINAL_PAPEL.armado_papel).
   armado_papel: [
     { key: "merma", label: "Merma", unidad: "bolsas" },
-    { key: "bolsas_armadas", label: "Bolsas armadas (referencia)", unidad: "bolsas" },
   ],
   especial_papel: [{ key: "merma", label: "Merma", unidad: "pliegos" }],
   empaque_papel: [{ key: "merma", label: "Merma", unidad: "bolsas" }],
@@ -316,7 +332,9 @@ const CAMPOS_FINALES_ADICIONALES_PAPEL: Record<NombreProcesoPapel, { key: string
 // ─────────────────────────────────────────────
 // HELPERS DE ESTADO / COLOR (mismo criterio visual que plástico)
 // ─────────────────────────────────────────────
-const colorEstado = (estado: string) => {
+// Exportados (Jose, 2026-09-04): mismo criterio visual de estado/color en
+// el modal de especiales.
+export const colorEstado = (estado: string) => {
   if (estado === "terminado") return "text-green-700 bg-green-50 border-green-300";
   if (estado === "en_proceso") return "text-yellow-700 bg-yellow-50 border-yellow-300";
   if (estado === "resagado") return "text-white bg-black border-black";
@@ -324,7 +342,7 @@ const colorEstado = (estado: string) => {
   return "text-orange-700 bg-orange-50 border-orange-300";
 };
 
-const textoEstado = (estado: string) => {
+export const textoEstado = (estado: string) => {
   const m: Record<string, string> = {
     terminado: "Terminado",
     en_proceso: "En proceso",
@@ -340,7 +358,7 @@ const textoEstado = (estado: string) => {
 // pero con los campos propios de la ficha de papel: material, calibre,
 // asa, pegamento, suaje, etc. — tomados del encabezado del PDF OP26003)
 // ─────────────────────────────────────────────
-function TarjetaProductoPapel({ pedido }: { pedido: PedidoSeguimientoPapel }) {
+export function TarjetaProductoPapel({ pedido }: { pedido: PedidoSeguimientoPapel }) {
   const cantidad = pedido.cantidad_orden != null
     ? pedido.cantidad_orden.toLocaleString("es-MX")
     : "—";
@@ -409,7 +427,7 @@ function TarjetaProductoPapel({ pedido }: { pedido: PedidoSeguimientoPapel }) {
 // de detalle_material_papel vía JOIN en getSeguimiento), no algo que se
 // capture por corrida -- así que este bloque debe leer de `pedido`, igual
 // que "FICHA DEL PRODUCTO" arriba, no de `registro`.
-function BloqueVisualHojeadoGuillotina({
+export function BloqueVisualHojeadoGuillotina({
   nombreProceso, pedido,
 }: { nombreProceso: NombreProcesoPapel; pedido: PedidoSeguimientoPapel }) {
   if (nombreProceso === "hojeado_papel") {
@@ -1099,7 +1117,7 @@ function FilaEnvioParcialPapel({
       <div>
         <p className="text-sm font-semibold text-gray-800">Envío parcial {num}</p>
         <p className="text-xs text-gray-500">
-          {bultosGrupo.length} bulto{bultosGrupo.length !== 1 ? "s" : ""} · {totalUnidadesGrupo.toLocaleString("es-MX")} bolsas
+          {bultosGrupo.length} empaque{bultosGrupo.length !== 1 ? "s" : ""} · {totalUnidadesGrupo.toLocaleString("es-MX")} bolsas
         </p>
       </div>
       <button
@@ -1134,8 +1152,13 @@ function FilaEnvioParcialPapel({
 // ─────────────────────────────────────────────
 // SECCIÓN BULTOS PAPEL (espejo de SeccionBultos de plástico, pero
 // siempre en modo unidades/bolsas — papel nunca trabaja por kilo)
+// ✅ Exportado (Jose, 2026-09-05): se reutiliza tal cual en
+// ModalProcesoIndividualEspecial.tsx para el apartado de "Empaquetado"
+// que cuelga del último proceso real de una OP de unión -- mismos campos,
+// mismo endpoint de bultos (ya funciona igual para especiales, ver
+// bultos.controller.ts).
 // ─────────────────────────────────────────────
-function SeccionBultosPapel({
+export function SeccionBultosPapel({
   pedido, cantidadReal, limiteEnCurso,
 }: {
   pedido: PedidoSeguimientoPapel;
@@ -1173,7 +1196,7 @@ function SeccionBultosPapel({
       setBultos(res.bultos);
       setTotalUnidades(res.total_unidades);
       setBultosFinalizados(res.bultos_finalizado);
-    } catch { showAlert("No se pudieron cargar los bultos."); }
+    } catch { showAlert("No se pudieron cargar los empaques."); }
     finally { setCargando(false); }
   };
 
@@ -1209,7 +1232,7 @@ function SeccionBultosPapel({
       setTotalUnidades(nuevosTotal.reduce((s, b) => s + b.cantidad_unidades, 0));
       setEditandoBulto(null);
     } catch (e: any) {
-      showAlert(e.response?.data?.error || "Error al editar bulto");
+      showAlert(e.response?.data?.error || "Error al editar empaque");
     } finally { setGuardandoEdicion(false); }
   };
 
@@ -1223,7 +1246,7 @@ function SeccionBultosPapel({
       return "El peso empaquetado es obligatorio.";
     if (!form.alto.trim() || !form.largo.trim() || !form.ancho.trim() ||
       parseFloat(form.alto) <= 0 || parseFloat(form.largo) <= 0 || parseFloat(form.ancho) <= 0)
-      return "Las dimensiones del bulto (alto, largo y ancho) son obligatorias.";
+      return "Las dimensiones del empaque (alto, largo y ancho) son obligatorias.";
     return null;
   };
 
@@ -1277,9 +1300,9 @@ function SeccionBultosPapel({
     } catch (e: any) {
       const mensajeBackend = e.response?.data?.error;
       if (mensajeBackend?.includes("último proceso") || mensajeBackend?.includes("completamente terminada")) {
-        showAlert("El proceso aún no está listo para registrar bultos. Asegúrate de que esté en curso con al menos un avance.");
+        showAlert("El proceso aún no está listo para registrar empaques. Asegúrate de que esté en curso con al menos un avance.");
       } else {
-        showAlert(mensajeBackend || "Error al agregar bulto(s)");
+        showAlert(mensajeBackend || "Error al agregar empaque(s)");
       }
     } finally { setGuardando(false); }
   };
@@ -1292,7 +1315,7 @@ function SeccionBultosPapel({
       setBultos(prev => prev.filter(b => b.idbulto !== idbulto));
       setTotalUnidades(prev => prev - (bulto?.cantidad_unidades ?? 0));
     } catch (e: any) {
-      showAlert(e.response?.data?.error || "Error al eliminar bulto");
+      showAlert(e.response?.data?.error || "Error al eliminar empaque");
     } finally { setEliminando(null); }
   };
 
@@ -1302,7 +1325,7 @@ function SeccionBultosPapel({
       await finalizarBultos(pedido.idproduccion!);
       setBultosFinalizados(true); setConfirmFinalizar(false);
     } catch (e: any) {
-      showAlert(e.response?.data?.error || "Error al finalizar bultos");
+      showAlert(e.response?.data?.error || "Error al finalizar empaques");
     } finally { setFinalizando(false); }
   };
 
@@ -1327,7 +1350,7 @@ function SeccionBultosPapel({
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3">
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-center">
-          <p className="text-[10px] text-blue-400 uppercase tracking-wide mb-0.5">Total bultos</p>
+          <p className="text-[10px] text-blue-400 uppercase tracking-wide mb-0.5">Total empaques</p>
           <p className="text-2xl font-bold text-blue-800">{bultos.length}</p>
           {esParcialidad && bultosNuevos.length < bultos.length && (
             <p className="text-[10px] text-blue-500 mt-0.5">
@@ -1352,7 +1375,7 @@ function SeccionBultosPapel({
               <p className="text-[10px] text-amber-400">bolsas</p>
             </div>
             <div className="text-center bg-white rounded border border-amber-100 px-2 py-2">
-              <p className="text-[10px] text-amber-400 uppercase tracking-wide mb-0.5">Ya en bultos</p>
+              <p className="text-[10px] text-amber-400 uppercase tracking-wide mb-0.5">Ya en empaques</p>
               <p className="text-lg font-bold text-blue-700">{totalActual.toLocaleString("es-MX")}</p>
               <p className="text-[10px] text-amber-400">bolsas</p>
             </div>
@@ -1401,7 +1424,7 @@ function SeccionBultosPapel({
             <svg className="w-5 h-5 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            <p className="text-green-800 text-sm font-medium">Bultos finalizados. No se pueden agregar ni eliminar más registros.</p>
+            <p className="text-green-800 text-sm font-medium">Empaques finalizados. No se pueden agregar ni eliminar más registros.</p>
           </div>
           <button onClick={handleImprimirEtiquetas} disabled={generandoEtiquetas || bultosNuevos.length === 0}
             className="w-full py-2.5 bg-red-600 hover:bg-red-700 disabled:bg-red-400 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-lg transition-colors flex items-center justify-center gap-2">
@@ -1415,15 +1438,15 @@ function SeccionBultosPapel({
             {generandoEtiquetas
               ? "Generando..."
               : bultosNuevos.length === 0
-                ? "Sin bultos pendientes"
-                : `🏷️ Imprimir Etiquetas PDF (${bultosNuevos.length} bulto${bultosNuevos.length !== 1 ? "s" : ""} pendientes)`
+                ? "Sin empaques pendientes"
+                : `🏷️ Imprimir Etiquetas PDF (${bultosNuevos.length} empaque${bultosNuevos.length !== 1 ? "s" : ""} pendientes)`
             }
           </button>
         </div>
       ) : (
         <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3">
           <div className="flex items-center justify-between">
-            <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">➕ Agregar bulto</p>
+            <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">➕ Agregar empaque</p>
             <div className="flex items-center gap-1.5">
               {camposRequeridos.map(k => (
                 <div key={k} title={k}
@@ -1455,7 +1478,7 @@ function SeccionBultosPapel({
             <div className="w-1/4">
               <label className="block text-xs font-medium text-gray-600 mb-1">
                 Multiplicador
-                <span className="ml-1.5 text-[10px] text-blue-500 font-semibold">× bultos</span>
+                <span className="ml-1.5 text-[10px] text-blue-500 font-semibold">× empaques</span>
               </label>
               <input type="text" min="1" max="50" value={repetir}
                 onChange={e => setRepetir(e.target.value.replace(/[^0-9]/g, ""))}
@@ -1468,7 +1491,7 @@ function SeccionBultosPapel({
 
           {esBatch && (
             <p className="text-[10px] mt-1 text-blue-600 font-medium">
-              Se crearán {repeticionesNum} bultos separados de{" "}
+              Se crearán {repeticionesNum} empaques separados de{" "}
               {valorIngresado.toLocaleString("es-MX")} bolsas c/u.
               Total: {valorTotalIngresado.toLocaleString("es-MX")} bolsas.
             </p>
@@ -1478,7 +1501,7 @@ function SeccionBultosPapel({
             <div className="mt-1.5 flex items-start gap-1.5 bg-red-50 border border-red-200 rounded px-3 py-2">
               <span className="text-red-500 text-sm flex-shrink-0">⚠️</span>
               <p className="text-[10px] text-red-600">
-                <strong>Excede lo producido.</strong> Con {valorIngresado.toLocaleString("es-MX")} bolsas por bulto{" "}
+                <strong>Excede lo producido.</strong> Con {valorIngresado.toLocaleString("es-MX")} bolsas por empaque{" "}
                 {esBatch && `× ${repeticionesNum} = ${valorTotalIngresado.toLocaleString("es-MX")} bolsas `}
                 llegarías a {proyectadoTotal.toLocaleString("es-MX")} bolsas, superando el límite de{" "}
                 {limiteEfectivo?.toLocaleString("es-MX")} bolsas.
@@ -1525,7 +1548,7 @@ function SeccionBultosPapel({
               ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
               : <span className="text-base leading-none">+</span>
             }
-            Agregar bulto{esBatch ? `s (${repeticionesNum})` : ""}
+            Agregar empaque{esBatch ? `s (${repeticionesNum})` : ""}
           </button>
         </div>
       )}
@@ -1535,7 +1558,7 @@ function SeccionBultosPapel({
           <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
         </div>
       ) : bultos.length === 0 ? (
-        <div className="text-center py-6 text-gray-400 text-sm">No hay bultos registrados aún</div>
+        <div className="text-center py-6 text-gray-400 text-sm">No hay empaques registrados aún</div>
       ) : (
         <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
           {esParcialidad && bultosEnviados.length > 0 && (
@@ -1589,8 +1612,8 @@ function SeccionBultosPapel({
                   {generandoEtiquetas
                     ? "Generando..."
                     : bultosNuevos.length === 0
-                      ? "Sin bultos pendientes"
-                      : `🏷️ Etiquetas parciales (${bultosNuevos.length} bulto${bultosNuevos.length !== 1 ? "s" : ""} nuevos)`
+                      ? "Sin empaques pendientes"
+                      : `🏷️ Etiquetas parciales (${bultosNuevos.length} empaque${bultosNuevos.length !== 1 ? "s" : ""} nuevos)`
                   }
                 </button>
               )}
@@ -1599,12 +1622,12 @@ function SeccionBultosPapel({
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                Finalizar bultos
+                Finalizar empaques
               </button>
             </div>
           ) : (
             <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-3">
-              <p className="text-sm font-semibold text-amber-800">⚠️ ¿Confirmas que ya no se agregarán más bultos?</p>
+              <p className="text-sm font-semibold text-amber-800">⚠️ ¿Confirmas que ya no se agregarán más empaques?</p>
               <p className="text-xs text-amber-700">Esta acción es irreversible.</p>
               <div className="flex gap-2">
                 <button onClick={() => setConfirmFinalizar(false)}
@@ -1624,7 +1647,7 @@ function SeccionBultosPapel({
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-5 space-y-4">
             <div className="flex items-center justify-between">
-              <p className="font-semibold text-gray-800">✏️ Editar Bulto #{editandoBulto.idbulto}</p>
+              <p className="font-semibold text-gray-800">✏️ Editar Empaque #{editandoBulto.idbulto}</p>
               <button onClick={() => setEditandoBulto(null)} className="text-gray-400 hover:text-gray-600">✕</button>
             </div>
 
@@ -1728,6 +1751,11 @@ function calcularPreFillEntradaPapel(
 interface PropsPapel {
   pedido: PedidoSeguimientoPapel;
   nombreProceso: NombreProcesoPapel;
+  // ❌ QUITADO (Jose, 2026-09-07): "pasada" NO va en este modal -- papel
+  // normal nunca repite un mismo proceso dentro de una orden, así que no
+  // hace falta para identificar el paso. Solo aplica en
+  // ModalProcesoIndividualEspecial (especiales sí pueden repetir un
+  // proceso en su ruta).
   onClose: () => void;
   onActualizar: () => void;
 }
@@ -1855,7 +1883,24 @@ export default function ModalProcesoIndividualPapel({ pedido, nombreProceso, onC
   const camposFicha = CAMPOS_FICHA_PAPEL[nombreProceso] ?? [];
   const camposRegistroPropio = CAMPOS_REGISTRO_PROPIO_PAPEL[nombreProceso] ?? [];
   const limiteAnterior: number | null = (proc as any)?.limite_avance ?? null;
-  const esBloqueVisual = esProcesoPreparacion;
+  // ✅ CORREGIDO (Jose, 2026-09-08): esBloqueVisual se separa de
+  // esProcesoPreparacion a propósito -- esProcesoPreparacion controla
+  // lógica de negocio real (reinicio, ignorarAnterior, puedeIniciar) que
+  // SOLO aplica a Hojeado/Guillotina como puntos de entrada de la cascada.
+  // Laminación no es un punto de entrada (sí depende de su proceso
+  // anterior con las reglas normales), pero SÍ necesita el mismo bloque
+  // visual de referencia calculada (BloqueVisualHojeadoGuillotina, rama
+  // laminacion_papel) para dejar de pedir a mano bobina/metros/rollos/
+  // desarrollo/ctes-mod en "Editar datos del proceso" -- esos datos ya se
+  // pueden calcular y mostrar.
+  const esBloqueVisual = esProcesoPreparacion || nombreProceso === "laminacion_papel";
+  // ✅ NUEVO (Jose, 2026-09-08): máquina configurada en la ficha para este
+  // proceso (viene resuelta del backend, ver maquina_configurada en
+  // getProcesosOrdenPapel) -- se MUESTRA aquí en vez de pedírsela al
+  // operador. Si ya hay una máquina real capturada en el registro de esta
+  // corrida (legado, antes de este cambio), esa gana -- mismo criterio de
+  // prioridad que ya usa el PDF (primeraLinea(registro.maquina, ficha)).
+  const maquinaConfigurada = proc?.registro?.maquina ?? (proc as any)?.maquina_configurada ?? null;
 
   // ── Reinicio de Hojeado/Guillotina ── Ya no exige fecha_inicio: una
   // Guillotina pendiente sin arrancar (porque el operador confirmó "sí"
@@ -1938,7 +1983,9 @@ export default function ModalProcesoIndividualPapel({ pedido, nombreProceso, onC
       [...campos, ...camposRegistroPropio].forEach((c) => {
         if (proc.registro[c.key] != null) preFill[c.key] = proc.registro[c.key];
       });
-      if (proc.registro.maquina != null) preFill.maquina = proc.registro.maquina;
+      // ✅ CORREGIDO (Jose, 2026-09-08): "Máquina" ya no se precarga aquí --
+      // dejó de ser un campo editable en "Editar datos del proceso" (ver
+      // maquinaConfigurada más abajo, que la MUESTRA en vez de pedirla).
       // slice(0,16) cortaba el ISO en UTC y lo metía a un input que el
       // usuario lee como hora de México: el mismo desfase de 6 horas.
       if (proc.registro.fecha_inicio) preFill.fecha_inicio = paraInputFechaHora(proc.registro.fecha_inicio);
@@ -1983,9 +2030,18 @@ export default function ModalProcesoIndividualPapel({ pedido, nombreProceso, onC
   const nombreProcesoAnterior = procAnterior ? (NOMBRES_PROCESO_PAPEL[procAnterior.tabla] ?? null) : null;
   const observacionesAnteriores = proc?.observaciones_proceso_anterior;
 
-  // Último proceso de papel: siempre Empaque, sin excepción (a diferencia
-  // de plástico, que alterna entre bolseo y asa_flexible).
-  const esUltimoProceso = nombreProceso === ULTIMO_PROCESO_PAPEL;
+  // ✅ NUEVO (Jose, 2026-09-05): "Empaquetado" deja de ser su propio
+  // proceso/columna -- el apartado de empaquetado (antes solo visible
+  // dentro de la tarjeta de Empaque) ahora cuelga de la tarjeta del
+  // proceso que de verdad resulte ser el ÚLTIMO de la ruta de esta orden
+  // (Armado o Suaje en papel normal), sea cual sea. Empaque sigue
+  // existiendo por dentro -- el motor de avances/finalización no cambió,
+  // ver getProcesosDeOrdenPapel y asegurarAnclaEmpaquePapel -- pero ya no
+  // cuenta como "visible" para decidir cuál tarjeta es la última.
+  const procesosVisiblesOrden = (datos?.procesos ?? []).filter((p) => p.tabla !== "empaque_papel");
+  const esUltimoProceso =
+    procesosVisiblesOrden.length > 0 &&
+    procesosVisiblesOrden[procesosVisiblesOrden.length - 1].tabla === nombreProceso;
 
   const cantidadRealBultos = esUltimoProceso && proc?.estado === "terminado"
     ? (proc?.registro?.bolsas_entregadas_final != null ? Number(proc.registro.bolsas_entregadas_final) : null)
@@ -2066,6 +2122,16 @@ export default function ModalProcesoIndividualPapel({ pedido, nombreProceso, onC
         </div>
       )}
 
+      {/* ✅ NUEVO (Jose, 2026-09-08): "Máquina" se muestra aquí, siempre
+          visible sin importar el estado del proceso -- ya no se pide en
+          "Editar datos del proceso" (ver maquinaConfigurada arriba). */}
+      {maquinaConfigurada && (
+        <div className="flex items-center justify-between bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+          <span className="text-xs text-slate-500 uppercase tracking-wide font-medium">Máquina</span>
+          <span className="text-sm font-semibold text-slate-700">{maquinaConfigurada}</span>
+        </div>
+      )}
+
       {esBloqueVisual && (
         <BloqueVisualHojeadoGuillotina nombreProceso={nombreProceso} pedido={pedido} />
       )}
@@ -2116,13 +2182,9 @@ export default function ModalProcesoIndividualPapel({ pedido, nombreProceso, onC
                   <span className="text-gray-800 font-medium">{fmtFechaHora(proc.registro.fecha_fin)}</span>
                 </div>
               )}
-              {/* Máquina usada en esta corrida — dato real del registro, no de ficha */}
-              {proc.registro.maquina && (
-                <div className="flex justify-between text-xs">
-                  <span className="text-gray-400">Máquina</span>
-                  <span className="font-semibold text-indigo-700">{proc.registro.maquina}</span>
-                </div>
-              )}
+              {/* ✅ CORREGIDO (Jose, 2026-09-08): la máquina ya no se repite
+                  aquí -- se muestra una sola vez, siempre visible, en el
+                  bloque de "Máquina" de arriba (maquinaConfigurada). */}
               {/* Campos propios de esta corrida que SÍ viven en el registro
                   del proceso (ej. cálculos de laminación, folio de suaje) */}
               {camposRegistroPropio.map((campo) => {
@@ -2226,14 +2288,9 @@ export default function ModalProcesoIndividualPapel({ pedido, nombreProceso, onC
                     <p className="text-sm font-semibold text-blue-800">✏️ Editar datos del proceso</p>
                     <span className="text-[10px] text-blue-500 uppercase tracking-wide font-medium">{nombreLabel}</span>
                   </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Máquina</label>
-                    <input type="text" value={formEditar.maquina ?? ""}
-                      onChange={e => setFormEditar((prev: Record<string, any>) => ({ ...prev, maquina: e.target.value }))}
-                      className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
-                      placeholder="—"
-                    />
-                  </div>
+                  {/* ✅ CORREGIDO (Jose, 2026-09-08): "Máquina" ya no se pide
+                      aquí -- se muestra siempre arriba (maquinaConfigurada),
+                      no es algo que el operador deba escribir por corrida. */}
                   {camposRegistroPropio.map((campo) => (
                     <div key={campo.key}>
                       <label className="block text-xs font-medium text-gray-600 mb-1">{campo.label}</label>
@@ -2303,7 +2360,7 @@ export default function ModalProcesoIndividualPapel({ pedido, nombreProceso, onC
               {esUltimoProceso && (
                 <>
                   <div className="border-t border-gray-200 pt-4">
-                    <p className="text-xs font-semibold text-indigo-700 uppercase tracking-wide mb-3">📦 Registro de bultos</p>
+                    <p className="text-xs font-semibold text-indigo-700 uppercase tracking-wide mb-3">📦 Empaquetado</p>
                   </div>
                   <SeccionBultosPapel pedido={pedido} cantidadReal={cantidadRealBultos} limiteEnCurso={null} />
                 </>
@@ -2315,12 +2372,12 @@ export default function ModalProcesoIndividualPapel({ pedido, nombreProceso, onC
             <>
               <div className="border-t border-gray-200 pt-4">
                 <div className="flex items-center gap-2 mb-3">
-                  <p className="text-xs font-semibold text-indigo-700 uppercase tracking-wide">📦 Registro de bultos</p>
+                  <p className="text-xs font-semibold text-indigo-700 uppercase tracking-wide">📦 Empaquetado</p>
                   <span className="inline-flex items-center px-2 py-0.5 bg-amber-100 text-amber-700 text-[10px] font-semibold rounded-full border border-amber-200">
                     Proceso en curso
                   </span>
                 </div>
-                <p className="text-xs text-gray-500 mb-3">Puedes ir registrando bultos conforme vayas terminando.</p>
+                <p className="text-xs text-gray-500 mb-3">Puedes ir registrando empaques conforme vayas terminando.</p>
               </div>
               <SeccionBultosPapel pedido={pedido} cantidadReal={null} limiteEnCurso={limiteEnCursoBultos} />
             </>
@@ -2329,7 +2386,7 @@ export default function ModalProcesoIndividualPapel({ pedido, nombreProceso, onC
           {esUltimoProceso && proc.estado === "en_proceso" && (proc.avances ?? []).length === 0 && (
             <div className="border-t border-gray-200 pt-4">
               <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-center">
-                <p className="text-gray-500 text-sm">📦 El registro de bultos estará disponible cuando registres tu primer avance del día.</p>
+                <p className="text-gray-500 text-sm">📦 El registro de empaquetado estará disponible cuando registres tu primer avance del día.</p>
               </div>
             </div>
           )}

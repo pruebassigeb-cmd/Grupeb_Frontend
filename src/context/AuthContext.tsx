@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from "react";
-import { loginService, logoutService } from "../services/authService";
+import { loginService, loginCollageService, logoutService } from "../services/authService";
 import { warmApiCache } from "../utils/pwa/warmApiCache";
 import { tienePermisoUsuario } from "../utils/permisosUsuario";
 
@@ -20,6 +20,7 @@ interface User {
 interface AuthContextType {
   user:    User | null;
   login:   (correo: string, codigo: string) => Promise<void>;
+  loginConId: (idusuario: number, codigo: string) => Promise<void>;
   logout:  () => Promise<void>;
   loading: boolean;
   tienePermiso:   (permiso: string) => boolean;
@@ -84,6 +85,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     saveUser(usuario);
   };
 
+  // Módulo de autenticación por red — modo COLLAGE: se autentica por
+  // idusuario (elegido por foto) en vez de por correo. Mismo resultado
+  // final que login(), solo cambia cómo se identifica al usuario.
+  const loginConId = async (idusuario: number, codigo: string) => {
+    const data = await loginCollageService(idusuario, codigo);
+    const usuario: User = {
+      ...data.usuario,
+      privilegios: data.usuario.privilegios ?? [],
+      foto_url:    data.usuario.foto_url ?? undefined,
+    };
+    setUser(usuario);
+    saveUser(usuario);
+  };
+
   const logout = async () => {
     try {
       await logoutService();
@@ -111,7 +126,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, loading, tienePermiso, refreshFotoUrl }}>
+    <AuthContext.Provider value={{ user, login, loginConId, logout, loading, tienePermiso, refreshFotoUrl }}>
       {children}
     </AuthContext.Provider>
   );

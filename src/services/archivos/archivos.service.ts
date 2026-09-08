@@ -13,10 +13,15 @@ export interface Archivo {
   carpeta: string;
   subcarpeta?: string;
   envio_id?: number | null;
+  // ✅ NUEVO — ligado a un pedido (ej. Orden de Compra). El backend hace
+  // LEFT JOIN a solicitud, así que no_pedido viene ya resuelto y solo es
+  // no-null cuando solicitud_id apunta a un pedido existente.
+  solicitud_id?: number | null;
+  no_pedido?: string | null;
   created_at: string;
 }
 
-export type CarpetaFrontend = "disenos" | "pdfs" | "fotos-envios" | "backups" | "suaje" | "catalogoproductos" | "catalogos-admin" | "tickets";
+export type CarpetaFrontend = "disenos" | "pdfs" | "fotos-envios" | "backups" | "suaje" | "catalogoproductos" | "catalogos-admin" | "tickets" | "ordenes-compra";
 
 export type SubcarpetaCatalogo = "papel" | "plastico" | "carton";
 
@@ -89,6 +94,10 @@ export const CARPETAS_LABELS: Record<CarpetaFrontend, string> = {
   // UV, color de asa). Ver config/multer.ts CARPETAS.catalogos_admin.
   "catalogos-admin":    "Catálogos de Papel",
   "tickets":            "Tickets",
+  // ✅ NUEVO — folio/archivo de la Orden de Compra del cliente, ligado a
+  // nivel pedido. La subida real se hace desde la pantalla de editar
+  // pedido (que manda solicitud_id); esta carpeta es solo de consulta.
+  "ordenes-compra":     "Orden Compra",
 };
 
 export const SUBCARPETAS_PDF: { value: SubcarpetaPDF; label: string }[] = [
@@ -113,7 +122,7 @@ export const SUBCARPETAS_SUAJE: { value: SubcarpetaSuaje; label: string }[] = [
   { value: "plastico-producto",  label: "Plástico Producto" },
 ];
 
-// Subir archivo — acepta envio_id y nota_id opcionales
+// Subir archivo — acepta envio_id, nota_id y solicitud_id opcionales
 export const subirArchivo = async (
   file: File,
   carpeta: CarpetaFrontend,
@@ -122,6 +131,8 @@ export const subirArchivo = async (
   nota_id?: number,
   ticket_id?: number,
   ticket_comentario_id?: number,
+  // ✅ NUEVO — liga el archivo a un pedido (ej. Orden de Compra).
+  solicitud_id?: number,
 ): Promise<Archivo> => {
   const formData = new FormData();
   formData.append("archivo", file);
@@ -131,6 +142,7 @@ export const subirArchivo = async (
   if (nota_id  != null)             formData.append("nota_id",    String(nota_id));
   if (ticket_id != null)            formData.append("ticket_id",  String(ticket_id));
   if (ticket_comentario_id != null) formData.append("ticket_comentario_id", String(ticket_comentario_id));
+  if (solicitud_id != null)         formData.append("solicitud_id", String(solicitud_id));
 
   const { data } = await api.post<Archivo>("/archivos/upload", formData, {
     headers: { "Content-Type": "multipart/form-data" },
@@ -194,6 +206,7 @@ export interface Estadisticas {
     backups:       number;
     suaje:         number;
     catalogo_expo: number;
+    ordenes_compra: number;
   };
 }
 

@@ -33,6 +33,22 @@ export const puedeVerAuditoriaUsuario = (
   );
 
 /**
+ * Mismo chequeo que puedeVerAuditoriaUsuario, con nombre genérico — lo usa
+ * cualquier pantalla que deba ser exclusiva de admin/superusuario (ej. el
+ * panel de administración de redes del módulo de autenticación por red),
+ * no solo auditoría. Espeja exactamente usuarioEsAdminOSuper() del backend
+ * (auth.middleware.ts) para que frontend y backend nunca decidan cosas
+ * distintas sobre quién es "admin".
+ */
+export const esAdminOSuperUsuario = (
+  usuario: UsuarioConPermisos | null | undefined
+): boolean =>
+  Boolean(
+    usuario?.acceso_total &&
+    ROLES_ADMINISTRATIVOS.has(normalizarRol(usuario.rol))
+  );
+
+/**
  * `usuario.privilegios` trae claves (fase 6), no el texto visible del
  * privilegio. La antigua excepción por nombre de rol para Diseño/Ventas se
  * quitó: los dos roles ya tienen estos privilegios en su base real desde

@@ -4,6 +4,7 @@ import type {
   LandingSlotItem,
   SeccionLandingCotizadorLibre,
 } from "../../types/cotizadorLibre/cotizadorLibreLanding.types";
+import type { CategoriaCotizadorLibre } from "../../types/cotizadorLibre/cotizadorLibre.types";
 
 const BASE = "/cotizador-libre/landing";
 
@@ -14,15 +15,29 @@ export const getLandingCotizadorLibre = async (): Promise<LandingSlotItem[]> => 
 
 export const crearSlotLandingCotizadorLibre = async (
   seccion: SeccionLandingCotizadorLibre,
-  titulo: string
+  titulo: string,
+  // ✅ NUEVO — opcional: configurar el atajo desde el alta misma.
+  atajo?: { categoriaDestino: CategoriaCotizadorLibre; idTipoDestino: number }
 ): Promise<LandingSlotItem> => {
-  const { data } = await api.post<LandingSlotItem>(BASE, { seccion, titulo });
+  const { data } = await api.post<LandingSlotItem>(BASE, {
+    seccion,
+    titulo,
+    ...(atajo ? { categoriaDestino: atajo.categoriaDestino, idTipoDestino: atajo.idTipoDestino } : {}),
+  });
   return data;
 };
 
 export const actualizarSlotLandingCotizadorLibre = async (
   id: number,
-  cambios: { titulo?: string; orden?: number; seccion?: SeccionLandingCotizadorLibre }
+  cambios: {
+    titulo?: string;
+    orden?: number;
+    seccion?: SeccionLandingCotizadorLibre;
+    // ✅ NUEVO — categoriaDestino: null es la señal explícita de "quitar
+    // el atajo"; no mandar el campo deja el que ya tenía sin tocar.
+    categoriaDestino?: CategoriaCotizadorLibre | null;
+    idTipoDestino?: number | null;
+  }
 ): Promise<LandingSlotItem> => {
   const { data } = await api.put<LandingSlotItem>(`${BASE}/${id}`, cambios);
   return data;

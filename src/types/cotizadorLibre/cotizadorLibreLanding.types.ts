@@ -1,4 +1,5 @@
 // src/types/cotizadorLibre/cotizadorLibreLanding.types.ts
+import type { CategoriaCotizadorLibre } from "./cotizadorLibre.types";
 
 export const SECCIONES_LANDING_COTIZADOR_LIBRE = [
   "lineas",
@@ -35,4 +36,9 @@ export interface LandingSlotItem {
   orden: number;
   idArchivo: number | null;
   imagenUrl: string | null;
+  // ✅ NUEVO — atajo de navegación: si están ambos, dar clic en la imagen
+  // (fuera de modo admin) manda directo al wizard con esa categoría y tipo
+  // ya seleccionados en vez de solo entrar a la landing vacía.
+  categoriaDestino: CategoriaCotizadorLibre | null;
+  idTipoDestino: number | null;
 }

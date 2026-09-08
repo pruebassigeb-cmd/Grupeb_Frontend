@@ -39,6 +39,8 @@ import "./offline/expoOutboxHandlers";
 import ReportesCorreo from "./pages/ReportesCorreo";
 import CotizadorLibre from "./pages/cotizadorLibre/CotizadorLibre";
 import Tickets from "./pages/tickets/Tickets";
+// ✅ NUEVO — panel de administración del módulo de autenticación por red
+import AdministracionRedes from "./pages/redes/AdministracionRedes";
 
 // Las rutas ya no listan privilegio por privilegio: usan `permisoPantalla`
 // con el prefijo de la pantalla, así que CUALQUIER privilegio de esa pantalla
@@ -304,6 +306,21 @@ function App() {
             element={
               <ProtectedRoute>
                 <GestorBackups />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Administración de redes (módulo de autenticación por red) —
+              exclusivo admin/superusuario, mismo patrón que /backups: no
+              pide permisoPantalla porque no es un privilegio granular de
+              los que se gestionan en Roles — la pantalla se protege sola
+              con esAdminOSuperUsuario() y redirige a /sin-acceso si no
+              corresponde. */}
+          <Route
+            path="/admin/redes"
+            element={
+              <ProtectedRoute>
+                <AdministracionRedes />
               </ProtectedRoute>
             }
           />

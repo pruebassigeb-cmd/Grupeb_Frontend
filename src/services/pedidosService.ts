@@ -173,10 +173,13 @@ export type ProductoNuevo = ProductoNuevoPlastico | ProductoNuevoPapel;
 export interface ActualizarPedidoPayload {
   productos: ProductoActualizar[];
   productos_nuevos?: ProductoNuevo[];
-  // Banderas de cabecera del pedido. Opcionales: si no se envían, el
+  // Banderas/datos de cabecera del pedido. Opcionales: si no se envían, el
   // backend conserva el valor actual.
   prioridad?: boolean; // pedido urgente
   sin_iva?: boolean;
+  // Folio de la orden de compra del cliente. Mandar "" o null para borrarlo;
+  // omitir el campo para no tocar el valor guardado.
+  orden_compra_folio?: string | null;
 }
 
 export const actualizarPedido = async (
@@ -210,4 +213,49 @@ export const cambiarMonedaPedido = async (
 export const getHistorialPedidosPorCliente = async (clienteId: number): Promise<Pedido[]> => {
   const { data } = await api.get(`/pedidos/historial/${clienteId}`);
   return data;
+};
+
+// ─── Archivos de la Orden de Compra (ligados al pedido, no al producto) ──────
+
+export interface ArchivoOrdenCompra {
+  id_archivo: number;
+  nombre: string;
+  tipo: "image" | "pdf" | "document";
+  mime_type: string;
+  tamano_kb: number;
+  categoria: string | null;
+  created_at: string;
+  url: string;
+}
+
+// Sube un archivo (imagen o PDF) de la Orden de Compra y lo liga al pedido
+// vía no_pedido (el backend lo resuelve internamente a solicitud_id). Se
+// puede llamar varias veces para el mismo pedido: no hay límite de archivos
+// (ej. una imagen y el PDF por separado).
+export const subirArchivoOrdenCompra = async (
+  noPedido: string,
+  archivo: File
+): Promise<ArchivoOrdenCompra> => {
+  const formData = new FormData();
+  formData.append("archivo", archivo);
+  formData.append("carpeta", "ordenes-compra");
+  formData.append("no_pedido", noPedido);
+
+  const { data } = await api.post("/archivos/upload", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return data;
+};
+
+// Lista los archivos de Orden de Compra (u otros) ya ligados a un pedido.
+export const getArchivosOrdenCompra = async (
+  noPedido: string
+): Promise<ArchivoOrdenCompra[]> => {
+  const { data } = await api.get(`/archivos/pedido/${noPedido}`);
+  return data;
+};
+
+// Elimina un archivo de Orden de Compra ya subido.
+export const eliminarArchivoOrdenCompra = async (idArchivo: number): Promise<void> => {
+  await api.delete(`/archivos/${idArchivo}`);
 };

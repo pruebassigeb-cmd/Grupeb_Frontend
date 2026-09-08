@@ -27,15 +27,19 @@ import type {
 import { newComponenteProceso } from "../../../types/papel/papel.types";
 import {
   actualizarNotaProducto, crearNotaProducto, eliminarNotaProducto, fetchNotasProducto,
+  fetchContenidoArchivo,
   type NotaProducto, type ProcesoCatOpcion,
 } from "../../../services/papel/papel.service";
 import { showConfirm } from "../../CustomConfirm";
 import {
   T, Tarjeta, TituloSeccion, Boton, Selector, Entrada, Palomita,
   IconoProcesoCuadro, IcoAgarre, IcoBote, IcoLista, IcoFlecha, IcoPalomita,
-  IlustracionCaja, paletaOP,
+  IlustracionCaja, paletaOP, colorProceso,
 } from "./disenoEspeciales";
-import { etiquetaComponente, indiceInicio, nombreMaterial } from "./MaterialesAsignacion";
+import {
+  etiquetaComponente, indicePaleta, nombreMaterial,
+  agregarOPC, eliminarOPC, cambiarPadre, destinosValidosPara,
+} from "./MaterialesAsignacion";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // PROCESO → CATÁLOGO DE MAQUINARIA
@@ -43,6 +47,35 @@ import { etiquetaComponente, indiceInicio, nombreMaterial } from "./MaterialesAs
 // Espejo de CLAVE_MAQUINA_POR_TABLA en procesosPapel.controller.ts: se mapea
 // por la columna `tabla` de proceso_cat (no por nombre), que es el mismo
 // campo con el que el motor decide la máquina de un proceso real.
+// OJO -- son DOS cosas distintas y antes se usaba una sola llave para ambas,
+// que es de donde salía el bug (Jose, 2026-09-04): al cambiar la máquina de
+// Hot Stamping se cambiaba también la de Alto Relieve.
+//
+//   · CATALOGO_MAQUINA_POR_TABLA = de qué lista se eligen las máquinas.
+//     Hot Stamping y Alto Relieve comparten lista de verdad (cat_hs_ar):
+//     son las mismas máquinas físicas.
+//   · CLAVE_MAQUINA_POR_TABLA = en qué casilla se GUARDA lo elegido.
+//     Aquí sí tienen que ser distintas, si no se pisan entre ellas.
+//
+// Hojeado/Guillotina siguen compartiendo casilla porque su catálogo trae
+// `tipo_maquina` y el selector sabe cuál de los dos ids tocar; cat_hs_ar no
+// tiene esa columna, así que ahí la única salida es separar la casilla.
+const CATALOGO_MAQUINA_POR_TABLA: Record<string, CatKey> = {
+  hojeado_papel: "hojeado_guillotina" as CatKey,
+  guillotina_papel: "hojeado_guillotina" as CatKey,
+  impresion_papel: "impresora" as CatKey,
+  laminacion_papel: "laminado_maquina" as CatKey,
+  barniz_uv_papel: "uv" as CatKey,
+  hot_stamping_papel: "hs_ar" as CatKey,
+  texturizado_papel: "texturizadora" as CatKey,
+  alto_relieve_papel: "hs_ar" as CatKey,   // misma lista que Hot Stamping
+  suaje_produccion_papel: "suaje_maquina" as CatKey,
+  desbarbe_papel: "desbarbe" as CatKey,
+  armado_papel: "armado" as CatKey,
+  empaque_papel: "empaque_maquina" as CatKey,
+  litolaminado_papel: "empalme" as CatKey,
+};
+
 const CLAVE_MAQUINA_POR_TABLA: Record<string, CatKey> = {
   hojeado_papel: "hojeado_guillotina" as CatKey,
   guillotina_papel: "hojeado_guillotina" as CatKey,
@@ -51,7 +84,9 @@ const CLAVE_MAQUINA_POR_TABLA: Record<string, CatKey> = {
   barniz_uv_papel: "uv" as CatKey,
   hot_stamping_papel: "hs_ar" as CatKey,
   texturizado_papel: "texturizadora" as CatKey,
-  alto_relieve_papel: "hs_ar" as CatKey,
+  // Casilla PROPIA: guarda en maquinaria_alto_relieve (que ya existía en BD),
+  // aunque las opciones salgan de cat_hs_ar.
+  alto_relieve_papel: "alto_relieve_maquina" as CatKey,
   suaje_produccion_papel: "suaje_maquina" as CatKey,
   desbarbe_papel: "desbarbe" as CatKey,
   armado_papel: "armado" as CatKey,
@@ -99,6 +134,191 @@ const NOMBRE_PROCESO_CORTO: Record<string, string> = {
 const nombreCortoProceso = (tabla: string | undefined | null, fallback: string): string =>
   (tabla && NOMBRE_PROCESO_CORTO[tabla]) || fallback;
 
+// Numera las ocurrencias repetidas del mismo proceso dentro de UNA ruta
+// (Jose, 2026-09-04): si Impresión va tres veces, sus tarjetas se leen
+// "Impresión (1ª)", "(2ª)", "(3ª)" -- ese número es la `pasada` con la que
+// después se registra en planta. Un proceso que aparece una sola vez NO se
+// numera (devuelve cadena vacía), para no ensuciar la ruta normal.
+//
+// Devuelve un mapa por id de proceso, porque el número depende de la POSICIÓN
+// en la ruta y esa cambia al arrastrar -- no se puede guardar en la tarjeta.
+function etiquetasPasada(
+  procesos: { id: number; idproceso_cat: number | null }[],
+  catPorId: Map<number, ProcesoCatOpcion>,
+): Map<number, string> {
+  const tablaDe = (p: { idproceso_cat: number | null }): string =>
+    (p.idproceso_cat != null ? catPorId.get(p.idproceso_cat)?.tabla : undefined) ?? "";
+
+  const totalPorTabla = new Map<string, number>();
+  procesos.forEach(p => {
+    const t = tablaDe(p);
+    totalPorTabla.set(t, (totalPorTabla.get(t) ?? 0) + 1);
+  });
+
+  const vistas = new Map<string, number>();
+  const out = new Map<number, string>();
+  procesos.forEach(p => {
+    const t = tablaDe(p);
+    const n = (vistas.get(t) ?? 0) + 1;
+    vistas.set(t, n);
+    out.set(p.id, (totalPorTabla.get(t) ?? 1) > 1 ? ` (${n}ª)` : "");
+  });
+  return out;
+}
+
+// ── Reordenar tarjetas con arrastre suave y soporte táctil ────────────────
+// Jose (2026-09-04): el arrastre nativo de HTML5 se veía "cortado" (la tarjeta
+// desaparecía y reaparecía de golpe) y en pantalla táctil de plano no jala.
+// Esto lo reemplaza con Pointer Events, que son los mismos para mouse, dedo y
+// lápiz, así que una sola implementación cubre los tres:
+//
+//   · la tarjeta tomada se levanta y SIGUE al dedo/cursor en tiempo real
+//   · las demás se hacen a un lado con una transición suave, abriendo el hueco
+//     donde va a caer -- no brincan al soltar
+//   · si tocas y sueltas SIN mover, la tarjeta se queda SELECCIONADA; luego
+//     tocas otra y se coloca ahí. Con el dedo eso es mucho más cómodo que
+//     mantener el arrastre, y es lo que pidió Jose ("que se seleccione").
+//
+// `eje` es "y" para la lista vertical de las tarjetas de OP y "x" para la
+// cadena horizontal de la vista "misma orden".
+function useReordenar(
+  ids: number[],
+  eje: "x" | "y",
+  mover: (idOrigen: number, idDestino: number) => void,
+) {
+  const [tomado, setTomado] = useState<number | null>(null);
+  const [arrastrando, setArrastrando] = useState(false);
+  const [delta, setDelta] = useState(0);
+  const [destino, setDestino] = useState<number | null>(null);
+
+  const nodos = useRef(new Map<number, HTMLElement>());
+  const inicio = useRef(0);
+  const medidas = useRef<{ centro: number; tam: number }[]>([]);
+  const idxOrigen = useRef(-1);
+
+  const registrar = (id: number) => (el: HTMLElement | null) => {
+    if (el) nodos.current.set(id, el);
+    else nodos.current.delete(id);
+  };
+
+  // Se mide UNA vez al tomar la tarjeta: durante el arrastre las posiciones
+  // reales cambian (las demás se están corriendo), así que hay que decidir
+  // contra la foto del inicio, no contra lo que se ve en ese instante.
+  const medir = () => {
+    medidas.current = ids.map(id => {
+      const r = nodos.current.get(id)?.getBoundingClientRect();
+      if (!r) return { centro: 0, tam: 0 };
+      return eje === "y"
+        ? { centro: r.top + r.height / 2, tam: r.height }
+        : { centro: r.left + r.width / 2, tam: r.width };
+    });
+  };
+
+  const coord = (e: React.PointerEvent) => (eje === "y" ? e.clientY : e.clientX);
+
+  const alTomar = (id: number) => (e: React.PointerEvent) => {
+    e.stopPropagation();
+    if (tomado != null) {
+      // Segundo toque en la MISMA tarjeta: se suelta. En OTRA: se coloca ahí.
+      if (tomado === id) setTomado(null);
+      else { mover(tomado, id); setTomado(null); }
+      return;
+    }
+    idxOrigen.current = ids.indexOf(id);
+    if (idxOrigen.current < 0) return;
+    medir();
+    inicio.current = coord(e);
+    setTomado(id);
+    setArrastrando(false);
+    setDelta(0);
+    setDestino(idxOrigen.current);
+    try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); } catch { /* navegador viejo: se sigue sin captura */ }
+  };
+
+  const alMover = (e: React.PointerEvent) => {
+    if (tomado == null || idxOrigen.current < 0) return;
+    const d = coord(e) - inicio.current;
+    // Umbral: menos de 5px es un toque, no un arrastre -- así un tap limpio
+    // no se convierte en un micro-movimiento accidental.
+    if (!arrastrando && Math.abs(d) < 5) return;
+    if (!arrastrando) setArrastrando(true);
+    setDelta(d);
+
+    const m = medidas.current;
+    const o = idxOrigen.current;
+    const centroActual = (m[o]?.centro ?? 0) + d;
+    let idx = o;
+    for (let i = 0; i < m.length; i++) {
+      if (i === o) continue;
+      if (i < o && centroActual < m[i].centro) idx = Math.min(idx, i);
+      if (i > o && centroActual > m[i].centro) idx = Math.max(idx, i);
+    }
+    setDestino(idx);
+  };
+
+  const alSoltar = () => {
+    if (tomado == null) return;
+    if (arrastrando) {
+      const idDestino = destino != null ? ids[destino] : null;
+      if (idDestino != null && idDestino !== tomado) mover(tomado, idDestino);
+      setTomado(null);
+    }
+    // Si NO se arrastró, la tarjeta se queda seleccionada a propósito: es el
+    // modo "toco esta, toco dónde va" para pantallas táctiles.
+    setArrastrando(false);
+    setDelta(0);
+    setDestino(null);
+  };
+
+  const cancelar = () => {
+    setTomado(null); setArrastrando(false); setDelta(0); setDestino(null);
+  };
+
+  // Handlers listos para poner en la tarjeta (o en el asa).
+  const asaProps = (id: number) => ({
+    onPointerDown: alTomar(id),
+    onPointerMove: alMover,
+    onPointerUp: alSoltar,
+    onPointerCancel: cancelar,
+  });
+
+  const estilo = (id: number): React.CSSProperties => {
+    const i = ids.indexOf(id);
+    const esTomada = tomado === id;
+    const o = idxOrigen.current;
+    const tamOrigen = medidas.current[o]?.tam ?? 0;
+
+    if (esTomada && arrastrando) {
+      return {
+        transform: `${eje === "y" ? `translateY(${delta}px)` : `translateX(${delta}px)`} scale(1.03)`,
+        transition: "none",
+        position: "relative", zIndex: 30,
+        boxShadow: "0 14px 30px rgba(21,42,102,.24)",
+        cursor: "grabbing", touchAction: "none", willChange: "transform",
+      };
+    }
+
+    let corrimiento = 0;
+    if (arrastrando && destino != null && o >= 0 && !esTomada) {
+      if (i > o && i <= destino) corrimiento = -tamOrigen;
+      else if (i < o && i >= destino) corrimiento = tamOrigen;
+    }
+
+    return {
+      transform: corrimiento
+        ? (eje === "y" ? `translateY(${corrimiento}px)` : `translateX(${corrimiento}px)`)
+        : undefined,
+      transition: "transform 190ms cubic-bezier(.2,.8,.3,1), box-shadow 160ms ease",
+      position: esTomada ? "relative" : undefined,
+      zIndex: esTomada ? 20 : undefined,
+      boxShadow: esTomada ? "0 8px 20px rgba(21,42,102,.20)" : undefined,
+      touchAction: "none", cursor: "grab",
+    };
+  };
+
+  return { tomado, arrastrando, registrar, asaProps, estilo, cancelar };
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // HELPERS
 // ═══════════════════════════════════════════════════════════════════════════
@@ -109,6 +329,687 @@ const refsDeComponente = (materiales: MaterialEntry[], idComponente: number): Ma
     .map((m, i) => ({ m, i }))
     .filter(({ m }) => m.idComponenteAsignado === idComponente)
     .map(({ m, i }) => ({ id: m.id, etiqueta: `${nombreMaterial(m)} (M${i + 1})` }));
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EXPORTAR LA RUTA COMO DIAGRAMA (SVG / PNG)
+// ═══════════════════════════════════════════════════════════════════════════
+// Jose (2026-09-04): poder sacar la ruta de flujo como archivo para abrirla en
+// el navegador (o mandarla / imprimirla) sin tener que entrar al sistema.
+//
+// El SVG se arma a mano, sin librerías, y queda AUTOCONTENIDO: sin fuentes
+// externas, sin imágenes ligadas, sin CSS de fuera. Eso importa por dos
+// razones: se abre igual en cualquier navegador, y es lo que permite
+// convertirlo a PNG con canvas sin que el navegador "manche" el lienzo y
+// bloquee la exportación.
+
+const escaparXml = (s: string): string =>
+  String(s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&apos;");
+
+const recortar = (s: string, max: number): string =>
+  s.length <= max ? s : s.slice(0, Math.max(0, max - 1)).trimEnd() + "…";
+
+// Una tarjeta del diagrama = una OP (de inicio, de unión, o la única).
+// Es EL MISMO contenido que se ve en pantalla: encabezado con su nombre,
+// descripción y material, y abajo la lista de procesos en orden.
+interface ProcesoSvg {
+  nombre: string;   // "Hojeado", "Impresión Papel"...
+  pasada: string;   // "(2ª)" cuando el proceso se repite; "" si va una sola vez
+  detalle: string;  // el mismo resumen de una línea que sale bajo el proceso
+  color: string;    // color del cuadrito del proceso (colorProceso)
+  // Los mismos campos que la tarjeta ancha de "misma orden" muestra por
+  // separado en pantalla. En el modo con unión no se usan: ahí el detalle va
+  // resumido en una sola línea y la información completa vive en las hojas
+  // de abajo, porque las tarjetas de OP son angostas y no caben.
+  materiales: string;
+  maquina: string;
+  observaciones: string;
+}
+interface TarjetaSvg {
+  titulo: string;
+  descripcion: string;
+  material: string;
+  procesos: ProcesoSvg[];
+  paleta: { headBg: string; headText: string };
+}
+interface DiagramaSvg {
+  nombreProducto: string;
+  inicios: TarjetaSvg[];
+  union: TarjetaSvg | null;
+  unica: TarjetaSvg | null;
+  // Foto del producto ya convertida a data URI (o null para usar el dibujo
+  // predeterminado). Tiene que venir embebida, no como URL: si no, el archivo
+  // deja de ser autocontenido.
+  imagenProducto: string | null;
+}
+
+// Ancho aproximado de un carácter, para poder partir el texto en renglones
+// sin poder medirlo de verdad (en un SVG que se arma como texto no hay canvas
+// donde medir). Es una estimación conservadora para una tipografía sans.
+const anchoCaracter = (fontSize: number) => fontSize * 0.53;
+
+const partirTexto = (texto: string, anchoMax: number, fontSize: number, maxRenglones = 3): string[] => {
+  const cw = anchoCaracter(fontSize);
+  const porRenglon = Math.max(4, Math.floor(anchoMax / cw));
+  const palabras = String(texto).split(/\s+/).filter(Boolean);
+  const renglones: string[] = [];
+  let actual = "";
+  for (const palabra of palabras) {
+    const tentativo = actual ? `${actual} ${palabra}` : palabra;
+    if (tentativo.length <= porRenglon) { actual = tentativo; continue; }
+    if (actual) renglones.push(actual);
+    actual = palabra.length > porRenglon ? recortar(palabra, porRenglon) : palabra;
+    if (renglones.length === maxRenglones) break;
+  }
+  if (actual && renglones.length < maxRenglones) renglones.push(actual);
+  if (renglones.length === maxRenglones && palabras.length > 0) {
+    const ultimo = renglones[maxRenglones - 1];
+    const usadas = renglones.join(" ").split(/\s+/).length;
+    if (usadas < palabras.length) renglones[maxRenglones - 1] = recortar(ultimo + " …", porRenglon);
+  }
+  return renglones.length > 0 ? renglones : [""];
+};
+
+// ── Medidas del diagrama (las mismas proporciones que la pantalla) ────────
+const D = {
+  PAD: 30,
+  CARD_W: 206,       // igual que la tarjeta de OP en pantalla
+  PUNTO_W: 150,
+  PROD_W: 186,
+  FILA_H: 34,        // alto de cada renglón de proceso
+  FILA_GAP: 7,
+  CUERPO_PAD: 9,
+  GAP_CARDS: 22,     // separación vertical entre OP de inicio
+  GAP_COL: 74,       // separación horizontal entre columnas del flujo
+  GAP_PROD: 46,
+};
+
+// La descripción y el material se parten en renglones en vez de recortarse:
+// "(usa las piezas de sus OP de inicio)" no cabe en uno solo y cortarlo dejaba
+// un "(usa las piezas de sus OP de in…" que no dice nada.
+const renglonesDescripcion = (t: TarjetaSvg): string[] =>
+  t.descripcion ? partirTexto(t.descripcion, D.CARD_W - 22, 11, 2) : [];
+const renglonesMaterial = (t: TarjetaSvg): string[] =>
+  partirTexto(t.material, D.CARD_W - 22, 10.5, 2);
+
+const altoEncabezadoTarjeta = (t: TarjetaSvg): number =>
+  13 + 16 + renglonesDescripcion(t).length * 15 + renglonesMaterial(t).length * 14 + 11;
+
+const altoCuerpoTarjeta = (t: TarjetaSvg): number =>
+  t.procesos.length === 0
+    ? D.CUERPO_PAD * 2 + 30
+    : D.CUERPO_PAD * 2 + t.procesos.length * D.FILA_H + (t.procesos.length - 1) * D.FILA_GAP;
+
+const altoTarjeta = (t: TarjetaSvg): number => altoEncabezadoTarjeta(t) + altoCuerpoTarjeta(t);
+
+// Dibuja una tarjeta de OP tal cual se ve en pantalla.
+function dibujarTarjeta(t: TarjetaSvg, x: number, y: number): string {
+  const w = D.CARD_W;
+  const hEnc = altoEncabezadoTarjeta(t);
+  const h = altoTarjeta(t);
+  const cx = x + w / 2;
+  const partes: string[] = [];
+
+  // Contenedor + encabezado de color (solo las esquinas de arriba redondeadas:
+  // se logra pintando el encabezado redondeado y tapando su mitad de abajo).
+  partes.push(
+    `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="12" fill="#FFFFFF" stroke="#E4E9F2"/>`,
+    `<path d="M ${x} ${y + 12} a 12 12 0 0 1 12 -12 h ${w - 24} a 12 12 0 0 1 12 12 v ${hEnc - 12} h -${w} z" fill="${t.paleta.headBg}"/>`,
+  );
+
+  let ty = y + 13 + 12;
+  partes.push(
+    `<text x="${cx}" y="${ty}" text-anchor="middle" font-size="12.5" font-weight="700" letter-spacing="0.4" fill="${t.paleta.headText}">${escaparXml(recortar(t.titulo, 24))}</text>`
+  );
+  renglonesDescripcion(t).forEach(ln => {
+    ty += 15;
+    partes.push(`<text x="${cx}" y="${ty}" text-anchor="middle" font-size="11" fill="#4A66B4">${escaparXml(ln)}</text>`);
+  });
+  renglonesMaterial(t).forEach(ln => {
+    ty += 14;
+    partes.push(`<text x="${cx}" y="${ty}" text-anchor="middle" font-size="10.5" fill="#4A66B4">${escaparXml(ln)}</text>`);
+  });
+
+  // Cuerpo: los procesos, en orden, uno por renglón.
+  let fy = y + hEnc + D.CUERPO_PAD;
+  if (t.procesos.length === 0) {
+    partes.push(
+      `<rect x="${x + D.CUERPO_PAD}" y="${fy}" width="${w - D.CUERPO_PAD * 2}" height="30" rx="7" fill="#FEF3E2" stroke="#F7C182" stroke-dasharray="4 3"/>`,
+      `<text x="${cx}" y="${fy + 19}" text-anchor="middle" font-size="10.5" fill="#C2710C">Esta orden todavía no tiene procesos.</text>`,
+    );
+  } else {
+    t.procesos.forEach((p, i) => {
+      const icoX = x + D.CUERPO_PAD + 9;
+      partes.push(
+        `<rect x="${x + D.CUERPO_PAD}" y="${fy}" width="${w - D.CUERPO_PAD * 2}" height="${D.FILA_H}" rx="9" fill="#FFFFFF" stroke="#EDF1F7"/>`,
+        `<rect x="${icoX}" y="${fy + 6}" width="22" height="22" rx="6" fill="${p.color}"/>`,
+        `<rect x="${icoX + 6}" y="${fy + 12}" width="10" height="10" rx="2" fill="#FFFFFF" opacity="0.9"/>`,
+        `<text x="${icoX + 32}" y="${fy + 22}" font-size="11.5" font-weight="700" fill="#142E75">${escaparXml(recortar(`${i + 1}. ${p.nombre}`, 20))}` +
+          (p.pasada ? `<tspan fill="#1D4ED8"> ${escaparXml(p.pasada)}</tspan>` : "") +
+        `</text>`,
+      );
+      fy += D.FILA_H + D.FILA_GAP;
+    });
+  }
+  return partes.join("\n");
+}
+
+// Medidas de la tarjeta "PRODUCTO TERMINADO", calcadas del componente
+// ProductoTerminado que se ve en pantalla (encabezado naranja, cuerpo blanco,
+// recuadro de 108 de alto, palomita de 34 y la leyenda de dos renglones).
+const PROD = {
+  HEAD_H: 58,
+  PAD: 14,
+  IMG_H: 108,
+  GAP_PAL: 10,
+  PAL: 34,
+  GAP_TXT: 14,
+  TXT_H: 34,
+  BOTTOM: 16,
+};
+const ALTO_PRODUCTO =
+  PROD.HEAD_H + PROD.PAD + PROD.IMG_H + PROD.GAP_PAL + PROD.PAL + PROD.GAP_TXT + PROD.TXT_H + PROD.BOTTOM;
+
+// La misma ilustración de caja abierta que usa la pantalla (IlustracionCaja en
+// disenoEspeciales.tsx): mismos trazos, mismo viewBox 128x112 dibujado a
+// 112x98. Se copia aquí porque el SVG se arma como texto, no como JSX.
+const ILUSTRACION_CAJA_PATHS = [
+  `<path d="M18 56 L66 33 L62 5 Q36 13 12 29 Z"/>`,
+  `<path d="M66 33 L110 54 L115 33 Q94 23 70 17 Z"/>`,
+  `<path d="M18 56 L64 78 L110 54 L66 33 Z"/>`,
+  `<path d="M18 56 L18 84 L64 106 L110 82 L110 54"/>`,
+  `<path d="M64 78 L64 106"/>`,
+  `<path d="M25 58 L66 41 L103 56" stroke-width="1.2" opacity="0.45"/>`,
+].join("");
+
+// Caja "PRODUCTO TERMINADO". Igual que en pantalla: si el producto tiene
+// imagen se muestra esa foto, y si no, el dibujo predeterminado de la caja
+// (Jose, 2026-09-04). La imagen entra como data URI para que el SVG siga
+// siendo autocontenido -- si dependiera de una URL, ni se vería al abrir el
+// archivo aparte ni se podría convertir a PNG.
+function dibujarProductoTerminado(
+  nombreProducto: string, imagenDataUri: string | null, x: number, y: number,
+): string {
+  const w = D.PROD_W;
+  const cx = x + w / 2;
+  const partes: string[] = [];
+  const h = ALTO_PRODUCTO;
+
+  // Tarjeta blanca con borde naranja + banda de encabezado naranja arriba.
+  partes.push(
+    `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="12" fill="#FFFFFF" stroke="#F7C182" stroke-width="1.5"/>`,
+    `<path d="M ${x} ${y + 12} a 12 12 0 0 1 12 -12 h ${w - 24} a 12 12 0 0 1 12 12 v ${PROD.HEAD_H - 12} h -${w} z" fill="#FEF3E2"/>`,
+    `<text x="${cx}" y="${y + 24}" text-anchor="middle" font-size="12" font-weight="700" letter-spacing="0.4" fill="#C2710C">PRODUCTO TERMINADO</text>`,
+  );
+  partirTexto(nombreProducto || "(sin nombre)", w - 24, 11.5, 2).forEach((ln, i) =>
+    partes.push(`<text x="${cx}" y="${y + 42 + i * 14}" text-anchor="middle" font-size="11.5" font-weight="600" fill="#C2710C">${escaparXml(ln)}</text>`)
+  );
+
+  const imgX = x + PROD.PAD;
+  const imgY = y + PROD.HEAD_H + PROD.PAD;
+  const imgW = w - PROD.PAD * 2;
+
+  if (imagenDataUri) {
+    // Recorte redondeado + "slice" = el object-fit: cover de la pantalla.
+    const idClip = `cp${Math.round(x)}_${Math.round(y)}`;
+    partes.push(
+      `<clipPath id="${idClip}"><rect x="${imgX}" y="${imgY}" width="${imgW}" height="${PROD.IMG_H}" rx="9"/></clipPath>`,
+      `<rect x="${imgX}" y="${imgY}" width="${imgW}" height="${PROD.IMG_H}" rx="9" fill="#F6F8FC"/>`,
+      `<image href="${escaparXml(imagenDataUri)}" xlink:href="${escaparXml(imagenDataUri)}" x="${imgX}" y="${imgY}" width="${imgW}" height="${PROD.IMG_H}" preserveAspectRatio="xMidYMid slice" clip-path="url(#${idClip})"/>`,
+      `<rect x="${imgX}" y="${imgY}" width="${imgW}" height="${PROD.IMG_H}" rx="9" fill="none" stroke="#E4E9F2"/>`,
+    );
+  } else {
+    // Dibujo predeterminado, centrado en el mismo hueco de 108 de alto.
+    const escala = 112 / 128;
+    const tx = cx - 56;
+    const ty = imgY + (PROD.IMG_H - 98) / 2;
+    partes.push(
+      `<g transform="translate(${tx} ${ty}) scale(${escala})" fill="none" stroke="#22377F" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round">${ILUSTRACION_CAJA_PATHS}</g>`
+    );
+  }
+
+  // Palomita verde
+  const palCy = imgY + PROD.IMG_H + PROD.GAP_PAL + PROD.PAL / 2;
+  partes.push(
+    `<circle cx="${cx}" cy="${palCy}" r="17" fill="#16A34A"/>`,
+    `<path d="M ${cx - 7.5} ${palCy} l 5 5 l 10 -10" stroke="#FFFFFF" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`,
+  );
+
+  const ty2 = palCy + PROD.PAL / 2 + PROD.GAP_TXT;
+  partes.push(
+    `<text x="${cx}" y="${ty2 + 6}" text-anchor="middle" font-size="12" font-weight="600" fill="#142E75">Listo para despacho</text>`,
+    `<text x="${cx}" y="${ty2 + 23}" text-anchor="middle" font-size="12" font-weight="600" fill="#142E75">o entrega al cliente.</text>`,
+  );
+
+  return partes.join("\n");
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TARJETA ANCHA DE PROCESO — solo para "misma orden de producción"
+// ═══════════════════════════════════════════════════════════════════════════
+// Jose (2026-09-04): en ese modo la pantalla encadena los procesos de
+// izquierda a derecha y cada tarjeta ya trae su información adentro
+// (materiales, máquina, observaciones). Como son anchas, aquí SÍ cabe todo
+// junto y no hace falta la sección de hojas de abajo -- esa existe solo
+// porque las tarjetas de OP del modo con unión son angostas.
+const PROC = { W: 210, PAD: 14, ICONO: 29, GAP_ICONO: 11, LINEA: 14 };
+
+const anchoTextoProceso = PROC.W - PROC.PAD * 2;
+const anchoTituloProceso = anchoTextoProceso - PROC.ICONO - PROC.GAP_ICONO;
+
+// Los renglones se calculan una sola vez y se reutilizan para medir y para
+// dibujar, así el alto y el contenido nunca se desincronizan.
+function renglonesProceso(p: ProcesoSvg, indice: number) {
+  return {
+    titulo: partirTexto(`${indice + 1}. ${p.nombre}`, anchoTituloProceso, 12.5, 2),
+    observaciones: p.observaciones ? partirTexto(p.observaciones, anchoTextoProceso, 11, 3) : [],
+    materiales: partirTexto(p.materiales || "—", anchoTextoProceso, 11, 3),
+    maquina: partirTexto(p.maquina || "—", anchoTextoProceso, 11, 2),
+  };
+}
+
+function altoTarjetaProcesoAncha(p: ProcesoSvg, indice: number): number {
+  const r = renglonesProceso(p, indice);
+  let h = PROC.PAD;
+  h += Math.max(PROC.ICONO, r.titulo.length * 16) + (p.pasada ? 13 : 0);
+  if (r.observaciones.length) h += 6 + r.observaciones.length * PROC.LINEA;
+  h += 14 + 13 + r.materiales.length * PROC.LINEA;   // separador + etiqueta + valor
+  h += 12 + 13 + r.maquina.length * PROC.LINEA;
+  return h + PROC.PAD;
+}
+
+function dibujarTarjetaProcesoAncha(p: ProcesoSvg, indice: number, x: number, y: number, alto: number): string {
+  const r = renglonesProceso(p, indice);
+  const partes: string[] = [
+    `<rect x="${x}" y="${y}" width="${PROC.W}" height="${alto}" rx="12" fill="#FFFFFF" stroke="#E4E9F2"/>`,
+    `<rect x="${x + PROC.PAD}" y="${y + PROC.PAD}" width="${PROC.ICONO}" height="${PROC.ICONO}" rx="8" fill="${p.color}"/>`,
+    `<rect x="${x + PROC.PAD + 9}" y="${y + PROC.PAD + 9}" width="11" height="11" rx="2.5" fill="#FFFFFF" opacity="0.92"/>`,
+  ];
+
+  const tx = x + PROC.PAD + PROC.ICONO + PROC.GAP_ICONO;
+  let ty = y + PROC.PAD + 14;
+  r.titulo.forEach(ln => {
+    partes.push(`<text x="${tx}" y="${ty}" font-size="12.5" font-weight="700" fill="#142E75">${escaparXml(ln)}</text>`);
+    ty += 16;
+  });
+  if (p.pasada) {
+    partes.push(`<text x="${tx}" y="${ty}" font-size="10.5" font-weight="700" fill="#1D4ED8">${escaparXml(p.pasada)}</text>`);
+    ty += 13;
+  }
+
+  let cy = y + PROC.PAD + Math.max(PROC.ICONO, r.titulo.length * 16) + (p.pasada ? 13 : 0);
+  if (r.observaciones.length) {
+    cy += 6;
+    r.observaciones.forEach(ln => {
+      partes.push(`<text x="${x + PROC.PAD}" y="${cy + 10}" font-size="11" fill="#4A66B4">${escaparXml(ln)}</text>`);
+      cy += PROC.LINEA;
+    });
+  }
+
+  const bloque = (etiqueta: string, renglones: string[], separacion: number) => {
+    cy += separacion;
+    partes.push(`<text x="${x + PROC.PAD}" y="${cy + 4}" font-size="10" font-weight="600" fill="#7C8DB5">${escaparXml(etiqueta)}</text>`);
+    cy += 13;
+    renglones.forEach(ln => {
+      partes.push(`<text x="${x + PROC.PAD}" y="${cy + 10}" font-size="11" font-weight="700" fill="#142E75">${escaparXml(ln)}</text>`);
+      cy += PROC.LINEA;
+    });
+  };
+  bloque("Materiales:", r.materiales, 14);
+  bloque("Máquina:", r.maquina, 12);
+
+  return partes.join("\n");
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// El SVG completo: arriba el diagrama tal cual se ve en pantalla, abajo una
+// hoja por OP con la información capturada de cada proceso.
+// ═══════════════════════════════════════════════════════════════════════════
+function construirSvgRuta(d: DiagramaSvg): string {
+  // "Misma orden de producción" tiene su propio dibujo: cadena horizontal de
+  // tarjetas anchas, cada una con su información adentro.
+  if (d.unica) return construirSvgMismaOrden(d, d.unica);
+  return construirSvgConUnion(d);
+}
+
+function construirSvgMismaOrden(d: DiagramaSvg, comp: TarjetaSvg): string {
+  const { PAD, PROD_W, GAP_PROD } = D;
+  const TITULO_H = 62;
+  const FLECHA = 46;
+  const partes: string[] = [];
+
+  const procesos = comp.procesos;
+  const altoFila = procesos.length
+    ? Math.max(...procesos.map((p, i) => altoTarjetaProcesoAncha(p, i)))
+    : 120;
+
+  const anchoCadena = procesos.length
+    ? procesos.length * PROC.W + (procesos.length - 1) * FLECHA
+    : 240;
+
+  const altoDiagrama = Math.max(altoFila, ALTO_PRODUCTO);
+  const cy = TITULO_H + altoDiagrama / 2;
+  const xProd = PAD + anchoCadena + GAP_PROD;
+  const W = xProd + PROD_W + PAD;
+  const H = TITULO_H + altoDiagrama + PAD;
+
+  partes.push(
+    `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" font-family="Poppins, Inter, Segoe UI, Roboto, Helvetica, Arial, sans-serif">`,
+    `<rect width="${W}" height="${H}" fill="#FFFFFF"/>`,
+    `<defs><marker id="flS" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">` +
+      `<path d="M 0 0 L 10 5 L 0 10 z" fill="#142E75"/></marker></defs>`,
+    `<text x="${PAD}" y="30" font-size="17" font-weight="700" fill="#142E75">${escaparXml(recortar(d.nombreProducto || "Ruta de procesos", 70))}</text>`,
+    `<text x="${PAD}" y="48" font-size="11" fill="#7C8DB5">Ruta de procesos · Misma orden de producción · ${escaparXml(recortar(comp.material.replace(/^\(|\)$/g, ""), 60))}</text>`,
+  );
+
+  if (procesos.length === 0) {
+    partes.push(
+      `<rect x="${PAD}" y="${cy - 26}" width="${anchoCadena}" height="52" rx="9" fill="#FEF3E2" stroke="#F7C182" stroke-dasharray="5 4"/>`,
+      `<text x="${PAD + anchoCadena / 2}" y="${cy + 4}" text-anchor="middle" font-size="12" fill="#C2710C">Esta orden todavía no tiene procesos.</text>`,
+    );
+  } else {
+    procesos.forEach((p, i) => {
+      const x = PAD + i * (PROC.W + FLECHA);
+      partes.push(dibujarTarjetaProcesoAncha(p, i, x, cy - altoFila / 2, altoFila));
+      if (i < procesos.length - 1) {
+        partes.push(`<line x1="${x + PROC.W + 10}" y1="${cy}" x2="${x + PROC.W + FLECHA - 10}" y2="${cy}" stroke="#142E75" stroke-width="1.8" marker-end="url(#flS)"/>`);
+      }
+    });
+  }
+
+  partes.push(
+    `<line x1="${PAD + anchoCadena + 10}" y1="${cy}" x2="${xProd - 10}" y2="${cy}" stroke="#142E75" stroke-width="1.8" marker-end="url(#flS)"/>`,
+    dibujarProductoTerminado(d.nombreProducto, d.imagenProducto, xProd, cy - ALTO_PRODUCTO / 2),
+    `</svg>`,
+  );
+  return partes.join("\n");
+}
+
+function construirSvgConUnion(d: DiagramaSvg): string {
+  const { PAD, CARD_W, PUNTO_W, PROD_W, GAP_CARDS, GAP_COL, GAP_PROD } = D;
+  const TITULO_H = 56;
+  const partes: string[] = [];
+
+  const tarjetas: TarjetaSvg[] = d.unica
+    ? [d.unica]
+    : [...d.inicios, ...(d.union ? [d.union] : [])];
+
+  // ── Geometría del diagrama ──────────────────────────────────────────────
+  const hayUnion = !d.unica && d.union != null;
+  const altosInicio = (d.unica ? [d.unica] : d.inicios).map(altoTarjeta);
+  const altoColumna1 = altosInicio.reduce((a, b) => a + b, 0) + Math.max(0, altosInicio.length - 1) * GAP_CARDS;
+
+  const xCol1 = PAD;
+  const xPunto = xCol1 + CARD_W + GAP_COL;
+  const xUnion = xPunto + PUNTO_W + GAP_COL;
+  const xProd = hayUnion ? xUnion + CARD_W + GAP_PROD : xPunto;
+
+  const altoUnion = d.union ? altoTarjeta(d.union) : 0;
+  const ALTO_PROD = ALTO_PRODUCTO;
+  const ALTO_PUNTO = 96;
+
+  const altoDiagrama = Math.max(altoColumna1, altoUnion, ALTO_PROD, ALTO_PUNTO);
+  const yDiag = TITULO_H;
+  const cyDiag = yDiag + altoDiagrama / 2;
+  const anchoDiagrama = (hayUnion ? xProd + PROD_W : xPunto + PROD_W) + PAD;
+
+  // ── Geometría de la sección de información ──────────────────────────────
+  const HOJA_W = 336;
+  const HOJA_GAP = 26;
+  const COL_INFO = 152;                       // dónde arranca la columna derecha
+  const ANCHO_INFO = HOJA_W - COL_INFO - 14;
+  const ANCHO_NOMBRE = COL_INFO - 25 - 8;
+  const porFila = Math.min(3, Math.max(1, tarjetas.length));
+  const anchoHojas = PAD * 2 + porFila * HOJA_W + (porFila - 1) * HOJA_GAP;
+
+  // Alto de un renglón: manda el que ocupe más, el nombre del proceso o su
+  // información -- los dos pueden partirse en varios renglones.
+  const altoRenglon = (p: ProcesoSvg): number => Math.max(
+    26,
+    10 + Math.max(
+      partirTexto(p.detalle || "Sin datos capturados", ANCHO_INFO, 10).length,
+      partirTexto(p.nombre, ANCHO_NOMBRE, 10.5, 2).length + (p.pasada ? 1 : 0),
+    ) * 13,
+  );
+
+  const altoHoja = (t: TarjetaSvg): number => {
+    let alto = 34; // encabezado interno de la hoja (Proceso / Información)
+    if (t.procesos.length === 0) return alto + 34;
+    for (const p of t.procesos) alto += altoRenglon(p);
+    return alto + 14;
+  };
+
+  const filasHojas: TarjetaSvg[][] = [];
+  for (let i = 0; i < tarjetas.length; i += porFila) filasHojas.push(tarjetas.slice(i, i + porFila));
+  const altosFila = filasHojas.map(f => Math.max(...f.map(altoHoja)) + 26); // + etiqueta de arriba
+  const SEC2_TITULO_H = 54;
+  const altoSeccion2 = tarjetas.length === 0 ? 0
+    : SEC2_TITULO_H + altosFila.reduce((a, b) => a + b, 0) + (altosFila.length - 1) * 24;
+
+  const W = Math.max(anchoDiagrama, anchoHojas, 720);
+  const H = yDiag + altoDiagrama + 34 + altoSeccion2 + PAD;
+
+  // ── Cabecera ────────────────────────────────────────────────────────────
+  partes.push(
+    `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" font-family="Poppins, Inter, Segoe UI, Roboto, Helvetica, Arial, sans-serif">`,
+    `<rect width="${W}" height="${H}" fill="#FFFFFF"/>`,
+    `<defs><marker id="fl" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">` +
+      `<path d="M 0 0 L 10 5 L 0 10 z" fill="#A9BADB"/></marker>` +
+      `<marker id="flS" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">` +
+      `<path d="M 0 0 L 10 5 L 0 10 z" fill="#142E75"/></marker></defs>`,
+    `<text x="${PAD}" y="32" font-size="17" font-weight="700" fill="#142E75">${escaparXml(recortar(d.nombreProducto || "Ruta de procesos", 70))}</text>`,
+    `<text x="${PAD}" y="49" font-size="11" fill="#7C8DB5">Ruta de procesos del producto especial</text>`,
+  );
+
+  // ── Diagrama ────────────────────────────────────────────────────────────
+  const centrosInicio: number[] = [];
+  let yy = yDiag + (altoDiagrama - altoColumna1) / 2;
+  (d.unica ? [d.unica] : d.inicios).forEach(t => {
+    const h = altoTarjeta(t);
+    partes.push(dibujarTarjeta(t, xCol1, yy));
+    centrosInicio.push(yy + h / 2);
+    yy += h + GAP_CARDS;
+  });
+
+  if (hayUnion && d.union) {
+    // Llave de las OP de inicio hacia el punto de unión
+    const bus = xCol1 + CARD_W + 37;
+    const yBus1 = centrosInicio[0];
+    const yBus2 = centrosInicio[centrosInicio.length - 1];
+    partes.push(`<line x1="${bus}" y1="${yBus1}" x2="${bus}" y2="${yBus2}" stroke="#A9BADB" stroke-width="1.5" stroke-dasharray="5 4"/>`);
+    centrosInicio.forEach(cy => {
+      partes.push(`<line x1="${xCol1 + CARD_W}" y1="${cy}" x2="${bus}" y2="${cy}" stroke="#A9BADB" stroke-width="1.5" stroke-dasharray="5 4"/>`);
+    });
+    partes.push(`<line x1="${bus}" y1="${cyDiag}" x2="${xPunto - 4}" y2="${cyDiag}" stroke="#A9BADB" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#fl)"/>`);
+
+    // Punto de unión
+    const yPunto = cyDiag - ALTO_PUNTO / 2;
+    const cxPunto = xPunto + PUNTO_W / 2;
+    partes.push(
+      `<rect x="${xPunto}" y="${yPunto}" width="${PUNTO_W}" height="${ALTO_PUNTO}" rx="11" fill="#E7F5EC" stroke="#9AD3B4"/>`,
+      `<text x="${cxPunto}" y="${yPunto + 24}" text-anchor="middle" font-size="11" font-weight="700" letter-spacing="0.4" fill="#15803D">PUNTO DE UNIÓN</text>`,
+    );
+    const nombresInicio = d.inicios.map(t => t.titulo).join(" y ");
+    partirTexto(`Se unirán los resultados de ${nombresInicio}.`, PUNTO_W - 22, 10, 4)
+      .forEach((ln, i) => partes.push(
+        `<text x="${cxPunto}" y="${yPunto + 43 + i * 13}" text-anchor="middle" font-size="10" fill="#15803D">${escaparXml(ln)}</text>`
+      ));
+
+    partes.push(`<line x1="${xPunto + PUNTO_W}" y1="${cyDiag}" x2="${xUnion - 4}" y2="${cyDiag}" stroke="#A9BADB" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#fl)"/>`);
+
+    // OP de unión
+    partes.push(dibujarTarjeta(d.union, xUnion, cyDiag - altoUnion / 2));
+
+    // Flecha sólida al producto terminado
+    partes.push(`<line x1="${xUnion + CARD_W + 8}" y1="${cyDiag}" x2="${xProd - 8}" y2="${cyDiag}" stroke="#142E75" stroke-width="1.8" marker-end="url(#flS)"/>`);
+    partes.push(dibujarProductoTerminado(d.nombreProducto, d.imagenProducto, xProd, cyDiag - ALTO_PROD / 2));
+  } else {
+    partes.push(`<line x1="${xCol1 + CARD_W + 8}" y1="${cyDiag}" x2="${xPunto - 8}" y2="${cyDiag}" stroke="#142E75" stroke-width="1.8" marker-end="url(#flS)"/>`);
+    partes.push(dibujarProductoTerminado(d.nombreProducto, d.imagenProducto, xPunto, cyDiag - ALTO_PROD / 2));
+  }
+
+  // ── Sección 2: información de cada proceso ──────────────────────────────
+  if (tarjetas.length > 0) {
+    let ys = yDiag + altoDiagrama + 34;
+    partes.push(
+      `<line x1="${PAD}" y1="${ys}" x2="${W - PAD}" y2="${ys}" stroke="#E4E9F2" stroke-width="1"/>`,
+      `<text x="${PAD}" y="${ys + 30}" font-size="14" font-weight="700" fill="#142E75">Información de los procesos</text>`,
+      `<text x="${PAD}" y="${ys + 46}" font-size="10.5" fill="#7C8DB5">Lo capturado en cada proceso de la ruta, por orden de producción.</text>`,
+    );
+    ys += SEC2_TITULO_H;
+
+    filasHojas.forEach((fila, fi) => {
+      fila.forEach((t, ti) => {
+        const hx = PAD + ti * (HOJA_W + HOJA_GAP);
+        const hAlto = Math.max(...fila.map(altoHoja));
+
+        // Etiqueta arriba de la hoja
+        partes.push(
+          `<text x="${hx + 2}" y="${ys + 13}" font-size="11.5" font-weight="700" fill="#142E75">${escaparXml(recortar(t.titulo, 30))}</text>`,
+          `<text x="${hx + 2}" y="${ys + 26}" font-size="10" fill="#7C8DB5">${escaparXml(recortar(t.material, 42))}</text>`,
+        );
+
+        const hy = ys + 34;
+        partes.push(`<rect x="${hx}" y="${hy}" width="${HOJA_W}" height="${hAlto}" rx="4" fill="#FFFFFF" stroke="#94A3B8" stroke-width="1.4"/>`);
+
+        // Encabezado de columnas
+        partes.push(
+          `<text x="${hx + 12}" y="${hy + 22}" font-size="10" font-weight="700" letter-spacing="0.3" fill="#7C8DB5">PROCESO</text>`,
+          `<text x="${hx + COL_INFO}" y="${hy + 22}" font-size="10" font-weight="700" letter-spacing="0.3" fill="#7C8DB5">INFORMACIÓN</text>`,
+          `<line x1="${hx + 10}" y1="${hy + 30}" x2="${hx + HOJA_W - 10}" y2="${hy + 30}" stroke="#E4E9F2"/>`,
+        );
+
+        let fy = hy + 34;
+        if (t.procesos.length === 0) {
+          partes.push(`<text x="${hx + 12}" y="${fy + 18}" font-size="10.5" fill="#C2710C" font-style="italic">Sin procesos en la ruta.</text>`);
+        } else {
+          t.procesos.forEach((p, pi) => {
+            const info = partirTexto(p.detalle || "Sin datos capturados", ANCHO_INFO, 10);
+            const nombreLns = partirTexto(p.nombre, ANCHO_NOMBRE, 10.5, 2);
+            const alto = altoRenglon(p);
+            if (pi > 0) partes.push(`<line x1="${hx + 10}" y1="${fy}" x2="${hx + HOJA_W - 10}" y2="${fy}" stroke="#EDF1F7"/>`);
+            partes.push(`<rect x="${hx + 12}" y="${fy + 6}" width="8" height="8" rx="2" fill="${p.color}"/>`);
+            nombreLns.forEach((ln, li) => partes.push(
+              `<text x="${hx + 25}" y="${fy + 14 + li * 12}" font-size="10.5" font-weight="700" fill="#142E75">${escaparXml(li === 0 ? `${pi + 1}. ${ln}` : ln)}</text>`
+            ));
+            if (p.pasada) {
+              partes.push(`<text x="${hx + 25}" y="${fy + 14 + nombreLns.length * 12}" font-size="9.5" font-weight="700" fill="#1D4ED8">${escaparXml(p.pasada)}</text>`);
+            }
+            info.forEach((ln, li) => partes.push(
+              `<text x="${hx + COL_INFO}" y="${fy + 14 + li * 13}" font-size="10" fill="#4A66B4">${escaparXml(ln)}</text>`
+            ));
+            fy += alto;
+          });
+        }
+      });
+      ys += altosFila[fi];
+    });
+  }
+
+  partes.push(`</svg>`);
+  return partes.join("\n");
+}
+
+// Dispara la descarga de un archivo en el navegador.
+function descargarArchivo(contenido: Blob, nombre: string): void {
+  const url = URL.createObjectURL(contenido);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = nombre;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  // Se libera con retraso: si se revoca de inmediato, algunos navegadores
+  // cancelan la descarga antes de haberla leído.
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+
+// Lee una imagen y la devuelve como data URI acotado, lista para meterse
+// dentro del SVG. Tiene que ir embebida y no como URL: si no, el archivo no se
+// vería al abrirlo por su cuenta y en el paso a PNG el canvas quedaría
+// "manchado" y el navegador bloquearía la exportación.
+//
+// Se repinta en un canvas en vez de copiar los bytes tal cual porque así se
+// acota el tamaño: una foto de celular de 4000px metida entera como data URI
+// dejaría un SVG de varios MB imposible de mandar por correo. Se limita el
+// lado largo y se guarda como JPEG sobre fondo blanco (el mismo fondo que ya
+// tiene el recuadro en la tarjeta; sin él, una imagen con transparencia
+// quedaría en negro al pasar a JPEG).
+//
+// Solo sirve para URLs que el navegador SÍ deje leer: blob:, data: y el mismo
+// origen. Contra una URL firmada de S3 devuelve null por CORS -- para esa está
+// fetchContenidoArchivo, que pasa por la API.
+const MAX_LADO_IMAGEN = 720;
+
+function imagenAcotadaDesdeUrl(url: string): Promise<string | null> {
+  return new Promise(resolve => {
+    const img = new Image();
+    // Solo afecta a URLs de otro dominio; en blob:/data:/mismo origen es inocuo.
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      try {
+        const anchoNat = img.naturalWidth || img.width;
+        const altoNat = img.naturalHeight || img.height;
+        if (!anchoNat || !altoNat) { resolve(null); return; }
+        const escala = Math.min(1, MAX_LADO_IMAGEN / Math.max(anchoNat, altoNat));
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, Math.round(anchoNat * escala));
+        canvas.height = Math.max(1, Math.round(altoNat * escala));
+        const ctx = canvas.getContext("2d");
+        if (!ctx) { resolve(null); return; }
+        ctx.fillStyle = "#FFFFFF";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        const salida = canvas.toDataURL("image/jpeg", 0.85);
+        resolve(salida.startsWith("data:image/") ? salida : null);
+      } catch {
+        resolve(null);   // canvas "manchado": la imagen es de otro dominio sin CORS
+      }
+    };
+    img.onerror = () => resolve(null);
+    img.src = url;
+  });
+}
+
+// Mismo tratamiento, pero partiendo de los bytes que ya se tienen en mano.
+async function blobAImagenAcotada(blob: Blob): Promise<string | null> {
+  const url = URL.createObjectURL(blob);
+  try {
+    return await imagenAcotadaDesdeUrl(url);
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+// Convierte el SVG a PNG usando un canvas. `escala` 2 da una imagen nítida
+// para pantalla e impresión sin volverse pesadísima.
+function svgAPng(svg: string, escala = 2): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    const blobSvg = new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
+    const url = URL.createObjectURL(blobSvg);
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.round(img.width * escala);
+        canvas.height = Math.round(img.height * escala);
+        const ctx = canvas.getContext("2d");
+        if (!ctx) { URL.revokeObjectURL(url); reject(new Error("No se pudo crear el canvas")); return; }
+        ctx.fillStyle = "#FFFFFF";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        URL.revokeObjectURL(url);
+        canvas.toBlob(b => (b ? resolve(b) : reject(new Error("No se pudo generar el PNG"))), "image/png");
+      } catch (err) {
+        URL.revokeObjectURL(url);
+        reject(err);
+      }
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("No se pudo leer el SVG")); };
+    img.src = url;
+  });
+}
 
 const refDeMaterial = (materiales: MaterialEntry[], id: number): string => {
   const i = materiales.findIndex(m => m.id === id);
@@ -122,8 +1023,11 @@ const detalleCorto = (
 ): string => {
   const clave = cat ? CLAVE_MAQUINA_POR_TABLA[cat.tabla] : undefined;
   if (clave) {
+    // Los ids salen de la CASILLA; los nombres, de la LISTA (que para Alto
+    // Relieve es la de Hot Stamping).
+    const claveCat = (cat ? CATALOGO_MAQUINA_POR_TABLA[cat.tabla] : undefined) ?? clave;
     const ids = (comp.maquinaria[clave] ?? []) as number[];
-    const items = (catalogs?.[clave] ?? []) as CatItem[];
+    const items = (catalogs?.[claveCat] ?? []) as CatItem[];
     const nombres = ids.map(id => items.find(i => i.id === id)?.nombre).filter(Boolean) as string[];
     if (nombres.length > 0) return nombres.join(" · ");
   }
@@ -137,14 +1041,18 @@ const detalleCorto = (
 // muestra desplegables simples por proceso. Se guarda en la maquinaria del
 // COMPONENTE, con la misma clave que ya usa el backend, como arreglo de 0 o
 // 1 elemento — el shape que papel.service.ts y el controlador ya esperan.
-function SelectorMaquina({ clave, tipoMaquina, comp, catalogs, onCambiar }: {
+function SelectorMaquina({ clave, claveCatalogo, tipoMaquina, comp, catalogs, onCambiar }: {
+  /** Casilla donde se guarda lo elegido (comp.maquinaria[clave]). */
   clave: CatKey;
+  /** Lista de la que se elige. Casi siempre igual a `clave`; Alto Relieve es
+   *  la excepción: guarda en su casilla pero lista de la de Hot Stamping. */
+  claveCatalogo?: CatKey;
   tipoMaquina?: "hojeadora" | "guillotina";
   comp: ComponentePapel;
   catalogs: Catalogs;
   onCambiar: (patch: Record<string, number[] | string[]>) => void;
 }) {
-  const todos = (catalogs?.[clave] ?? []) as CatItem[];
+  const todos = (catalogs?.[claveCatalogo ?? clave] ?? []) as CatItem[];
   const items = tipoMaquina ? todos.filter(i => i.tipo_maquina === tipoMaquina) : todos;
 
   const idsActuales = (comp.maquinaria[clave] ?? []) as number[];
@@ -465,6 +1373,7 @@ function DetalleProceso({
 }) {
   const tabla = cat?.tabla ?? "";
   const clave = CLAVE_MAQUINA_POR_TABLA[tabla];
+  const claveCatalogo = CATALOGO_MAQUINA_POR_TABLA[tabla] ?? clave;
   const tipoMaquina = TIPO_MAQUINA_POR_TABLA[tabla];
   const refs = refsDeComponente(materiales, comp.id);
 
@@ -724,7 +1633,7 @@ function DetalleProceso({
       {clave ? (
         <div>
           <span style={lbl}>{tipoMaquina === "guillotina" ? "Guillotina" : tipoMaquina === "hojeadora" ? "Hojeadora" : "Máquina"}</span>
-          <SelectorMaquina clave={clave} tipoMaquina={tipoMaquina} comp={comp} catalogs={catalogs} onCambiar={onMaquinaria} />
+          <SelectorMaquina clave={clave} claveCatalogo={claveCatalogo} tipoMaquina={tipoMaquina} comp={comp} catalogs={catalogs} onCambiar={onMaquinaria} />
         </div>
       ) : (
         <p style={nota}>Este proceso no tiene máquina asociada en el catálogo.</p>
@@ -772,29 +1681,241 @@ function DetalleProceso({
         />
       </div>
 
-      {/* NUEVO (Fase 2, Jose 2026-09-01): cuántas veces se repite este
-          proceso antes de pasar al siguiente ("Laminación x2"). 1 = sin
-          repetición, comportamiento de siempre. */}
-      <div style={{ maxWidth: 160 }}>
-        <span style={lbl}>Se repite (veces)</span>
-        <input
-          type="number" min={1} step={1}
-          value={proceso.veces ?? 1}
-          onChange={e => {
-            const n = Math.max(1, Math.round(Number(e.target.value) || 1));
-            onProceso({ veces: n });
-          }}
-          style={{
-            width: "100%", height: 34, padding: "0 8px", border: `1px solid ${T.border}`, borderRadius: 5,
-            fontSize: 12.5, color: T.inkStrong, background: "#fff", outline: "none", boxSizing: "border-box",
-          }}
-        />
-        {(proceso.veces ?? 1) > 1 && (
-          <span style={{ display: "block", fontSize: 10.5, color: T.muted, marginTop: 4, lineHeight: 1.5 }}>
-            Este proceso se corre {proceso.veces} veces seguidas antes de pasar al siguiente de la ruta.
-          </span>
-        )}
-      </div>
+      {/* El campo "Se repite (veces)" se retiró (Jose, 2026-09-04): la
+          repetición ya no es un número dentro del proceso, sino cuántas veces
+          aparece el proceso EN LA RUTA. Agregarlo otra vez desde el picker es
+          lo que lo repite, y así las repeticiones ya no tienen que ser
+          consecutivas (Impresión -> Laminación -> Impresión ahora se puede). */}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// RUTEO ORTOGONAL DE LAS LÍNEAS DEL ÁRBOL (FASE 4, Jose 2026-09-08:
+// "evitar que las flechas queden debajo de los componentes, o sea que hagan
+// la función de ser rectas, pero doblarse cuando sea necesario en lugar de
+// que sean flechas directas sin importar entorno y componentes").
+// ═══════════════════════════════════════════════════════════════════════════
+// Antes cada línea era una curva directa origen→destino, que se metía por
+// debajo de cualquier tarjeta que estuviera en medio. Ahora se rutea en
+// tramos rectos (horizontal/vertical) que se doblan por los pasillos libres
+// entre columnas y por los carriles libres entre tarjetas, probando cada
+// tramo contra TODAS las demás tarjetas antes de aceptarlo.
+//
+// Todo esto son funciones puras a nivel de módulo, a propósito: el script de
+// prueba las extrae de este archivo entre los marcadores <<<RUTEO>>> y las
+// corre en un navegador real contra el layout de verdad -- así lo que se
+// verifica es exactamente este código, no una copia que se pueda desfasar.
+// <<<RUTEO>>>
+type RectRuta = { top: number; left: number; right: number; bottom: number };
+type PuntoRuta = { x: number; y: number };
+
+// Aire mínimo entre una línea y el borde de una tarjeta. 9 está elegido a
+// propósito: los huecos verticales entre tarjetas apiladas son de 22px, así
+// que dejan 11px de cada lado -- con 9 sí se pueden usar como carril, con
+// 13 no cabía ninguno y todo se iba a rodear por arriba/abajo de todo.
+const SEP_RUTA = 9;
+const RADIO_RUTA = 7;
+
+// ¿El tramo (siempre horizontal o vertical) pisa alguna de estas tarjetas?
+const tramoChoca = (obst: RectRuta[], x1: number, y1: number, x2: number, y2: number): boolean => {
+  const ax = Math.min(x1, x2), bx = Math.max(x1, x2);
+  const ay = Math.min(y1, y2), by = Math.max(y1, y2);
+  return obst.some(r =>
+    bx > r.left - SEP_RUTA && ax < r.right + SEP_RUTA &&
+    by > r.top - SEP_RUTA && ay < r.bottom + SEP_RUTA
+  );
+};
+
+// Pasillos verticales libres: se agrupan las tarjetas en columnas por su
+// rango horizontal y se devuelve el centro del hueco entre columna y
+// columna (más uno a cada extremo, para poder rodear por fuera).
+const pasillosVerticales = (todas: RectRuta[]): number[] => {
+  const cols: { l: number; r: number }[] = [];
+  [...todas].sort((a, b) => a.left - b.left).forEach(r => {
+    const ult = cols[cols.length - 1];
+    if (ult && r.left <= ult.r + 1) ult.r = Math.max(ult.r, r.right);
+    else cols.push({ l: r.left, r: r.right });
+  });
+  const xs: number[] = [];
+  for (let i = 0; i < cols.length - 1; i++) xs.push((cols[i].r + cols[i + 1].l) / 2);
+  if (cols.length > 0) {
+    xs.push(cols[cols.length - 1].r + 37);
+    if (cols[0].l - 37 > 4) xs.push(cols[0].l - 37);
+  }
+  return xs;
+};
+
+// Carriles horizontales libres: por arriba de todo, por abajo de todo, y el
+// centro de cada hueco entre dos tarjetas apiladas.
+const carrilesHorizontales = (todas: RectRuta[]): number[] => {
+  if (todas.length === 0) return [];
+  const ys: number[] = [
+    Math.min(...todas.map(r => r.top)) - (SEP_RUTA + 7),
+    Math.max(...todas.map(r => r.bottom)) + (SEP_RUTA + 7),
+  ];
+  const orden = [...todas].sort((a, b) => a.top - b.top);
+  for (let i = 0; i < orden.length - 1; i++) {
+    if (orden[i + 1].top - orden[i].bottom > 2 * SEP_RUTA) {
+      ys.push((orden[i].bottom + orden[i + 1].top) / 2);
+    }
+  }
+  return ys;
+};
+
+// Devuelve los vértices del recorrido: sale del borde de `o`, se dobla lo
+// que haga falta por pasillos/carriles libres, y entra al borde de `d`.
+// `obst` son todas las tarjetas MENOS el origen y el destino (a esas dos sí
+// tiene que tocarlas); `todas` incluye todo, para detectar columnas/huecos.
+const rutaOrtogonal = (o: RectRuta, d: RectRuta, obst: RectRuta[], todas: RectRuta[]): PuntoRuta[] => {
+  const oy = (o.top + o.bottom) / 2;
+  const dy = (d.top + d.bottom) / 2;
+  const libre = (x1: number, y1: number, x2: number, y2: number) => !tramoChoca(obst, x1, y1, x2, y2);
+  const pasillos = pasillosVerticales(todas);
+
+  // 1) Misma columna y pegadas (una OPC arriba de otra): recta vertical por
+  //    el hueco, sin rodeos.
+  const solapaX = Math.min(o.right, d.right) - Math.max(o.left, d.left);
+  if (solapaX > 20) {
+    const cx = (Math.max(o.left, d.left) + Math.min(o.right, d.right)) / 2;
+    if (d.top >= o.bottom && libre(cx, o.bottom, cx, d.top)) {
+      return [{ x: cx, y: o.bottom }, { x: cx, y: d.top }];
+    }
+    if (d.bottom <= o.top && libre(cx, o.top, cx, d.bottom)) {
+      return [{ x: cx, y: o.top }, { x: cx, y: d.bottom }];
+    }
+  }
+
+  if (d.left >= o.right) {
+    // 2) Destino a la derecha (el caso normal): "Z" de tres tramos por el
+    //    pasillo que quede libre -- se prueba primero el más pegado al
+    //    destino, para que la línea corra derecho lo más lejos posible.
+    const entre = pasillos.filter(x => x > o.right + 4 && x < d.left - 4).sort((a, b) => b - a);
+    for (const cx of entre) {
+      if (libre(o.right, oy, cx, oy) && libre(cx, oy, cx, dy) && libre(cx, dy, d.left, dy)) {
+        return [{ x: o.right, y: oy }, { x: cx, y: oy }, { x: cx, y: dy }, { x: d.left, y: dy }];
+      }
+    }
+    // 3) Si ningún pasillo sirve solo, se sale al primer pasillo, se viaja
+    //    por un carril libre (el más cercano a la altura media del tramo) y
+    //    se baja/sube en el último pasillo antes del destino.
+    if (entre.length > 0) {
+      const c1 = Math.min(...entre), c2 = Math.max(...entre);
+      const carriles = carrilesHorizontales(todas)
+        .sort((a, b) => Math.abs(a - (oy + dy) / 2) - Math.abs(b - (oy + dy) / 2));
+      for (const ly of carriles) {
+        if (libre(o.right, oy, c1, oy) && libre(c1, oy, c1, ly) && libre(c1, ly, c2, ly) &&
+            libre(c2, ly, c2, dy) && libre(c2, dy, d.left, dy)) {
+          return [
+            { x: o.right, y: oy }, { x: c1, y: oy }, { x: c1, y: ly },
+            { x: c2, y: ly }, { x: c2, y: dy }, { x: d.left, y: dy },
+          ];
+        }
+      }
+    }
+    // 4) Último recurso: Z por el punto medio. Puede rozar algo, pero la
+    //    línea nunca deja de dibujarse ni apunta a otro lado.
+    const cx = (o.right + d.left) / 2;
+    return [{ x: o.right, y: oy }, { x: cx, y: oy }, { x: cx, y: dy }, { x: d.left, y: dy }];
+  }
+
+  // 5) Destino a la izquierda o traslapado: sale por la derecha, rodea por
+  //    el pasillo libre más cercano y entra por la derecha del destino.
+  const porFuera = pasillos.filter(x => x > Math.max(o.right, d.right) + 4).sort((a, b) => a - b);
+  for (const cx of porFuera) {
+    if (libre(o.right, oy, cx, oy) && libre(cx, oy, cx, dy) && libre(cx, dy, d.right, dy)) {
+      return [{ x: o.right, y: oy }, { x: cx, y: oy }, { x: cx, y: dy }, { x: d.right, y: dy }];
+    }
+  }
+  const cx = Math.max(o.right, d.right) + 37;
+  return [{ x: o.right, y: oy }, { x: cx, y: oy }, { x: cx, y: dy }, { x: d.right, y: dy }];
+};
+
+// Vértices -> path de SVG, con las esquinas apenas redondeadas (se sigue
+// leyendo como tramos rectos, nomás no pica en las vueltas).
+const caminoDesdePuntos = (pts: PuntoRuta[]): string => {
+  const p = pts.filter((punto, i) => i === 0 || punto.x !== pts[i - 1].x || punto.y !== pts[i - 1].y);
+  if (p.length < 2) return "";
+  let d = `M ${p[0].x} ${p[0].y}`;
+  for (let i = 1; i < p.length - 1; i++) {
+    const act = p[i], prev = p[i - 1], sig = p[i + 1];
+    const d1 = Math.hypot(act.x - prev.x, act.y - prev.y);
+    const d2 = Math.hypot(sig.x - act.x, sig.y - act.y);
+    if (d1 === 0 || d2 === 0) continue;
+    const r = Math.max(0, Math.min(RADIO_RUTA, d1 / 2, d2 / 2));
+    const a = { x: act.x + ((prev.x - act.x) / d1) * r, y: act.y + ((prev.y - act.y) / d1) * r };
+    const b = { x: act.x + ((sig.x - act.x) / d2) * r, y: act.y + ((sig.y - act.y) / d2) * r };
+    d += ` L ${a.x} ${a.y} Q ${act.x} ${act.y} ${b.x} ${b.y}`;
+  }
+  const fin = p[p.length - 1];
+  return `${d} L ${fin.x} ${fin.y}`;
+};
+
+// Nivel de una OPC contando saltos hasta la unión: 1 = alimenta directo a la
+// unión, 2 = alimenta a una OPC de nivel 1, etc. Sirve para acomodar las
+// columnas (Jose, 2026-09-08: "si una OPC depende de otra OPC, que la OPC se
+// ponga frente de la OPC padre"): a mayor nivel, más a la izquierda.
+const nivelOPC = (comp: ComponentePapel, componentes: ComponentePapel[]): number => {
+  let n = 0;
+  let actual: ComponentePapel | undefined = comp;
+  const vistos = new Set<number>();
+  while (actual && actual.tipo === "complementaria" && !vistos.has(actual.id)) {
+    vistos.add(actual.id);
+    n++;
+    const padre: ComponentePapel | undefined = componentes.find(c => c.id === actual!.idComponentePadre);
+    if (!padre || padre.tipo !== "complementaria") break;
+    actual = padre;
+  }
+  return Math.max(1, n);
+};
+// <<<FIN RUTEO>>>
+
+// ═══════════════════════════════════════════════════════════════════════════
+// NODO CONECTABLE (FASE 4, Jose 2026-09-08) — envoltura para conectar el
+// árbol de OPC visualmente desde aquí, sin duplicar la lógica de destinos
+// válidos/ciclos (misma destinosValidosPara que usa "Estructura del árbol").
+// Mientras hay una conexión en curso (origenConexion != null), cualquier
+// nodo que sea un destino válido para ese origen se resalta y se vuelve
+// clicable en cualquier parte de la tarjeta; el resto se queda igual que
+// siempre (no intercepta clics para no estorbar con nombre/procesos).
+// ═══════════════════════════════════════════════════════════════════════════
+function NodoConectable({ comp, componentes, origenConexion, onConectarAqui, children }: {
+  comp: ComponentePapel;
+  componentes: ComponentePapel[];
+  origenConexion: ComponentePapel | null;
+  onConectarAqui: (id: number) => void;
+  children: React.ReactNode;
+}) {
+  const esOrigen = origenConexion?.id === comp.id;
+  const esDestinoValido = origenConexion != null && !esOrigen &&
+    destinosValidosPara(origenConexion, componentes).some(d => d.id === comp.id);
+
+  // Siempre el MISMO div (nunca un Fragment de por medio): si la envoltura
+  // cambiara de tipo entre renders, React desmontaría y volvería a montar
+  // todo lo de adentro (la TarjetaOP, con su estado local de "Mover
+  // procesos" y sus refs de medición) cada vez que esta tarjeta empieza o
+  // deja de ser un destino válido -- justo el mismo bug de fondo que ya
+  // pasó una vez con TarjetaOP (ver su comentario, "pierde el foco después
+  // de cada carácter"). Aquí solo cambian estilos/handlers, nunca el tipo.
+  return (
+    <div
+      onClick={esDestinoValido ? () => onConectarAqui(comp.id) : undefined}
+      style={{
+        borderRadius: 12, position: "relative",
+        outline: esDestinoValido ? `2px dashed ${T.primary}` : "none",
+        outlineOffset: 3, cursor: esDestinoValido ? "pointer" : "inherit",
+      }}
+    >
+      {esDestinoValido && (
+        <span style={{
+          position: "absolute", top: -10, left: "50%", transform: "translateX(-50%)",
+          background: T.primary, color: "#fff", fontSize: 10, fontWeight: 700,
+          padding: "2px 9px", borderRadius: 999, whiteSpace: "nowrap", zIndex: 2,
+        }}>
+          Conectar aquí
+        </span>
+      )}
+      {children}
     </div>
   );
 }
@@ -816,6 +1937,7 @@ function TarjetaOP({
   setArrastrandoId, setSobreId, eligiendoEn, setEligiendoEn,
   tamanoAsaDefault, onTamanoAsaDefaultChange, addItem,
   parcharComp, parcharMaquinaria, parcharMaterial, parcharProceso, quitarProceso,
+  reordenarProcesos, acomodarRuta, rutaYaAcomodada,
 }: {
   comp: ComponentePapel;
   cardRef?: (el: HTMLDivElement | null) => void;
@@ -841,9 +1963,27 @@ function TarjetaOP({
   parcharMaterial: (id: number, patch: Partial<MaterialEntry>) => void;
   parcharProceso: (comp: ComponentePapel, procesoId: number, patch: Partial<ComponenteProceso>) => void;
   quitarProceso: (comp: ComponentePapel, procesoId: number) => void;
+  reordenarProcesos: (comp: ComponentePapel, idArrastrado: number, idDestino: number) => void;
+  acomodarRuta: (comp: ComponentePapel) => void;
+  rutaYaAcomodada: (comp: ComponentePapel) => boolean;
 }) {
-  const pal = paletaOP(comp.tipo, indiceInicio(comp, componentes));
+  const pal = paletaOP(comp.tipo, indicePaleta(comp, componentes));
   const refs = refsDeComponente(materiales, comp.id);
+
+  // Mover procesos DENTRO de esta ruta. Es un modo aparte (botón "Mover
+  // procesos") en vez de estar siempre activo: así en pantalla táctil no se
+  // arrastra sin querer al intentar abrir un proceso, y queda clarísimo
+  // cuándo se está reacomodando (Jose, 2026-09-04). Una tarjeta solo se
+  // mueve entre las de su propia OP -- no se pasan de una OP a otra.
+  const [modoMover, setModoMover] = useState(false);
+  const pasadas = etiquetasPasada(comp.procesos, catPorId);
+  const enModoMover = modoMover && !pantallaCompleta && comp.procesos.length > 1;
+  const reord = useReordenar(
+    comp.procesos.map(p => p.id),
+    "y",
+    (a, b) => reordenarProcesos(comp, a, b),
+  );
+
   return (
     <div ref={cardRef} style={{ width: 206, flexShrink: 0 }}>
       <div style={{
@@ -880,15 +2020,16 @@ function TarjetaOP({
           />
           <div style={{ fontSize: 11.5, fontWeight: 500, color: T.inkSoft, marginTop: 3 }}>
             {refs.length === 0
-              ? (comp.tipo === "union"
-                // La OP de unión sin material propio NO es un error ni un
-                // dato faltante -- es lo normal: recibe las piezas ya
-                // hechas de sus OP de inicio en vez de partir de un
-                // material propio (Jose, 2026-09-02: "en el apartado de op
-                // de union cada que no tenga material asignado aqui hay
-                // que cambiar la leyenda", porque "(sin material
-                // asignado)" sonaba a que faltaba algo).
-                ? "(usa las piezas de sus OP de inicio)"
+              ? (["union", "complementaria"].includes(comp.tipo)
+                // La OP de unión (y, FASE 4, cualquier OPC) sin material
+                // propio NO es un error ni un dato faltante -- es lo
+                // normal: recibe las piezas ya hechas de sus órdenes de
+                // origen en vez de partir de un material propio (Jose,
+                // 2026-09-02: "en el apartado de op de union cada que no
+                // tenga material asignado aqui hay que cambiar la
+                // leyenda", porque "(sin material asignado)" sonaba a que
+                // faltaba algo).
+                ? "(usa las piezas de sus órdenes de origen)"
                 : "(sin material asignado)")
               : `(Material: ${refs.map(r => r.etiqueta).join(", ")})`}
           </div>
@@ -906,22 +2047,52 @@ function TarjetaOP({
 
           {comp.procesos.map((proceso, i) => {
             const cat = proceso.idproceso_cat != null ? catPorId.get(proceso.idproceso_cat) : undefined;
-            const nombre = proceso.procesoNombre || nombreCortoProceso(cat?.tabla, cat?.nombre_proceso ?? "") || "—";
+            // El catálogo resuelto por tabla SIEMPRE gana sobre procesoNombre
+            // (Jose, 2026-09-04): procesoNombre es un campo que solo vive en
+            // memoria/borrador -- un borrador guardado antes de que existiera
+            // este acortador, o restaurado de una sesión vieja, puede traer
+            // atrapado el nombre crudo del catálogo ("Impresión Papel") y
+            // antes se quedaba así para siempre porque procesoNombre ganaba
+            // la carrera. Ahora solo se usa procesoNombre cuando el catálogo
+            // no se puede resolver (proceso quitado del catálogo, por ejemplo).
+            const nombre = (cat ? nombreCortoProceso(cat.tabla, cat.nombre_proceso) : null) || proceso.procesoNombre || "—";
             const detalle = detalleCorto(proceso, comp, cat, catalogs);
-            const expandido = !pantallaCompleta && abierto === proceso.id;
+            // En modo mover no se abre el detalle: la tarjeta entera es el asa,
+            // así que un toque significa "tomar", no "abrir".
+            const expandido = !pantallaCompleta && !enModoMover && abierto === proceso.id;
+            const seleccionada = reord.tomado === proceso.id;
             return (
-              <div key={proceso.id} data-proceso-card={proceso.id} style={{
-                border: `1px solid ${expandido ? "#BFD3F2" : T.borderSoft}`, borderRadius: 9,
-                padding: "9px 10px", marginBottom: 7, background: "#fff",
-              }}>
+              <div
+                key={proceso.id}
+                ref={reord.registrar(proceso.id)}
+                data-proceso-card={proceso.id}
+                {...(enModoMover ? reord.asaProps(proceso.id) : {})}
+                style={{
+                  border: `1px solid ${seleccionada ? T.primary : expandido ? "#BFD3F2" : T.borderSoft}`,
+                  borderRadius: 9, padding: "9px 10px", marginBottom: 7,
+                  background: seleccionada ? "#F4F8FE" : "#fff",
+                  ...(enModoMover ? reord.estilo(proceso.id) : {}),
+                }}
+              >
                 <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
+                  {enModoMover && (
+                    <span
+                      title="Arrástralo, o tócalo y luego toca dónde va"
+                      style={{ display: "grid", placeItems: "center", color: seleccionada ? T.primary : T.inkSoft, opacity: seleccionada ? 1 : 0.55, flexShrink: 0 }}
+                    >
+                      <IcoAgarre />
+                    </span>
+                  )}
                   <IconoProcesoCuadro nombre={nombre} />
                   <span
-                    onClick={() => { if (!pantallaCompleta) setAbierto(expandido ? null : proceso.id); }}
-                    style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 2, flex: 1, cursor: pantallaCompleta ? "default" : "pointer" }}
+                    onClick={() => { if (!pantallaCompleta && !enModoMover) setAbierto(expandido ? null : proceso.id); }}
+                    style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 2, flex: 1, cursor: pantallaCompleta || enModoMover ? "inherit" : "pointer" }}
                   >
                     <span style={{ fontSize: 12, fontWeight: 700, color: T.inkStrong, lineHeight: 1.35 }}>
                       {i + 1}. {nombre}
+                      {pasadas.get(proceso.id) && (
+                        <span style={{ color: T.primary, fontWeight: 700 }}>{pasadas.get(proceso.id)}</span>
+                      )}
                     </span>
                     {!compacta && !pantallaCompleta && detalle && (
                       <span style={{ fontSize: 11, fontWeight: 400, color: T.inkSoft, lineHeight: 1.4 }}>{detalle}</span>
@@ -950,6 +2121,55 @@ function TarjetaOP({
               </div>
             );
           })}
+
+          {/* Modo "Mover procesos" (Jose, 2026-09-04): mientras está prendido,
+              cada tarjeta se puede arrastrar o tocar-y-colocar. Apagado, las
+              tarjetas se comportan como siempre (tocar = abrir el detalle). */}
+          {!pantallaCompleta && comp.procesos.length > 1 && (
+            <button
+              type="button"
+              onClick={() => { setModoMover(v => !v); reord.cancelar(); setAbierto(null); }}
+              style={{
+                width: "100%", height: 28, borderRadius: 8,
+                border: `1px solid ${enModoMover ? T.primary : T.borderSoft}`,
+                background: enModoMover ? "#EFF6FF" : "#fff",
+                color: enModoMover ? T.primary : T.inkSoft,
+                fontSize: 11.5, fontWeight: 700, cursor: "pointer",
+                fontFamily: "inherit", marginBottom: 7,
+              }}
+            >
+              {enModoMover ? "✓ Listo de mover" : "⇅ Mover procesos"}
+            </button>
+          )}
+
+          {enModoMover && (
+            <p style={{
+              margin: "0 0 7px", fontSize: 10.5, lineHeight: 1.5, color: T.primary,
+              background: "#F4F8FE", border: "1px dashed #A9C3EE", borderRadius: 7, padding: "5px 7px",
+            }}>
+              {reord.tomado != null
+                ? "Ahora toca el proceso del lugar a donde quieres moverlo."
+                : "Arrastra un proceso, o tócalo y luego toca dónde va."}
+            </p>
+          )}
+
+          {/* Jose (2026-09-04): el acomodo al orden canónico ya no pasa solo al
+              agregar -- ahora se pide con este botón, y solo aparece cuando de
+              verdad cambiaría algo, para no ofrecer una acción que no hace nada. */}
+          {!pantallaCompleta && comp.procesos.length > 1 && !rutaYaAcomodada(comp) && (
+            <button
+              type="button"
+              onClick={() => acomodarRuta(comp)}
+              title="Reordena esta ruta al orden normal de producción"
+              style={{
+                width: "100%", height: 28, borderRadius: 8, border: `1px solid ${T.borderSoft}`,
+                background: "#fff", color: T.inkSoft, fontSize: 11.5, fontWeight: 600,
+                cursor: "pointer", fontFamily: "inherit", marginBottom: 7,
+              }}
+            >
+              ↕ Acomodar al orden normal
+            </button>
+          )}
 
           {!pantallaCompleta && (
             <button
@@ -989,6 +2209,7 @@ function VistaMismaOrden({
   catPorId, catalogs, materiales, abierto, setAbierto, compacta,
   tamanoAsaDefault, onTamanoAsaDefaultChange, parcharProceso, parcharMaquinaria,
   parcharComp, parcharMaterial, addItem, quitarProceso, nombreProducto,
+  reordenarProcesos, acomodarRuta, rutaYaAcomodada,
 }: {
   comp: ComponentePapel;
   pantallaCompleta: boolean;
@@ -1010,30 +2231,50 @@ function VistaMismaOrden({
   addItem?: (key: CatKey, nombre: string) => Promise<unknown>;
   quitarProceso: (comp: ComponentePapel, procesoId: number) => void;
   nombreProducto: string;
+  reordenarProcesos: (comp: ComponentePapel, idArrastrado: number, idDestino: number) => void;
+  acomodarRuta: (comp: ComponentePapel) => void;
+  rutaYaAcomodada: (comp: ComponentePapel) => boolean;
 }) {
+  const [modoMover, setModoMover] = useState(false);
+  const pasadas = etiquetasPasada(comp.procesos, catPorId);
+  const enModoMover = modoMover && !pantallaCompleta && comp.procesos.length > 1;
+  const reord = useReordenar(
+    comp.procesos.map(p => p.id),
+    "x",
+    (a, b) => reordenarProcesos(comp, a, b),
+  );
+
   return (
     <div style={{ display: "grid", gridTemplateColumns: pantallaCompleta ? "1fr" : "186px 1fr", gap: 18, alignItems: "start" }}>
       {!pantallaCompleta && (
       <div style={{ border: `1px solid ${T.border}`, borderRadius: 12, background: "#FBFCFE", padding: "14px 12px" }}>
         <h4 style={{ margin: "0 0 2px", fontSize: 13, fontWeight: 700, color: T.inkStrong }}>Procesos disponibles</h4>
-        <p style={{ fontSize: 11.5, color: T.inkSoft, margin: "0 0 12px", fontWeight: 400 }}>Toca uno para agregarlo</p>
+        <p style={{ fontSize: 11.5, color: T.inkSoft, margin: "0 0 12px", fontWeight: 400 }}>
+          Toca uno para agregarlo. Tócalo otra vez para repetirlo en la ruta.
+        </p>
+        {/* Jose (2026-09-04): los procesos que ya están en la ruta YA NO se
+            deshabilitan -- volver a tocarlos es justo la forma de repetirlos.
+            Se muestra cuántas veces va cada uno para que se vea de un vistazo. */}
         {filtrarPorPreparacion(comp, procesosCat).map(p => {
-          const yaEsta = comp.procesos.some(cp => cp.idproceso_cat === p.idproceso_cat);
+          const cuantas = comp.procesos.filter(cp => cp.idproceso_cat === p.idproceso_cat).length;
           const nombreCorto = nombreCortoProceso(p.tabla, p.nombre_proceso);
           return (
             <button
-              key={p.idproceso_cat} type="button" disabled={yaEsta}
+              key={p.idproceso_cat} type="button"
               onClick={() => agregarProceso(comp, p)}
-              title={yaEsta ? "Ya está en la ruta" : "Agregar a la ruta"}
+              title={cuantas > 0 ? `Ya va ${cuantas} ${cuantas === 1 ? "vez" : "veces"} -- agregar otra` : "Agregar a la ruta"}
               style={{
                 width: "100%", display: "flex", alignItems: "center", gap: 11, background: "#fff",
-                border: `1px solid ${T.borderSoft}`, borderRadius: 9, padding: "8px 10px", marginBottom: 6,
-                cursor: yaEsta ? "not-allowed" : "pointer", opacity: yaEsta ? 0.45 : 1,
+                border: `1px solid ${cuantas > 0 ? "#BFD3F2" : T.borderSoft}`, borderRadius: 9,
+                padding: "8px 10px", marginBottom: 6, cursor: "pointer",
                 fontFamily: "inherit", textAlign: "left",
               }}
             >
               <IconoProcesoCuadro nombre={nombreCorto} />
-              <span style={{ fontSize: 12.5, fontWeight: 600, color: T.inkStrong }}>{nombreCorto}</span>
+              <span style={{ fontSize: 12.5, fontWeight: 600, color: T.inkStrong, flex: 1 }}>{nombreCorto}</span>
+              {cuantas > 0 && (
+                <span style={{ fontSize: 11, fontWeight: 700, color: T.primary, flexShrink: 0 }}>×{cuantas}</span>
+              )}
             </button>
           );
         })}
@@ -1049,31 +2290,102 @@ function VistaMismaOrden({
             Elige procesos de la lista de la izquierda para armar la ruta.
           </p>
         ) : (
+          <>
+          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, marginBottom: 10 }}>
+            {!pantallaCompleta && comp.procesos.length > 1 && (
+              <button
+                type="button"
+                onClick={() => { setModoMover(v => !v); reord.cancelar(); setAbierto(null); }}
+                style={{
+                  height: 28, borderRadius: 8,
+                  border: `1px solid ${enModoMover ? T.primary : T.borderSoft}`,
+                  background: enModoMover ? "#EFF6FF" : "#fff",
+                  color: enModoMover ? T.primary : T.inkSoft,
+                  fontSize: 11.5, fontWeight: 700, cursor: "pointer",
+                  fontFamily: "inherit", padding: "0 12px",
+                }}
+              >
+                {enModoMover ? "✓ Listo de mover" : "⇅ Mover procesos"}
+              </button>
+            )}
+
+            {!pantallaCompleta && comp.procesos.length > 1 && !rutaYaAcomodada(comp) && (
+              <button
+                type="button"
+                onClick={() => acomodarRuta(comp)}
+                title="Reordena esta ruta al orden normal de producción"
+                style={{
+                  height: 28, borderRadius: 8, border: `1px solid ${T.borderSoft}`, background: "#fff",
+                  color: T.inkSoft, fontSize: 11.5, fontWeight: 600, cursor: "pointer",
+                  fontFamily: "inherit", padding: "0 12px",
+                }}
+              >
+                ↕ Acomodar al orden normal
+              </button>
+            )}
+
+            {enModoMover && (
+              <span style={{ fontSize: 11, color: T.primary, fontWeight: 500 }}>
+                {reord.tomado != null
+                  ? "Ahora toca el proceso del lugar a donde quieres moverlo."
+                  : "Arrastra un proceso, o tócalo y luego toca dónde va."}
+              </span>
+            )}
+          </div>
           <div style={{ display: "flex", alignItems: "stretch", overflowX: "auto", paddingBottom: 6 }}>
             {comp.procesos.map((proceso, i) => {
               const cat = proceso.idproceso_cat != null ? catPorId.get(proceso.idproceso_cat) : undefined;
-              const nombre = proceso.procesoNombre || nombreCortoProceso(cat?.tabla, cat?.nombre_proceso ?? "") || "—";
+              // Ver comentario arriba (VistaMismaOrden hermana): el catálogo
+              // resuelto por tabla siempre gana sobre un procesoNombre que
+              // pueda venir atrapado con el nombre crudo de un borrador viejo.
+              const nombre = (cat ? nombreCortoProceso(cat.tabla, cat.nombre_proceso) : null) || proceso.procesoNombre || "—";
               const clave = cat ? CLAVE_MAQUINA_POR_TABLA[cat.tabla] : undefined;
+              const claveCat = (cat ? CATALOGO_MAQUINA_POR_TABLA[cat.tabla] : undefined) ?? clave;
               const ids = clave ? ((comp.maquinaria[clave] ?? []) as number[]) : [];
-              const items = clave ? ((catalogs?.[clave] ?? []) as CatItem[]) : [];
+              const items = claveCat ? ((catalogs?.[claveCat] ?? []) as CatItem[]) : [];
               const maquina = ids.map(id => items.find(x => x.id === id)?.nombre).filter(Boolean).join(" · ");
               const usados = proceso.materiales.length > 0
                 ? proceso.materiales.map(id => refDeMaterial(materiales, id))
                 : refsDeComponente(materiales, comp.id).map(r => r.etiqueta);
-              const expandido = !pantallaCompleta && abierto === proceso.id;
+              const expandido = !pantallaCompleta && !enModoMover && abierto === proceso.id;
+              const seleccionada = reord.tomado === proceso.id;
               return (
-                <div key={proceso.id} data-proceso-card={proceso.id} style={{ display: "flex", alignItems: "stretch" }}>
+                <div
+                  key={proceso.id}
+                  ref={reord.registrar(proceso.id)}
+                  data-proceso-card={proceso.id}
+                  {...(enModoMover ? reord.asaProps(proceso.id) : {})}
+                  style={{
+                    display: "flex", alignItems: "stretch",
+                    ...(enModoMover ? reord.estilo(proceso.id) : {}),
+                  }}
+                >
                   <div style={{
-                    width: 210, flexShrink: 0, border: `1px solid ${expandido ? "#BFD3F2" : T.border}`,
-                    borderRadius: 12, background: "#fff", boxShadow: T.shadow, padding: "14px 14px 16px",
+                    width: 210, flexShrink: 0,
+                    border: `1px solid ${seleccionada ? T.primary : expandido ? "#BFD3F2" : T.border}`,
+                    borderRadius: 12, background: seleccionada ? "#F4F8FE" : "#fff",
+                    boxShadow: T.shadow, padding: "14px 14px 16px",
                   }}>
                     <div style={{ display: "flex", alignItems: "flex-start", gap: 11, marginBottom: 12 }}>
+                      {enModoMover && (
+                        <span
+                          title="Arrástralo, o tócalo y luego toca dónde va"
+                          style={{ display: "grid", placeItems: "center", color: seleccionada ? T.primary : T.inkSoft, opacity: seleccionada ? 1 : 0.55, flexShrink: 0, marginTop: 2 }}
+                        >
+                          <IcoAgarre />
+                        </span>
+                      )}
                       <IconoProcesoCuadro nombre={nombre} />
                       <span
-                        onClick={() => { if (!pantallaCompleta) setAbierto(expandido ? null : proceso.id); }}
-                        style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0, cursor: pantallaCompleta ? "default" : "pointer" }}
+                        onClick={() => { if (!pantallaCompleta && !enModoMover) setAbierto(expandido ? null : proceso.id); }}
+                        style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0, cursor: pantallaCompleta || enModoMover ? "inherit" : "pointer" }}
                       >
-                        <span style={{ fontSize: 13, fontWeight: 700, color: T.inkStrong, lineHeight: 1.35 }}>{i + 1}. {nombre}</span>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: T.inkStrong, lineHeight: 1.35 }}>
+                          {i + 1}. {nombre}
+                          {pasadas.get(proceso.id) && (
+                            <span style={{ color: T.primary, fontWeight: 700 }}>{pasadas.get(proceso.id)}</span>
+                          )}
+                        </span>
                         {proceso.observaciones.trim() && !compacta && !pantallaCompleta && (
                           <span style={{ fontSize: 12, color: T.inkSoft, fontWeight: 400, lineHeight: 1.55 }}>{proceso.observaciones}</span>
                         )}
@@ -1115,6 +2427,7 @@ function VistaMismaOrden({
               );
             })}
           </div>
+          </>
         )}
 
         <div style={{
@@ -1340,6 +2653,7 @@ export default function RutaProcesos({
   componentes, onUpdateComponentes, materiales, onUpdateMateriales, catalogs, nombreProducto,
   procesosCat, errorProcesos, idproducto, notasPendientes, onNotasPendientesChange,
   tamanoAsaDefault, onTamanoAsaDefaultChange, addItem, imagenProductoUrl,
+  imagenProductoIdArchivo,
 }: {
   componentes: ComponentePapel[];
   onUpdateComponentes: (componentes: ComponentePapel[]) => void;
@@ -1371,6 +2685,11 @@ export default function RutaProcesos({
   // subida o una preview local (blob:) mientras el producto todavía no
   // existe. null/undefined = no hay imagen todavía, se usa el dibujo.
   imagenProductoUrl?: string | null;
+  // id del archivo en la tabla `archivos`, para poder bajar la imagen YA
+  // GUARDADA por la API en vez de por la URL firmada de S3 (que CORS no deja
+  // leer). Solo se usa para exportar el diagrama; la pantalla sigue pintando
+  // la foto con imagenProductoUrl, que para MOSTRAR sí funciona.
+  imagenProductoIdArchivo?: number | null;
 }) {
   const errorCat = errorProcesos;
   const [compacta, setCompacta] = useState(false);
@@ -1454,6 +2773,28 @@ export default function RutaProcesos({
   const unica = componentes.find(c => c.tipo === "unica") ?? null;
   const inicios = componentes.filter(c => c.tipo === "inicio");
   const union = componentes.find(c => c.tipo === "union") ?? null;
+  // 🔁 FASE 4: OPC (Orden de Producción Complementaria) -- nivel(es)
+  // intermedio(s) opcionales. No participan de la geometría del diagrama
+  // medido de abajo (eso sigue siendo solo inicios→unión, ver geomFlujo);
+  // se renderizan aparte, en su propia columna, más adelante.
+  const opcs = componentes.filter(c => c.tipo === "complementaria");
+
+  // 🔁 FASE 4 (Jose, 2026-09-08: "si una OPC depende de otra OPC, que la OPC
+  // se ponga frente de la OPC padre o principal"): las OPC ya no van todas
+  // en una sola columna, sino una columna por NIVEL del árbol. Nivel 1 =
+  // alimenta directo a la unión (queda pegada a ella, hasta la derecha);
+  // nivel 2 = alimenta a una OPC de nivel 1, y por lo tanto se dibuja ANTES
+  // que ella; y así hasta donde el usuario quiera anidar. Así el flujo se
+  // lee siempre de izquierda a derecha y las líneas nunca tienen que
+  // regresarse.
+  const columnasOPC: ComponentePapel[][] = (() => {
+    const porNivel = new Map<number, ComponentePapel[]>();
+    opcs.forEach(c => {
+      const n = nivelOPC(c, componentes);
+      porNivel.set(n, [...(porNivel.get(n) ?? []), c]);
+    });
+    return [...porNivel.entries()].sort((a, b) => b[0] - a[0]).map(([, lista]) => lista);
+  })();
 
   // ── Conectores del diagrama (medidos, en forma de llave/corchete) ────────
   // Las OP de inicio se apilan en una sola columna (son independientes entre
@@ -1482,15 +2823,26 @@ export default function RutaProcesos({
   } | null>(null);
 
   useLayoutEffect(() => {
-    if (unica || !union || inicios.length === 0) { setGeomFlujo(null); return; }
+    // 🔁 FASE 4 (Jose, 2026-09-08): esta llave asume que TODAS las OP de
+    // inicio van directo a la unión -- deja de ser cierto en cuanto hay una
+    // OPC (puede que alguna alimente a la OPC en su lugar). Con al menos
+    // una OPC se usa geomArbol/overlayArbol en su lugar (líneas
+    // individuales por cada padre real). Sin ninguna OPC, esta llave se
+    // queda exactamente como estaba (cero riesgo para el caso de siempre).
+    if (unica || !union || inicios.length === 0 || opcs.length > 0) { setGeomFlujo(null); return; }
     const contenedor = contenedorFlujoRef.current;
     if (!contenedor) return;
 
     const recalcular = () => {
       const contRect = contenedor.getBoundingClientRect();
+      // Mismo ajuste de scroll que en geomArbol (ver más abajo): el SVG vive
+      // dentro del contenedor con overflow:auto, así que las coordenadas
+      // tienen que ser del CONTENIDO, no de la parte visible.
       const relativo = (r: DOMRect) => ({
-        top: r.top - contRect.top, left: r.left - contRect.left,
-        right: r.right - contRect.left, bottom: r.bottom - contRect.top,
+        top: r.top - contRect.top + contenedor.scrollTop,
+        left: r.left - contRect.left + contenedor.scrollLeft,
+        right: r.right - contRect.left + contenedor.scrollLeft,
+        bottom: r.bottom - contRect.top + contenedor.scrollTop,
       });
 
       const tarjetasInicio = inicios
@@ -1548,7 +2900,7 @@ export default function RutaProcesos({
     window.addEventListener("resize", recalcular);
     return () => { ro.disconnect(); window.removeEventListener("resize", recalcular); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [inicios.length, union, unica, materiales, componentes, compacta, pantallaCompleta]);
+  }, [inicios.length, opcs.length, union, unica, materiales, componentes, compacta, pantallaCompleta]);
 
   const overlayConectores = geomFlujo && (
     <svg
@@ -1611,20 +2963,33 @@ export default function RutaProcesos({
     [...lista].sort((a, b) => indiceCanonico(a.tabla) - indiceCanonico(b.tabla));
 
   const filtrarPorPreparacion = (comp: ComponentePapel, lista: ProcesoCatOpcion[]): ProcesoCatOpcion[] => {
+    // ✅ NUEVO (Jose, 2026-09-05): "Empaquetado" siempre va en la OP de
+    // unión -- es la orden principal, la última por la que pasa todo el
+    // producto -- así que ahí ya no se puede elegir a mano: se engancha
+    // solo al último proceso real de esa ruta (ver asegurarAnclaEmpaquePapel
+    // en bultos.controller.ts y esUltimoProceso en
+    // ModalProcesoIndividualEspecial.tsx). Una OP "única" (sin unión
+    // separada) es igual de terminal que la unión, así que se trata igual.
+    // Solo una OP de inicio puede seguir agregándolo a mano, para los casos
+    // que sí necesitan empaquetarse por separado antes de llegar a unión.
+    const listaBase = (comp.tipo === "union" || comp.tipo === "unica")
+      ? lista.filter(p => p.tabla !== "empaque_papel")
+      : lista;
+
     const metodos = new Set(
       materiales.filter(m => m.idComponenteAsignado === comp.id).map(m => m.metodoPreparacion).filter(Boolean)
     );
-    if (metodos.size !== 1) return ordenarCatalogoCanonico(lista);
+    if (metodos.size !== 1) return ordenarCatalogoCanonico(listaBase);
     const metodo = [...metodos][0];
     // "Proveedor" (Jose, 2026-09-02): el material ya llega al tamaño exacto
     // -- lo compran así o se lo entrega quien pidió el producto -- así que
     // ni Hojeado ni Guillotina aplican, ninguno de los dos se ofrece.
     if (metodo === "proveedor") {
-      return ordenarCatalogoCanonico(lista.filter(p => p.tabla !== "hojeado_papel" && p.tabla !== "guillotina_papel"));
+      return ordenarCatalogoCanonico(listaBase.filter(p => p.tabla !== "hojeado_papel" && p.tabla !== "guillotina_papel"));
     }
     const tablaExcluida = metodo === "hojeadora" ? "guillotina_papel"
       : metodo === "guillotina" ? "hojeado_papel" : null;
-    return ordenarCatalogoCanonico(tablaExcluida ? lista.filter(p => p.tabla !== tablaExcluida) : lista);
+    return ordenarCatalogoCanonico(tablaExcluida ? listaBase.filter(p => p.tabla !== tablaExcluida) : listaBase);
   };
 
   // ── Arrastrar tarjetas OP INICIO para reordenarlas ─────────────────────
@@ -1650,6 +3015,188 @@ export default function RutaProcesos({
   };
   const totalProcesos = componentes.reduce((n, c) => n + c.procesos.length, 0);
 
+  // ═══════════════════════════════════════════════════════════════════════
+  // OPC: conexión visual del árbol desde Ruta de procesos (Jose, 2026-09-08)
+  // ═══════════════════════════════════════════════════════════════════════
+  // Antes solo se podía armar el árbol (a qué alimenta cada OP de inicio o
+  // cada OPC) desde el desplegable de "Estructura del árbol" en
+  // MaterialesAsignacion.tsx. Jose pidió que también se pudiera hacer aquí,
+  // de forma visual: tocar "alimenta a: ..." bajo una OP de inicio o una
+  // OPC arranca el "modo conexión"; mientras está activo, cualquier OPC o
+  // la OP de unión que sea un destino válido para ESA orden (sin formar un
+  // ciclo -- misma regla de destinosValidosPara que ya usa "Estructura del
+  // árbol", y que el trigger de BD vuelve a validar del lado del servidor)
+  // se resalta con un contorno y una etiqueta "Conectar aquí"; tocarla
+  // completa la conexión (cambiarPadre) y cierra el modo. Se puede cancelar
+  // tocando de nuevo la etiqueta de origen o el botón "Cancelar" del aviso.
+  //
+  // "OPC ilimitadas y anidables" (Jose): agregarOPC/eliminarOPC/cambiarPadre
+  // son las MISMAS funciones (a nivel de módulo, sin estado propio) que ya
+  // usa "Estructura del árbol" -- se les pasa componentes/materiales y los
+  // callbacks de actualización de aquí, así que ambas pantallas quedan
+  // siempre sincronizadas sin duplicar la lógica de árbol/ciclos.
+  const [conectandoDesdeId, setConectandoDesdeId] = useState<number | null>(null);
+  const origenConexion = conectandoDesdeId != null
+    ? componentes.find(c => c.id === conectandoDesdeId) ?? null
+    : null;
+
+  const agregarOPCAqui = () => agregarOPC(componentes, onUpdateComponentes);
+  const eliminarOPCAqui = (id: number) => {
+    eliminarOPC(id, componentes, materiales, onUpdateComponentes, onUpdateMateriales);
+    setConectandoDesdeId(v => (v === id ? null : v));
+  };
+  const conectarA = (destinoId: number) => {
+    if (conectandoDesdeId == null) return;
+    cambiarPadre(conectandoDesdeId, destinoId, componentes, onUpdateComponentes);
+    setConectandoDesdeId(null);
+  };
+
+  // Botón DENTRO de la tarjeta, en la esquina superior izquierda (Jose,
+  // 2026-09-08: "el botón que te pedí reubicar sigue estando debajo y fuera
+  // del cuadro de la OP cuando tiene que encontrarse en la esquina superior
+  // izquierda algo como '->'"). Va sobre el encabezado de color de la
+  // TarjetaOP -- del lado opuesto al asa de arrastre, que vive en la esquina
+  // superior derecha -- anclado al contenedor position:relative que envuelve
+  // cada TarjetaOP (ver los .map() de abajo).
+  //
+  // A dónde alimenta ya NO se escribe aquí: eso ahora se ve en la línea
+  // punteada que sale de la tarjeta y apunta a su destino (overlayArbol). El
+  // botón solo dispara/cancela el modo conexión, y deja el nombre del
+  // destino en el tooltip por si la línea no alcanza a leerse.
+  const botonAlimentaA = (comp: ComponentePapel) => {
+    const destino = componentes.find(c => c.id === comp.idComponentePadre);
+    const esOrigenActivo = conectandoDesdeId === comp.id;
+    return (
+      <button
+        type="button"
+        onClick={() => setConectandoDesdeId(v => (v === comp.id ? null : comp.id))}
+        title={esOrigenActivo
+          ? "Cancelar: toca aquí de nuevo, o toca el destino resaltado"
+          : `Alimenta a: ${destino ? etiquetaComponente(destino, componentes) : "—"} — toca para cambiarlo`}
+        style={{
+          position: "absolute", top: 7, left: 7, width: 24, height: 24, borderRadius: 8,
+          display: "grid", placeItems: "center", padding: 0, zIndex: 2,
+          fontSize: 13, fontWeight: 700, lineHeight: 1, fontFamily: "inherit", cursor: "pointer",
+          border: `1px solid ${esOrigenActivo ? T.primary : T.border}`,
+          background: esOrigenActivo ? T.primary : "#fff",
+          color: esOrigenActivo ? "#fff" : T.inkStrong,
+          boxShadow: T.shadow,
+        }}
+      >
+        →
+      </button>
+    );
+  };
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // Líneas de conexión reales del árbol (Jose, 2026-09-08: "tiene que
+  // reubicarse en toda la ruta"): en cuanto hay al menos una OPC, la llave
+  // medida de arriba (geomFlujo) ya no aplica -- esa asume que TODAS las OP
+  // de inicio van directo a la unión, y con OPC eso ya no es cierto (puede
+  // que una alimente a una OPC en vez de a la unión). En su lugar se mide,
+  // para cada OP de inicio y cada OPC, una línea punteada individual hacia
+  // SU padre real (idComponentePadre) -- inicio→OPC, inicio→unión, OPC→OPC
+  // u OPC→unión, cualquier combinación y cualquier nivel de anidamiento. Se
+  // recalculan solas cuando cambia el árbol o el tamaño de cualquier
+  // tarjeta (mismo patrón que geomFlujo, con ResizeObserver).
+  //
+  // Cuando NO hay ninguna OPC, este overlay se apaga (geomArbol = null) y
+  // se sigue usando geomFlujo/overlayConectores tal cual, sin ningún riesgo
+  // para el caso de siempre (2 niveles, inicio→unión).
+  // ═══════════════════════════════════════════════════════════════════════
+  const opcCardRefs = useRef<Map<number, HTMLDivElement>>(new Map());
+  const [geomArbol, setGeomArbol] = useState<{ ancho: number; alto: number; lineas: { id: number; d: string }[] } | null>(null);
+
+  const elDeComponente = (comp: ComponentePapel): HTMLDivElement | null => {
+    if (comp.tipo === "inicio") return inicioCardRefs.current.get(comp.id) ?? null;
+    if (comp.tipo === "complementaria") return opcCardRefs.current.get(comp.id) ?? null;
+    if (comp.tipo === "union") return unionCardRef.current;
+    return null;
+  };
+
+  useLayoutEffect(() => {
+    if (unica || opcs.length === 0) { setGeomArbol(null); return; }
+    const contenedor = contenedorFlujoRef.current;
+    if (!contenedor) return;
+
+    const origenes = [...inicios, ...opcs].filter(c => c.idComponentePadre != null);
+
+    const recalcular = () => {
+      const contRect = contenedor.getBoundingClientRect();
+      // CORREGIDO (Jose, 2026-09-08: "las flechas siguen sin reubicarse"):
+      // el contenedor del diagrama tiene overflow:auto, y el SVG va con
+      // position:absolute DENTRO de él -- o sea que se desplaza junto con el
+      // contenido. getBoundingClientRect() en cambio devuelve coordenadas de
+      // la parte VISIBLE, así que sin sumarle el scroll las líneas quedaban
+      // corridas justo lo que el usuario hubiera desplazado el diagrama a lo
+      // ancho (que es casi siempre: con una OPC de por medio, el flujo ya no
+      // cabe en el ancho del formulario). Sumando scrollLeft/scrollTop las
+      // coordenadas quedan en el mismo espacio que el SVG y las flechas caen
+      // exactamente en el borde de la tarjeta a la que apuntan.
+      const relativo = (r: DOMRect) => ({
+        top: r.top - contRect.top + contenedor.scrollTop,
+        left: r.left - contRect.left + contenedor.scrollLeft,
+        right: r.right - contRect.left + contenedor.scrollLeft,
+        bottom: r.bottom - contRect.top + contenedor.scrollTop,
+      });
+
+      // Se miden TODAS las tarjetas una sola vez: cada una es a la vez
+      // posible extremo de una línea y obstáculo para las demás (Jose,
+      // 2026-09-08: que las flechas no queden por debajo de los componentes).
+      const rects = new Map<number, RectRuta>();
+      [...inicios, ...opcs, ...(union ? [union] : [])].forEach(c => {
+        const el = elDeComponente(c);
+        if (el) rects.set(c.id, relativo(el.getBoundingClientRect()));
+      });
+      const todas = [...rects.values()];
+
+      const lineas: { id: number; d: string }[] = [];
+      origenes.forEach(comp => {
+        const destino = componentes.find(c => c.id === comp.idComponentePadre);
+        const rOrigen = rects.get(comp.id);
+        const rDestino = destino ? rects.get(destino.id) : undefined;
+        if (!rOrigen || !rDestino) return;
+        // Obstáculos = todas menos las dos puntas (a esas sí tiene que tocarlas).
+        const obst = [...rects.entries()]
+          .filter(([id]) => id !== comp.id && id !== destino!.id)
+          .map(([, r]) => r);
+        lineas.push({ id: comp.id, d: caminoDesdePuntos(rutaOrtogonal(rOrigen, rDestino, obst, todas)) });
+      });
+      setGeomArbol({ ancho: contenedor.scrollWidth, alto: contenedor.scrollHeight, lineas });
+    };
+
+    recalcular();
+    const ro = new ResizeObserver(recalcular);
+    ro.observe(contenedor);
+    inicioCardRefs.current.forEach(el => ro.observe(el));
+    opcCardRefs.current.forEach(el => ro.observe(el));
+    if (unionCardRef.current) ro.observe(unionCardRef.current);
+    window.addEventListener("resize", recalcular);
+    return () => { ro.disconnect(); window.removeEventListener("resize", recalcular); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inicios.length, opcs.length, union, unica, componentes, compacta, pantallaCompleta]);
+
+  const overlayArbol = geomArbol && (
+    <svg
+      width={geomArbol.ancho} height={geomArbol.alto}
+      style={{ position: "absolute", top: 0, left: 0, pointerEvents: "none" }}
+    >
+      <defs>
+        <marker id="flechaConectorArbol" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L6,3 L0,6 Z" fill={T.dash} />
+        </marker>
+      </defs>
+      {geomArbol.lineas.map(l => (
+        <path
+          key={l.id}
+          d={l.d}
+          stroke={T.dash} strokeWidth={1.7} strokeDasharray="7 6" strokeLinecap="round" fill="none"
+          markerEnd="url(#flechaConectorArbol)"
+        />
+      ))}
+    </svg>
+  );
+
   // ── mutaciones ──────────────────────────────────────────────────────────
   const parcharComp = (id: number, patch: Partial<ComponentePapel>) =>
     onUpdateComponentes(componentes.map(c => (c.id === id ? { ...c, ...patch } : c)));
@@ -1673,6 +3220,14 @@ export default function RutaProcesos({
     alto_relieve_papel: "llevaAltoRelieve",
   };
 
+  // Jose (2026-09-04): el proceso se agrega DONDE VA EN LA FILA, al final, y de
+  // ahí el usuario lo mueve arrastrando. Ya NO se reacomoda solo al orden
+  // canónico -- ese acomodo ahora es un botón ("Acomodar") que se pide a mano,
+  // porque el orden real de la ruta lo decide quien la arma, no el catálogo.
+  //
+  // Y ya NO se impide agregar un proceso que ya está en la ruta: agregarlo otra
+  // vez ES la forma de repetirlo (antes era el campo "veces"). Cada tarjeta es
+  // una pasada independiente, con su material, su máquina y su posición.
   const agregarProceso = (comp: ComponentePapel, cat: ProcesoCatOpcion) => {
     const nuevo = newComponenteProceso();
     nuevo.idproceso_cat = cat.idproceso_cat;
@@ -1682,7 +3237,7 @@ export default function RutaProcesos({
     if (refs.length === 1) nuevo.materiales = [refs[0].id];
     const campoLleva = TABLA_A_LLEVA[cat.tabla];
     parcharComp(comp.id, {
-      procesos: renumerar(ordenarCanonico([...comp.procesos, nuevo])),
+      procesos: renumerar([...comp.procesos, nuevo]),
       ...(campoLleva ? { acabados: { ...comp.acabados, [campoLleva]: true } } : {}),
     });
     setEligiendoEn(null);
@@ -1693,10 +3248,48 @@ export default function RutaProcesos({
     const proceso = comp.procesos.find(p => p.id === procesoId);
     const tabla = proceso?.idproceso_cat != null ? catPorId.get(proceso.idproceso_cat)?.tabla : undefined;
     const campoLleva = tabla ? TABLA_A_LLEVA[tabla] : undefined;
+    const restantes = comp.procesos.filter(p => p.id !== procesoId);
+    // Con procesos repetidos, el acabado solo se apaga cuando se va la ÚLTIMA
+    // ocurrencia. Si todavía queda otra tarjeta del mismo proceso en la ruta,
+    // el acabado sigue encendido -- si no, quitar la 2ª pasada de Barniz UV
+    // apagaría el acabado dejando viva la 1ª (Jose, 2026-09-04).
+    const quedaOtra = tabla != null && restantes.some(
+      p => (p.idproceso_cat != null ? catPorId.get(p.idproceso_cat)?.tabla : undefined) === tabla
+    );
     parcharComp(comp.id, {
-      procesos: comp.procesos.filter(p => p.id !== procesoId).map((p, i) => ({ ...p, orden: i + 1 })),
-      ...(campoLleva ? { acabados: { ...comp.acabados, [campoLleva]: false } } : {}),
+      procesos: renumerar(restantes),
+      ...(campoLleva && !quedaOtra ? { acabados: { ...comp.acabados, [campoLleva]: false } } : {}),
     });
+  };
+
+  // ── Reordenar procesos DENTRO de una ruta (arrastrar y soltar) ──────────
+  // Jose (2026-09-04): antes los procesos de una OP eran lineales y no se
+  // movían; ahora se toman y se sueltan en otra posición de su propia ruta.
+  // Solo se mueven entre procesos de la MISMA OP -- una tarjeta no se puede
+  // pasar a otra OP arrastrándola.
+  const reordenarProcesos = (comp: ComponentePapel, idArrastrado: number, idDestino: number) => {
+    if (idArrastrado === idDestino) return;
+    const iOrigen = comp.procesos.findIndex(p => p.id === idArrastrado);
+    const iDestino = comp.procesos.findIndex(p => p.id === idDestino);
+    if (iOrigen < 0 || iDestino < 0) return;
+    const copia = [...comp.procesos];
+    const [item] = copia.splice(iOrigen, 1);
+    copia.splice(iDestino, 0, item);
+    parcharComp(comp.id, { procesos: renumerar(copia) });
+  };
+
+  // Acomoda UNA ruta al orden canónico, a petición del usuario (botón
+  // "Acomodar"). Es lo que antes pasaba solo en cada alta de proceso.
+  const acomodarRuta = (comp: ComponentePapel) => {
+    parcharComp(comp.id, { procesos: renumerar(ordenarCanonico(comp.procesos)) });
+  };
+
+  // ¿Esta ruta ya está en orden canónico? Sirve para no ofrecer "Acomodar"
+  // cuando no cambiaría nada.
+  const rutaYaAcomodada = (comp: ComponentePapel): boolean => {
+    const actual = comp.procesos.map(p => p.id).join(",");
+    const ordenada = ordenarCanonico(comp.procesos).map(p => p.id).join(",");
+    return actual === ordenada;
   };
 
   const borrarTodo = async () => {
@@ -1706,19 +3299,160 @@ export default function RutaProcesos({
     onUpdateComponentes(componentes.map(c => ({ ...c, procesos: [] })));
   };
 
+  // ── Exportar la ruta como diagrama ──────────────────────────────────────
+  // Jose (2026-09-04): un archivo con la ruta de flujo, para abrirlo en el
+  // navegador, mandarlo o imprimirlo sin entrar al sistema. El SVG es el
+  // "bueno" (texto real, se puede acercar sin pixelearse); el PNG es para
+  // pegarlo donde no acepten SVG (WhatsApp, Word, un correo).
+  // Convierte un componente a la tarjeta que dibuja el SVG. Es EXACTAMENTE lo
+  // que se ve en pantalla: mismo encabezado, misma descripción, mismo material,
+  // los mismos procesos en el mismo orden y con los mismos colores. Además se
+  // lleva el resumen de cada proceso (`detalleCorto`, el mismo texto que sale
+  // bajo el nombre en la tarjeta) para la sección de información de abajo.
+  const tarjetaParaSvg = (c: ComponentePapel): TarjetaSvg => {
+    const pasadas = etiquetasPasada(c.procesos, catPorId);
+    const refs = refsDeComponente(materiales, c.id);
+    const pal = paletaOP(c.tipo, indicePaleta(c, componentes));
+    return {
+      titulo: etiquetaComponente(c, componentes),
+      descripcion: (c.nombre ?? "").trim(),
+      material: refs.length === 0
+        ? (["union", "complementaria"].includes(c.tipo) ? "(usa las piezas de sus órdenes de origen)" : "(sin material asignado)")
+        : `(Material: ${refs.map(r => r.etiqueta).join(", ")})`,
+      procesos: c.procesos.map(p => {
+        const cat = p.idproceso_cat != null ? catPorId.get(p.idproceso_cat) : undefined;
+        // Mismo criterio que en las tarjetas en pantalla: el catálogo por
+        // tabla gana sobre procesoNombre, para que el diagrama tampoco
+        // arrastre un nombre crudo atrapado en un borrador viejo.
+        const nombre = (cat ? nombreCortoProceso(cat.tabla, cat.nombre_proceso) : null) || p.procesoNombre || "—";
+        const resumen = detalleCorto(p, c, cat, catalogs);
+        const obs = (p.observaciones ?? "").trim();
+
+        // Materiales y máquina por separado, resueltos igual que en
+        // VistaMismaOrden: si el proceso no marcó materiales propios, hereda
+        // los del componente (que es lo que muestra la pantalla).
+        const usados = p.materiales.length > 0
+          ? p.materiales.map(id => refDeMaterial(materiales, id))
+          : refsDeComponente(materiales, c.id).map(r => r.etiqueta);
+        const claveMaq = cat ? CLAVE_MAQUINA_POR_TABLA[cat.tabla] : undefined;
+        const claveMaqCat = (cat ? CATALOGO_MAQUINA_POR_TABLA[cat.tabla] : undefined) ?? claveMaq;
+        const idsMaq = claveMaq ? ((c.maquinaria[claveMaq] ?? []) as number[]) : [];
+        const itemsMaq = claveMaqCat ? ((catalogs?.[claveMaqCat] ?? []) as CatItem[]) : [];
+        const maquina = idsMaq.map(id => itemsMaq.find(x => x.id === id)?.nombre).filter(Boolean).join(" · ");
+
+        return {
+          nombre,
+          pasada: (pasadas.get(p.id) ?? "").trim(),
+          detalle: [resumen, obs].filter(Boolean).join(" · "),
+          color: colorProceso(nombre),
+          materiales: usados.length ? usados.join(" · ") : "—",
+          maquina: maquina || "—",
+          observaciones: obs,
+        };
+      }),
+      paleta: { headBg: pal.headBg, headText: pal.headText },
+    };
+  };
+
+  // Igual que en pantalla: si el producto tiene imagen se usa esa foto en la
+  // tarjeta de PRODUCTO TERMINADO, y si no, el dibujo predeterminado. La foto
+  // se embebe (data URI) para que el archivo siga siendo autocontenido.
+  //
+  // Se intenta en este orden, del que más probabilidad tiene al que menos:
+  //   1. La que se acaba de elegir y AÚN NO SE SUBE (blob:/data:). Vive en el
+  //      navegador, así que se lee directo -- aquí no hay CORS que valga.
+  //   2. La que ya está guardada: por la API (fetchContenidoArchivo), NO por la
+  //      URL firmada de S3. El bucket no publica Access-Control-Allow-Origin,
+  //      así que leer sus bytes desde el navegador siempre falla; el servidor
+  //      sí puede bajarla y reenviarla. Además así la URL firmada nunca sale
+  //      del servidor y el acceso queda sujeto al token del usuario.
+  //   3. Como último recurso, la URL directa. Hoy no va a pasar por CORS, pero
+  //      si algún día se configura el bucket empieza a funcionar sola.
+  const imagenParaDiagrama = async (): Promise<string | null> => {
+    if (imagenProductoUrl && (imagenProductoUrl.startsWith("blob:") || imagenProductoUrl.startsWith("data:"))) {
+      const local = await imagenAcotadaDesdeUrl(imagenProductoUrl);
+      if (local) return local;
+    }
+    if (imagenProductoIdArchivo != null) {
+      const blob = await fetchContenidoArchivo(imagenProductoIdArchivo);
+      if (blob) {
+        const porApi = await blobAImagenAcotada(blob);
+        if (porApi) return porApi;
+      }
+    }
+    if (imagenProductoUrl) return await imagenAcotadaDesdeUrl(imagenProductoUrl);
+    return null;
+  };
+
+  const diagramaParaSvg = async (): Promise<DiagramaSvg> => ({
+    nombreProducto: nombreProducto.trim(),
+    inicios: inicios.map(tarjetaParaSvg),
+    union: union ? tarjetaParaSvg(union) : null,
+    unica: unica ? tarjetaParaSvg(unica) : null,
+    imagenProducto: await imagenParaDiagrama(),
+  });
+
+  const nombreArchivoRuta = (ext: string): string => {
+    const base = (nombreProducto || "").trim().toLowerCase()
+      .normalize("NFD").replace(/[\u0300-\u036f]/g, "")   // quita acentos
+      .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
+    return `ruta-${base || "producto"}.${ext}`;
+  };
+
+  const svgDeLaRuta = async () => construirSvgRuta(await diagramaParaSvg());
+
+  const descargarSvg = async () => {
+    descargarArchivo(
+      new Blob([await svgDeLaRuta()], { type: "image/svg+xml;charset=utf-8" }),
+      nombreArchivoRuta("svg"),
+    );
+  };
+
+  const descargarPng = async () => {
+    try {
+      descargarArchivo(await svgAPng(await svgDeLaRuta()), nombreArchivoRuta("png"));
+    } catch {
+      await showConfirm(
+        "No se pudo generar la imagen PNG en este navegador. Descarga el SVG: se abre igual en el navegador y se ve mejor."
+      );
+    }
+  };
+
   // ── piezas visuales ─────────────────────────────────────────────────────
   const botonesCabecera = (
     <>
       <Boton onClick={borrarTodo} disabled={totalProcesos === 0}><IcoBote /> Borrar todo</Boton>
+      {/* 🔁 FASE 4: agregar OPC desde aquí mismo -- solo tiene sentido cuando
+          ya existe la OP de unión (modo "órdenes independientes"). */}
+      {union && (
+        <Boton
+          onClick={agregarOPCAqui}
+          style={{ border: `1px dashed ${T.orangeBorder}`, background: T.orangeBg, color: T.orangeText }}
+        >
+          <span style={{ fontSize: 16, fontWeight: 400, lineHeight: 1 }}>+</span> Agregar OPC
+        </Boton>
+      )}
       <Boton onClick={() => setCompacta(v => !v)}><IcoLista /> {compacta ? "Vista detallada" : "Vista compacta"}</Boton>
       <Boton onClick={() => setPantallaCompleta(true)}><IcoLista /> Previsualizar</Boton>
+      <Boton onClick={descargarSvg} disabled={totalProcesos === 0}><IcoFlecha ancho={16} /> Diagrama SVG</Boton>
+      <Boton onClick={descargarPng} disabled={totalProcesos === 0}><IcoFlecha ancho={16} /> Diagrama PNG</Boton>
     </>
   );
 
   // El componente al que le corresponde el picker abierto (puede ser una OP
-  // de inicio o la de unión, las dos usan TarjetaOP).
+  // de inicio, una OPC o la de unión/única -- todas usan TarjetaOP).
+  //
+  // CORREGIDO (2026-09-08, reporte de Jose "ya no me permite agregar
+  // procesos a la OPC"): esta lista se armó en FASE 1 (solo inicio/unión) y
+  // nunca se actualizó al agregar las OPC en FASE 4 ni el modo "misma
+  // orden" (unica). Como resultado, al hacer clic en "+ agregar proceso"
+  // sobre una tarjeta de OPC, `eligiendoEn.id` sí se fijaba, pero esta
+  // búsqueda no la encontraba entre inicios/unión -> compEligiendo quedaba
+  // en null -> el picker se abría vacío/invisible (ver el early return de
+  // más abajo: `if (!eligiendoEn || !compEligiendo) return null`).
   const compEligiendo = eligiendoEn
-    ? [...inicios, ...(union ? [union] : [])].find(c => c.id === eligiendoEn.id) ?? null
+    ? [...inicios, ...opcs, ...(union ? [union] : []), ...(unica ? [unica] : [])]
+        .find(c => c.id === eligiendoEn.id) ?? null
     : null;
 
   // El picker antes se anclaba con position:absolute DENTRO de la tarjeta,
@@ -1754,10 +3488,13 @@ export default function RutaProcesos({
 
   const PickerProcesos = () => {
     if (!eligiendoEn || !compEligiendo) return null;
-    const disponibles = filtrarPorPreparacion(
-      compEligiendo,
-      procesosCat.filter(p => !compEligiendo.procesos.some(cp => cp.idproceso_cat === p.idproceso_cat))
-    );
+    // Jose (2026-09-04): ya NO se filtran los procesos que ya están en la
+    // ruta -- volver a elegirlos es la forma de repetirlos. Lo único que se
+    // sigue filtrando es lo que no aplica por método de preparación
+    // (Hojeado/Guillotina cuando el material llega del proveedor).
+    const disponibles = filtrarPorPreparacion(compEligiendo, procesosCat);
+    const vecesEnRuta = (idproceso_cat: number): number =>
+      compEligiendo.procesos.filter(cp => cp.idproceso_cat === idproceso_cat).length;
     return createPortal(
       <div ref={pickerRef} style={{
         position: "fixed", top: eligiendoEn.top, left: eligiendoEn.left,
@@ -1783,13 +3520,15 @@ export default function RutaProcesos({
         </div>
         {disponibles.length === 0 ? (
           <div style={{ padding: "8px 10px", fontSize: 11.5, color: T.muted }}>
-            Ya se agregaron todos los procesos disponibles.
+            No hay procesos disponibles para esta orden.
           </div>
         ) : disponibles.map(p => {
           const nombreCorto = nombreCortoProceso(p.tabla, p.nombre_proceso);
+          const cuantas = vecesEnRuta(p.idproceso_cat);
           return (
             <button
               key={p.idproceso_cat} type="button" onClick={() => agregarProceso(compEligiendo, p)}
+              title={cuantas > 0 ? `Ya va ${cuantas} ${cuantas === 1 ? "vez" : "veces"} en esta ruta -- agregar otra` : undefined}
               style={{
                 width: "100%", display: "flex", alignItems: "center", gap: 9, padding: "7px 11px",
                 border: "none", background: "transparent", cursor: "pointer", textAlign: "left",
@@ -1797,7 +3536,10 @@ export default function RutaProcesos({
               }}
             >
               <IconoProcesoCuadro nombre={nombreCorto} size={22} />
-              {nombreCorto}
+              <span style={{ flex: 1 }}>{nombreCorto}</span>
+              {cuantas > 0 && (
+                <span style={{ fontSize: 11, fontWeight: 700, color: T.primary, flexShrink: 0 }}>×{cuantas}</span>
+              )}
             </button>
           );
         })}
@@ -1886,6 +3628,11 @@ export default function RutaProcesos({
       <span style={leg}><span style={{ ...dot, background: T.green }} />Punto de unión (espera a que las OP de inicio estén completas)</span>
       <span style={leg}><span style={{ ...dot, background: T.greenDeep }} />Orden de unión (continúa el flujo)</span>
       <span style={leg}><span style={{ ...dot, background: T.orange }} />Fin del flujo</span>
+      {opcs.length > 0 && (
+        <span style={{ ...leg, color: T.muted, fontWeight: 500 }}>
+          Toca el botón "→" de una tarjeta para cambiar a qué orden alimenta.
+        </span>
+      )}
     </div>
   );
 
@@ -1916,20 +3663,37 @@ export default function RutaProcesos({
     const hayLito = componentes.some(c => c.procesos.some(p => tablaDe(p) === "litolaminado_papel"));
     if (hayLito) reglas.push("El litolaminado va antes del suaje: es donde se juntan las piezas y arranca la orden de unión.");
 
-    // NUEVO (Jose, 2026-09-01): si la unión NO tiene material propio, es
-    // solo un junte lógico de piezas (como cajas de regalo o roscas de
-    // reyes) -- no necesita Litolaminado, no se pegan. Si SÍ tiene material
-    // propio, ese material es justo lo que fusiona las piezas de las OP de
-    // inicio, y Litolaminado sí aplica. Las dos combinaciones "raras" se
-    // avisan aquí; la primera además bloquea guardar (ver guardar() más
-    // abajo) porque describe un proceso sin nada que procesar.
-    if (union) {
-      const materialUnion = refsDeComponente(materiales, union.id);
-      const litoEnUnion = union.procesos.some(p => tablaDe(p) === "litolaminado_papel");
-      if (litoEnUnion && materialUnion.length === 0) {
-        reglas.push("⚠ La OP de unión lleva Litolaminado pero no tiene material propio asignado — sin material que fusionar, ese proceso no debería estar en su ruta.");
-      } else if (!litoEnUnion && materialUnion.length > 0) {
-        reglas.push("La OP de unión tiene material propio asignado: probablemente necesite Litolaminado en su ruta para fusionarlo con las piezas de las OP de inicio.");
+    // 🔁 FASE 4 (Jose, 2026-09-07): hay 0 o más OPC (Orden de Producción
+    // Complementaria), nivel(es) intermedio(s) opcionales entre las OP de
+    // inicio y la unión final.
+    if (opcs.length > 0) {
+      reglas.push(
+        `Hay ${opcs.length} ${opcs.length === 1 ? "Orden de Producción Complementaria (OPC)" : "Órdenes de Producción Complementarias (OPC)"}: cada una junta el resultado de sus órdenes de origen antes de pasarlo al siguiente nivel.`
+      );
+    }
+
+    // NUEVO (Jose, 2026-09-01): si un nodo que junta insumos (unión, o FASE
+    // 4 cualquier OPC) NO tiene material propio, es solo un junte lógico de
+    // piezas (como cajas de regalo o roscas de reyes) -- no necesita
+    // Litolaminado, no se pegan. Si SÍ tiene material propio, ese material
+    // es justo lo que fusiona las piezas de sus órdenes de origen, y
+    // Litolaminado sí aplica. Las dos combinaciones "raras" se avisan aquí;
+    // la primera además bloquea guardar (ver guardar() en
+    // FormularioProductoEspecial.tsx) porque describe un proceso sin nada
+    // que procesar.
+    //
+    // 🔁 FASE 4: antes esto solo revisaba la unión -- una OPC es
+    // estructuralmente lo mismo para este propósito, así que se revisan
+    // juntas en un solo bucle.
+    const nombreNodoRegla = (nodo: ComponentePapel) =>
+      nodo.tipo === "union" ? "OP de unión" : etiquetaComponente(nodo, componentes);
+    for (const nodo of [...(union ? [union] : []), ...opcs]) {
+      const materialNodo = refsDeComponente(materiales, nodo.id);
+      const litoEnNodo = nodo.procesos.some(p => tablaDe(p) === "litolaminado_papel");
+      if (litoEnNodo && materialNodo.length === 0) {
+        reglas.push(`⚠ La ${nombreNodoRegla(nodo)} lleva Litolaminado pero no tiene material propio asignado — sin material que fusionar, ese proceso no debería estar en su ruta.`);
+      } else if (!litoEnNodo && materialNodo.length > 0) {
+        reglas.push(`La ${nombreNodoRegla(nodo)} tiene material propio asignado: probablemente necesite Litolaminado en su ruta para fusionarlo con las piezas de sus órdenes de origen.`);
       }
     }
 
@@ -2017,14 +3781,38 @@ export default function RutaProcesos({
       parcharMaterial={parcharMaterial}
       addItem={addItem}
       quitarProceso={quitarProceso}
+      reordenarProcesos={reordenarProcesos}
+      acomodarRuta={acomodarRuta}
+      rutaYaAcomodada={rutaYaAcomodada}
       nombreProducto={nombreProducto}
     />
   ) : (
-    <div
-      ref={contenedorFlujoRef}
-      style={{ display: "flex", alignItems: "center", overflow: "auto", padding: "26px 4px", position: "relative" }}
-    >
+    <>
+      {/* 🔁 FASE 4 (Jose, 2026-09-08): aviso de "modo conexión" -- fuera del
+          contenedor con scroll horizontal, para que siempre se vea aunque
+          el diagrama sea más ancho que la pantalla. */}
+      {origenConexion && (
+        <div style={{
+          display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap",
+          background: "#EFF6FF", border: "1px solid #BFD3F2", borderRadius: 10,
+          padding: "9px 14px", margin: "0 0 12px", fontSize: 12.5, fontWeight: 600, color: T.primary,
+        }}>
+          Toca la orden resaltada a la que alimentará {etiquetaComponente(origenConexion, componentes)}.
+          <button
+            type="button"
+            onClick={() => setConectandoDesdeId(null)}
+            style={{ marginLeft: "auto", border: "none", background: "none", color: T.primary, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", fontSize: 12.5 }}
+          >
+            Cancelar
+          </button>
+        </div>
+      )}
+      <div
+        ref={contenedorFlujoRef}
+        style={{ display: "flex", alignItems: "center", overflow: "auto", padding: "26px 4px", position: "relative" }}
+      >
       {overlayConectores}
+      {overlayArbol}
       <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
         {inicios.map((comp) => (
           <div
@@ -2043,12 +3831,144 @@ export default function RutaProcesos({
               outlineOffset: 2, borderRadius: 12, transition: "opacity .12s",
             }}
           >
+            {/* 🔁 FASE 4: con al menos una OPC en el producto, ya no es obvio
+                que TODA OP de inicio alimente a la unión -- puede que
+                alimente a una OPC en su lugar. El botón "→" (esquina superior
+                izquierda de la tarjeta, ver botonAlimentaA) la reconecta; la
+                línea punteada real la dibuja overlayArbol arriba. Sin
+                ninguna OPC no hay ambigüedad, así que ninguno de los dos se
+                muestra. */}
+            <div style={{ position: "relative" }}>
+              <TarjetaOP
+                comp={comp}
+                cardRef={el => {
+                  if (el) inicioCardRefs.current.set(comp.id, el);
+                  else inicioCardRefs.current.delete(comp.id);
+                }}
+                componentes={componentes}
+                materiales={materiales}
+                catalogs={catalogs}
+                procesosCat={procesosCat}
+                catPorId={catPorId}
+                pantallaCompleta={pantallaCompleta}
+                compacta={compacta}
+                abierto={abierto}
+                setAbierto={setAbierto}
+                inicios={inicios}
+                setArrastrandoId={setArrastrandoId}
+                setSobreId={setSobreId}
+                eligiendoEn={eligiendoEn}
+                setEligiendoEn={setEligiendoEn}
+                tamanoAsaDefault={tamanoAsaDefault}
+                onTamanoAsaDefaultChange={onTamanoAsaDefaultChange}
+                addItem={addItem}
+                parcharComp={parcharComp}
+                parcharMaquinaria={parcharMaquinaria}
+                parcharMaterial={parcharMaterial}
+                parcharProceso={parcharProceso}
+                quitarProceso={quitarProceso}
+                reordenarProcesos={reordenarProcesos}
+                acomodarRuta={acomodarRuta}
+                rutaYaAcomodada={rutaYaAcomodada}
+              />
+              {opcs.length > 0 && botonAlimentaA(comp)}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* ── OPC: Orden de Producción Complementaria (FASE 4, Jose 2026-09-07,
+          conexión visual agregada 2026-09-08, línea real 2026-09-08) ── Cada
+          OPC recibe su propia tarjeta, totalmente funcional (agregar/editar/
+          borrar procesos, exactamente igual que cualquier otra OP), en su
+          columna entre las OP de inicio y la unión -- una columna POR NIVEL
+          del árbol (ver columnasOPC): si una OPC alimenta a otra, la que
+          alimenta se dibuja antes que su padre. A dónde alimenta se declara
+          y se cambia aquí mismo con el botón "→" de la esquina de la
+          tarjeta: arranca el modo conexión, y mientras está activo esta y
+          las demás OPC/unión válidas como destino (NodoConectable, respeta
+          destinosValidosPara -- ninguna puede apuntarse a sí misma ni a un
+          descendiente propio) se resaltan y se vuelven clicables. La línea
+          punteada real hacia el padre de cada una la dibuja overlayArbol
+          (arriba, ruteada en tramos rectos que esquivan las demás tarjetas)
+          -- reemplaza a la llave de geomFlujo, que solo servía para el caso
+          sin OPC. El marginLeft hace de EspacioConector entre columnas. */}
+      {columnasOPC.map((columna, iCol) => (
+          <div key={`opc-col-${iCol}`} style={{ display: "flex", flexDirection: "column", gap: 22, marginLeft: 74 }}>
+            {columna.map((comp) => (
+              <NodoConectable key={comp.id} comp={comp} componentes={componentes} origenConexion={origenConexion} onConectarAqui={conectarA}>
+                <div
+                  ref={el => {
+                    if (el) opcCardRefs.current.set(comp.id, el);
+                    else opcCardRefs.current.delete(comp.id);
+                  }}
+                  style={{ position: "relative" }}
+                >
+                  <TarjetaOP
+                    comp={comp}
+                    componentes={componentes}
+                    materiales={materiales}
+                    catalogs={catalogs}
+                    procesosCat={procesosCat}
+                    catPorId={catPorId}
+                    pantallaCompleta={pantallaCompleta}
+                    compacta={compacta}
+                    abierto={abierto}
+                    setAbierto={setAbierto}
+                    inicios={inicios}
+                    setArrastrandoId={setArrastrandoId}
+                    setSobreId={setSobreId}
+                    eligiendoEn={eligiendoEn}
+                    setEligiendoEn={setEligiendoEn}
+                    tamanoAsaDefault={tamanoAsaDefault}
+                    onTamanoAsaDefaultChange={onTamanoAsaDefaultChange}
+                    addItem={addItem}
+                    parcharComp={parcharComp}
+                    parcharMaquinaria={parcharMaquinaria}
+                    parcharMaterial={parcharMaterial}
+                    parcharProceso={parcharProceso}
+                    quitarProceso={quitarProceso}
+                    reordenarProcesos={reordenarProcesos}
+                    acomodarRuta={acomodarRuta}
+                    rutaYaAcomodada={rutaYaAcomodada}
+                  />
+                  <button
+                    type="button"
+                    title="Eliminar OPC"
+                    onClick={() => eliminarOPCAqui(comp.id)}
+                    style={{
+                      position: "absolute", top: -8, right: -8, width: 22, height: 22, borderRadius: "50%",
+                      border: `1px solid ${T.border}`, background: "#fff", boxShadow: T.shadow,
+                      display: "grid", placeItems: "center", cursor: "pointer", padding: 0, zIndex: 1,
+                    }}
+                  >
+                    <IcoBote size={12} color={T.danger} />
+                  </button>
+                  {botonAlimentaA(comp)}
+                </div>
+              </NodoConectable>
+            ))}
+          </div>
+      ))}
+
+      {union && (
+        <>
+          <EspacioConector />
+          {/* Con al menos una OPC, "Punto de unión" (la llave + el rombo)
+              deja de ser cierto -- puede que la unión reciba de una OPC en
+              vez de directo de una OP de inicio -- así que se apaga y la
+              tarjeta de unión pasa directo, alimentada por las líneas de
+              overlayArbol como cualquier otro destino. */}
+          {opcs.length === 0 && (
+            <>
+              <PuntoDeUnion cardRef={el => { puntoUnionCardRef.current = el; }} />
+              <EspacioConector />
+            </>
+          )}
+          <NodoConectable comp={union} componentes={componentes} origenConexion={origenConexion} onConectarAqui={conectarA}>
             <TarjetaOP
-              comp={comp}
-              cardRef={el => {
-                if (el) inicioCardRefs.current.set(comp.id, el);
-                else inicioCardRefs.current.delete(comp.id);
-              }}
+              comp={union}
+              cardRef={el => { unionCardRef.current = el; }}
               componentes={componentes}
               materiales={materiales}
               catalogs={catalogs}
@@ -2071,48 +3991,19 @@ export default function RutaProcesos({
               parcharMaterial={parcharMaterial}
               parcharProceso={parcharProceso}
               quitarProceso={quitarProceso}
+              reordenarProcesos={reordenarProcesos}
+              acomodarRuta={acomodarRuta}
+              rutaYaAcomodada={rutaYaAcomodada}
             />
-          </div>
-        ))}
-      </div>
-      {union && (
-        <>
-          <EspacioConector />
-          <PuntoDeUnion cardRef={el => { puntoUnionCardRef.current = el; }} />
-          <EspacioConector />
-          <TarjetaOP
-            comp={union}
-            cardRef={el => { unionCardRef.current = el; }}
-            componentes={componentes}
-            materiales={materiales}
-            catalogs={catalogs}
-            procesosCat={procesosCat}
-            catPorId={catPorId}
-            pantallaCompleta={pantallaCompleta}
-            compacta={compacta}
-            abierto={abierto}
-            setAbierto={setAbierto}
-            inicios={inicios}
-            setArrastrandoId={setArrastrandoId}
-            setSobreId={setSobreId}
-            eligiendoEn={eligiendoEn}
-            setEligiendoEn={setEligiendoEn}
-            tamanoAsaDefault={tamanoAsaDefault}
-            onTamanoAsaDefaultChange={onTamanoAsaDefaultChange}
-            addItem={addItem}
-            parcharComp={parcharComp}
-            parcharMaquinaria={parcharMaquinaria}
-            parcharMaterial={parcharMaterial}
-            parcharProceso={parcharProceso}
-            quitarProceso={quitarProceso}
-          />
+          </NodoConectable>
         </>
       )}
       <div style={{ width: 62, flexShrink: 0, display: "grid", placeItems: "center", color: T.inkStrong }}>
         <IcoFlecha />
       </div>
       <ProductoTerminado />
-    </div>
+      </div>
+    </>
   );
 
   // Solo el diagrama de flujo (la Tarjeta) -- Resumen, Reglas y Notas se

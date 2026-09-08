@@ -1527,7 +1527,11 @@ function bloqueArmado(
 
   const cantX = mainX + maquinaW;
   celda(doc, "Pliegos", entrada, cantX, y, cantW, h / 2, { size: 9, maxLines: 1 });
-  celda(doc, "Bolsas", fmtNum(reg.bolsas_armadas), cantX, y + h / 2, cantW, h / 2, { size: 9, maxLines: 1 });
+  // CORREGIDO (Jose, 2026-09-08): "bolsas_armadas" dejó de pedirse en el
+  // modal por duplicar "bolsas_entregadas" (ver ModalProcesoIndividualPapel,
+  // CAMPOS_PROCESO_PAPEL.armado_papel) -- se agrega el fallback para que
+  // este PDF no quede en blanco para los registros nuevos.
+  celda(doc, "Bolsas", fmtNum(reg.bolsas_armadas ?? reg.bolsas_entregadas), cantX, y + h / 2, cantW, h / 2, { size: 9, maxLines: 1 });
 
   const tablaX = cantX + cantW;
   caja(doc, tablaX, y, tablaW, h);
@@ -1763,14 +1767,17 @@ export function dibujarOrdenPapelEnDoc(
   // ── Resto de los procesos ─────────────────────────────────────────────
   const rendimientoPrep = n((data as any).rendimiento) ?? n((data as any).hoj_rendimiento);
 
-  // ── Especiales, sólo UNIÓN: piezas finales de las OP de inicio hermanas ──
-  // Una OP de unión no tiene "proceso anterior" dentro de su propia cadena
-  // (no lleva Hojeado/Guillotina si ya le llegan piezas preparadas de otra
-  // OP), así que su primer proceso se queda sin "entrada" a menos que se
-  // tome de afuera: de lo que entregó el ÚLTIMO proceso de cada OP de
-  // inicio hermana (piezas_finales_hermanas/piezas_finales_total, calculado
-  // en seguimiento.controller.ts::getOrdenProduccion). (Jose, 2026-09-02)
-  const esUnionPdf = (data as any).componente?.tipo === "union";
+  // ── Especiales, UNIÓN u OPC: piezas finales de los hijos directos ──────
+  // Un nodo de unión (o, FASE 4, una OPC intermedia) no tiene "proceso
+  // anterior" dentro de su propia cadena (no lleva Hojeado/Guillotina si ya
+  // le llegan piezas preparadas de otra OP), así que su primer proceso se
+  // queda sin "entrada" a menos que se tome de afuera: de lo que entregó el
+  // ÚLTIMO proceso de cada hijo directo (piezas_finales_hermanas/
+  // piezas_finales_total, calculado en
+  // seguimiento.controller.ts::getOrdenProduccion, generalizado en FASE 4
+  // para mirar idcomponente_papel_padre en vez de "todo inicio del
+  // producto"). (Jose, 2026-09-02, generalizado 2026-09-07)
+  const esUnionPdf = ["union", "complementaria"].includes((data as any).componente?.tipo);
   const piezasFinalesHermanas = (data as any).piezas_finales_hermanas as
     | { no_produccion: string | null; componente_nombre: string | null; cantidad_entregada: number | null; terminado: boolean }[]
     | undefined;

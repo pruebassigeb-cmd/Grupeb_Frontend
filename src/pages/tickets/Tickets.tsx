@@ -12,13 +12,14 @@ import {
   cambiarPrioridadTicket,
   cambiarEstrellasTicket,
   tomarTicket,
+  iniciarTicket,
   comentarTicket,
   asignarTicketA,
   unirseTicket,
   liberarTicket,
   rebotarTicket,
   getUsuariosAsignables,
-  getEquipoActivo,
+  getResolutores,
   getEstadisticasUsuario,
   getNotificacionesTickets,
   type Ticket,
@@ -26,7 +27,7 @@ import {
   type EstadoTicket,
   type PrioridadTicket,
   type UsuarioAsignable,
-  type EquipoActivoItem,
+  type ResolutorTickets,
   type EstadisticasUsuarioTickets,
 } from "../../services/tickets/tickets.service";
 
@@ -107,6 +108,10 @@ const estaVencido = (t: Ticket) =>
 // todavía no lo confirma/toma — se queda en Pendiente a propósito, con
 // dueño ya puesto, para que nadie más lo agarre mientras tanto.
 const esReservado = (t: Ticket) => t.estado === "Pendiente" && !!t.asignado_a && !t.rebotado;
+
+// "En valoración" = ya se tomó (En proceso) pero todavía no se le puso
+// duración estimada — está en revisión antes de comprometer un tiempo.
+const enValoracion = (t: Ticket) => t.estado === "En proceso" && t.duracion_estimada_horas == null;
 
 // % de diferencia entre lo real y lo estimado — mismo cálculo que ya se
 // usaba solo dentro del drawer, ahora reutilizable para la tarjeta también.
@@ -192,6 +197,11 @@ export default function Tickets() {
   const privilegiosTickets = user?.privilegios ?? [];
   const tieneAcceso = privilegiosTickets.includes("tickets.crear") || privilegiosTickets.includes("tickets.resolver");
   const esResolutor = privilegiosTickets.includes("tickets.resolver");
+  // Excepción a propósito: el resto del módulo es 100% por privilegio
+  // manual, pero la fase de valoración (el "cronómetro") Toni pidió
+  // explícitamente que sea por ROL — ni un Admin con tickets.resolver
+  // debe verla, solo el rol Super Usuario exacto.
+  const esSuperUsuarioReal = user?.rol === "Super Usuario";
 
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [cargando, setCargando] = useState(true);
@@ -213,8 +223,8 @@ export default function Tickets() {
 
   // Fase 1: equipo activo (panel de devs con tickets En proceso) y usuarios
   // a los que se puede asignar directo desde el drawer.
-  const [equipoActivoRaw, setEquipoActivoRaw] = useState<EquipoActivoItem[]>([]);
   const [usuariosAsignables, setUsuariosAsignables] = useState<UsuarioAsignable[]>([]);
+  const [resolutores, setResolutores] = useState<ResolutorTickets[]>([]);
   const [notificaciones, setNotificaciones] = useState<Record<number, boolean>>({});
   const [asignarA, setAsignarA] = useState("");
   const [asignando, setAsignando] = useState(false);
@@ -295,29 +305,15 @@ export default function Tickets() {
     cargarLista();
   }, [cargarLista]);
 
-  // El panel "Equipo activo" ahora es visible para cualquiera con acceso al
-  // módulo (Admin también) — es solo informativo, no da ningún poder extra.
-  useEffect(() => {
-    getEquipoActivo()
-      .then((data) => setEquipoActivoRaw(Array.isArray(data) ? data : []))
-      .catch((e) => console.error("❌ Equipo activo:", e));
-  }, [tickets]);
-
-  // El usuario logueado siempre va primero en la lista — "soy yo, quiero
-  // verme de inmediato sin buscar" — el resto conserva el orden que ya
-  // trae el backend (alfabético).
-  const equipoActivo = [...equipoActivoRaw].sort((a, b) => {
-    if (a.idusuario === user?.id) return -1;
-    if (b.idusuario === user?.id) return 1;
-    return 0;
-  });
-
   // El catálogo de "a quién asignar/rebotar" también se abrió: un Admin
   // necesita esta lista para poder rebotar SU propio ticket personal directo
   // a alguien. La acción de asignación en frío (PATCH /asignar) sigue
   // siendo exclusiva de Super Usuario — eso no cambió, solo el catálogo.
   useEffect(() => {
     getUsuariosAsignables().then(setUsuariosAsignables).catch((e) => console.error("❌ Usuarios asignables:", e));
+    // Lista de TODOS los resolutores reales — para que su columna en el
+    // tablero siempre aparezca, tengan o no algo asignado ahorita.
+    getResolutores().then(setResolutores).catch((e) => console.error("❌ Resolutores:", e));
   }, []);
 
   const refrescarDetalle = async (id: number) => {
@@ -443,6 +439,26 @@ export default function Tickets() {
       if (drawerId === id) await refrescarDetalle(id);
     } catch (e: any) {
       showAlert(e.response?.data?.error || "Ya lo tomó alguien más", "error");
+    }
+  };
+
+  // Cierra la fase de valoración: ya se evaluó el ticket, ahora sí se
+  // compromete una duración de verdad. Reusa los mismos campos de
+  // estimación que "Tomar ticket" — nunca coexisten en la misma pantalla.
+  const handleIniciar = async (id: number) => {
+    try {
+      const dias = Number(estimacionDias) || 0;
+      const horas = Number(estimacionHoras) || 0;
+      const minutos = Number(estimacionMinutos) || 0;
+      await iniciarTicket(id, { dias_habiles: dias, horas_habiles: horas, minutos_habiles: minutos });
+      setEstimacionDias("");
+      setEstimacionHoras("");
+      setEstimacionMinutos("");
+      setMostrarEstimacion(false);
+      await cargarLista();
+      if (drawerId === id) await refrescarDetalle(id);
+    } catch (e: any) {
+      showAlert(e.response?.data?.error || "No se pudo iniciar el ticket", "error");
     }
   };
 
@@ -582,48 +598,55 @@ export default function Tickets() {
   const puedoUnirme =
     !!detalle && esResolutor && detalle.estado === "En proceso" && !!detalle.asignado_a && !soyResponsable;
 
-  // Una columna "En proceso" por cada persona que de verdad tiene algo EN
-  // PROCESO confirmado (no cuenta si solo tiene reservados/rebotados sin
-  // confirmar — esos se siguen viendo con su insignia en Pendiente/
-  // Rebotados, igual que antes). Si un ticket tiene 2 responsables,
-  // aparece bajo los 2 — el filtro checa la lista completa, no un dueño
-  // único.
-  const personasEnProceso = equipoActivo.filter((dev) => dev.tickets.some((t) => t.estado === "En proceso"));
-  const columnasPorPersona: ColumnaTablero[] = personasEnProceso.map((dev) => ({
-    key: `enproceso-${dev.idusuario}`,
+  // Tú primero en el orden de columnas — el resto ya viene alfabético
+  // del backend.
+  const resolutoresOrdenados = [...resolutores].sort((a, b) => {
+    if (a.idusuario === user?.id) return -1;
+    if (b.idusuario === user?.id) return 1;
+    return 0;
+  });
+
+  // Una columna "En proceso" por CADA resolutor con acceso real — SIEMPRE
+  // se muestra, tenga o no algo asignado ahorita (así se ve de un vistazo
+  // quién está libre). Adentro entran 2 tipos de ticket:
+  //   · los que de verdad están En proceso con esa persona (confirmados)
+  //   · los reservados/rebotados-pendientes de confirmar con esa persona
+  //     (siguen en estado Pendiente, pero ya tienen dueño) — se ven con su
+  //     insignia 📌/↻ normal, igual que en la columna Pendiente.
+  // Si un ticket tiene 2 responsables, aparece bajo los 2.
+  const columnasPorPersona: ColumnaTablero[] = resolutoresOrdenados.map((dev) => ({
+    key: `persona-${dev.idusuario}`,
     label: dev.nombre,
     dot: "bg-blue-600",
     header: "border-t-blue-600",
-    filtro: (t: Ticket) => t.estado === "En proceso" && (t.asignados ?? []).some((a) => a.idusuario === dev.idusuario),
+    filtro: (t: Ticket) => {
+      const esSuyo = (t.asignados ?? []).some((a) => a.idusuario === dev.idusuario) || t.asignado_a === dev.idusuario;
+      if (!esSuyo) return false;
+      return t.estado === "En proceso" || (t.estado === "Pendiente" && !!t.asignado_a);
+    },
     persona: { idusuario: dev.idusuario, nombre: dev.nombre, apellido: dev.apellido, foto_url: dev.foto_url },
   }));
 
-  // Con "Ver archivo histórico" activo, solo Finalizado y Cancelado pueden
-  // tener algo (son los únicos estados que el cron archiva) — mostrar
-  // Rebotados/Pendiente/En-proceso-por-persona vacíos ahí no aporta nada.
-  const columnasVisibles: ColumnaTablero[] = verArchivados
-    ? TABLERO_COLUMNAS_FIJAS.filter((c) => c.key === "Finalizado" || c.key === "Cancelado")
-    : [
-        TABLERO_COLUMNAS_FIJAS[0], // Rebotados
-        TABLERO_COLUMNAS_FIJAS[1], // Pendiente
-        ...columnasPorPersona,
-        TABLERO_COLUMNAS_FIJAS[2], // Finalizado
-        TABLERO_COLUMNAS_FIJAS[3], // Cancelado
-      ];
+  // Las columnas FIJAS se esconden cuando no tienen nada — ahorra espacio.
+  // Las de PERSONA nunca se esconden — ese es justo el punto: ver quién
+  // está disponible aunque no tenga nada asignado.
+  const fijasConConteo = TABLERO_COLUMNAS_FIJAS.map((c) => ({ col: c, count: tickets.filter(c.filtro).length }));
+  const [rebotadosF, pendienteF, finalizadoF, canceladoF] = fijasConConteo;
+  const fijasVisiblesInicio = [rebotadosF, pendienteF].filter((c) => c.count > 0).map((c) => c.col);
+  const fijasVisiblesFin = [finalizadoF, canceladoF].filter((c) => c.count > 0).map((c) => c.col);
 
-  // El número de columnas ya no es fijo (depende de cuánta gente tenga algo
-  // en proceso ahorita), así que el grid-template-columns se arma en JS y
-  // se aplica como estilo inline — igual que la altura de abajo, para no
-  // depender de que Tailwind genere bien una clase arbitraria dinámica.
-  const gridTemplateColumns = verArchivados
-    ? "minmax(260px,1fr) minmax(260px,1fr)"
-    : [
-        "minmax(155px,1fr)", // Rebotados
-        "minmax(220px,2fr)", // Pendiente
-        ...columnasPorPersona.map(() => "minmax(200px,1.4fr)"), // una por persona
-        "minmax(155px,1fr)", // Finalizado
-        "minmax(155px,1fr)", // Cancelado
-      ].join(" ");
+  const columnasVisibles: ColumnaTablero[] = verArchivados
+    ? fijasVisiblesFin
+    : [...fijasVisiblesInicio, ...columnasPorPersona, ...fijasVisiblesFin];
+
+  // El número de columnas ya no es fijo (depende de cuánta gente tenga
+  // acceso y de cuáles columnas fijas estén vacías ahorita), así que el
+  // grid-template-columns se arma en JS a partir de las columnas que de
+  // verdad se van a mostrar, y se aplica como estilo inline — no depende
+  // de que Tailwind genere bien un arbitrary-value dinámico.
+  const gridTemplateColumns = columnasVisibles
+    .map((c) => (c.persona ? "minmax(200px,1.4fr)" : c.key === "Pendiente" ? "minmax(220px,2fr)" : "minmax(155px,1fr)"))
+    .join(" ");
 
   // Altura real del tablero, medida en JS — no una clase de Tailwind con
   // calc(100vh-...), que en este build no estaba surtiendo efecto (por eso
@@ -728,6 +751,12 @@ export default function Tickets() {
         ) : tickets.length === 0 ? (
           <div className="bg-white border border-dashed border-slate-300 rounded-2xl py-16 text-center">
             <p className="text-sm text-slate-400">No hay tickets por aquí. 🎉</p>
+          </div>
+        ) : columnasVisibles.length === 0 ? (
+          <div className="bg-white border border-dashed border-slate-300 rounded-2xl py-16 text-center">
+            <p className="text-sm text-slate-400">
+              {verArchivados ? "Todavía no hay nada en el archivo histórico." : "No hay tickets por aquí. 🎉"}
+            </p>
           </div>
         ) : (
           <div
@@ -839,6 +868,14 @@ export default function Tickets() {
                                   className="w-4 h-4 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center text-[9px] flex-shrink-0"
                                 >
                                   📌
+                                </span>
+                              )}
+                              {enValoracion(t) && (
+                                <span
+                                  title="En valoración — todavía sin duración estimada"
+                                  className="w-4 h-4 rounded-full bg-sky-100 text-sky-700 flex items-center justify-center text-[9px] flex-shrink-0"
+                                >
+                                  🔍
                                 </span>
                               )}
                               {estaVencido(t) && (
@@ -1227,6 +1264,84 @@ export default function Tickets() {
                 <div className="px-5 py-3.5 border-b border-slate-100 bg-slate-50 space-y-2.5">
                   {soyResponsable && detalle.estado !== "Pendiente" ? (
                     <div className="space-y-2">
+                      {/* Fase de valoración: ya se tomó, pero todavía no se
+                          comprometió una duración — se puede revisar el
+                          ticket con calma antes de estimar. El estado se
+                          puede seguir cambiando normal (los botones de
+                          abajo), esto solo es para cuando ya se sabe
+                          cuánto va a tomar de aquí en adelante. */}
+                      {enValoracion(detalle) && (
+                        <div className="bg-sky-50 border border-sky-200 rounded-lg p-2.5 space-y-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-xs font-semibold text-sky-700">
+                              🔍 En valoración — todavía sin duración estimada
+                            </span>
+                            <button
+                              onClick={() => setMostrarEstimacion((v) => !v)}
+                              className="text-xs px-3 py-1.5 bg-gradient-to-br from-sky-600 to-blue-700 text-white rounded-lg font-semibold flex-shrink-0"
+                            >
+                              Iniciar
+                            </button>
+                          </div>
+                          {/* Cronómetro en vivo — exclusivo de Super Usuario.
+                              El campo ni siquiera llega en la respuesta si
+                              quien pregunta es Admin (lo omite el backend),
+                              esto es solo una capa extra de claridad. */}
+                          {esSuperUsuarioReal && detalle.valoracion_en_curso_horas != null && (
+                            <p className="text-[11px] text-sky-600">
+                              ⏱️ Llevas {detalle.valoracion_en_curso_horas}h en valoración
+                            </p>
+                          )}
+                          {mostrarEstimacion && (
+                            <div className="bg-white border border-slate-200 rounded-lg p-2.5 space-y-2">
+                              <p className="text-[11px] text-slate-500">
+                                ¿Cuánto crees que te va a tomar de aquí en adelante? Horas hábiles (L-V, 8am-6pm).
+                              </p>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <div className="flex items-center gap-1">
+                                  <input
+                                    type="text"
+                                    inputMode="numeric"
+                                    value={estimacionDias}
+                                    onChange={(e) => setEstimacionDias(e.target.value.replace(/\D/g, ""))}
+                                    placeholder="0"
+                                    className="w-14 text-xs px-2 py-1.5 rounded-md border border-slate-200"
+                                  />
+                                  <span className="text-xs text-slate-500">días</span>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <input
+                                    type="text"
+                                    inputMode="numeric"
+                                    value={estimacionHoras}
+                                    onChange={(e) => setEstimacionHoras(e.target.value.replace(/\D/g, ""))}
+                                    placeholder="0"
+                                    className="w-14 text-xs px-2 py-1.5 rounded-md border border-slate-200"
+                                  />
+                                  <span className="text-xs text-slate-500">horas</span>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <input
+                                    type="text"
+                                    inputMode="numeric"
+                                    value={estimacionMinutos}
+                                    onChange={(e) => setEstimacionMinutos(e.target.value.replace(/\D/g, ""))}
+                                    placeholder="0"
+                                    className="w-14 text-xs px-2 py-1.5 rounded-md border border-slate-200"
+                                  />
+                                  <span className="text-xs text-slate-500">min</span>
+                                </div>
+                                <button
+                                  onClick={() => handleIniciar(detalle.idticket)}
+                                  className="ml-auto text-xs px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-md font-semibold"
+                                >
+                                  Confirmar
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
                       <div className="flex flex-wrap items-center gap-1.5">
                         {COLUMNAS.map((c) => (
                           <button
@@ -1525,7 +1640,17 @@ export default function Tickets() {
                   pctTiempo(detalle) &&
                   (() => {
                     const estimado = detalle.duracion_estimada_horas!;
-                    const real = detalle.tiempo_real_horas!;
+                    // El % de abajo (pctTiempo) SIEMPRE usa tiempo_real_horas
+                    // puro (sin valoración) — eso no cambia. Lo que si
+                    // cambia es el número que se MUESTRA como "Real": para
+                    // Super Usuario es la suma (trabajo + valoración), para
+                    // que se vea el tiempo total de punta a punta; para
+                    // Admin (que ni recibe tiempo_valoracion_horas) es
+                    // igual de siempre.
+                    const real =
+                      esSuperUsuarioReal && detalle.tiempo_valoracion_horas
+                        ? detalle.tiempo_real_horas! + detalle.tiempo_valoracion_horas
+                        : detalle.tiempo_real_horas!;
                     const { pct, sobreEstimado } = pctTiempo(detalle)!;
                     const base = Math.max(estimado, real);
                     const anchoEstimado = Math.min((estimado / base) * 100, 100);
@@ -1562,6 +1687,15 @@ export default function Tickets() {
                               ? `⚠️ Se tardó ${pct}% más de lo estimado`
                               : `✅ Terminó ${Math.abs(pct)}% más rápido de lo estimado`}
                           </p>
+                          {/* Tiempo de valoración — exclusivo de Super
+                              Usuario, y a propósito NO entra en el % de
+                              arriba (ese ya se calcula solo con el tramo
+                              real, desde que se confirmó la estimación). */}
+                          {esSuperUsuarioReal && !!detalle.tiempo_valoracion_horas && (
+                            <p className="text-[11px] text-sky-600">
+                              🔍 De esas {real}h, {detalle.tiempo_valoracion_horas}h fueron de valoración antes de estimar — no cuentan en el % de arriba, así que sí fue en tiempo y forma.
+                            </p>
+                          )}
                         </div>
                       </div>
                     );

@@ -1,6 +1,7 @@
 // src/components/cotizadorLibre/LandingCotizadorLibre.tsx
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { ReactNode } from "react";
+import type { MouseEvent, ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { showConfirm } from "../CustomConfirm";
 import { useAuth } from "../../context/AuthContext";
 import {
@@ -19,11 +20,19 @@ import type {
   LandingSlotItem,
   SeccionLandingCotizadorLibre,
 } from "../../types/cotizadorLibre/cotizadorLibreLanding.types";
+// ✅ NUEVO — atajo de navegación: mismo servicio y tipos que ya usa el
+// wizard (CotizadorLibre.tsx) para traer "tipos" reales de papel/plástico.
+import { getTiposCotizadorLibre } from "../../services/cotizadorLibre/cotizadorLibreCatalogo.service";
+import type { CategoriaCotizadorLibre, TipoCatalogoItem } from "../../types/cotizadorLibre/cotizadorLibre.types";
 
 interface LandingCotizadorLibreProps {
   esClienteExterno: boolean;
   onComenzar: () => void;
   onSalir: () => void;
+  // ✅ NUEVO — se dispara cuando el usuario da clic en una imagen que ya
+  // tiene un atajo configurado (categoría + tipo). El padre decide qué
+  // hacer con eso (típicamente: fijar categoría/tipo y saltar al wizard).
+  onSeleccionarAtajo: (categoria: CategoriaCotizadorLibre, idTipo: number) => void;
 }
 
 type SlotVariant = "linea" | "producto" | "etiqueta";
@@ -54,9 +63,22 @@ export default function LandingCotizadorLibre({
   esClienteExterno,
   onComenzar,
   onSalir,
+  onSeleccionarAtajo,
 }: LandingCotizadorLibreProps) {
   const { user } = useAuth();
   const esAdmin = user?.acceso_total === true;
+
+  // ✅ NUEVO — catálogo real de tipos (para el selector de atajo en modo
+  // admin). Solo se pide si hace falta — un cliente/staff normal nunca lo
+  // necesita, solo quien va a configurar los atajos.
+  const [tiposPapel, setTiposPapel] = useState<TipoCatalogoItem[]>([]);
+  const [tiposPlastico, setTiposPlastico] = useState<TipoCatalogoItem[]>([]);
+
+  useEffect(() => {
+    if (!esAdmin) return;
+    getTiposCotizadorLibre("papel").then(setTiposPapel).catch(() => {});
+    getTiposCotizadorLibre("plastico").then(setTiposPlastico).catch(() => {});
+  }, [esAdmin]);
 
   const [slots, setSlots] = useState<LandingSlotItem[]>([]);
   const [cargando, setCargando] = useState(true);
@@ -246,6 +268,10 @@ export default function LandingCotizadorLibre({
                         onCambio={cargar}
                         variant="etiqueta"
                         destacado={index === 0 && etiquetas.length >= 3}
+                        onComenzar={onComenzar}
+                        onSeleccionarAtajo={onSeleccionarAtajo}
+                        tiposPapel={tiposPapel}
+                        tiposPlastico={tiposPlastico}
                       />
                     ))}
                   </div>
@@ -283,6 +309,10 @@ export default function LandingCotizadorLibre({
                             onCambio={cargar}
                             variant="linea"
                             destacado={index === 0 || index === 3}
+                            onComenzar={onComenzar}
+                            onSeleccionarAtajo={onSeleccionarAtajo}
+                            tiposPapel={tiposPapel}
+                            tiposPlastico={tiposPlastico}
                           />
                         ))}
                       </div>
@@ -322,6 +352,10 @@ export default function LandingCotizadorLibre({
                                   onCambio={cargar}
                                   variant="producto"
                                   destacado={items.length >= 3 ? index === 0 : index === 0 && items.length === 2}
+                                  onComenzar={onComenzar}
+                                  onSeleccionarAtajo={onSeleccionarAtajo}
+                                  tiposPapel={tiposPapel}
+                                  tiposPlastico={tiposPlastico}
                                 />
                               ))}
                             </div>
@@ -420,12 +454,20 @@ function SlotCard({
   onCambio,
   variant = "producto",
   destacado = false,
+  onComenzar,
+  onSeleccionarAtajo,
+  tiposPapel,
+  tiposPlastico,
 }: {
   slot: LandingSlotItem;
   esAdmin: boolean;
   onCambio: () => void;
   variant?: SlotVariant;
   destacado?: boolean;
+  onComenzar: () => void;
+  onSeleccionarAtajo: (categoria: CategoriaCotizadorLibre, idTipo: number) => void;
+  tiposPapel: TipoCatalogoItem[];
+  tiposPlastico: TipoCatalogoItem[];
 }) {
   const [editandoTitulo, setEditandoTitulo] = useState(false);
   const [tituloBorrador, setTituloBorrador] = useState(slot.titulo);
@@ -436,6 +478,43 @@ function SlotCard({
   useEffect(() => {
     setTituloBorrador(slot.titulo);
   }, [slot.titulo]);
+
+  // ✅ NUEVO — clic en la tarjeta (fuera de modo admin): si el espacio ya
+  // tiene un atajo configurado, salta directo al wizard con esa categoría
+  // y tipo; si no, se comporta igual que el botón "Comenzar". stopPropagation
+  // evita que también dispare el clic-en-cualquier-parte de la página
+  // completa (que solo aplica para el cliente externo).
+  const handleClickTarjeta = (e: MouseEvent) => {
+    e.stopPropagation();
+    if (slot.categoriaDestino && slot.idTipoDestino) {
+      onSeleccionarAtajo(slot.categoriaDestino, slot.idTipoDestino);
+    } else {
+      onComenzar();
+    }
+  };
+
+  // ✅ NUEVO — guarda el atajo elegido en el <select> de abajo (solo admin).
+  // valor === "" limpia el atajo; si no, viene como "papel:12" o "plastico:7".
+  const guardarAtajo = async (valor: string) => {
+    try {
+      setOcupado(true);
+      if (valor === "") {
+        await actualizarSlotLandingCotizadorLibre(slot.id, {
+          categoriaDestino: null,
+          idTipoDestino: null,
+        });
+      } else {
+        const [categoria, idTexto] = valor.split(":");
+        await actualizarSlotLandingCotizadorLibre(slot.id, {
+          categoriaDestino: categoria as CategoriaCotizadorLibre,
+          idTipoDestino: Number(idTexto),
+        });
+      }
+      onCambio();
+    } finally {
+      setOcupado(false);
+    }
+  };
 
   const guardarTitulo = async () => {
     setEditandoTitulo(false);
@@ -524,7 +603,10 @@ function SlotCard({
   const nombreLinea = tituloLinea.replace(/^l[íi]nea\s+/i, "");
 
   return (
-    <article className={`group relative min-w-0 ${anchoWrapper}`}>
+    <article
+      onClick={!esAdmin ? handleClickTarjeta : undefined}
+      className={`group relative min-w-0 ${anchoWrapper} ${!esAdmin ? "cursor-pointer" : ""}`}
+    >
       {variant === "linea" && (
         <div className="mb-1.5 text-center min-h-[3.1em]">
           {esAdmin && editandoTitulo ? (
@@ -559,8 +641,27 @@ function SlotCard({
         </div>
       )}
 
+      {/* ✅ NUEVO — configurar el atajo de navegación (solo admin, siempre
+          visible, no solo al pasar el mouse — un selector dentro de un
+          overlay que solo aparece en hover sería muy incómodo de usar).
+          Dropdown propio (no <select> nativo): el nativo se veía diminuto
+          y su menú se cortaba en la orilla de la pantalla en las tarjetas
+          de la derecha — con un portal a document.body eso ya no pasa.
+          Va ARRIBA de la imagen (no abajo): en las tarjetas del final de
+          la página, el botón quedaba tan abajo que la página se lo comía
+          antes de poder verlo/darle clic. */}
+      {esAdmin && (
+        <SelectorAtajo
+          valor={slot.categoriaDestino && slot.idTipoDestino ? `${slot.categoriaDestino}:${slot.idTipoDestino}` : ""}
+          onChange={guardarAtajo}
+          disabled={ocupado}
+          tiposPapel={tiposPapel}
+          tiposPlastico={tiposPlastico}
+        />
+      )}
+
       <div
-        className={`relative flex w-full items-center justify-center overflow-hidden rounded-[clamp(8px,0.7vw,13px)] bg-[#f6f2ea] ${altoImagen} ${paddingImagen}`}
+        className={`relative flex w-full items-center justify-center overflow-hidden rounded-[clamp(8px,0.7vw,13px)] bg-[#f6f2ea] ${altoImagen} ${paddingImagen} ${esAdmin ? "mt-1.5" : ""}`}
       >
         {slot.imagenUrl ? (
           <img
@@ -634,6 +735,174 @@ function SlotCard({
         </div>
       )}
     </article>
+  );
+}
+
+// ============================================================================
+// Selector de atajo — dropdown propio en vez de <select> nativo. El nativo
+// se veía diminuto y su menú de opciones se cortaba en la orilla de la
+// pantalla en las tarjetas más a la derecha del poster. Al montar el panel
+// vía createPortal directo en document.body (con position: fixed y la
+// posición calculada a mano contra los bordes de la ventana), no importa
+// qué overflow/z-index tenga ningún contenedor padre — nunca se corta.
+// ============================================================================
+function SelectorAtajo({
+  valor,
+  onChange,
+  disabled,
+  tiposPapel,
+  tiposPlastico,
+}: {
+  valor: string;
+  onChange: (valor: string) => void;
+  disabled: boolean;
+  tiposPapel: TipoCatalogoItem[];
+  tiposPlastico: TipoCatalogoItem[];
+}) {
+  const [abierto, setAbierto] = useState(false);
+  const [posicion, setPosicion] = useState<{ top: number; left: number; width: number } | null>(null);
+  const botonRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  const etiquetaActual = useMemo(() => {
+    if (!valor) return 'Sin atajo (va a "Comenzar")';
+    const [categoria, idTexto] = valor.split(":");
+    const id = Number(idTexto);
+    const lista = categoria === "papel" ? tiposPapel : tiposPlastico;
+    const encontrado = lista.find((t) => t.id === id);
+    if (!encontrado) return 'Sin atajo (va a "Comenzar")';
+    return `${categoria === "papel" ? "Papel" : "Plástico"}: ${encontrado.nombre}`;
+  }, [valor, tiposPapel, tiposPlastico]);
+
+  const abrir = () => {
+    if (disabled) return;
+    const rect = botonRef.current?.getBoundingClientRect();
+    if (rect) {
+      const ANCHO_PANEL = 240;
+      const MARGEN = 8;
+      const izquierda = Math.min(rect.left, window.innerWidth - ANCHO_PANEL - MARGEN);
+      // Si no cabe hacia abajo (tarjetas del final de la página), se abre
+      // hacia arriba en su lugar.
+      const ALTO_ESTIMADO = 340;
+      const cabeAbajo = rect.bottom + ALTO_ESTIMADO <= window.innerHeight;
+      setPosicion({
+        top: cabeAbajo ? rect.bottom + 4 : Math.max(MARGEN, rect.top - ALTO_ESTIMADO - 4),
+        left: Math.max(MARGEN, izquierda),
+        width: ANCHO_PANEL,
+      });
+    }
+    setAbierto(true);
+  };
+
+  // ✅ Este selector SOLO existe para admin/superusuario (el padre nunca lo
+  // renderiza para nadie más), así que no hace falta condicionar nada aquí:
+  // se permite desplazar la página libremente con el panel abierto — antes
+  // se cerraba con cualquier scroll de la página, lo cual en pantallas de
+  // laptop (poco alto disponible) impedía llegar a ver/usar el panel en
+  // las tarjetas de más abajo. Ahora solo se cierra al elegir una opción o
+  // al dar clic afuera (la capa invisible de abajo).
+
+  const elegir = (nuevoValor: string) => {
+    setAbierto(false);
+    onChange(nuevoValor);
+  };
+
+  return (
+    <>
+      <button
+        ref={botonRef}
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          if (abierto) {
+            setAbierto(false);
+          } else {
+            abrir();
+          }
+        }}
+        disabled={disabled}
+        title="A qué categoría/tipo del cotizador salta esta imagen al dar clic"
+        className="mt-1 flex w-full items-center justify-between gap-1.5 rounded-md border border-[#cfc6b8] bg-white px-2.5 py-1.5 text-[11px] font-semibold text-[#3a403a] transition-colors hover:border-[#b07f33] disabled:opacity-50"
+      >
+        <span className="truncate">{etiquetaActual}</span>
+        <span className="flex-shrink-0 text-[9px] text-[#8a8378]">▾</span>
+      </button>
+
+      {abierto &&
+        posicion &&
+        createPortal(
+          <>
+            {/* Capa invisible para cerrar al dar clic afuera — antes que
+                el panel en el DOM para que quede detrás en el z-index. */}
+            <div className="fixed inset-0 z-[999]" onClick={() => setAbierto(false)} />
+            <div
+              ref={panelRef}
+              className="fixed z-[1000] max-h-[340px] overflow-y-auto rounded-lg border border-[#d8d1c5] bg-white py-1.5 shadow-[0_14px_30px_rgba(18,43,30,0.25)]"
+              style={{ top: posicion.top, left: posicion.left, width: posicion.width }}
+            >
+              <OpcionAtajo activo={valor === ""} onClick={() => elegir("")}>
+                Sin atajo (va a &quot;Comenzar&quot;)
+              </OpcionAtajo>
+
+              <p className="px-3 pb-1 pt-2.5 text-[10px] font-black uppercase tracking-[0.08em] text-[#a8a294]">
+                Papel
+              </p>
+              {tiposPapel.length === 0 && (
+                <p className="px-3 py-1 text-[12px] text-[#a8a294]">Sin tipos disponibles</p>
+              )}
+              {tiposPapel.map((t) => (
+                <OpcionAtajo
+                  key={`papel:${t.id}`}
+                  activo={valor === `papel:${t.id}`}
+                  onClick={() => elegir(`papel:${t.id}`)}
+                >
+                  {t.nombre}
+                </OpcionAtajo>
+              ))}
+
+              <p className="px-3 pb-1 pt-2.5 text-[10px] font-black uppercase tracking-[0.08em] text-[#a8a294]">
+                Plástico
+              </p>
+              {tiposPlastico.length === 0 && (
+                <p className="px-3 py-1 text-[12px] text-[#a8a294]">Sin tipos disponibles</p>
+              )}
+              {tiposPlastico.map((t) => (
+                <OpcionAtajo
+                  key={`plastico:${t.id}`}
+                  activo={valor === `plastico:${t.id}`}
+                  onClick={() => elegir(`plastico:${t.id}`)}
+                >
+                  {t.nombre}
+                </OpcionAtajo>
+              ))}
+            </div>
+          </>,
+          document.body
+        )}
+    </>
+  );
+}
+
+function OpcionAtajo({
+  activo,
+  onClick,
+  children,
+}: {
+  activo: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] font-semibold transition-colors hover:bg-[#f3efe6] ${
+        activo ? "text-[#1c3f2a]" : "text-[#3a403a]"
+      }`}
+    >
+      <span className="w-3.5 flex-shrink-0 text-[#b07f33]">{activo ? "✓" : ""}</span>
+      <span className="truncate">{children}</span>
+    </button>
   );
 }
 

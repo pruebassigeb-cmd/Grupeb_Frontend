@@ -22,7 +22,14 @@ const CARPETAS_OPTIONS: { value: CarpetaFrontend; label: string }[] = [
   { value: "catalogoproductos", label: "Catálogo de Productos" },
   { value: "catalogos-admin", label: "Catálogos de Papel" },
   { value: "tickets", label: "Tickets" },
+  { value: "ordenes-compra", label: "Orden Compra" },
 ];
+
+// Carpetas que NO se ofrecen como destino en "Subir archivo" manual: sus
+// archivos deben quedar ligados a algo (aquí, a un pedido vía solicitud_id)
+// y ese vínculo solo se puede armar desde la pantalla dueña del contexto
+// (editar pedido), no desde este selector genérico.
+const CARPETAS_SIN_SUBIDA_MANUAL: CarpetaFrontend[] = ["ordenes-compra"];
 
 const CARPETAS_PROTEGIDAS: CarpetaFrontend[] = ["backups"];
 
@@ -605,7 +612,8 @@ const colores: Record<CarpetaFrontend, string> = {
       "suaje": "text-purple-400",
       "catalogoproductos": "text-amber-400",
       "catalogos-admin": "text-teal-400",
-      "tickets": "text-yellow-400"
+      "tickets": "text-yellow-400",
+      "ordenes-compra": "text-orange-400"
     };
     return (
       <svg className={`w-16 h-16 ${colores[carpeta]}`} fill="currentColor" viewBox="0 0 24 24">
@@ -667,6 +675,13 @@ const colores: Record<CarpetaFrontend, string> = {
             <div className="p-2">
               <p className="text-xs text-gray-700 font-medium truncate" title={archivo.nombre}>{archivo.nombre}</p>
               <p className="text-xs text-gray-400 mt-0.5">{formatTamano(archivo.tamano_kb)} · {formatFecha(archivo.created_at)}</p>
+              {/* Solo tiene valor en archivos ligados a un pedido (ej. carpeta
+                  Orden Compra); el resto de archivos no trae no_pedido. */}
+              {archivo.no_pedido && (
+                <p className="text-xs font-semibold text-orange-600 mt-0.5 truncate" title={`Pedido ${archivo.no_pedido}`}>
+                  Pedido {archivo.no_pedido}
+                </p>
+              )}
             </div>
             {/* Eliminar: ícono fijo en la esquina, siempre disponible (no depende
                 de :hover, que en táctil se comporta raro con doble-toque). El
@@ -813,13 +828,14 @@ const getNumSubcarpetas = (carpeta: CarpetaFrontend) => {
                     : "bg-blue-600"
                 }`} style={{ width: `${Math.max(estadisticas.almacenamiento.porcentaje, 0.5)}%` }} />
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 pt-1">
+            <div className="grid grid-cols-2 sm:grid-cols-6 gap-3 pt-1">
               {[
                 { label: "Diseños", value: estadisticas.por_carpeta.disenos, color: "bg-blue-50 text-blue-700" },
                 { label: "PDFs", value: estadisticas.por_carpeta.pdfs, color: "bg-red-50 text-red-700" },
                 { label: "Fotos de Envíos", value: estadisticas.por_carpeta.fotos_envios, color: "bg-green-50 text-green-700" },
                 { label: "Backups BD", value: estadisticas.por_carpeta.backups, color: "bg-gray-100 text-gray-700" },
                 { label: "Productos", value: estadisticas.por_carpeta.suaje, color: "bg-purple-50 text-purple-700" },
+                { label: "Orden Compra", value: estadisticas.por_carpeta.ordenes_compra, color: "bg-orange-50 text-orange-700" },
               ].map(item => (
                 <div key={item.label} className={`rounded-xl px-3 py-2 ${item.color}`}>
                   <p className="text-xs font-semibold">{item.label}</p>
@@ -1136,9 +1152,10 @@ const getNumSubcarpetas = (carpeta: CarpetaFrontend) => {
               ))}
             </div>
 
-            {/* Selector carpeta */}
+            {/* Selector carpeta — se excluyen las carpetas de CARPETAS_SIN_SUBIDA_MANUAL
+                (ej. Orden Compra, que necesita el solicitud_id del pedido). */}
             <div className="grid grid-cols-2 gap-2">
-              {CARPETAS_OPTIONS.map(c => (
+              {CARPETAS_OPTIONS.filter(c => !CARPETAS_SIN_SUBIDA_MANUAL.includes(c.value)).map(c => (
                 <button key={c.value} onClick={() => { setCarpetaSeleccion(c.value); setSubcarpetaSeleccion(null); }}
                   className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border-2 text-sm font-semibold transition-all ${carpetaSeleccion === c.value
                       ? "border-blue-600 bg-blue-50 text-blue-700"

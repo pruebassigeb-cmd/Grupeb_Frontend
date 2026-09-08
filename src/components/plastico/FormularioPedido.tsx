@@ -22,18 +22,43 @@ interface Pedido {
   observaciones: string;
   disenoAprobado: boolean;
   anticipoAprobado: boolean;
+  // Folio de la orden de compra que el cliente manda con el pedido (a nivel
+  // pedido, no por producto). Opcional.
+  ordenCompraFolio?: string | null;
+}
+
+// Archivo/imagen de la Orden de Compra ya subido, tal como lo regresa
+// getArchivosOrdenCompra en pedidosService.ts.
+export interface ArchivoOrdenCompraForm {
+  id_archivo: number;
+  nombre: string;
+  url: string;
+  tipo: "image" | "pdf" | "document";
 }
 
 interface FormularioPedidoProps {
   pedido: Pedido;
   onSave: (pedido: Pedido) => void;
   onCancel: () => void;
+  // Archivos de OC ya subidos para este pedido (el padre los trae con
+  // getArchivosOrdenCompra al abrir el formulario).
+  archivosOrdenCompra?: ArchivoOrdenCompraForm[];
+  // El padre hace la subida real (subirArchivoOrdenCompra) porque necesita
+  // el idsolicitud del pedido y actualizar su propio estado/lista al
+  // terminar.
+  onSubirArchivoOrdenCompra?: (archivo: File) => void | Promise<void>;
+  onEliminarArchivoOrdenCompra?: (idArchivo: number) => void | Promise<void>;
+  subiendoArchivoOrdenCompra?: boolean;
 }
 
 export default function FormularioPedido({
   pedido,
   onSave,
   onCancel,
+  archivosOrdenCompra = [],
+  onSubirArchivoOrdenCompra,
+  onEliminarArchivoOrdenCompra,
+  subiendoArchivoOrdenCompra = false,
 }: FormularioPedidoProps) {
   const [form, setForm] = useState<Pedido>(pedido);
 
@@ -320,6 +345,81 @@ export default function FormularioPedido({
               Anticipo Pagado
             </label>
           </div>
+        </div>
+      </div>
+
+      {/* Orden de Compra del cliente */}
+      <div className="bg-amber-50 p-4 rounded-lg border border-amber-200">
+        <h4 className="text-sm font-bold text-amber-900 mb-3 uppercase tracking-wider">
+          Orden de Compra
+        </h4>
+        <div className="mb-3">
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Folio de la orden de compra
+          </label>
+          <input
+            type="text"
+            value={form.ordenCompraFolio ?? ""}
+            onChange={(e) =>
+              setForm({ ...form, ordenCompraFolio: e.target.value })
+            }
+            className="w-full p-2 border border-gray-300 rounded-md focus:ring-amber-500 focus:border-amber-500"
+            placeholder="Ej. OC-4521 (opcional)"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Archivo o imagen de la orden de compra
+          </label>
+
+          {archivosOrdenCompra.length > 0 && (
+            <ul className="mb-2 space-y-1">
+              {archivosOrdenCompra.map((archivo) => (
+                <li
+                  key={archivo.id_archivo}
+                  className="flex items-center justify-between bg-white px-3 py-2 rounded border border-gray-200 text-sm"
+                >
+                  <a
+                    href={archivo.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-600 hover:underline truncate"
+                  >
+                    {archivo.nombre}
+                  </a>
+                  {onEliminarArchivoOrdenCompra && (
+                    <button
+                      type="button"
+                      onClick={() => onEliminarArchivoOrdenCompra(archivo.id_archivo)}
+                      className="text-red-600 hover:text-red-800 text-xs font-medium ml-3"
+                    >
+                      Eliminar
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {onSubirArchivoOrdenCompra && (
+            <input
+              type="file"
+              accept="image/*,application/pdf"
+              disabled={subiendoArchivoOrdenCompra}
+              onChange={(e) => {
+                const archivo = e.target.files?.[0];
+                if (archivo) {
+                  onSubirArchivoOrdenCompra(archivo);
+                  e.target.value = "";
+                }
+              }}
+              className="block w-full text-sm text-gray-600 file:mr-3 file:py-2 file:px-4 file:rounded-md file:border-0 file:bg-amber-100 file:text-amber-900 file:font-medium hover:file:bg-amber-200"
+            />
+          )}
+          {subiendoArchivoOrdenCompra && (
+            <p className="text-xs text-gray-500 mt-1">Subiendo archivo...</p>
+          )}
         </div>
       </div>
 

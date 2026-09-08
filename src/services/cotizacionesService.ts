@@ -3,6 +3,9 @@ import api from "./api";
 import { ejecutarOEncolar } from "../offline/outbox";
 import type {
   Cotizacion,
+  // NOTA: CrearCotizacionPayload ya acepta [key: string]: any, así que
+  // ordenCompraFolio (opcional, solo aplica a tipo="pedido") se puede pasar
+  // sin tocar la interfaz — ver cotizaciones.types.ts.
   CrearCotizacionPayload,
   DetalleCrearCotizacion,
   ProductoEnviarCotizacion,
@@ -133,6 +136,9 @@ export const crearCotizacion = async (
     sin_iva: datos.sin_iva ?? false,
     moneda: datos.moneda ?? "MXN",
     tipoCambio: datos.tipoCambio ?? null,
+    // Folio de la orden de compra del cliente. Solo tiene sentido cuando
+    // tipo="pedido"; se ignora en el backend si es una cotización.
+    orden_compra_folio: datos.ordenCompraFolio ?? null,
     productos,
   };
 

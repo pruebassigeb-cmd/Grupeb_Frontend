@@ -29,6 +29,20 @@ import FormularioProductoEspecial from "../../components/papel/especiales/Formul
 import type { ProductoEspecialConId } from "../../components/papel/especiales/FormularioProductoEspecial";
 import { T, Boton, Entrada, IcoLapiz, IcoBote, Chip, paletaOP } from "../../components/papel/especiales/disenoEspeciales";
 import { etiquetaComponente, indiceInicio, nombreComponente } from "../../components/papel/especiales/MaterialesAsignacion";
+// NOMBRES_PROCESO_PAPEL (Jose, 2026-09-04): el catálogo (proceso_cat.nombre_proceso)
+// trae el nombre completo tal cual se dio de alta ("Impresión Papel", "Suaje
+// Papel", etc.) -- este es el mismo mapa de nombres cortos que ya usan
+// Seguimiento y los modales de proceso, para que un producto especial no se
+// vea distinto aquí que en el resto del sistema.
+import { NOMBRES_PROCESO_PAPEL } from "../../types/papel/seguimientoPapel.types";
+import type { NombreProcesoPapel } from "../../types/papel/seguimientoPapel.types";
+
+// Nombre corto de un proceso a partir de su `tabla` (llave estable), con
+// respaldo al nombre crudo del catálogo solo si la tabla no se reconoce
+// (proceso nuevo aún no mapeado) -- nunca al revés, porque el nombre crudo
+// SIEMPRE existe pero casi nunca es el que se quiere mostrar.
+const nombreCortoDeProceso = (p: { tabla?: string | null; nombre_proceso?: string | null }): string =>
+  (p.tabla && NOMBRES_PROCESO_PAPEL[p.tabla as NombreProcesoPapel]) || p.nombre_proceso || "";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // MAPEOS API → FORM
@@ -246,21 +260,43 @@ function seccionProcesos(procesos: any[]) {
       </p>
     );
   }
+  // Jose (2026-09-04): la repetición ya no viene en un campo `veces` -- un
+  // proceso repetido aparece varias VECES en la ruta, así que aquí se numera
+  // cada ocurrencia ("Impresión (1ª)", "(2ª)"), igual que al armar la ruta.
+  // Los procesos que van una sola vez no se numeran.
+  // La repetición se numera por `tabla` (llave estable del proceso), no por
+  // el nombre mostrado -- agrupar por nombre_proceso crudo rompía la cuenta
+  // en cuanto dos procesos distintos con el mismo texto de catálogo caían
+  // juntos, y además es lo mismo que causaba que se mostrara el nombre largo
+  // de catálogo ("Impresión Papel") en vez del corto (Jose, 2026-09-04).
+  const totalPorProceso = new Map<string, number>();
+  procesos.forEach((p: any) => {
+    const k = String(p.tabla ?? p.nombre_proceso ?? "");
+    totalPorProceso.set(k, (totalPorProceso.get(k) ?? 0) + 1);
+  });
+  const vistas = new Map<string, number>();
+
   return (
     <div style={{ marginBottom: 10 }}>
       <p style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#1D4ED8", margin: "0 0 5px" }}>
         Ruta de procesos
       </p>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-        {procesos.map((p: any, pi: number) => (
-          <span key={p.idcomponente_papel_proceso ?? pi}
-            style={{ display: "inline-flex", alignItems: "center", gap: 4, background: "#EFF6FF", border: "1px solid #BFDBFE", borderRadius: 6, padding: "3px 8px", fontSize: 11 }}>
-            <span style={{ fontWeight: 700, color: "#1D4ED8" }}>{pi + 1}.</span>
-            <span style={{ color: "#1E3A8A", fontWeight: 600 }}>{p.nombre_proceso}</span>
-            {p.veces > 1 && <span style={{ color: "#1D4ED8", fontWeight: 700 }}>×{p.veces}</span>}
-            {p.observaciones && <span style={{ color: "#64748B", fontStyle: "italic" }}>— {p.observaciones}</span>}
-          </span>
-        ))}
+        {procesos.map((p: any, pi: number) => {
+          const k = String(p.tabla ?? p.nombre_proceso ?? "");
+          const n = (vistas.get(k) ?? 0) + 1;
+          vistas.set(k, n);
+          const pasada = (totalPorProceso.get(k) ?? 1) > 1 ? `(${n}ª)` : "";
+          return (
+            <span key={p.idcomponente_papel_proceso ?? pi}
+              style={{ display: "inline-flex", alignItems: "center", gap: 4, background: "#EFF6FF", border: "1px solid #BFDBFE", borderRadius: 6, padding: "3px 8px", fontSize: 11 }}>
+              <span style={{ fontWeight: 700, color: "#1D4ED8" }}>{pi + 1}.</span>
+              <span style={{ color: "#1E3A8A", fontWeight: 600 }}>{nombreCortoDeProceso(p)}</span>
+              {pasada && <span style={{ color: "#1D4ED8", fontWeight: 700 }}>{pasada}</span>}
+              {p.observaciones && <span style={{ color: "#64748B", fontStyle: "italic" }}>— {p.observaciones}</span>}
+            </span>
+          );
+        })}
       </div>
     </div>
   );
@@ -628,11 +664,25 @@ export default function ProductoEspecial() {
           orden: comp.orden ?? null,
           nombre: comp.nombre ?? "",
           esUnion: comp.es_union === true,
+          // 🔁 FASE 4: se resuelve ABAJO, en un segundo paso, una vez que
+          // TODOS los componentes ya están en idComponentePapelToLocalId --
+          // el padre real de este componente puede aparecer MÁS ADELANTE en
+          // este mismo arreglo (mismo problema que ya resuelve el bloque de
+          // materiales más abajo).
+          idComponentePadre: null,
           procesos: (comp.procesos ?? []).map((proceso: any, pi: number) => ({
             id: Date.now() + ci * 1000 + pi,
             idcomponente_papel_proceso: proceso.idcomponente_papel_proceso,
             idproceso_cat: proceso.idproceso_cat ?? null,
-            procesoNombre: proceso.nombre_proceso ?? "",
+            // Antes se guardaba aquí el nombre_proceso CRUDO del catálogo
+            // ("Impresión Papel", "Suaje Papel"...), y como RutaProcesos.tsx
+            // prefiere procesoNombre sobre su propio acortador cuando ya
+            // trae algo, cualquier producto especial ya guardado se quedaba
+            // mostrando el nombre largo para siempre, aunque los procesos
+            // agregados de ahí en adelante sí salieran cortos. Se usa el
+            // mismo acortador que la vista de solo lectura de arriba (Jose,
+            // 2026-09-04).
+            procesoNombre: nombreCortoDeProceso(proceso),
             orden: proceso.orden ?? pi + 1,
             observaciones: proceso.observaciones ?? "",
             materiales: (proceso.materiales ?? []).map(
@@ -643,6 +693,16 @@ export default function ProductoEspecial() {
           acabados: mapApiAcabadosToForm(comp.acabados),
           maquinaria: mapApiMaquinariaToForm(comp.maquinaria),
         };
+      });
+
+      // 🔁 FASE 4: traduce idcomponente_papel_padre (id REAL de BD) a id
+      // LOCAL, ahora que idComponentePapelToLocalId ya tiene a TODOS los
+      // componentes (sin importar el orden en que vinieron del backend).
+      (d.componentes ?? []).forEach((comp: any, ci: number) => {
+        if (comp.idcomponente_papel_padre != null) {
+          form.componentes[ci].idComponentePadre =
+            idComponentePapelToLocalId.get(comp.idcomponente_papel_padre) ?? null;
+        }
       });
 
       for (const grupo of form.grupos) {

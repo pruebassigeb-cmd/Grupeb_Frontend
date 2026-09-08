@@ -27,10 +27,13 @@ import { formatMoney, type Moneda } from "../../utils/formatMoney";
 import AuditoriaDesplegable from "../../components/auditoria/AuditoriaDesplegable";
 import { leerBorrador, useAutoguardarBorrador, limpiarBorrador } from "../../hooks/useBorradorFormulario";
 import { invalidarSolicitudesGet } from "../../services/api";
+import ArchivosOrdenCompra from "../../components/pedidos/ArchivosOrdenCompra";
 import {
   CLAVE_PEDIDO_ACTUALIZADO,
   EVENTO_PEDIDO_ACTUALIZADO,
+  getArchivosOrdenCompra,
 } from "../../services/pedidosService";
+import type { ArchivoOrdenCompra } from "../../services/pedidosService";
 
 import { fmtFecha, hoyMX } from "../../utils/fecha";
 const ESTADO = { PENDIENTE: 1, EN_PROCESO: 2, PAGADO: 6 } as const;
@@ -505,6 +508,15 @@ export function EditarAntLiqReal({
   const [alertaPdf,       setAlertaPdf]       = useState<{ visible: boolean; folios: string[] }>({
     visible: false, folios: [],
   });
+  // Solo lectura: aquí no se sube ni se borra, se muestra lo que ya se
+  // cargó desde Editar Pedido.
+  const [archivosOC, setArchivosOC] = useState<ArchivoOrdenCompra[]>([]);
+
+  useEffect(() => {
+    getArchivosOrdenCompra(ventaInicial.no_pedido)
+      .then(setArchivosOC)
+      .catch(() => {});
+  }, [ventaInicial.no_pedido]);
 
   useEffect(() => {
     setVenta(ventaInicial);
@@ -714,6 +726,25 @@ export function EditarAntLiqReal({
           )}
         </p>
       </div>
+
+      {/* Orden de Compra del cliente — solo lectura, se edita desde Editar Pedido. */}
+      {(venta.orden_compra_folio || archivosOC.length > 0) && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+          <div className="flex flex-col sm:flex-row sm:items-start gap-3">
+            <div className="sm:flex-shrink-0">
+              <h3 className="text-xs font-semibold text-amber-800 uppercase tracking-wide mb-1">
+                Orden de Compra
+              </h3>
+              {venta.orden_compra_folio && (
+                <p className="text-sm text-gray-700">
+                  Folio: <span className="font-semibold">{venta.orden_compra_folio}</span>
+                </p>
+              )}
+            </div>
+            <ArchivosOrdenCompra archivos={archivosOC} vacioTexto="Sin archivo cargado." />
+          </div>
+        </div>
+      )}
 
       <AuditoriaDesplegable
         tabla="ventas"
@@ -1099,6 +1130,28 @@ export default function AnticipoLiquidacion() {
   const [loading,         setLoading]         = useState(false);
   const [busqueda,        setBusqueda]        = useState("");
   const [pagina,          setPagina]          = useState(1);
+  // Popover de OC en la tabla: qué pedido está abierto + caché de sus
+  // archivos ya pedidos, para no volver a pedirlos si se abre/cierra varias
+  // veces la misma fila.
+  const [popoverOC,        setPopoverOC]        = useState<string | null>(null);
+  const [archivosPorPedido, setArchivosPorPedido] = useState<Record<string, ArchivoOrdenCompra[]>>({});
+  const [cargandoPopoverOC, setCargandoPopoverOC] = useState<string | null>(null);
+
+  const toggleOC = async (noPedido: string) => {
+    if (popoverOC === noPedido) { setPopoverOC(null); return; }
+    setPopoverOC(noPedido);
+    if (!archivosPorPedido[noPedido]) {
+      setCargandoPopoverOC(noPedido);
+      try {
+        const archivos = await getArchivosOrdenCompra(noPedido);
+        setArchivosPorPedido(prev => ({ ...prev, [noPedido]: archivos }));
+      } catch {
+        // Silencioso: el popover simplemente se queda sin thumbnails.
+      } finally {
+        setCargandoPopoverOC(null);
+      }
+    }
+  };
   // ── NUEVO: orden por fecha del estado de cuenta (más antiguo primero por
   // default = prioriza cobranza) y ocultar liquidadas salvo búsqueda activa.
   const [orden,           setOrden]           = useState<"antiguo" | "reciente">("antiguo");
@@ -1272,6 +1325,9 @@ export default function AnticipoLiquidacion() {
   return (
     <Dashboard>
       <RequiereConexion>
+      {popoverOC && (
+        <div className="fixed inset-0 z-10" onClick={() => setPopoverOC(null)} />
+      )}
       <h1 className="text-2xl font-bold mb-2">Anticipo y Liquidación</h1>
       <p className="text-slate-400 mb-6">Gestiona los anticipos y liquidaciones de los pedidos activos.</p>
 
@@ -1323,6 +1379,33 @@ export default function AnticipoLiquidacion() {
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                   {v.no_pedido}
                   {v.no_cotizacion && <span className="ml-1 text-xs text-gray-400 font-normal">Cot.#{v.no_cotizacion}</span>}
+                  {(v.orden_compra_folio || v.tiene_archivo_oc) && (
+                    <div className="relative inline-block ml-2 align-middle">
+                      <button
+                        type="button"
+                        onClick={() => toggleOC(v.no_pedido)}
+                        title={v.orden_compra_folio ? `Orden de Compra: ${v.orden_compra_folio}` : "Orden de Compra"}
+                        className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px] font-semibold hover:bg-amber-200 transition-colors"
+                      >
+                        {v.orden_compra_folio ? `OC: ${v.orden_compra_folio}` : "OC"}
+                      </button>
+                      {popoverOC === v.no_pedido && (
+                        <div
+                          className="absolute z-20 top-full left-0 mt-1 w-56 bg-white border border-amber-200 rounded-lg shadow-lg p-3"
+                          onClick={e => e.stopPropagation()}
+                        >
+                          {cargandoPopoverOC === v.no_pedido ? (
+                            <p className="text-xs text-gray-400">Cargando...</p>
+                          ) : (
+                            <ArchivosOrdenCompra
+                              archivos={archivosPorPedido[v.no_pedido] ?? []}
+                              vacioTexto="Sin archivo cargado."
+                            />
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{fmtFecha(v.fecha_pedido)}</td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{v.impresion || "—"}</td>

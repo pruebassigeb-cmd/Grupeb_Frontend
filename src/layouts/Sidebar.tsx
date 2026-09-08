@@ -44,7 +44,7 @@ export default function Dashboard({ children }: DashboardProps) {
   const [contadorTickets, setContadorTickets] = useState<number | null>(null);
   // 🔔 Cuántos tickets tienen algo nuevo sin leer (comentario o imagen de
   // alguien más desde la última vez que los abriste). Aparte del contador
-  // de activos — ese cuenta tickets abiertos, esto cuenta "hay algo nuevo".
+  // de activos — ese cuenta tickets abiertos, esta cuenta "hay algo nuevo".
   const [campanitaTickets, setCampanitaTickets] = useState<number>(0);
 
   const navigate = useNavigate();
@@ -229,6 +229,21 @@ export default function Dashboard({ children }: DashboardProps) {
       accesoTotal: true,
       subItems: [],
     },
+    // ✅ NUEVO — módulo de autenticación por red. Va con accesoTotal: true,
+    // el mismo criterio que Archivos/Backups BD: la pantalla en sí impone
+    // una regla un poco más estricta todavía (acceso_total Y rol
+    // admin/superusuario, ver esAdminOSuperUsuario en
+    // AdministracionRedes.tsx), así que si alguna cuenta tuviera
+    // acceso_total sin ese rol, vería el ítem pero la pantalla la mandaría
+    // a /sin-acceso — no es un hueco de seguridad, solo un ítem de menú de
+    // más en un caso que hoy no existe en tu base de usuarios.
+    // {
+    //   name: "Administración de redes",
+    //   icon: "🌐",
+    //   path: "/admin/redes",
+    //   accesoTotal: true,
+    //   subItems: [],
+    // },
     {
       name: "Gestor proveedores",
       icon: "🤝",

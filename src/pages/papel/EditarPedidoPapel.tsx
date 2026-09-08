@@ -4,10 +4,11 @@ import { showAlert } from "../../components/CustomAlert";
 import { useParams, useNavigate } from "react-router-dom";
 import Dashboard from "../../layouts/Sidebar";
 import { formatMoney } from "../../utils/formatMoney";
-import { getPedidos, actualizarPedido, cambiarMonedaPedido } from "../../services/pedidosService";
+import { getPedidos, actualizarPedido, cambiarMonedaPedido, subirArchivoOrdenCompra, getArchivosOrdenCompra, eliminarArchivoOrdenCompra } from "../../services/pedidosService";
 import type {
   ProductoPapelActualizar,
   ProductoNuevoPapel,
+  ArchivoOrdenCompra,
 } from "../../services/pedidosService";
 import type { Pedido } from "../../types/cotizaciones.types";
 import {
@@ -44,6 +45,7 @@ import type { MaquinariaProductoPedidoPapel } from "../../types/papel/maquinaria
 import api from "../../services/api";
 import { coincideBusquedaProductoPapel } from "../../utils/papel/buscarProductoPapel";
 import { limpiarBorrador } from "../../hooks/useBorradorFormulario";
+import ArchivosOrdenCompra from "../../components/pedidos/ArchivosOrdenCompra";
 import { claveBorradorProductoPapel } from "../../utils/clavesBorrador";
 
 // ─── Tipos internos ───────────────────────────────────────────────────────────
@@ -917,6 +919,9 @@ export default function EditarPedidoPapel() {
   const [productos, setProductos] = useState<ProductoPapelEdit[]>([]);
   const [prioridad, setPrioridad] = useState(false);
   const [sinIva, setSinIva] = useState(false);
+  const [ordenCompraFolio, setOrdenCompraFolio] = useState("");
+  const [archivosOC, setArchivosOC] = useState<ArchivoOrdenCompra[]>([]);
+  const [subiendoOC, setSubiendoOC] = useState(false);
 
   // Refs por producto (indexadas por posición en `productos`) para poder
   // hacer scroll automático al producto que falla una validación al guardar.
@@ -993,6 +998,10 @@ export default function EditarPedidoPapel() {
         if (!ped) { setError("Pedido no encontrado"); return; }
         setPrioridad((ped as any).prioridad ?? false);
         setSinIva((ped as any).sin_iva ?? false);
+        setOrdenCompraFolio((ped as any).orden_compra_folio ?? "");
+        getArchivosOrdenCompra(noPedido)
+          .then(setArchivosOC)
+          .catch(() => {});
         setPedidoOrig(ped);
         setMonedaSeleccionada((ped.moneda as "MXN" | "USD") ?? "MXN");
 
@@ -1427,6 +1436,29 @@ export default function EditarPedidoPapel() {
   const totalMaquinasSeleccionadas = (p: ProductoPapelEdit) =>
     Object.values(p.maquinaria_seleccionada ?? {}).filter(Boolean).length;
 
+  // ── Orden de Compra: subir/eliminar archivo ────────────────────────────────
+  const handleSubirArchivoOC = async (archivo: File) => {
+    if (!noPedido) return;
+    setSubiendoOC(true);
+    try {
+      const nuevo = await subirArchivoOrdenCompra(noPedido, archivo);
+      setArchivosOC(prev => [nuevo, ...prev]);
+    } catch (e: any) {
+      showAlert(e.response?.data?.error || e.message || "Error al subir el archivo");
+    } finally {
+      setSubiendoOC(false);
+    }
+  };
+
+  const handleEliminarArchivoOC = async (idArchivo: number) => {
+    try {
+      await eliminarArchivoOrdenCompra(idArchivo);
+      setArchivosOC(prev => prev.filter(a => a.id_archivo !== idArchivo));
+    } catch (e: any) {
+      showAlert(e.response?.data?.error || e.message || "Error al eliminar el archivo");
+    }
+  };
+
   // ─── Guardar ─────────────────────────────────────────────────────────────────
   const handleGuardar = async () => {
     if (!pedidoOrig) return;
@@ -1556,6 +1588,7 @@ export default function EditarPedidoPapel() {
         productos_nuevos: productosNuevos,
         prioridad,
         sin_iva: sinIva,
+        orden_compra_folio: ordenCompraFolio.trim() || null,
       };
 
       await actualizarPedido(pedidoOrig.no_pedido, payload);
@@ -1863,6 +1896,33 @@ export default function EditarPedidoPapel() {
               + IVA 16%: ${fmt(totalGeneral * 0.16)} →{" "}
               <span className="font-semibold text-gray-600">${fmt(totalGeneral * 1.16)}</span>
             </p>
+          </div>
+        </div>
+
+        {/* Orden de Compra del cliente */}
+        <div className="bg-white rounded-xl border border-amber-200 shadow-sm p-5">
+          <h3 className="text-sm font-semibold text-amber-800 mb-3">Orden de Compra</h3>
+
+          <div className="flex flex-col sm:flex-row sm:items-start gap-4">
+            <div className="w-full sm:w-56 sm:flex-shrink-0">
+              <label className="block text-xs font-medium text-gray-500 mb-1">
+                Folio de la orden de compra
+              </label>
+              <input
+                type="text"
+                value={ordenCompraFolio}
+                onChange={e => setOrdenCompraFolio(e.target.value)}
+                placeholder="Ej. OC-4521 (opcional)"
+                className="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-amber-500 focus:border-amber-500"
+              />
+            </div>
+
+            <ArchivosOrdenCompra
+              archivos={archivosOC}
+              onSubir={handleSubirArchivoOC}
+              onEliminar={handleEliminarArchivoOC}
+              subiendo={subiendoOC}
+            />
           </div>
         </div>
 

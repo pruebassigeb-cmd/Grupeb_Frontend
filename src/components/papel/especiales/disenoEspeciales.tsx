@@ -93,14 +93,23 @@ export interface PaletaOP {
   punto: string;
 }
 
-export const paletaOP = (tipo: "unica" | "inicio" | "union", indiceInicio = 0): PaletaOP => {
+export const paletaOP = (
+  tipo: "unica" | "inicio" | "union" | "complementaria",
+  indice = 0
+): PaletaOP => {
   if (tipo === "union") {
     return { headBg: T.greenBg, headText: T.greenDeep, chipBg: "#DCF2E4", chipText: T.greenDeep, punto: T.greenDeep };
   }
   if (tipo === "unica") {
     return { headBg: T.greenBg, headText: T.greenDeep, chipBg: "#DCF2E4", chipText: T.greenDeep, punto: T.greenDeep };
   }
-  const par = indiceInicio % 2 === 1;
+  if (tipo === "complementaria") {
+    // 🔁 FASE 4 (OPC): naranja -- a medio camino visualmente entre inicio
+    // (azul/lavanda) y unión (verde), para que de un vistazo la tarjeta ya
+    // diga "esto es un nivel intermedio, no el origen ni el final".
+    return { headBg: T.orangeBg, headText: T.orangeText, chipBg: T.orangeBg, chipText: T.orangeText, punto: T.orange };
+  }
+  const par = indice % 2 === 1;
   return par
     ? { headBg: T.purpleBg, headText: T.purpleText, chipBg: "#EAE2F6", chipText: T.purple, punto: T.purple }
     : { headBg: T.blueBg, headText: T.inkStrong, chipBg: "#DCE8F8", chipText: T.primary, punto: "#1D5DB8" };

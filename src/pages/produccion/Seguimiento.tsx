@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, type MouseEvent as ReactMouseEvent } from "react";
 import Dashboard from "../../layouts/Sidebar";
 import RequiereConexion from "../../components/pwa/RequiereConexion";
 import { getSeguimiento, getCuentasPorCobrar } from "../../services/produccion/seguimientoService";
@@ -35,6 +35,10 @@ import type { Proceso as ProcesoVerificacion } from "../../components/produccion
 import { showAlert } from '../../components/CustomAlert';
 import ModalProcesoIndividualPapel from "../../components/papel/ModalProcesoIndividualPapel";
 import { getProcesosOrdenPapel } from "../../services/papel/seguimientoPapelService";
+// Modal propio de especiales: entiende procesos repetidos (tabla + pasada)
+// y no pregunta nada del par Hojeado/Guillotina, porque en un especial la
+// ruta ya viene fija del alta del producto (Jose, 2026-09-04).
+import ModalProcesoIndividualEspecial from "../../components/papel/especiales/ModalProcesoIndividualEspecial";
 import type {
   ProcesoRegistroPapel,
   ProcesosOrdenPapelRespuesta,
@@ -62,10 +66,15 @@ const formatearFechaAprobacion = (fecha: string | null): string | null => {
   return fmtFecha(fecha);
 };
 
-const FechaAprobacion = ({ fecha }: { fecha: string | null }) => {
+const FechaAprobacion = ({ fecha, sinMargen = false }: { fecha: string | null; sinMargen?: boolean }) => {
   const texto = formatearFechaAprobacion(fecha);
   if (!texto) return null;
-  return <div className="text-[10px] text-gray-400 leading-tight mt-0.5 whitespace-nowrap">✓ {texto}</div>;
+  return (
+    <div className={`flex items-center justify-center gap-0.5 text-[10px] text-gray-400 leading-tight whitespace-nowrap ${sinMargen ? "" : "mt-0.5"}`}>
+      <IconoCheck className="w-2.5 h-2.5" />
+      {texto}
+    </div>
+  );
 };
 
 // Fecha corta (día/mes en números, ej. "17/08") que se muestra debajo de los
@@ -140,13 +149,103 @@ const obtenerColorEstado = (estado: string) => {
   }
 };
 
+// ── ICONOS (Jose, 2026-09-08: "usa iconos y no emoticonos, se ven mejor")
+// SVG inline en vez de emoji/glifos de texto (🔒 ✓ ⚙ ▶ 🎉). Razones:
+//   · Un emoji lo dibuja la FUENTE DEL SISTEMA -- se ve distinto en Windows,
+//     Mac y Android, y en varios casos llega a color aunque el badge sea
+//     monocromo, que es justo lo que se veía "de juguete".
+//   · Estos heredan el color del texto (stroke="currentColor"), así que un
+//     mismo icono se pinta gris en una fila bloqueada y verde dentro de un
+//     badge finalizado, sin duplicar nada.
+//   · Sin dependencias nuevas: el proyecto no trae lucide-react ni
+//     react-icons, y no vale la pena agregar un paquete por 6 iconos.
+// Todos comparten viewBox 24 y se escalan con la clase que reciben.
+const svgBase = "shrink-0 inline-block";
+
+// Ancho en px de cada nivel de sangría del árbol de OP en el desglose de un
+// especial. Se usa tanto para la sangría del contenido como para la
+// posición de las líneas, así que cambiarlo aquí las mueve juntas.
+const NIVEL_ARBOL = 18;
+
+const IconoCandado = ({ className = "w-3 h-3" }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+    strokeLinecap="round" strokeLinejoin="round" className={`${svgBase} ${className}`} aria-hidden="true">
+    <rect x="4" y="11" width="16" height="10" rx="2" />
+    <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+  </svg>
+);
+
+const IconoChevron = ({ className = "w-3 h-3" }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"
+    strokeLinecap="round" strokeLinejoin="round" className={`${svgBase} ${className}`} aria-hidden="true">
+    <path d="M9 5l7 7-7 7" />
+  </svg>
+);
+
+const IconoCheck = ({ className = "w-3 h-3" }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"
+    strokeLinecap="round" strokeLinejoin="round" className={`${svgBase} ${className}`} aria-hidden="true">
+    <path d="M4 12.5l5.5 5.5L20 6.5" />
+  </svg>
+);
+
+// "En proceso": flecha circular. Se probó primero con un engrane (el
+// equivalente dibujado del glifo ⚙) pero a 13-14px, que es el tamaño real
+// dentro de un chip, los dientes se apelmazan y se lee como un solecito.
+// La flecha circular aguanta el tamaño chico y ya significa "corriendo /
+// en curso" sin tener que explicarla.
+const IconoProceso = ({ className = "w-3.5 h-3.5" }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+    strokeLinecap="round" strokeLinejoin="round" className={`${svgBase} ${className}`} aria-hidden="true">
+    <path d="M20.5 12a8.5 8.5 0 1 1-2.5-6" />
+    <path d="M20.5 3.5V9H15" />
+  </svg>
+);
+
+// "Pendiente": una raya, pero dibujada -- el guion de texto cambiaba de
+// ancho según la fuente y descuadraba los chips entre sí.
+const IconoGuion = ({ className = "w-3 h-3" }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"
+    strokeLinecap="round" className={`${svgBase} ${className}`} aria-hidden="true">
+    <path d="M6 12h12" />
+  </svg>
+);
+
+const IconoAlerta = ({ className = "w-3.5 h-3.5" }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+    strokeLinecap="round" strokeLinejoin="round" className={`${svgBase} ${className}`} aria-hidden="true">
+    <path d="M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" />
+    <path d="M12 9v4M12 17h.01" />
+  </svg>
+);
+
+// El estado de un chip de proceso, ya como icono. Reemplaza al mapa de
+// caracteres de antes. "N/A" se queda como TEXTO a propósito: es una
+// etiqueta ("no aplica"), no un símbolo -- dibujarla como icono la haría
+// menos legible, no más.
+const obtenerIconoEstado = (estado: string) => {
+  switch (estado) {
+    case "finalizado": case "aprobado": case "pagado": case "aprobado_sin_archivos":
+      return <IconoCheck className="w-3.5 h-3.5" />;
+    case "proceso":
+      return <IconoProceso className="w-3.5 h-3.5" />;
+    case "detenido": case "resagado":
+      return <IconoAlerta className="w-3.5 h-3.5" />;
+    case "no-aplica":
+      return <span className="text-[10px] font-bold leading-none">N/A</span>;
+    default:
+      return <IconoGuion className="w-3 h-3" />;
+  }
+};
+
+// Se conserva solo para los title/tooltip (texto plano, sin JSX).
 const obtenerTextoEstado = (estado: string) => {
   const mapa: Record<string, string> = {
-    finalizado: "✓", proceso: "⚙", pendiente: "–",
-    detenido: "!", resagado: "!", "no-aplica": "N/A", aprobado: "✓", pagado: "✓",
-    aprobado_sin_archivos: "✓",
+    finalizado: "Finalizado", proceso: "En proceso", pendiente: "Pendiente",
+    detenido: "Detenido", resagado: "Resagado", "no-aplica": "No aplica",
+    aprobado: "Aprobado", pagado: "Pagado", aprobado_sin_archivos: "Aprobado",
   };
-  return mapa[estado] ?? "–";
+  return mapa[estado] ?? estado;
 };
 
 const Badge = ({
@@ -161,14 +260,45 @@ const Badge = ({
   const dias = diasDesde(fechaEstado);
   const color = obtenerColorEstadoProceso(estado, fechaEstado, intensificado);
   const titulo = dias !== null && (estado === "pendiente" || estado === "proceso")
-    ? `${estado} · ${dias} día${dias !== 1 ? "s" : ""} sin cambio`
-    : estado;
-  const base = `inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold border ${color}`;
-  const cursor = clickable && estado !== "no-aplica" ? "cursor-pointer hover:scale-110 hover:shadow-md transition-transform" : "";
+    ? `${obtenerTextoEstado(estado)} · ${dias} día${dias !== 1 ? "s" : ""} sin cambio`
+    : obtenerTextoEstado(estado);
+  // 🎨 (Jose, 2026-09-08 -- "para que se vea más fresco y renovado"): los
+  // chips de proceso eran círculos de 28px (w-7 h-7 rounded-full), que con
+  // 14 columnas de papel dejaban la tabla con aspecto de tablero de fichas
+  // y apretaban "N/A" contra el borde. Ahora son rectángulos redondeados
+  // (más anchos que altos), que es como se leen las etiquetas de estado en
+  // el resto de la app y deja respirar el texto sin ocupar más alto.
+  const base = `inline-flex items-center justify-center min-w-[2.15rem] h-6 px-2 rounded-lg text-[11px] font-bold border ${color}`;
+  const cursor = clickable && estado !== "no-aplica" ? "cursor-pointer hover:brightness-95 hover:shadow-sm transition-all" : "";
   return (
     <span title={titulo} className={`${base} ${cursor}`}
       onClick={clickable && estado !== "no-aplica" ? onClick : undefined}>
-      {obtenerTextoEstado(estado)}
+      {obtenerIconoEstado(estado)}
+    </span>
+  );
+};
+
+// ✅ NUEVO (Jose, 2026-09-05): badge chico para cuando un proceso se repite
+// en la ruta -- una fila de estos (uno por corrida) reemplaza al Badge
+// grande de arriba, para poder abrir CUALQUIER corrida, no solo la que
+// está corriendo ahora. Mismo color/estado que Badge, pero muestra el
+// número de corrida (1, 2, 3...) en vez del glifo de estado, porque aquí
+// lo que hace falta distinguir es CUÁL corrida es, no repetir el estado
+// (el color ya lo dice).
+const BadgePasada = ({
+  numero, estado, clickable, onClick, titulo, intensificado = false,
+}: {
+  numero: number; estado: string; clickable: boolean; onClick?: () => void;
+  titulo: string; intensificado?: boolean;
+}) => {
+  const color = obtenerColorEstadoProceso(estado, null, intensificado);
+  const cursor = clickable && estado !== "no-aplica" ? "cursor-pointer hover:scale-110 hover:shadow-md transition-transform" : "";
+  const anillo = intensificado ? "ring-2 ring-offset-1 ring-orange-400" : "";
+  return (
+    <span title={titulo}
+      className={`inline-flex items-center justify-center min-w-[1.35rem] h-5 px-1 rounded-md text-[10px] font-bold border ${color} ${cursor} ${anillo}`}
+      onClick={clickable && estado !== "no-aplica" ? onClick : undefined}>
+      {numero}
     </span>
   );
 };
@@ -176,7 +306,7 @@ const Badge = ({
 const BadgeTexto = ({ estado, fechaEstado = null }: { estado: string; fechaEstado?: string | null }) => {
   const textos: Record<string, string> = {
     finalizado: "Finalizado", proceso: "En Proceso", pendiente: "Pendiente",
-    resagado: "Resagado", "no-aplica": "N/A", aprobado: "Aprobado", pagado: "Pagado ✓",
+    resagado: "Resagado", "no-aplica": "N/A", aprobado: "Aprobado", pagado: "Pagado",
     // ✅ NUEVO: mismo texto "Aprobado" — solo cambia el color (ver
     // obtenerColorEstado), para el caso "aprobado pero sin archivos".
     aprobado_sin_archivos: "Aprobado",
@@ -185,8 +315,10 @@ const BadgeTexto = ({ estado, fechaEstado = null }: { estado: string; fechaEstad
   const dias = diasDesde(fechaEstado);
   const titulo = dias !== null ? `${textos[estado] ?? estado} · ${dias} día${dias !== 1 ? "s" : ""}` : undefined;
   return (
-    <span title={titulo} className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium border ${color}`}>
+    <span title={titulo} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium border ${color}`}>
       {textos[estado] ?? estado}
+      {/* El "✓" que traía pegado el texto "Pagado ✓" ahora es un icono. */}
+      {estado === "pagado" && <IconoCheck className="w-3 h-3" />}
     </span>
   );
 };
@@ -196,7 +328,7 @@ const BadgeTextoBtn = ({ estado, fechaEstado = null, onClick, cargando = false }
 }) => {
   const textos: Record<string, string> = {
     finalizado: "Finalizado", proceso: "En Proceso", pendiente: "Pendiente",
-    resagado: "Resagado", "no-aplica": "N/A", aprobado: "Aprobado", pagado: "Pagado ✓",
+    resagado: "Resagado", "no-aplica": "N/A", aprobado: "Aprobado", pagado: "Pagado",
     // ✅ NUEVO: mismo texto "Aprobado" — solo cambia el color (ver
     // obtenerColorEstado), para el caso "aprobado pero sin archivos".
     aprobado_sin_archivos: "Aprobado",
@@ -211,6 +343,7 @@ const BadgeTextoBtn = ({ estado, fechaEstado = null, onClick, cargando = false }
         ${color}`}>
       {cargando && <div className="w-2.5 h-2.5 border-2 border-current border-t-transparent rounded-full animate-spin" />}
       {textos[estado] ?? estado}
+      {estado === "pagado" && <IconoCheck className="w-3 h-3" />}
     </button>
   );
 };
@@ -233,6 +366,48 @@ function calcularProcesoSiguiente<K extends string>(
     }
   }
   return null;
+}
+
+// ✅ NUEVO (Jose, 2026-09-04): cuál proceso de PAPEL "sigue", cuando el
+// backend todavía no manda paso_actual (deploy viejo, o la respuesta aún no
+// llega). Es un espejo exacto de pasoActualPapel del backend: el PRIMER paso
+// aplicable que no esté finalizado.
+//
+// No se usa calcularProcesoSiguiente para esto porque esa arranca en i=1 y
+// exige que el ANTERIOR esté finalizado. En una OP recién generada no hay
+// nada finalizado, así que devolvía null y el primer proceso se quedaba sin
+// resaltar -- justo el caso que reportó Jose. Se deja intacta para plástico,
+// que sigue con su regla de siempre.
+function primerProcesoPendientePapel<K extends string>(
+  pasos: { key: K; estado: string }[]
+): K | null {
+  const aplican = pasos.filter(p => p.estado !== "no-aplica");
+  const siguiente = aplican.find(p => p.estado !== "finalizado");
+  return siguiente ? siguiente.key : null;
+}
+
+// ✅ NUEVO (Jose, 2026-09-04): con procesos repetidos, una misma tabla puede
+// aparecer VARIAS veces en la ruta de un especial (Impresión -> Laminación ->
+// Impresión). El tablero tiene UNA sola columna por proceso, así que hay que
+// decidir cuál de las ocurrencias representa esa celda. La regla es "hasta
+// dónde le tocó":
+//   · si el paso que corre ahora es de esta tabla, esa ocurrencia manda;
+//   · si no, la primera que todavía no termina;
+//   · y si ya se terminaron todas, la última.
+// Antes esto era un Map por tabla, que se quedaba con la última y perdía el
+// estado real de la que estaba en curso.
+function ocurrenciaRelevantePapel(
+  procesos: ProcesoRegistroPapel[],
+  tabla: NombreProcesoPapel,
+  pasoActual: { tabla: string; pasada: number } | null | undefined,
+): ProcesoRegistroPapel | undefined {
+  const dela = procesos.filter(p => p.tabla === tabla);
+  if (dela.length <= 1) return dela[0];
+  if (pasoActual?.tabla === tabla) {
+    const enCurso = dela.find(p => p.pasada === pasoActual.pasada);
+    if (enCurso) return enCurso;
+  }
+  return dela.find(p => p.estado !== "terminado") ?? dela[dela.length - 1];
 }
 
 const IconoPdf = () => (
@@ -515,11 +690,22 @@ function BotonPdfDirecto({ pedido }: { pedido: PedidoSeguimiento }) {
     }
   };
 
+  // 🔁 (Jose, 2026-09-08 -- "fecha, botón de PDF y el identificador de cada
+  // OP [...] ponerlos como el botón o a un lado del botón (lado izquierdo)"):
+  // esto iba en flex-col -- número de OP, botón, fecha, TRES líneas
+  // apiladas -- y era lo que de verdad estiraba la fila (también la del
+  // árbol de un especial, que comparte esta misma celda "Orden"). Ahora el
+  // número de OP y su fecha de aprobación van a la IZQUIERDA del botón, en
+  // un bloque de 2 líneas apretadas, y el botón queda al lado -- la fila ya
+  // no depende de 3 renglones sueltos para caber.
   return (
-    <div className="inline-flex flex-col items-center gap-1">
-      <span className="whitespace-nowrap text-xs font-medium text-gray-700">
-        {pedido.no_produccion}
-      </span>
+    <div className="inline-flex items-center gap-1.5">
+      <div className="flex flex-col items-end leading-tight">
+        <span className="whitespace-nowrap text-xs font-medium text-gray-700">
+          {pedido.no_produccion}
+        </span>
+        <FechaAprobacion fecha={(pedido as any).op_fecha_aprobacion ?? null} sinMargen />
+      </div>
       <button
         onClick={handleDescargar}
         disabled={descargando}
@@ -530,7 +716,6 @@ function BotonPdfDirecto({ pedido }: { pedido: PedidoSeguimiento }) {
           : <IconoPdf />}
         PDF
       </button>
-      <FechaAprobacion fecha={(pedido as any).op_fecha_aprobacion ?? null} />
     </div>
   );
 }
@@ -553,8 +738,11 @@ function RenderOrdenProduccion({
   // de PDF DISTINTO (orden de producción, no pedido) que se había quedado
   // sin bloquear.
   if (bloqueado) {
+    // 🔁 (Jose, 2026-09-08): mismo ajuste que BotonPdfDirecto -- el número
+    // de OP va a la izquierda de la píldora, no encima, para no apilar dos
+    // líneas donde una sola alcanza.
     return (
-      <div className="inline-flex flex-col items-center gap-1">
+      <div className="inline-flex items-center gap-1.5">
         {pedido.no_produccion && (
           <span className="whitespace-nowrap text-xs font-medium text-gray-400">
             {pedido.no_produccion}
@@ -563,7 +751,8 @@ function RenderOrdenProduccion({
         <span
           title={motivoBloqueo ?? "Esperando a que terminen las OP de inicio de este especial"}
           className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-amber-50 text-amber-700 border border-amber-300 text-xs rounded cursor-not-allowed">
-          🔒 PDF
+          <IconoCandado className="w-3 h-3" />
+          PDF
         </span>
       </div>
     );
@@ -591,6 +780,14 @@ function RenderOrdenProduccion({
 // canónico (ver ORDEN_CASCADA_PAPEL en seguimientoPapel.types.ts). Pegado
 // NO se agrega: se quitó como proceso seleccionable (era lo mismo que
 // Empaque, ver RutaProcesos.tsx).
+//
+// ✅ NUEVO (Jose, 2026-09-05): "empaque_papel" YA NO tiene columna aquí --
+// dejó de ser un proceso más para pasar a ser el apartado "Empaquetado"
+// que cuelga de la tarjeta del proceso que de verdad resulte último en la
+// ruta de cada orden (ver esUltimoProceso en ModalProcesoIndividualPapel.tsx
+// y ModalProcesoIndividualEspecial.tsx). Por dentro el motor de
+// avances/finalización lo sigue usando igual (ver ULTIMO_PROCESO_PAPEL en
+// seguimientoPapel.types.ts) -- solo se quitó de esta tabla.
 const PROCESOS_PAPEL: { key: NombreProcesoPapel; encabezado: string; titulo: string }[] = [
   { key: "hojeado_papel", encabezado: "Hoj", titulo: "Hojeado" },
   { key: "guillotina_papel", encabezado: "Gui", titulo: "Guillotina" },
@@ -605,7 +802,6 @@ const PROCESOS_PAPEL: { key: NombreProcesoPapel; encabezado: string; titulo: str
   { key: "desbarbe_papel", encabezado: "Desb", titulo: "Desbarbe" },
   { key: "armado_papel", encabezado: "Arm", titulo: "Armado" },
   { key: "especial_papel", encabezado: "Esp", titulo: "Especial" },
-  { key: "empaque_papel", encabezado: "Emp", titulo: "Empaque" },
 ];
 
 const COLUMNAS_PAPEL = PROCESOS_PAPEL.map(({ encabezado }) => encabezado);
@@ -629,15 +825,44 @@ const PRIVILEGIO_PROCESO_PAPEL: Record<NombreProcesoPapel, string> = {
   empaque_papel: "produccion.papel.empaque.operar",
 };
 
-const COLUMNAS = [
-  "Fecha", "N° Pedido", "Impresion + Info", "Tipo", "Cantidad",
-  "Anticipo", "OD", "Diseno", "Orden", "Días",
-  "Ext", "Imp", "Bol", "Asa", ...COLUMNAS_PAPEL,
-  "E. Cta", "Pago", "Envio",
-];
+// 🔁 FASE 5 → REVERTIDO en la vista (Jose, 2026-09-08: "no necesito el
+// apartado de merma, y el a producir, no necesito esas dos columnas").
+// El cálculo en cascada de FASE 5 sigue INTACTO en el backend
+// (merma.service.ts / orden_produccion_merma): es lo que garantiza que la
+// unión termine con las piezas que pidió el cliente. Lo que se quita es
+// solo mostrarlo como dos columnas más en una tabla que ya trae ~30 --
+// el dato sigue estando donde se usa de verdad (modal de Hojeado/
+// Guillotina y el PDF de la OP).
+const COLUMNAS_PLASTICO = ["Ext", "Imp", "Bol", "Asa"];
+const COLUMNAS_ADMIN_IZQ = ["Fecha", "N° Pedido", "Impresion + Info", "Tipo", "Cantidad"];
+const COLUMNAS_ADMIN_DER = ["Anticipo", "OD", "Diseno", "Orden", "Días"];
+const COLUMNAS_ADMIN_FIN = ["E. Cta", "Pago", "Envio"];
+
+// 🔁 (Jose, 2026-09-08 -- "si en el filtro selecciona plástico, papel o
+// especiales, necesito que muestre todos sus posibles procesos [...] obvio
+// en cualquier filtro dejando lo administrativo"): antes la tabla siempre
+// traía las 4 columnas de plástico (Ext/Imp/Bol/Asa) MÁS las 13 de papel
+// pegadas una detrás de otra, sin importar el filtro -- un pedido de
+// plástico se veía rodeado de 13 columnas "N/A" (todo lo de papel) y
+// viceversa. Ahora las columnas de PROCESO se arman según el filtro
+// activo; las administrativas (fecha, pedido, tipo, cantidad, anticipo,
+// OD, diseño, orden, días, estado de cuenta, pago, envío) se quedan
+// SIEMPRE, en cualquier filtro -- eso fue explícito ("dejando lo
+// administrativo").
+const columnasParaFiltro = (filtro: string): string[] => {
+  const procesos =
+    filtro === "plastico" ? COLUMNAS_PLASTICO
+    : filtro === "papel" || filtro === "especiales" ? COLUMNAS_PAPEL
+    : [...COLUMNAS_PLASTICO, ...COLUMNAS_PAPEL]; // "todos" (o cualquier otro valor futuro)
+  return [...COLUMNAS_ADMIN_IZQ, ...COLUMNAS_ADMIN_DER, ...procesos, ...COLUMNAS_ADMIN_FIN];
+};
+
+// Para centrar encabezados -- cubre TODAS las columnas posibles (proceso +
+// administrativas relevantes); no depende del filtro, solo se usa para
+// decidir alineación de las que sí terminan mostrándose.
 const COLS_CENTRADAS = new Set([
   "Impresion + Info", "Tipo", "Cantidad", "Anticipo", "OD", "Diseno", "Orden", "Días",
-  "Ext", "Imp", "Bol", "Asa", ...COLUMNAS_PAPEL,
+  ...COLUMNAS_PLASTICO, ...COLUMNAS_PAPEL,
   "E. Cta", "Pago", "Envio",
 ]);
 
@@ -727,10 +952,10 @@ function CantidadPedido({ pedido }: { pedido: PedidoSeguimiento }) {
 // visibles. El fondo va en cada <th> y no solo en el <thead> porque con
 // border-collapse el navegador no pinta el fondo del thead, y las filas se
 // verían por debajo del encabezado.
-const renderThead = (oscuro = false) => (
+const renderThead = (oscuro = false, filtroTipo = "todos") => (
   <thead className={`sticky top-0 z-20 ${oscuro ? "bg-gray-900 text-white" : "bg-gray-100 border-b border-gray-200"}`}>
     <tr>
-      {COLUMNAS.map(h => (
+      {columnasParaFiltro(filtroTipo).map(h => (
         <th key={h}
           title={PROCESOS_PAPEL.find(proceso => proceso.encabezado === h)?.titulo}
           className={`sticky top-0 z-20 px-2 py-2 text-xs font-semibold uppercase tracking-wider ${oscuro
@@ -748,8 +973,9 @@ const norm = (t: string) =>
   (t ?? "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
 
 // ── NUEVO: badge de días vencidos, mismos cortes de color que pidió Jose:
-// 5-9 amarillo, 10-19 naranja, 20+ rojo. (El filtro del backend ya
-// garantiza que aquí nunca llega nada por debajo de 5.)
+// 1-9 amarillo, 10-19 naranja, 20+ rojo. (El filtro del backend --
+// DIAS_HABILES_VENCIMIENTO_ESTADO_CUENTA en seguimiento.controller.ts --
+// ya garantiza que aquí nunca llega nada por debajo de ese umbral, hoy 1.)
 function BadgeDiasVencidos({ dias }: { dias: number }) {
   const estilos = dias >= 20
     ? "bg-red-100 text-red-700 border-red-300"
@@ -786,8 +1012,11 @@ function ModalCuentasPorCobrar({
 
   if (ordenadas.length === 0) {
     return (
-      <p className="text-center text-gray-500 py-10">
-        No hay cuentas por cobrar vencidas — todos los estados de cuenta generados hace 5+ días hábiles ya están liquidados. 🎉
+      <p className="flex items-center justify-center gap-2 text-center text-gray-500 py-10">
+        <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-green-100 text-green-700">
+          <IconoCheck className="w-3.5 h-3.5" />
+        </span>
+        No hay cuentas por cobrar vencidas — todos los estados de cuenta generados hace 1+ día hábil ya están liquidados.
       </p>
     );
   }
@@ -861,13 +1090,32 @@ export default function Seguimiento() {
   const [filtroTipo, setFiltroTipo] = useState("todos");
   const [busqueda, setBusqueda] = useState("");
   const [pantallaCompleta, setPantallaCompleta] = useState(false);
-  // ── NUEVO: botón discreto que cambia a una vista EXCLUSIVA de órdenes ya
-  // finalizadas por completo (producción + envío + pago). Apagado (default):
-  // se ven las órdenes activas, igual que siempre. Encendido: la lista se
-  // reemplaza por solo las que ya se cerraron del todo — no es un "mostrar
-  // también", es un filtro aparte, para poder auditar/consultar lo ya
-  // cerrado sin que se mezcle con lo que sigue en curso.
+  // ── NUEVO: botón discreto que cambia a una vista EXCLUSIVA de órdenes
+  // terminadas EN LO ABSOLUTO (ver esProductoFinalizadoPorCompleto más abajo
+  // -- producción + envío + OD aprobada + pago completo). Esto es DISTINTO
+  // del ocultamiento por default de la tabla principal (que es puramente por
+  // antigüedad del estado de cuenta, ver productoFacturadoVencido): una orden
+  // puede ya llevar 1+ día facturada y por eso no aparecer en la vista normal,
+  // sin todavía estar "finalizada en lo absoluto" (p.ej. le falta el envío).
+  // Apagado (default): se ven las órdenes activas, igual que siempre.
+  // Encendido: la lista se reemplaza por solo las que ya cumplieron TODO
+  // (producción, envío, OD y pago) — no es un "mostrar también", es un
+  // filtro aparte, para auditar/consultar lo ya cerrado por completo sin que
+  // se mezcle con lo que sigue en curso.
   const [soloFinalizados, setSoloFinalizados] = useState(false);
+  // ── NUEVO (Jose, 2026-09-07): otro filtro EXCLUSIVO, hermano de
+  // soloFinalizados -- para dar seguimiento a pedidos que ya se facturaron
+  // (y por eso ya no aparecen en la vista normal) pero todavía les falta
+  // algo por cerrar. 🔁 GENERALIZADO (Jose, 2026-09-07): al inicio solo
+  // miraba envío, pero un pedido puede caer aquí con envío pendiente, OD
+  // pendiente, y/o pago pendiente -- así que el botón ahora es un
+  // "Pendientes" general que agrupa los tres motivos (ver
+  // productoConPendiente más abajo), no solo envío. El pago pendiente ya
+  // se cubre aparte en Cuentas por Cobrar, pero no está de más que también
+  // aparezca aquí por si acaso. Mutuamente excluyente con soloFinalizados:
+  // prender uno apaga el otro (no tiene sentido pedir "solo finalizadas" y
+  // "solo pendientes" a la vez).
+  const [soloPendientes, setSoloPendientes] = useState(false);
 
   // ── NUEVO: productos especiales con más de una OP real (una o varias de
   // inicio + una de unión, ver fase1_productos_especiales_up.sql). El
@@ -909,6 +1157,13 @@ export default function Seguimiento() {
   const [modalVerificacion, setModalVerificacion] = useState<{
     pedido: PedidoSeguimiento;
     proceso: ProcesoVerificacion;
+    // Se arrastran desde la celda para no perderlos al pasar por la
+    // verificación del operador: al salir de ahí se abre el modal del
+    // proceso, y ese necesita saber QUÉ corrida y CUÁL modal usar
+    // (Jose, 2026-09-04). Opcionales porque plástico y orden_diseno
+    // pasan por aquí y no los usan.
+    pasada?: number;
+    esEspecial?: boolean;
   } | null>(null);
 
   const [procesosPapel, setProcesosPapel] = useState<Record<number, ProcesosOrdenPapelRespuesta>>({});
@@ -926,6 +1181,11 @@ export default function Seguimiento() {
   const [modalProcesoPapel, setModalProcesoPapel] = useState<{
     pedido: PedidoSeguimiento;
     nombreProceso: NombreProcesoPapel;
+    // Cuál repetición del proceso se está abriendo. Sin esto, en un especial
+    // con el proceso repetido siempre se abriría la 1a corrida.
+    pasada: number;
+    // Decide qué modal se abre: los especiales usan el suyo.
+    esEspecial: boolean;
   } | null>(null);
 
   // ── NUEVO: Cuentas por cobrar (modal) ─────────────────────────────────
@@ -1151,7 +1411,7 @@ export default function Seguimiento() {
     medir();
     window.addEventListener("resize", medir);
     return () => window.removeEventListener("resize", medir);
-  }, [cargaInicial, pantallaCompleta, busqueda, filtroTipo, soloFinalizados, error]);
+  }, [cargaInicial, pantallaCompleta, busqueda, filtroTipo, soloFinalizados, soloPendientes, error]);
 
   const abrirDiseno = (pedido: PedidoSeguimiento) => {
     setModalDiseno({
@@ -1174,41 +1434,144 @@ export default function Seguimiento() {
   const estaPagadoPorCompleto = (p: PedidoSeguimiento): boolean =>
     p.saldo_venta != null ? p.saldo_venta <= 0.01 : Boolean(p.pago_completo);
 
-  // ── Pedidos terminados por completo ──────────────────────────────────
-  // Un producto se considera terminado del todo cuando:
-  //  - ya tiene orden de producción (idproduccion), si no, ni siquiera ha
-  //    arrancado y de ninguna manera puede contar como terminado;
-  //  - no es una parcialidad (es_parcialidad === true bloquea, porque el
-  //    usuario pidió expresamente "ni parcialidades tiene que haber");
-  //  - todos sus procesos aplicables (los que no son "no-aplica") están
-  //    en "finalizado" — en papel se usa el único estado_resumen_papel
-  //    que ya calcula el backend, porque ahí no hay columnas por proceso;
-  //  - ✅ CORREGIDO: el envío tiene que estar realmente "finalizado". Antes
-  //    también se aceptaba "no-aplica", pero para papel ese era HOY el valor
-  //    que el backend mandaba SIEMPRE, porque la query de seguimiento nunca
-  //    revisaba bultos.empaque_papel_idempaque_papel — 2026-08-25: esa parte
-  //    ya se corrigió en seguimiento.controller.ts (ahora sí cuenta las
-  //    "cajas" ligadas al proceso de Empaque papel), pero sigue pendiente
-  //    del lado de escritura que ese proceso realmente genere bultos, así
-  //    que se deja este filtro estricto por ahora — en cuanto el backend
-  //    reporte "finalizado" de verdad, este chequeo ya lo toma tal cual sin
-  //    tocar nada más aquí. Plástico sigue tratando "no-aplica" como válido
-  //    para el pedido que genuinamente no requiere envío.
-  //  - ✅ CORREGIDO: si el producto tiene una orden de diseño (OD) creada,
-  //    esa OD tiene que estar aprobada Y con archivos subidos
-  //    (od_tiene_archivos) — "aprobado_sin_archivos" (aprobado
-  //    administrativamente pero sin ningún render/master/feedback subido
-  //    todavía) NO cuenta como terminado, aunque el badge diga "Aprobado".
-  //  - ✅ NUEVO: el pedido ya está pagado por completo (saldo en 0). Antes
-  //    esta función no revisaba el pago, así que un pedido con producción
-  //    y envío terminados pero CON SALDO PENDIENTE desaparecía de
-  //    Seguimiento de todas formas — la única forma de verlo era el modal
-  //    de Cuentas por Cobrar (y ese solo lista adeudos de 5+ días hábiles).
-  //    Ahora un pedido se sigue mostrando aquí mientras falte pagar o
-  //    falte enviar, que es justo lo que se necesita vigilar día a día.
+  // ── ¿Ya se factura hace tiempo? (controla lo que se oculta POR DEFAULT) ──
+  // 🔁 REDEFINIDO (Jose, 2026-09-07, a petición del cliente): la vista
+  // normal (sin ningún filtro activo) YA NO depende de pago, envío, OD ni
+  // de los procesos por columna. La regla es puramente de tiempo desde la
+  // facturación:
+  //
+  //   en cuanto el estado de cuenta del pedido lleva generado
+  //   >= UMBRAL_DIAS_OCULTAR_ESTADO_CUENTA (1) día hábil, el pedido se
+  //   oculta de la vista normal de Seguimiento -- sin importar qué (esté
+  //   pagado o no, se haya enviado o no).
+  //
+  // Por qué: antes esto pasaba por producción+OD+pago (y hasta hace poco,
+  // también envío) -- pero eso significaba que un pedido con saldo
+  // pendiente se quedaba en la tabla principal indefinidamente, aunque ya
+  // llevara semanas facturado (ver el caso real OP26010/P26115: estado de
+  // cuenta generado el 31/jul, 26 días hábiles después seguía viéndose
+  // aquí solo porque no estaba pagado). El cliente pidió que, pasado ese
+  // día de gracia, el pedido salga de la operación diaria sin importar el
+  // pago: si debe dinero, se sigue viendo en el modal "Cuentas por
+  // Cobrar" (que ya usa exactamente el mismo umbral en el backend --
+  // DIAS_HABILES_VENCIMIENTO_ESTADO_CUENTA en seguimiento.controller.ts,
+  // así que ambos números siempre coinciden); si lo que falta es el envío,
+  // se sigue viendo con el botón "Pendientes"; y siempre se puede
+  // encontrar buscándolo por texto o con cualquier otro filtro.
+  //
+  // IMPORTANTE: esto es DISTINTO de "Solo finalizadas" (soloFinalizados,
+  // más abajo) -- ese botón sigue exigiendo el cumplimiento real de todo
+  // (producción + envío + OD + pago), porque Jose lo pidió así
+  // explícitamente para poder auditar lo genuinamente terminado, separado
+  // de "ya se facturó hace rato" (que es lo que rige el ocultamiento por
+  // default).
+  //
+  // Se mantiene el resguardo de que el pedido tenga producción arrancada
+  // (idproduccion) y de que no sea una parcialidad (es_parcialidad
+  // bloquea, igual que antes: el usuario pidió expresamente "ni
+  // parcialidades tiene que haber").
+  //
+  // estado_cuenta_fecha / estado_cuenta_generado vienen ya calculados por
+  // pedido desde el backend (ver seguimiento.controller.ts, el query
+  // aparte contra la tabla estado_cuenta con vigente = true) -- el mismo
+  // valor se repite en todos los productos de un mismo no_pedido.
+  //
   // Un pedido completo (no_pedido) se oculta solo si TODOS sus productos
   // cumplen lo anterior — basta con que uno quede pendiente para que el
   // pedido entero se siga mostrando.
+  const UMBRAL_DIAS_OCULTAR_ESTADO_CUENTA = 1; // mismo número que el backend (Cuentas por Cobrar)
+
+  const productoFacturadoVencido = (p: PedidoSeguimiento): boolean => {
+    if (!p.idproduccion) return false;
+    if ((p as any).es_parcialidad) return false;
+
+    const generado = Boolean((p as any).estado_cuenta_generado);
+    const fechaGeneracion = (p as any).estado_cuenta_fecha;
+    if (!generado || !fechaGeneracion) return false;
+
+    const diasHabiles = contarDiasHabiles(new Date(fechaGeneracion), new Date());
+    return diasHabiles >= UMBRAL_DIAS_OCULTAR_ESTADO_CUENTA;
+  };
+
+  // ── ¿Ya se factura hace tiempo, agregado por pedido? ─────────────────
+  const pedidosFacturadosVencidos = (() => {
+    const porPedido = new Map<string, PedidoSeguimiento[]>();
+    pedidos.forEach(p => {
+      const arr = porPedido.get(p.no_pedido) ?? [];
+      arr.push(p);
+      porPedido.set(p.no_pedido, arr);
+    });
+    const vencidos = new Set<string>();
+    porPedido.forEach((productos, no_pedido) => {
+      if (productos.length > 0 && productos.every(productoFacturadoVencido)) {
+        vencidos.add(no_pedido);
+      }
+    });
+    return vencidos;
+  })();
+
+  // ── NUEVO: ¿a este producto todavía le falta algo por cerrar? --
+  // productoFacturadoVencido (arriba) ya NO revisa envío, OD ni pago
+  // (petición del cliente: un pedido facturado se oculta de la vista
+  // normal aunque le falte cualquiera de los tres), así que esta es la
+  // función dedicada para el filtro general "Pendientes": agrupa los tres
+  // motivos por los que un pedido puede seguir necesitando seguimiento
+  // aunque ya haya salido de la vista normal.
+  // 🔁 GENERALIZADO (Jose, 2026-09-07): antes solo miraba envío
+  // (productoConEnvioPendiente); ahora también cuenta OD pendiente y pago
+  // pendiente, porque son las mismas tres cosas por las que un pedido
+  // termina apareciendo aquí. El pago pendiente ya se sigue en Cuentas por
+  // Cobrar (que usa el mismo umbral de 1 día hábil), pero se agrega
+  // también aquí por si acaso.
+  //   - Envío: "no-aplica" (plástico que genuinamente no requiere envío)
+  //     no cuenta como pendiente.
+  //   - OD: solo pendiente si existe (idorden_diseno != null) y todavía no
+  //     está aprobada -- una vez aprobada ya no es motivo de pendiente,
+  //     aunque no tenga archivos subidos (misma excepción que en
+  //     esProductoFinalizadoPorCompleto).
+  //   - Pago: pendiente si el saldo no ha llegado a 0 (estaPagadoPorCompleto).
+  const productoConPendiente = (p: PedidoSeguimiento): boolean => {
+    if (!p.idproduccion) return false; // ni siquiera arrancó producción
+
+    const esPapel = (p.tipo_producto ?? "").toLowerCase() === "papel";
+    const estadoEnvio = (p as any).estado_envio;
+    const envioPendiente = esPapel
+      ? estadoEnvio !== "finalizado"
+      : estadoEnvio !== "finalizado" && estadoEnvio !== "no-aplica";
+    if (envioPendiente) return true;
+
+    const idOrdenDiseno = (p as any).idorden_diseno;
+    if (idOrdenDiseno != null && (p as any).od_estado !== "aprobado") return true;
+
+    if (!estaPagadoPorCompleto(p)) return true;
+
+    return false;
+  };
+
+  const pedidosConPendiente = (() => {
+    const porPedido = new Map<string, PedidoSeguimiento[]>();
+    pedidos.forEach(p => {
+      const arr = porPedido.get(p.no_pedido) ?? [];
+      arr.push(p);
+      porPedido.set(p.no_pedido, arr);
+    });
+    const pendientes = new Set<string>();
+    porPedido.forEach((productos, no_pedido) => {
+      if (productos.some(productoConPendiente)) {
+        pendientes.add(no_pedido);
+      }
+    });
+    return pendientes;
+  })();
+
+  // ── Pedidos terminados por completo (para el botón "Solo finalizadas") ──
+  // 🔁 RESTAURADO (Jose, 2026-09-07): este botón necesita las que están
+  // finalizadas "en lo absoluto" -- producción + envío + pago -- y NO el
+  // criterio de facturación de arriba (que es solo para lo que se oculta
+  // por default). La única excepción sigue siendo la de siempre: la OD
+  // solo necesita estar APROBADA (od_estado === "aprobado"); no exige
+  // od_tiene_archivos, así que una OD aprobada sin ninguna imagen subida
+  // todavía cuenta como resuelta para este filtro.
   const esProductoFinalizadoPorCompleto = (p: PedidoSeguimiento): boolean => {
     if (!p.idproduccion) return false;
     if ((p as any).es_parcialidad) return false;
@@ -1232,11 +1595,13 @@ export default function Seguimiento() {
       if (!okOProcesoNoAplica(estadoEnvio)) return false;
     }
 
+    // La OD (si existe) solo necesita estar aprobada -- od_tiene_archivos
+    // NO se exige aquí: una OD aprobada sin ninguna imagen subida todavía
+    // cuenta como resuelta para efectos de "finalizada en lo absoluto".
     const idOrdenDiseno = (p as any).idorden_diseno;
     if (idOrdenDiseno != null) {
       const odAprobada = (p as any).od_estado === "aprobado";
-      const odTieneArchivos = Boolean((p as any).od_tiene_archivos);
-      if (!odAprobada || !odTieneArchivos) return false;
+      if (!odAprobada) return false;
     }
 
     if (!estaPagadoPorCompleto(p)) return false;
@@ -1264,12 +1629,31 @@ export default function Seguimiento() {
 
   const pedidosFiltrados = pedidos
     // soloFinalizados es un filtro exclusivo: prendido, se descarta todo lo
-    // que NO esté ya terminado (aunque haya búsqueda activa); apagado, es
-    // el comportamiento de siempre — se esconde lo terminado salvo que se
-    // esté buscando algo puntual.
+    // que NO esté ya terminado EN LO ABSOLUTO (pedidosTerminadosPorCompleto);
+    // apagado, es el comportamiento de siempre — se esconde lo YA FACTURADO
+    // hace 1+ día hábil (pedidosFacturadosVencidos), salvo que se esté
+    // buscando algo puntual O que esté prendido soloPendientes (ver 🔁 abajo:
+    // ese filtro necesita ver también lo que ya salió de la vista normal,
+    // así que aquí se le deja pasar sin aplicar el ocultamiento por
+    // facturación). Criterios distintos a propósito, ver los comentarios de
+    // cada función arriba.
     .filter(p => soloFinalizados
       ? pedidosTerminadosPorCompleto.has(p.no_pedido)
-      : (hayBusquedaActiva || !pedidosTerminadosPorCompleto.has(p.no_pedido)))
+      : (hayBusquedaActiva || soloPendientes || !pedidosFacturadosVencidos.has(p.no_pedido)))
+    // ── NUEVO: soloPendientes, mismo patrón que soloFinalizados pero
+    // exclusivo sobre lo que le falta cerrar -- envío, OD y/o pago
+    // (generalizado, ver productoConPendiente arriba) -- para poder auditar
+    // puntualmente qué pedidos todavía necesitan seguimiento.
+    // 🔁 IMPORTANTE (Jose, 2026-09-07): esto incluye a propósito pedidos que
+    // YA generaron su estado de cuenta (y por eso ya no aparecen en la
+    // vista normal, e incluso ya puedan estar en Cuentas por Cobrar) -- un
+    // pedido facturado y vencido puede seguir con envío, OD o pago
+    // pendiente, y aquí sí se tiene que ver sin importar que ya haya salido
+    // de la vista normal o ya esté en Cuentas por Cobrar. Por eso el filtro
+    // de arriba (soloFinalizados/facturación) se desactiva cuando
+    // soloPendientes está prendido: pedidosConPendiente ya decide qué
+    // mostrar aquí con su propio criterio.
+    .filter(p => !soloPendientes || pedidosConPendiente.has(p.no_pedido))
     .filter(p => {
       // "especiales" no es un tipo_producto de verdad (papel/plástico/cartón)
       // -- es_especial es una bandera aparte sobre productos de papel (ver
@@ -1365,6 +1749,22 @@ export default function Seguimiento() {
   interface OpcionesFilaEspecial {
     esSubfila?: boolean;
     grupo?: { expandido: boolean; totalOps: number; onToggle: () => void };
+    // 🔁 FASE 5: qué tan hondo está este nodo en el árbol real de OP,
+    // contando desde la unión (profundidad 0, la fila principal, nunca
+    // llega aquí como sub-fila). Un hijo directo de la unión es 1; una OP
+    // de inicio que alimenta a una OPC que alimenta a la unión es 2. Solo
+    // controla la sangría visual -- ver construirArbolHijos más abajo.
+    profundidad?: number;
+    // 🎨 (Jose, 2026-09-08): "OPC 1", "OPC 2"... -- numeración visual que
+    // asigna construirArbolHijos siguiendo el orden del árbol. undefined en
+    // todo lo que no sea una OPC.
+    numeroOpc?: number;
+    // 🌳 Líneas del árbol: una entrada por nivel por encima de esta fila
+    // (true ⇒ ese ancestro todavía tiene hermanas debajo ⇒ se pinta "│").
+    guias?: boolean[];
+    esUltimo?: boolean;
+    // A quién le entrega su material esta orden ("la OPC 1 (Forro)"...).
+    alimentaA?: string | null;
   }
 
   const renderFila = (
@@ -1373,13 +1773,34 @@ export default function Seguimiento() {
     idx = 0,
     opcionesEspecial: OpcionesFilaEspecial = {},
   ) => {
-    const { esSubfila = false, grupo } = opcionesEspecial;
+    const {
+      esSubfila = false, grupo, profundidad = 1, numeroOpc,
+      guias = [], esUltimo = true, alimentaA = null,
+    } = opcionesEspecial;
     // Las sub-filas de un especial (inicio/unión, desplegadas con el badge
     // "N OP") van un poco más compactas que las filas normales -- si no, un
     // especial con 3-4 OP se ve tan alto como 3-4 renglones completos y el
     // grupo se pierde de vista dentro de la tabla.
-    const px = esSubfila ? "px-2 py-1" : grande ? "px-3 py-3" : "px-2 py-2";
+    // 🔁 (Jose, 2026-09-08 -- "las filas indentadas se muestran más
+    // compactas, mostrando la información respectiva de cada OP"): las
+    // sub-filas de un árbol de especial ya iban en text-[11px], pero el
+    // padding vertical seguía siendo casi el mismo que una fila normal y la
+    // celda de producto apilaba badge + nombre + medida en 3 líneas -- un
+    // especial de 5 OP terminaba ocupando casi tanto alto como sin
+    // comprimir nada. Se aprieta py-1 → py-0.5 aquí; la celda de producto
+    // (más abajo) además junta esas 3 líneas en 1 sola para esSubfila.
+    const px = esSubfila ? "px-2 py-0.5" : grande ? "px-3 py-3" : "px-2 py-2";
     const txt = esSubfila ? "text-[11px]" : grande ? "text-sm" : "text-xs";
+
+    // 🔁 (Jose, 2026-09-08 -- "si en el filtro selecciona plástico, papel o
+    // especiales, necesito que muestre todos sus posibles procesos"): qué
+    // bloque de columnas de PROCESO pintar, según el filtro activo
+    // (filtroTipo -- estado del componente, capturado por closure). Debe
+    // coincidir exactamente con columnasParaFiltro() de más arriba, que es
+    // lo que arma el <thead> -- si uno de los dos cambia sin el otro, las
+    // columnas del cuerpo se desalinean contra el encabezado.
+    const mostrarColsPlastico = filtroTipo === "todos" || filtroTipo === "plastico";
+    const mostrarColsPapel = filtroTipo === "todos" || filtroTipo === "papel" || filtroTipo === "especiales";
 
     const estadoAnticipo = pedido.anticipo_cubierto ? "pagado" : "pendiente";
     const estadoDiseño = pedido.diseno_aprobado ? "aprobado" : "pendiente";
@@ -1415,20 +1836,58 @@ export default function Seguimiento() {
           ? "detenido"
           : "no-aplica";
 
+    // 🔒 (Jose, 2026-09-08 -- "si no tiene esa información no puede
+    // registrar o tan siquiera iniciar ese proceso [...] requiero que estén
+    // bloqueados hasta que se terminen todas sus OP previas"): el backend
+    // YA rechaza el intento de iniciar el primer proceso de una unión/OPC
+    // que sigue esperando a sus OP previas (unionEsperandoHermanasPapel,
+    // llamado desde iniciarProcesoPapel) -- eso es lo que de verdad protege
+    // los datos. Pero antes de este cambio el FRONTEND no sabía nada de
+    // eso: los chips de proceso (Imp, Lam, Lito, Sua, Desb, Arm) se
+    // quedaban clickeables y abrían el modal de todos modos, dejando que el
+    // usuario intentara capturar avance para solo enterarse hasta que el
+    // backend lo rechazara con un error. Ahora `abrirProceso`/`abrirPasada`
+    // (más abajo) también revisan `esUnionBloqueada` -- y como consecuencia,
+    // más abajo, cada `clickable` de esos chips baja el flag antes de
+    // pintar el badge (no solo antes de abrir el modal), así que también se
+    // VE bloqueado, no solo se comporta bloqueado.
     const abrirProceso = (nombreProceso: string) => {
-      if (!ordenVigente) return;
+      if (!ordenVigente || esUnionBloqueada) return;
       setModalProceso({ pedido, nombreProceso });
     };
 
-    const procesosDeLaOrden = pedido.idproduccion
-      ? procesosPapel[Number(pedido.idproduccion)]?.procesos ?? []
-      : [];
+    const respuestaOrden = pedido.idproduccion
+      ? procesosPapel[Number(pedido.idproduccion)]
+      : undefined;
+    const procesosDeLaOrden = respuestaOrden?.procesos ?? [];
+    // El paso que toca AHORA, ya validado por el backend contra la ruta real
+    // del producto y el avance registrado (ver pasoActualPapel). Es lo que
+    // decide el color, en vez de deducirlo aquí con una regla local.
+    const pasoActualPapel = respuestaOrden?.paso_actual ?? null;
     const errorCargaProcesosPapel = esPapel &&
       !!pedido.idproduccion &&
       erroresProcesosPapel.has(Number(pedido.idproduccion));
     const procesosPapelPorNombre = new Map<NombreProcesoPapel, ProcesoRegistroPapel>(
-      procesosDeLaOrden.map(proceso => [proceso.tabla, proceso] as const)
+      PROCESOS_PAPEL
+        .map(({ key }) => [key, ocurrenciaRelevantePapel(procesosDeLaOrden, key, pasoActualPapel)] as const)
+        .filter((par): par is readonly [NombreProcesoPapel, ProcesoRegistroPapel] => par[1] !== undefined)
     );
+
+    // ✅ NUEVO (Jose, 2026-09-05): "necesito poder volver a acceder a cada
+    // una de sus repeticiones" -- procesosPapelPorNombre de arriba solo
+    // guarda LA ocurrencia relevante (la que está corriendo, o si no la
+    // primera pendiente), así que en cuanto una corrida terminaba y la
+    // siguiente arrancaba, la celda ya no dejaba volver a abrir la corrida
+    // vieja. Aquí se agrupan TODAS las corridas de cada tabla (ordenadas
+    // por pasada) para poder pintar un badge POR CORRIDA cuando el proceso
+    // se repite, cada uno abriendo su propia pasada.
+    const todasLasPasadasPorNombre = new Map<NombreProcesoPapel, ProcesoRegistroPapel[]>();
+    procesosDeLaOrden.forEach(p => {
+      const arr = todasLasPasadasPorNombre.get(p.tabla) ?? [];
+      arr.push(p);
+      todasLasPasadasPorNombre.set(p.tabla, arr);
+    });
+    todasLasPasadasPorNombre.forEach(arr => arr.sort((a, b) => (a.pasada ?? 1) - (b.pasada ?? 1)));
 
     // ✅ NUEVO: "próximo proceso" a resaltar — ver calcularProcesoSiguiente.
     // Plástico sigue el pipeline fijo Ext→Imp→Bol→Asa (mismo orden que las
@@ -1446,7 +1905,14 @@ export default function Seguimiento() {
           estado: estadoProcesoPapelATabla(procesosPapelPorNombre.get(key)?.estado),
         }))
       : [];
-    const siguienteProcesoPapel = esPapel ? calcularProcesoSiguiente(estadosPapelDeLaFila) : null;
+    // El proceso que se resalta sale de paso_actual (backend), que ya validó
+    // la ruta que registró el producto y hasta dónde va el avance. Solo si esa
+    // respuesta no llegó todavía se cae a la regla local de siempre, para no
+    // dejar la fila sin resaltar mientras carga.
+    const siguienteProcesoPapel = esPapel
+      ? ((pasoActualPapel?.tabla as NombreProcesoPapel | undefined)
+          ?? primerProcesoPendientePapel(estadosPapelDeLaFila))
+      : null;
 
     // ── NUEVO: especiales con más de una OP real ────────────────────────
     // componente_tipo/componente_nombre/espera_union llegan del backend
@@ -1461,37 +1927,100 @@ export default function Seguimiento() {
     // como fila principal (ver principalDeGrupoEspecial) y esa unión
     // todavía debe esperar a sus OP de inicio, el candado tiene que verse
     // ahí también, no solo cuando está expandida como sub-fila.
-    const esUnionBloqueada = componenteTipo === "union" && esperaUnion;
+    //
+    // CORREGIDO (Jose, 2026-09-08 — "Candado correcto en OPC"): el backend
+    // (unionEsperandoHermanasPapel en procesosPapel.controller.ts) YA
+    // calcula espera_union también para tipo 'complementaria' -- una OPC
+    // con Litolaminado en su ruta espera a SUS propias OP de origen
+    // exactamente igual que la unión. Esta bandera solo miraba "union" y
+    // tiraba ese candado al piso en cualquier OPC, dejándola verse
+    // disponible aunque el backend ya sabía que debía bloquearse.
+    const esUnionBloqueada =
+      (componenteTipo === "union" || componenteTipo === "complementaria") && esperaUnion;
+
+    // 🔁 (Jose, 2026-09-08) — "que pueda presionar esa fila cuando es
+    // especial y se desglosan": antes solo el pill chiquito "N OP" era
+    // clickeable, un blanco muy pequeño para algo tan frecuente. Ahora toda
+    // la fila principal de un grupo (grupo != null) alterna el desglose --
+    // pero sin robarle el click a los botones/enlaces reales de la fila
+    // (PDF, badges de estado, etc.): si el click salió de dentro de un
+    // <button>/<a>, se deja pasar de largo y ese control hace lo suyo.
+    const alClicarFila = grupo
+      ? (e: ReactMouseEvent<HTMLTableRowElement>) => {
+          if ((e.target as HTMLElement).closest("button, a, input, select, textarea")) return;
+          grupo.onToggle();
+        }
+      : undefined;
 
     return (
       <tr key={`${pedido.no_pedido}-${pedido.no_produccion ?? "sin-op"}-${(pedido as any).idcomponente_papel ?? "sin-comp"}-${idx}`}
-        className={`transition-colors border-t ${
+        onClick={alClicarFila}
+        title={
+          grupo
+            ? (grupo.expandido ? "Ocultar las OP de este especial" : "Ver las OP de este especial (inicio + unión)")
+            // 🌳 En una sub-fila el tooltip dice, con palabras, la relación
+            // que dibujan las líneas: "Entrega su material a la OPC 1
+            // (Forro)" -- y, si está bloqueada, por qué todavía no se puede
+            // capturar avance en ella.
+            : esSubfila && alimentaA
+              ? `Entrega su material a ${alimentaA}${esUnionBloqueada ? ` · Bloqueada: ${esperaUnionMotivo ?? "esperando a las OP que la alimentan"}` : ""}`
+              : undefined
+        }
+        className={`transition-colors border-t ${grupo ? "cursor-pointer" : ""} ${
           // Unión bloqueada (esperando a sus OP de inicio): en gris, a
           // propósito, para que se distinga de un vistazo que ESTA OP
           // todavía no se puede descargar/trabajar -- solo las de inicio
           // sí dejan (ver esUnionBloqueada / BotonPdfPedido abajo).
+          // 🎨 (Jose, 2026-09-08): gris más suave (gray-50 en vez de
+          // gray-100). El bloqueo se sigue leyendo por el texto apagado y
+          // el 🔒 del badge, pero la fila ya no se ve "muerta" ni le roba
+          // contraste a la banda crema de Merma / A producir.
           esUnionBloqueada
-            ? "bg-gray-100 text-gray-400 border-gray-200"
+            ? "bg-gray-50 text-gray-400 border-gray-100"
             : esSubfila
-              ? "bg-gray-50/70 border-gray-100 hover:bg-gray-100"
-              : "hover:bg-gray-50 border-gray-200"
+              ? "bg-white border-gray-100 hover:bg-gray-50"
+              : grupo
+                ? "hover:bg-indigo-50/60 border-gray-200"
+                : "hover:bg-gray-50 border-gray-200"
         }`}>
 
+        {/* ── FECHA ──
+            🌳 (Jose, 2026-09-08): en una sub-fila NO se repite la fecha.
+            Es la misma del pedido, ya está en la fila principal, y
+            repetirla 5 veces solo llena de ruido el desglose. Ver el
+            comentario grande de "vista de flujo" más abajo. */}
         <td className={`${px} ${txt} text-gray-900 whitespace-nowrap`}>
-          {grupo ? (
+          {esSubfila ? null : grupo ? (
+            // Ya no es un <button> aislado -- es solo el indicador visual
+            // de que la fila completa se puede abrir (el onClick real vive
+            // en el <tr>). Sigue siendo <button> por accesibilidad
+            // (teclado/lector de pantalla), pero su estilo ahora se siente
+            // como parte del renglón, no como un control aparte perdido en
+            // la esquina.
             <button
               type="button"
               onClick={grupo.onToggle}
               title={grupo.expandido ? "Ocultar las OP de este especial" : "Ver las OP de este especial (inicio + unión)"}
-              className="inline-flex items-center gap-1 mb-1 px-1.5 py-0.5 rounded-md border border-indigo-200 bg-indigo-50 text-indigo-700 text-[10px] font-semibold hover:bg-indigo-100"
+              className="inline-flex items-center gap-1 mb-1 px-1.5 py-0.5 rounded-full border border-indigo-200 bg-white text-indigo-700 text-[10px] font-semibold shadow-sm hover:bg-indigo-100 hover:border-indigo-300"
             >
-              <span className={`transition-transform ${grupo.expandido ? "rotate-90" : ""}`}>▶</span>
+              <IconoChevron className={`w-2.5 h-2.5 text-indigo-400 transition-transform ${grupo.expandido ? "rotate-90" : ""}`} />
               {grupo.totalOps} OP
             </button>
-          ) : esSubfila ? (
-            <span className="inline-block w-3 text-gray-300 mr-1">↳</span>
-          ) : null}
-          <div>{fmtFechaCorta(pedido.fecha)}</div>
+          ) : (
+            // 🔁 (Jose, 2026-09-08): mismo lenguaje visual que el pill de
+            // arriba para una orden independiente (un solo producto, nada
+            // que desglosar) -- así la columna se ve consistente en toda la
+            // tabla en vez de quedar vacía solo en las filas que no son de
+            // un especial con varias OP. No es un botón: no hay nada que
+            // expandir, así que no debe parecer clickeable.
+            <span
+              title="Esta orden no tiene más OP que desglosar"
+              className="inline-flex items-center gap-1 mb-1 px-1.5 py-0.5 rounded-full border border-gray-200 bg-gray-50 text-gray-400 text-[10px] font-semibold"
+            >
+              1 OP
+            </span>
+          )}
+          {!esSubfila && <div>{fmtFechaCorta(pedido.fecha)}</div>}
         </td>
 
         <td className={`${px} whitespace-nowrap`}>
@@ -1502,36 +2031,123 @@ export default function Seguimiento() {
               tiene sentido que lo bloquees pues es el del pedido no el de
               orden de producción"). El candado de la unión va sólo en
               RenderOrdenProduccion (columna de la orden de producción, más
-              adelante en la fila). */}
-          <BotonPdfPedido pedido={pedido} puedePdf={puedePdfPedido} />
+              adelante en la fila).
+
+              🌳 (Jose, 2026-09-08): en las sub-filas NO va. Es el PDF del
+              PEDIDO -- el mismo archivo para las 5 OP del grupo, ya
+              disponible en la fila principal. Repetirlo por sub-fila daba
+              5 botones azules idénticos que no llevaban a nada distinto. */}
+          {!esSubfila && <BotonPdfPedido pedido={pedido} puedePdf={puedePdfPedido} />}
         </td>
 
         {/* ── IMPRESION + PRODUCTO + MEDIDAS + PIGMENTO ── */}
-        <td className={`${px} ${txt} text-gray-900 text-center min-w-[25px]`}>
-          {esSubfila && (componenteTipo || componenteNombre) && (
-            <div className="mb-0.5">
-              <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold ${
-                componenteTipo === "union"
-                  ? "bg-purple-100 text-purple-800"
-                  : "bg-teal-100 text-teal-800"
-              }`}>
-                {componenteTipo === "union" ? "Unión" : "Inicio"}
-                {componenteNombre ? ` · ${componenteNombre}` : ""}
-                {esUnionBloqueada && " 🔒"}
+        {/* relative en sub-filas: las líneas del árbol se posicionan contra
+            la CELDA COMPLETA (top-0/bottom-0), no contra el contenido. Es lo
+            que hace que la vertical de una fila empalme con la de la
+            siguiente y se lea como una sola línea corrida por todo el
+            desglose, en vez de un montón de rayitas sueltas. */}
+        <td className={`${px} ${txt} text-gray-900 min-w-[25px] ${esSubfila ? "text-left relative" : "text-center"}`}>
+          {esSubfila ? (
+            // ══ VISTA DE FLUJO (Jose, 2026-09-08) ═══════════════════════
+            // "necesito que agregues específicamente este apartado con el
+            //  fin de saber el flujo y qué orden depende de cuál [...] no te
+            //  preocupes por volver a poner el PDF de pedido, tipo, etc.,
+            //  pues la fila principal ya funciona como informativo".
+            //
+            // Toda la sub-fila es ahora una LÍNEA DE ÁRBOL, no un renglón
+            // de datos: "│ ├─ [OPC 1 🔒] Forro + chipboard". Lo que se
+            // repetía del pedido (fecha, PDF, tipo, cantidad, anticipo, OD,
+            // diseño, estado de cuenta, pago, envío) se dejó en blanco en
+            // sus celdas -- era idéntico en las 5 OP del grupo. Queda solo
+            // lo que SÍ cambia de una OP a otra: su lugar en el árbol, su
+            // número de OP y el avance de sus procesos.
+            //
+            // Las guías verticales son las que dejan seguir con el dedo de
+            // qué rama cuelga cada orden, que es justo el punto: una OPC no
+            // puede arrancar hasta que terminen las OP que le cuelgan
+            // debajo (por eso su candado).
+            //
+            // (Jose, 2026-09-08: "usa iconos y no emoticonos") -- las líneas
+            // ya NO son los caracteres │ ├ └: se dibujan con bordes CSS
+            // absolutos. Esos caracteres dependían de la fuente (salían
+            // entrecortados o descuadrados según el equipo) y nunca
+            // empalmaban entre renglón y renglón. Cada nivel del árbol es
+            // una columna fija de NIVEL_ARBOL px y cada línea va anclada a
+            // la celda (top-0/bottom-0), así que las de filas contiguas se
+            // encadenan en una sola línea continua.
+            <div
+              className="relative flex items-center gap-1.5 leading-tight min-h-[24px]"
+              style={{ paddingLeft: `${(guias.length + 1) * NIVEL_ARBOL}px` }}
+            >
+              <span aria-hidden="true" className="select-none">
+                {/* Una vertical por cada ancestro que TODAVÍA tiene órdenes
+                    debajo -- es la que deja seguir la rama con el dedo. */}
+                {guias.map((sigue, i) => (sigue ? (
+                  <span key={i} className="absolute top-0 bottom-0 w-px bg-gray-200"
+                    style={{ left: `${i * NIVEL_ARBOL + NIVEL_ARBOL / 2}px` }} />
+                ) : null))}
+                {/* El codo de ESTA fila: la vertical baja hasta media altura
+                    si es la última de su rama (└), o cruza completa si
+                    todavía le siguen hermanas (├). */}
+                <span
+                  className={`absolute w-px bg-gray-200 top-0 ${esUltimo ? "h-1/2" : "bottom-0"}`}
+                  style={{ left: `${guias.length * NIVEL_ARBOL + NIVEL_ARBOL / 2}px` }}
+                />
+                <span
+                  className="absolute h-px bg-gray-200 top-1/2"
+                  style={{
+                    left: `${guias.length * NIVEL_ARBOL + NIVEL_ARBOL / 2}px`,
+                    width: `${NIVEL_ARBOL / 2}px`,
+                  }}
+                />
               </span>
+              {componenteTipo && (
+                // El badge lleva SOLO el tipo (y su número si es OPC), para
+                // que todos midan igual y la columna se lea como una lista
+                // pareja. rounded-md (no rounded-full): el pill "N OP" de la
+                // fila principal es el único redondo, porque es el único
+                // clickeable.
+                <span className={`inline-flex items-center gap-0.5 px-2 py-0.5 rounded-md text-[10px] font-bold shrink-0 ${
+                  componenteTipo === "union"
+                    ? "bg-purple-100 text-purple-700"
+                    : componenteTipo === "complementaria"
+                      ? "bg-orange-100 text-orange-700"
+                      : "bg-teal-100 text-teal-700"
+                }`}>
+                  {componenteTipo === "union"
+                    ? "Unión"
+                    : componenteTipo === "complementaria"
+                      ? `OPC${numeroOpc != null ? ` ${numeroOpc}` : ""}`
+                      : "Inicio"}
+                  {esUnionBloqueada && (
+                    <IconoCandado className="w-2.5 h-2.5" />
+                  )}
+                </span>
+              )}
+              <span className="text-[11px] text-gray-600">
+                {componenteNombre || pedido.impresion || "—"}
+              </span>
+              {/* 🔁 (Jose, 2026-09-08: "quita el porque esta bloqueado...
+                  no es necesario") -- el motivo escrito en la fila se quitó;
+                  el candado ya dice "bloqueada" de un vistazo, y el tooltip
+                  de la fila (más abajo) sigue trayendo el motivo completo
+                  para quien SÍ lo necesite, sin ocupar espacio en la fila. */}
             </div>
+          ) : (
+            <>
+              <div className="font-medium leading-tight text-[12px]">{pedido.impresion || "—"}
+                {pedido.descripcion && (
+                  <span className="text-gray-400 text-[11px] italic ml-1">{pedido.descripcion}</span>
+                )}
+              </div>
+              <div className="text-[11px] leading-tight mt-0.5">
+                {pedido.medida && <span className="text-gray-500">{pedido.medida}</span>}
+                {pedido.pigmentos && (
+                  <span className="text-orange-500 ml-1">{pedido.pigmentos}</span>
+                )}
+              </div>
+            </>
           )}
-          <div className="font-medium leading-tight text-[12px]">{pedido.impresion || "—"}
-            {pedido.descripcion && (
-              <span className="text-gray-400 text-[11px] italic ml-1">{pedido.descripcion}</span>
-            )}
-          </div>
-          <div className="text-[11px] leading-tight mt-0.5">
-            {pedido.medida && <span className="text-gray-500">{pedido.medida}</span>}
-            {pedido.pigmentos && (
-              <span className="text-orange-500 ml-1">{pedido.pigmentos}</span>
-            )}
-          </div>
         </td>
 
 
@@ -1541,8 +2157,12 @@ export default function Seguimiento() {
               completo -- se pinta aparte y en morado para que el usuario
               identifique de un vistazo que es un especial (varias OP reales
               detrás) y por eso el renglón es clickeable, sin depender solo
-              del badge chico "N OP" de la celda de fecha. */}
-          {Boolean((pedido as any).es_especial) ? (
+              del badge chico "N OP" de la celda de fecha.
+
+              🌳 Vacío en sub-filas: las 5 OP de un especial son todas del
+              mismo producto, así que la columna repetía "Especial" cinco
+              veces sin decir nada nuevo. */}
+          {esSubfila ? null : Boolean((pedido as any).es_especial) ? (
             <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
               Especial
             </span>
@@ -1555,23 +2175,27 @@ export default function Seguimiento() {
           )}
         </td>
 
-        {/* CANTIDAD (unidades + kilogramos) */}
+        {/* CANTIDAD (unidades + kilogramos) — 🌳 vacía en sub-filas: es la
+            cantidad que pidió el CLIENTE, la misma para todo el grupo. */}
         <td className={`${px} text-center`}>
-          <CantidadPedido pedido={pedido} />
+          {esSubfila ? null : <CantidadPedido pedido={pedido} />}
         </td>
 
-        {/* ANTICIPO */}
+        {/* ANTICIPO — 🌳 vacío en sub-filas: el anticipo es del PEDIDO, no
+            de cada OP. Se aprueba una vez y aplica a las 5. */}
         <td className={`${px} text-center`}>
-          {esAccesoTotal
-            ? <BadgeTextoBtn estado={estadoAnticipo} fechaEstado={(pedido as any).anticipo_fecha_estado} cargando={cargandoAnticipo === pedido.no_pedido} onClick={() => abrirAnticipo(pedido)} />
-            : <BadgeTexto estado={estadoAnticipo} fechaEstado={(pedido as any).anticipo_fecha_estado} />
-          }
-          <FechaAprobacion fecha={(pedido as any).anticipo_fecha_aprobacion ?? null} />
+          {esSubfila ? null : (<>
+            {esAccesoTotal
+              ? <BadgeTextoBtn estado={estadoAnticipo} fechaEstado={(pedido as any).anticipo_fecha_estado} cargando={cargandoAnticipo === pedido.no_pedido} onClick={() => abrirAnticipo(pedido)} />
+              : <BadgeTexto estado={estadoAnticipo} fechaEstado={(pedido as any).anticipo_fecha_estado} />
+            }
+            <FechaAprobacion fecha={(pedido as any).anticipo_fecha_aprobacion ?? null} />
+          </>)}
         </td>
 
-        {/* OD */}
+        {/* OD — 🌳 vacía en sub-filas: la orden de diseño es del pedido. */}
         <td className={`${px} text-center`}>
-          {odId ? (
+          {esSubfila ? null : odId ? (
             (puedeVerOD || esRolPlanta) ? (
               <>
                 <BadgeTextoBtn
@@ -1596,13 +2220,15 @@ export default function Seguimiento() {
           )}
         </td>
 
-        {/* DISEÑO */}
+        {/* DISEÑO — 🌳 vacío en sub-filas: se aprueba a nivel pedido. */}
         <td className={`${px} text-center`}>
-          {esAccesoTotal
-            ? <BadgeTextoBtn estado={estadoDiseño} fechaEstado={(pedido as any).diseno_fecha_estado} onClick={() => abrirDiseno(pedido)} />
-            : <BadgeTexto estado={estadoDiseño} fechaEstado={(pedido as any).diseno_fecha_estado} />
-          }
-          <FechaAprobacion fecha={(pedido as any).diseno_fecha_aprobacion ?? null} />
+          {esSubfila ? null : (<>
+            {esAccesoTotal
+              ? <BadgeTextoBtn estado={estadoDiseño} fechaEstado={(pedido as any).diseno_fecha_estado} onClick={() => abrirDiseno(pedido)} />
+              : <BadgeTexto estado={estadoDiseño} fechaEstado={(pedido as any).diseno_fecha_estado} />
+            }
+            <FechaAprobacion fecha={(pedido as any).diseno_fecha_aprobacion ?? null} />
+          </>)}
         </td>
 
         <td className={`${px} text-center`}>
@@ -1611,62 +2237,123 @@ export default function Seguimiento() {
 
         <td className={`${px} text-center`}><ContadorDiasHabiles pedido={pedido} vigente={ordenVigente} /></td>
 
-        <td className={`${px} text-center`}>
-          <Badge estado={extEstado} fechaEstado={pedido.extrusion_fecha_estado}
-            intensificado={siguienteProcesoPlastico === "extrusion"}
-            clickable={ordenVigente && extEstado !== "no-aplica" && (puedeExtrusion || esRolPlanta)}
-            onClick={() => {
-              if (!ordenVigente) return;
-              puedeExtrusion ? abrirProceso("extrusion") : setModalVerificacion({ pedido, proceso: "extrusion" });
-            }} />
-          {extEstado === "finalizado" && <FechaCorta fecha={pedido.extrusion_fecha_fin} />}
-        </td>
+        {/* 🔁 (Jose, 2026-09-08 -- "si en el filtro selecciona plástico,
+            papel o especiales, necesito que muestre todos sus posibles
+            procesos [...] dejando lo administrativo"): las 4 columnas de
+            proceso de PLÁSTICO solo se pintan si el filtro es "todos" o
+            "plastico" -- con "papel"/"especiales" activo, esta app no tiene
+            nada que mostrar aquí (son N/A en cualquier fila de papel) y
+            ocupaban espacio sin decir nada. Nótese que NO se envuelve en
+            esPapel/mostrarPlastico condicionalmente por FILA -- es por
+            FILTRO, así que aplica igual a todas las filas para no
+            descuadrar el número de <td> contra el <thead>. */}
+        {mostrarColsPlastico && (<>
+          <td className={`${px} text-center`}>
+            <Badge estado={extEstado} fechaEstado={pedido.extrusion_fecha_estado}
+              intensificado={siguienteProcesoPlastico === "extrusion"}
+              clickable={ordenVigente && extEstado !== "no-aplica" && (puedeExtrusion || esRolPlanta)}
+              onClick={() => {
+                if (!ordenVigente) return;
+                puedeExtrusion ? abrirProceso("extrusion") : setModalVerificacion({ pedido, proceso: "extrusion" });
+              }} />
+            {extEstado === "finalizado" && <FechaCorta fecha={pedido.extrusion_fecha_fin} />}
+          </td>
 
-        <td className={`${px} text-center`}>
-          <Badge estado={impEstado} fechaEstado={pedido.impresion_fecha_estado}
-            intensificado={siguienteProcesoPlastico === "impresion"}
-            clickable={ordenVigente && impEstado !== "no-aplica" && (puedeImpresion || esRolPlanta)}
-            onClick={() => {
-              if (!ordenVigente) return;
-              puedeImpresion ? abrirProceso("impresion") : setModalVerificacion({ pedido, proceso: "impresion" });
-            }} />
-          {impEstado === "finalizado" && <FechaCorta fecha={pedido.impresion_fecha_fin} />}
-        </td>
+          <td className={`${px} text-center`}>
+            <Badge estado={impEstado} fechaEstado={pedido.impresion_fecha_estado}
+              intensificado={siguienteProcesoPlastico === "impresion"}
+              clickable={ordenVigente && impEstado !== "no-aplica" && (puedeImpresion || esRolPlanta)}
+              onClick={() => {
+                if (!ordenVigente) return;
+                puedeImpresion ? abrirProceso("impresion") : setModalVerificacion({ pedido, proceso: "impresion" });
+              }} />
+            {impEstado === "finalizado" && <FechaCorta fecha={pedido.impresion_fecha_fin} />}
+          </td>
 
-        <td className={`${px} text-center`}>
-          <Badge estado={bolEstado} fechaEstado={pedido.bolseo_fecha_estado}
-            intensificado={siguienteProcesoPlastico === "bolseo"}
-            clickable={ordenVigente && bolEstado !== "no-aplica" && (puedeBolseo || esRolPlanta)}
-            onClick={() => {
-              if (!ordenVigente) return;
-              puedeBolseo ? abrirProceso("bolseo") : setModalVerificacion({ pedido, proceso: "bolseo" });
-            }} />
-          {bolEstado === "finalizado" && <FechaCorta fecha={pedido.bolseo_fecha_fin} />}
-        </td>
+          <td className={`${px} text-center`}>
+            <Badge estado={bolEstado} fechaEstado={pedido.bolseo_fecha_estado}
+              intensificado={siguienteProcesoPlastico === "bolseo"}
+              clickable={ordenVigente && bolEstado !== "no-aplica" && (puedeBolseo || esRolPlanta)}
+              onClick={() => {
+                if (!ordenVigente) return;
+                puedeBolseo ? abrirProceso("bolseo") : setModalVerificacion({ pedido, proceso: "bolseo" });
+              }} />
+            {bolEstado === "finalizado" && <FechaCorta fecha={pedido.bolseo_fecha_fin} />}
+          </td>
 
-        <td className={`${px} text-center`}>
-          <Badge estado={asaEstado} fechaEstado={pedido.asa_flexible_fecha_estado}
-            intensificado={siguienteProcesoPlastico === "asa_flexible"}
-            clickable={ordenVigente && asaEstado !== "no-aplica" && (puedeAsaFlexible || esRolPlanta)}
-            onClick={() => {
-              if (!ordenVigente) return;
-              puedeAsaFlexible ? abrirProceso("asa_flexible") : setModalVerificacion({ pedido, proceso: "asa_flexible" });
-            }} />
-          {asaEstado === "finalizado" && <FechaCorta fecha={pedido.asa_flexible_fecha_fin} />}
-        </td>
+          <td className={`${px} text-center`}>
+            <Badge estado={asaEstado} fechaEstado={pedido.asa_flexible_fecha_estado}
+              intensificado={siguienteProcesoPlastico === "asa_flexible"}
+              clickable={ordenVigente && asaEstado !== "no-aplica" && (puedeAsaFlexible || esRolPlanta)}
+              onClick={() => {
+                if (!ordenVigente) return;
+                puedeAsaFlexible ? abrirProceso("asa_flexible") : setModalVerificacion({ pedido, proceso: "asa_flexible" });
+              }} />
+            {asaEstado === "finalizado" && <FechaCorta fecha={pedido.asa_flexible_fecha_fin} />}
+          </td>
+        </>)}
 
-        {PROCESOS_PAPEL.map(({ key }, idxPapel) => {
+        {mostrarColsPapel && PROCESOS_PAPEL.map(({ key }, idxPapel) => {
           const proceso = esPapel ? procesosPapelPorNombre.get(key) : undefined;
           const estado = esPapel ? estadosPapelDeLaFila[idxPapel].estado : estadoProcesoPapelATabla(proceso?.estado);
+          const todasLasPasadas = esPapel ? (todasLasPasadasPorNombre.get(key) ?? []) : [];
+          const seRepite = todasLasPasadas.length > 1;
+
+          const abrirPasada = (pasoRepetido: ProcesoRegistroPapel) => {
+            // 🔒 (Jose, 2026-09-08): ver el comentario de abrirProceso más
+            // arriba -- misma protección, para los procesos de papel.
+            if (!esPapel || !ordenVigente || esUnionBloqueada) return;
+            permisosProcesoPapel[key]
+              ? setModalProcesoPapel({
+                  pedido, nombreProceso: key,
+                  pasada: pasoRepetido.pasada ?? 1,
+                  esEspecial: componenteTipo != null,
+                })
+              : setModalVerificacion({
+                  pedido, proceso: key,
+                  pasada: pasoRepetido.pasada ?? 1,
+                  esEspecial: componenteTipo != null,
+                });
+          };
+
           return (
             <td key={key} className={`${px} text-center`}>
               {errorCargaProcesosPapel ? (
                 <span
                   title="No se pudieron cargar los procesos de papel"
-                  className="inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold border bg-red-100 text-red-800 border-red-300"
+                  className="inline-flex items-center justify-center min-w-[2.15rem] h-6 px-2 rounded-lg text-[11px] font-bold border bg-red-100 text-red-800 border-red-300"
                 >
                   !
                 </span>
+              ) : seRepite ? (
+                // ✅ NUEVO (Jose, 2026-09-05): un badge chico POR CORRIDA en
+                // vez de uno solo -- así cualquier repetición ya terminada
+                // se sigue pudiendo volver a abrir, no solo la que está
+                // corriendo ahora.
+                <div className="flex items-center justify-center gap-1 flex-wrap">
+                  {todasLasPasadas.map((p) => {
+                    const estadoPasada = estadoProcesoPapelATabla(p.estado);
+                    const esLaQueSigue =
+                      esPapel && key === siguienteProcesoPapel &&
+                      pasoActualPapel?.tabla === key &&
+                      (pasoActualPapel?.pasada ?? 1) === (p.pasada ?? 1);
+                    const clickeable =
+                      ordenVigente && !esUnionBloqueada && estadoPasada !== "no-aplica" &&
+                      (permisosProcesoPapel[key] || esRolPlanta);
+                    const fecha = fechaProcesoPapel(p);
+                    return (
+                      <BadgePasada
+                        key={p.posicion}
+                        numero={p.pasada ?? 1}
+                        estado={estadoPasada}
+                        intensificado={esLaQueSigue}
+                        clickable={clickeable}
+                        onClick={() => abrirPasada(p)}
+                        titulo={`${NOMBRES_PROCESO_PAPEL[key]} · ${p.pasada}a de ${p.total_pasadas} · ${estadoPasada}${fecha ? " · " + fecha : ""}`}
+                      />
+                    );
+                  })}
+                </div>
               ) : (
                 <>
                   <Badge
@@ -1674,15 +2361,10 @@ export default function Seguimiento() {
                     fechaEstado={fechaProcesoPapel(proceso)}
                     intensificado={esPapel && key === siguienteProcesoPapel}
                     clickable={
-                      esPapel && ordenVigente && !!proceso && estado !== "no-aplica" &&
+                      esPapel && ordenVigente && !esUnionBloqueada && !!proceso && estado !== "no-aplica" &&
                       (permisosProcesoPapel[key] || esRolPlanta)
                     }
-                    onClick={() => {
-                      if (!esPapel || !ordenVigente || !proceso) return;
-                      permisosProcesoPapel[key]
-                        ? setModalProcesoPapel({ pedido, nombreProceso: key })
-                        : setModalVerificacion({ pedido, proceso: key });
-                    }}
+                    onClick={() => { if (!esPapel || !ordenVigente || esUnionBloqueada || !proceso) return; abrirPasada(proceso); }}
                   />
                   {estado === "finalizado" && <FechaCorta fecha={fechaProcesoPapel(proceso)} />}
                 </>
@@ -1691,8 +2373,11 @@ export default function Seguimiento() {
           );
         })}
 
+        {/* E. CTA / PAGO / ENVÍO — 🌳 vacíos en sub-filas: los tres son del
+            PEDIDO completo (un estado de cuenta, una liquidación, un
+            envío), no de cada OP del árbol. */}
         <td className={`${px} text-center`}>
-          {puedeVerECta
+          {esSubfila ? null : puedeVerECta
             ? <BotonEstadoCuentaPdf
                 noPedido={pedido.no_pedido}
                 generado={(pedido as any).estado_cuenta_generado}
@@ -1703,7 +2388,7 @@ export default function Seguimiento() {
         </td>
 
         <td className={`${px} text-center`}>
-          {esAccesoTotal
+          {esSubfila ? null : esAccesoTotal
             ? <BadgeTextoBtn estado={estadoPago} fechaEstado={(pedido as any).pago_fecha_estado} cargando={cargandoAnticipo === pedido.no_pedido} onClick={() => abrirAnticipo(pedido)} />
             : <BadgeTexto estado={estadoPago} fechaEstado={(pedido as any).pago_fecha_estado} />
           }
@@ -1714,7 +2399,7 @@ export default function Seguimiento() {
               vez de apoyarse solo en pago_fecha_estado que no refleja la
               liquidación). Pide que se agregue pago_fecha_liquidacion
               (alias de ventas.fecha_liquidacion) a esa respuesta. */}
-          {estadoPago === "pagado" && (
+          {!esSubfila && estadoPago === "pagado" && (
             <FechaAprobacion fecha={
               (pedido as any).pago_fecha_liquidacion ??
               (pedido as any).venta_fecha_liquidacion ??
@@ -1727,7 +2412,7 @@ export default function Seguimiento() {
 
         {/* ENVÍO */}
         <td className={`${px} text-center`}>
-          {tieneOrden ? (
+          {esSubfila ? null : tieneOrden ? (
             puedeVerEnvio ? (
               <BadgeTextoBtn estado={estadoEnvio} fechaEstado={(pedido as any).envio_fecha_estado} onClick={() => setModalEnvio(pedido)} />
             ) : (
@@ -1737,10 +2422,135 @@ export default function Seguimiento() {
             <BadgeTexto estado="no-aplica" />
           )}
           {/* Fecha en que se terminó de enviar todo lo de esta orden */}
-          {estadoEnvio === "finalizado" && <FechaAprobacion fecha={(pedido as any).envio_fecha_estado ?? null} />}
+          {!esSubfila && estadoEnvio === "finalizado" && <FechaAprobacion fecha={(pedido as any).envio_fecha_estado ?? null} />}
         </td>
       </tr>
     );
+  };
+
+  // 🔁 FASE 5 (Jose, 2026-09-08): ordena las sub-filas de un especial como
+  // un árbol de verdad -- antes se listaban todas al mismo nivel, ordenadas
+  // solo por componente_orden, así que una OP de inicio que alimenta a una
+  // OPC se veía exactamente igual de "adentro" que la propia OPC. Ahora se
+  // recorre el árbol real (componente_padre_id) empezando en los hijos
+  // DIRECTOS de la raíz (la unión, que es la fila principal y no entra
+  // aquí) y bajando nivel por nivel, para que el orden visual sea el mismo
+  // "de dónde viene el material": unión → sus OPC/inicio directos → los
+  // hijos de esas OPC → ... -- y cada nivel pueda sangrarse según qué tan
+  // hondo está (ver `profundidad` en renderFila).
+  //
+  // 🎨 (Jose, 2026-09-08): además numera las OPC en el mismo recorrido
+  // ("OPC 1", "OPC 2"...). El número NO viene de la BD -- es puramente
+  // visual y sale del orden del árbol (unión → abajo), que es justo el
+  // orden en que Jose las lee en la tabla. Sale de aquí y no de renderFila
+  // porque solo este recorrido conoce a todas las hermanas de un grupo.
+  const construirArbolHijos = (
+    disponibles: PedidoSeguimiento[],
+    raizId: number | null,
+  ): Array<{
+    fila: PedidoSeguimiento;
+    profundidad: number;
+    numeroOpc?: number;
+    // 🌳 (Jose, 2026-09-08 -- "con el fin de saber el flujo y que orden
+    // depende de cual"): para dibujar líneas de árbol de verdad hace falta
+    // saber, en cada nivel POR ENCIMA de esta fila, si ese ancestro todavía
+    // tiene hermanas debajo (⇒ se pinta "│" y la rama sigue) o si ya fue la
+    // última (⇒ espacio en blanco). Eso solo lo sabe este recorrido, que es
+    // quien ve a todas las hermanas de cada nivel.
+    guias: boolean[];
+    esUltimo: boolean;
+    // Nombre/tipo del componente al que ESTA orden le entrega su material.
+    // Es la respuesta literal a "¿de quién depende cuál?" y se usa para el
+    // tooltip de la fila.
+    alimentaA: string | null;
+  }> => {
+    const porPadre = new Map<number, PedidoSeguimiento[]>();
+    disponibles.forEach((f) => {
+      const padreId = (f as any).componente_padre_id;
+      if (padreId == null) return; // no debería pasar entre los "hijos" (solo la unión no tiene padre)
+      const key = Number(padreId);
+      porPadre.set(key, [...(porPadre.get(key) ?? []), f]);
+    });
+
+    const resultado: Array<{
+      fila: PedidoSeguimiento; profundidad: number; numeroOpc?: number;
+      guias: boolean[]; esUltimo: boolean; alimentaA: string | null;
+    }> = [];
+    const visitados = new Set<number>(); // guarda contra un ciclo corrupto en los datos.
+    let contadorOpc = 0;
+
+    // Cómo se llama, para el humano, el componente al que esta orden le
+    // entrega -- "Unión", "OPC 2", "Inicio · Couché"... Se arma aquí porque
+    // el número de OPC solo existe en este recorrido.
+    const etiquetaDe = (f: PedidoSeguimiento, numOpc?: number): string => {
+      const tipo = (f as any).componente_tipo as string | null;
+      const nombre = (f as any).componente_nombre as string | null;
+      const base = tipo === "union"
+        ? "la unión"
+        : tipo === "complementaria"
+          ? `la OPC${numOpc != null ? ` ${numOpc}` : ""}`
+          : "la OP de inicio";
+      return nombre ? `${base} (${nombre})` : base;
+    };
+
+    const recorrer = (padreId: number, profundidad: number, guias: boolean[], etiquetaPadre: string) => {
+      const hijosDirectos = (porPadre.get(padreId) ?? []).sort(
+        (a, b) => (((a as any).componente_orden ?? 999) - ((b as any).componente_orden ?? 999))
+      );
+      hijosDirectos.forEach((hijo, i) => {
+        const idHijo = (hijo as any).idcomponente_papel != null ? Number((hijo as any).idcomponente_papel) : null;
+        if (idHijo != null) {
+          if (visitados.has(idHijo)) return;
+          visitados.add(idHijo);
+        }
+        const esUltimo = i === hijosDirectos.length - 1;
+        const esOpc = (hijo as any).componente_tipo === "complementaria";
+        const numeroOpc = esOpc ? ++contadorOpc : undefined;
+        resultado.push({
+          fila: hijo, profundidad, numeroOpc,
+          guias, esUltimo, alimentaA: etiquetaPadre,
+        });
+        // Los hijos de ESTE nodo se dibujan un nivel más adentro; heredan
+        // las guías de arriba más una nueva: se sigue pintando "│" en esta
+        // columna solo si este nodo todavía tiene hermanas debajo.
+        if (idHijo != null) {
+          recorrer(idHijo, profundidad + 1, [...guias, !esUltimo], etiquetaDe(hijo, numeroOpc));
+        }
+      });
+    };
+
+    if (raizId != null) recorrer(raizId, 1, [], "la unión");
+
+    // Huérfanos (idcomponente_papel_padre no encontrado entre las filas del
+    // grupo, o la unión no llegó en la respuesta): no se pierden de la
+    // lista, solo no se pueden sangrar con precisión -- se muestran al
+    // final, al nivel 1.
+    disponibles.forEach((f) => {
+      const idF = (f as any).idcomponente_papel != null ? Number((f as any).idcomponente_papel) : null;
+      if (idF == null || !visitados.has(idF)) {
+        const esOpc = (f as any).componente_tipo === "complementaria";
+        resultado.push({
+          fila: f, profundidad: 1, numeroOpc: esOpc ? ++contadorOpc : undefined,
+          guias: [], esUltimo: true, alimentaA: null,
+        });
+      }
+    });
+
+    // Recalcula "esUltimo" sobre la lista YA aplanada: los huérfanos se
+    // agregan al final y pueden dejar a la que era última del nivel 1
+    // cerrando con "└" cuando en pantalla todavía le sigue otra fila.
+    // Recorriendo de abajo hacia arriba, una fila es la última de su rama
+    // si no se vio otra de su misma profundidad después de ella (y sí antes
+    // de toparse con una menos profunda, que abre una rama nueva).
+    const vistosPorNivel = new Set<number>();
+    for (let i = resultado.length - 1; i >= 0; i--) {
+      const nivel = resultado[i].profundidad;
+      resultado[i].esUltimo = !vistosPorNivel.has(nivel);
+      for (const d of [...vistosPorNivel]) if (d > nivel) vistosPorNivel.delete(d);
+      vistosPorNivel.add(nivel);
+    }
+
+    return resultado;
   };
 
   // ── Renderiza una lista de filas "principales", intercalando las
@@ -1770,10 +2580,15 @@ export default function Seguimiento() {
 
       if (!expandido || !filasGrupo) return [filaPrincipal];
 
-      const hijos = filasGrupo
-        .filter(f => f !== p)
-        .sort((a, b) => (((a as any).componente_orden ?? 999) - ((b as any).componente_orden ?? 999)))
-        .map((hijo) => renderFila(hijo, grande, contador++, { esSubfila: true }));
+      // La fila principal normalmente ES la unión (ver principalDeGrupoEspecial)
+      // -- su propio idcomponente_papel es la raíz desde la que se cuelgan
+      // todos los demás nodos del árbol.
+      const raizId = (p as any).idcomponente_papel != null ? Number((p as any).idcomponente_papel) : null;
+      const hijos = construirArbolHijos(filasGrupo.filter((f) => f !== p), raizId)
+        .map(({ fila, profundidad, numeroOpc, guias, esUltimo, alimentaA }) =>
+          renderFila(fila, grande, contador++, {
+            esSubfila: true, profundidad, numeroOpc, guias, esUltimo, alimentaA,
+          }));
 
       return [filaPrincipal, ...hijos];
     });
@@ -1839,7 +2654,7 @@ export default function Seguimiento() {
           proceso={modalVerificacion.proceso}
           idproduccion={modalVerificacion.pedido.idproduccion}
           onSuccess={(_operador, tokenProceso) => {
-            const { pedido, proceso } = modalVerificacion;
+            const { pedido, proceso, pasada, esEspecial } = modalVerificacion;
             setModalVerificacion(null);
             // Token de proceso (fase 5): null para orden_diseno, que queda
             // fuera de su alcance — ver ModalVerificarOperador.tsx.
@@ -1847,7 +2662,12 @@ export default function Seguimiento() {
             if (proceso === "orden_diseno") {
               setModalOD(pedido);
             } else if (proceso in NOMBRES_PROCESO_PAPEL) {
-              setModalProcesoPapel({ pedido, nombreProceso: proceso as NombreProcesoPapel });
+              setModalProcesoPapel({
+                pedido,
+                nombreProceso: proceso as NombreProcesoPapel,
+                pasada: pasada ?? 1,
+                esEspecial: esEspecial ?? false,
+              });
             } else {
               setModalProceso({ pedido, nombreProceso: proceso });
             }
@@ -1882,14 +2702,26 @@ export default function Seguimiento() {
         <Modal
           isOpen={!!modalProcesoPapel}
           onClose={() => { setModalProcesoPapel(null); setTokenProceso(null); }}
-          title={`${NOMBRES_PROCESO_PAPEL[modalProcesoPapel.nombreProceso]} — ${modalProcesoPapel.pedido.no_produccion}`}
+          title={`${NOMBRES_PROCESO_PAPEL[modalProcesoPapel.nombreProceso]}${
+            modalProcesoPapel.pasada > 1 ? ` (${modalProcesoPapel.pasada}ª)` : ""
+          } — ${modalProcesoPapel.pedido.no_produccion}`}
         >
-          <ModalProcesoIndividualPapel
-            pedido={modalProcesoPapel.pedido as unknown as PedidoSeguimientoPapel}
-            nombreProceso={modalProcesoPapel.nombreProceso}
-            onClose={() => { setModalProcesoPapel(null); setTokenProceso(null); }}
-            onActualizar={cargar}
-          />
+          {modalProcesoPapel.esEspecial ? (
+            <ModalProcesoIndividualEspecial
+              pedido={modalProcesoPapel.pedido as unknown as PedidoSeguimientoPapel}
+              nombreProceso={modalProcesoPapel.nombreProceso}
+              pasada={modalProcesoPapel.pasada}
+              onClose={() => { setModalProcesoPapel(null); setTokenProceso(null); }}
+              onActualizar={cargar}
+            />
+          ) : (
+            <ModalProcesoIndividualPapel
+              pedido={modalProcesoPapel.pedido as unknown as PedidoSeguimientoPapel}
+              nombreProceso={modalProcesoPapel.nombreProceso}
+              onClose={() => { setModalProcesoPapel(null); setTokenProceso(null); }}
+              onActualizar={cargar}
+            />
+          )}
         </Modal>
       )}
     </>
@@ -1934,7 +2766,7 @@ export default function Seguimiento() {
         <div className="bg-white rounded-lg shadow overflow-hidden">
           <div className="overflow-auto max-h-[calc(100vh-9rem)]">
             <table className="w-full">
-              {renderThead(true)}
+              {renderThead(true, filtroTipo)}
               <tbody>{renderFilasConGrupos(filasPrincipales, true)}</tbody>
             </table>
           </div>
@@ -2038,10 +2870,14 @@ export default function Seguimiento() {
               sigue en curso. */}
           <button
             type="button"
-            onClick={() => setSoloFinalizados(prev => !prev)}
+            onClick={() => setSoloFinalizados(prev => {
+              const next = !prev;
+              if (next) setSoloPendientes(false); // exclusivo con el de abajo
+              return next;
+            })}
             title={soloFinalizados
               ? "Volver a la vista normal (órdenes activas)"
-              : "Ver solo las órdenes ya finalizadas por completo (producción + envío + pago)"}
+              : "Ver solo las órdenes finalizadas en lo absoluto (producción + envío + OD aprobada + pago completo)"}
             className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium border transition-colors ${
               soloFinalizados
                 ? "bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700"
@@ -2053,7 +2889,34 @@ export default function Seguimiento() {
             {soloFinalizados ? "Solo finalizadas" : "Ver finalizadas"}
           </button>
 
-          {(busqueda || filtroTipo !== "todos" || soloFinalizados) && (
+          {/* ── NUEVO: filtro EXCLUSIVO hermano del de arriba, pero para lo
+              que le falta cerrar en general -- envío, OD y/o pago
+              (generalizado, Jose 2026-09-07: antes era solo envío) -- para
+              dar seguimiento puntual a pedidos que ya salieron de la vista
+              normal pero siguen necesitando algo. Ver comentario de
+              soloPendientes arriba. */}
+          <button
+            type="button"
+            onClick={() => setSoloPendientes(prev => {
+              const next = !prev;
+              if (next) setSoloFinalizados(false); // exclusivo con el de arriba
+              return next;
+            })}
+            title={soloPendientes
+              ? "Volver a la vista normal (órdenes activas)"
+              : "Ver solo los pedidos a los que todavía les falta algo por cerrar (envío, OD y/o pago)"}
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium border transition-colors ${
+              soloPendientes
+                ? "bg-amber-600 text-white border-amber-600 hover:bg-amber-700"
+                : "text-gray-400 border-transparent hover:text-gray-600 hover:bg-gray-100"
+            }`}>
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v9a1 1 0 001 1h1m8-1a1 1 0 01-1 1H9m4-1V8a1 1 0 011-1h2.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V16a1 1 0 01-1 1h-1m-6-1a1 1 0 001 1h1m-2-1a1 1 0 011-1m5 1a1 1 0 102 0 1 1 0 00-2 0zM7 17a1 1 0 102 0 1 1 0 00-2 0z" />
+            </svg>
+            {soloPendientes ? "Solo pendientes" : "Pendientes"}
+          </button>
+
+          {(busqueda || filtroTipo !== "todos" || soloFinalizados || soloPendientes) && (
             <span className="text-sm text-gray-500 ml-auto">
               {filasPrincipales.length} resultado{filasPrincipales.length !== 1 ? "s" : ""}
             </span>
@@ -2115,7 +2978,7 @@ export default function Seguimiento() {
           style={altoTabla ? { maxHeight: altoTabla } : undefined}
           className="overflow-auto max-h-[calc(100vh-26rem)] min-h-[16rem]">
           <table className="w-full">
-            {renderThead()}
+            {renderThead(false, filtroTipo)}
             <tbody>{renderFilasConGrupos(pedidosPagina, false, inicio)}</tbody>
           </table>
         </div>

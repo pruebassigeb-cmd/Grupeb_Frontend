@@ -87,6 +87,9 @@ interface BorradorSolicitud {
   herramentalDescripcion: string;
   herramentalPrecioTexto: string;
   productoNuevoListo: boolean;
+  // Folio de la OC — solo aplica con modo="pedido". El archivo en sí no se
+  // guarda en el borrador (no se puede serializar un File a localStorage).
+  ordenCompraFolio?: string;
 }
 
 export default function FormularioSolicitud({
@@ -164,6 +167,12 @@ export default function FormularioSolicitud({
 
   const [modoProducto, setModoProducto] = useState<"registrado" | "nuevo">(borradorInicial?.modoProducto ?? "registrado");
   const [productoNuevoListo, setProductoNuevoListo] = useState(borradorInicial?.productoNuevoListo ?? false);
+  // Orden de Compra — solo aplica cuando modo="pedido". El archivo se sube
+  // hasta que el pedido ya existe (necesita su no_pedido), así que aquí solo
+  // se guarda el File seleccionado; quien haga onSubmit se encarga de
+  // subirlo después de crear el pedido.
+  const [ordenCompraFolio, setOrdenCompraFolio] = useState(borradorInicial?.ordenCompraFolio ?? "");
+  const [archivoOrdenCompra, setArchivoOrdenCompra] = useState<File | null>(null);
   const [mostrarModalProductos, setMostrarModalProductos] = useState(false);
   const [busquedaProducto, setBusquedaProducto] = useState("");
   const [productosCargados, setProductosCargados] = useState<ProductoBusqueda[]>([]);
@@ -243,6 +252,7 @@ export default function FormularioSolicitud({
     editandoProductoIndex, editandoPapelIndex, preciosEditadosManualmente, preciosTexto,
     modoColor, inputsPantones, idTipoPigmento, idTipoPanton, modoCantidad, cantidadesTexto,
     herramentalExpandido, herramentalDescripcion, herramentalPrecioTexto, productoNuevoListo,
+    ordenCompraFolio,
   }, true);
 
   const tintasPlastico = useMemo(
@@ -1028,7 +1038,13 @@ const cargarProductos = async (query?: string) => {
     }
     setEnviando(true);
     try {
-      await onSubmit({ ...datos, tipo: modo });
+      // Se arma en una variable (no como literal directo en la llamada) para
+      // que TS no aplique el chequeo de "excess properties": ordenCompraFolio
+      // y archivoOrdenCompra no están en DatosCotizacion, pero eso es
+      // intencional — onSubmit los recibe vía el tipo abierto que usa el
+      // padre (Pedido.tsx los lee con `datos: any`).
+      const payloadConOrdenCompra = { ...datos, tipo: modo, ordenCompraFolio, archivoOrdenCompra };
+      await onSubmit(payloadConOrdenCompra);
       // Se guardó de verdad: el borrador ya cumplió su propósito. Si fallara
       // (throw), se salta esta línea a propósito y el borrador queda intacto
       // para no perder la captura por un error de guardado.
@@ -1252,15 +1268,20 @@ const cargarProductos = async (query?: string) => {
           >
             🎁 Especial
           </button>
-          <button
-            type="button"
-            disabled={!puedeActivarModoLibre}
-            title={!puedeActivarModoLibre ? "No se puede mezclar con productos normales ya agregados" : undefined}
-            onClick={() => setModoLibre(true)}
-            className={`flex items-center gap-2 px-5 py-2 rounded-md font-medium text-sm transition-all ${modoLibre ? "bg-white text-purple-600 shadow" : "text-gray-600 hover:text-gray-900"} ${!puedeActivarModoLibre ? "opacity-40 cursor-not-allowed" : ""}`}
-          >
-            🆓 Libre
-          </button>
+          {/* "Libre" es solo para cotizaciones — un pedido ya implica que el
+              cliente aceptó precio y producto definidos, no una propuesta
+              libre sin catálogo. */}
+          {modo !== "pedido" && (
+            <button
+              type="button"
+              disabled={!puedeActivarModoLibre}
+              title={!puedeActivarModoLibre ? "No se puede mezclar con productos normales ya agregados" : undefined}
+              onClick={() => setModoLibre(true)}
+              className={`flex items-center gap-2 px-5 py-2 rounded-md font-medium text-sm transition-all ${modoLibre ? "bg-white text-purple-600 shadow" : "text-gray-600 hover:text-gray-900"} ${!puedeActivarModoLibre ? "opacity-40 cursor-not-allowed" : ""}`}
+            >
+              🆓 Libre
+            </button>
+          )}
         </div>
 
         {modoLibre && (
@@ -2160,6 +2181,58 @@ const cargarProductos = async (query?: string) => {
             <span className="text-emerald-500 text-xs">(exento de IVA en todo el proceso)</span>
           </label>
         </div>
+
+        {/* Orden de Compra — solo aplica al crear un pedido directo */}
+        {modo === "pedido" && (
+          <div className="py-3 px-4 bg-amber-50 border border-amber-200 rounded-lg mb-4">
+            <p className="text-amber-800 font-semibold text-sm mb-2">Orden de Compra</p>
+            <div className="flex flex-col sm:flex-row sm:items-start gap-3">
+              <input
+                type="text"
+                value={ordenCompraFolio}
+                onChange={e => setOrdenCompraFolio(e.target.value)}
+                placeholder="Folio de la OC (opcional)"
+                className="w-full sm:w-56 sm:flex-shrink-0 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-400 focus:border-transparent"
+              />
+
+              {archivoOrdenCompra ? (
+                <div className="relative w-20 h-20 rounded-lg border border-amber-300 overflow-hidden flex items-center justify-center bg-white flex-shrink-0">
+                  {archivoOrdenCompra.type.startsWith("image/") ? (
+                    <img
+                      src={URL.createObjectURL(archivoOrdenCompra)}
+                      alt={archivoOrdenCompra.name}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <span className="text-[10px] font-bold text-red-500">PDF</span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setArchivoOrdenCompra(null)}
+                    title="Quitar"
+                    className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-white border border-gray-200 shadow-sm text-red-500 hover:bg-red-50 flex items-center justify-center text-xs leading-none"
+                  >
+                    ×
+                  </button>
+                </div>
+              ) : (
+                <label className="text-xs font-semibold px-3 py-2 rounded-lg bg-amber-100 text-amber-900 hover:bg-amber-200 cursor-pointer transition-colors flex-shrink-0">
+                  + Agregar archivo o imagen
+                  <input
+                    type="file"
+                    accept="image/*,application/pdf"
+                    className="hidden"
+                    onChange={e => {
+                      const archivo = e.target.files?.[0];
+                      if (archivo) setArchivoOrdenCompra(archivo);
+                      e.target.value = "";
+                    }}
+                  />
+                </label>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Prioridad */}
         {modo === "pedido" && (

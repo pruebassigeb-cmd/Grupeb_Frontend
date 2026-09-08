@@ -1,23 +1,3 @@
-// src/utils/generarPdfCotizacionLibre.ts
-//
-// PDF "Propuesta Personalizada" para Cotización Libre.
-// Maqueta calcada de la hoja impresa — A4 horizontal (297 × 210 mm):
-//
-//   ┌──────────────┬──────────────────────────────────────────────┐
-//   │ bloque negro │ PROPUESTA / PERSONALIZADA        [ FOLIO ]   │
-//   │ + tagline    │ CLIENTE EMPRESA FECHA ASESOR │ 4 beneficios  │
-//   │ foto product.│ COTIZACIÓN + tabla                           │
-//   │ procesos     │ Comentarios                                  │
-//   ├──────────────┴──────────────────────────────────────────────┤
-//   │ procesos (izq) │ +35 AÑOS │ QR web │ QR wa │ GRUPO EB │ redes│
-//   └─────────────────────────────────────────────────────────────┘
-//
-// ASSETS: foto del panel izquierdo → src/assets/cotlibre.png
-//         QR de página web       → src/assets/qrweb.png
-//         QR de WhatsApp         → src/assets/qrwhatsapp.png
-// Basta con colocar esos archivos en src/assets/. Si alguno falta, queda el
-// espacio en blanco reservado (mismas medidas) y el resto no se mueve.
-// El 4º parámetro (`assets`) permite sobrescribirlos en runtime.
 
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -123,14 +103,42 @@ const GRIS_CLARO: [number, number, number] = [190, 190, 190];
 const PW = 297;
 const PH = 210;
 
-const COL_X = 91;                  // borde donde arranca la columna derecha / la tabla
-const TABLE_W = 194.5;             // hasta 285.5 → margen derecho de 11.5
-const HEAD_X = 109;                // sangría del título PROPUESTA
-const DER = PW - 11.5;             // borde derecho útil
-const TABLA_Y = 84;
-const COMENT_H_MAX = 18;
-const BANDA_Y = 157;               // inicio de la banda inferior
-const FOTO = { x: 0, y: 66, w: 88, h: 80 };
+// Coordenadas ajustadas a la maqueta de referencia A4 horizontal.
+// La tabla se redujo 5% de ancho (manteniendo su borde derecho fijo en
+// DER=290, o sea "empujándola a la derecha") y ese espacio liberado
+// (10.5 mm) se le dio a la foto de producto, que ahora es un poco más ancha.
+const TABLE_W_ORIGINAL = 210.5;
+const TABLE_W = TABLE_W_ORIGINAL * 0.95;      // 200.0 mm (antes 210.5)
+const DER = PW - 7;
+const COL_X = DER - TABLE_W;                  // 90 mm (antes 79.5)
+const DELTA_COL_X = COL_X - 79.5;             // 10.5 mm ganados por la foto
+const HEAD_X = 93.5;               // sangría del título (un poco más a la derecha)
+const TABLA_Y = 66;
+const COMENT_H_MAX = 20;
+// ── Bloque inferior (Comentarios / +35 años / QRs / Planta / Condiciones) ──
+// Antes estas piezas vivían en coordenadas Y fijas (Comentarios se calculaba
+// desde el final de la tabla, pero +35/QR/Planta/Condiciones arrancaban
+// siempre en y=135 y y=115 sin importar qué tan abajo terminara la tabla o
+// el cuadro de Comentarios). Con tablas de 5+ renglones y celdas de 2 líneas
+// (material+calibre, cantidad+precio) el final real de la tabla cae más
+// abajo de lo que esas coordenadas fijas asumían, y todo se encimaba.
+// Ahora el bloque completo se ancla dinámicamente al final de la tabla,
+// aprovechando el espacio libre que sobraba antes del filete dorado inferior.
+const GAP_TABLA_COMENT = 3;        // tabla → cuadro de Comentarios
+const GAP_COMENT_BLOQUE = 5;       // Comentarios → fila de +35/QR/Planta
+// BLOQUE_INF_H ya no es un valor fijo: en la referencia real, la caja negra
+// de "+35 años" y el marco de "Condiciones de venta" llegan casi hasta el
+// filete dorado inferior (aprovechando TODO el espacio libre) — antes se
+// cortaban a los 41 mm dejando un hueco en blanco grande abajo. Ahora se
+// calcula al vuelo como "todo lo que sobra hasta el límite inferior".
+const LIMITE_INFERIOR = PH - 6.5 - 1.5; // aire mínimo antes del filete dorado inferior
+// La foto es el fondo de TODA la columna izquierda (desde el borde superior
+// de la hoja hasta antes de "TODOS LOS PROCESOS..."), y la cinta diagonal +
+// logo + tagline se dibujan DESPUÉS (más abajo en este archivo) para quedar
+// por encima de ella. Su ancho ahora incluye los 10.5 mm liberados de la
+// tabla, y su alto se recorta un poco (150→142) para dejar aire real antes
+// del texto "TODOS LOS PROCESOS..." (que sigue arrancando en y=152).
+const FOTO = { x: 0, y: 0, w: 78 + DELTA_COL_X, h: 142 };
 
 type Doc = jsPDF;
 
@@ -244,10 +252,16 @@ const iconBolsa: Icono = (doc, cx, cy, s, c) => {
 
 const iconCapas: Icono = (doc, cx, cy, s, c) => {
   trazo(doc, c, 0.4);
+  // Antes el rombo arrancaba en (cx-0.34s, y0) y con esos mismos segmentos
+  // relativos terminaba centrado en (cx-0.34s, y0+0.16s) — es decir, el
+  // ícono completo quedaba ~2.3 mm corrido a la IZQUIERDA de cx en vez de
+  // centrado, y por eso se veía descuadrado frente a los otros 3 íconos.
+  // Arrancando en (cx, y0-0.16s) el mismo rombo queda centrado en (cx, y0).
   [-0.2, 0.05, 0.3].forEach((off) => {
+    const y0 = cy + off * s;
     doc.lines(
       [[s * 0.34, s * 0.16], [-s * 0.34, s * 0.16], [-s * 0.34, -s * 0.16]] as any,
-      cx - s * 0.34, cy + off * s, [1, 1], "S", true
+      cx, y0 - s * 0.16, [1, 1], "S", true
     );
   });
 };
@@ -409,6 +423,54 @@ const iconFlexo: Icono = (doc, cx, cy, s, c) => {
   doc.line(cx - s * 0.3, cy + s * 0.2, cx + s * 0.3, cy + s * 0.32);
 };
 
+/** Pin de ubicación relleno (gota con punto blanco), como el de la referencia. */
+const iconPinRelleno: Icono = (doc, cx, cy, s, c) => {
+  doc.setFillColor(...c);
+  doc.circle(cx, cy - s * 0.12, s * 0.42, "F");
+  doc.triangle(
+    cx - s * 0.36, cy + s * 0.05,
+    cx + s * 0.36, cy + s * 0.05,
+    cx, cy + s * 0.62,
+    "F"
+  );
+  doc.setFillColor(255, 255, 255);
+  doc.circle(cx, cy - s * 0.12, s * 0.17, "F");
+};
+
+/** Pin de ubicación en línea (contorno), para usarse dentro de círculos
+ * pequeños dorados como el de "Condiciones de venta" — el relleno negro de
+ * iconPinRelleno se ve pesado a ese tamaño. */
+const iconPinLinea: Icono = (doc, cx, cy, s, c) => {
+  trazo(doc, c, 0.35);
+  doc.circle(cx, cy - s * 0.12, s * 0.32, "S");
+  doc.lines(
+    [[-s * 0.22, s * 0.32], [s * 0.22, 0]] as any,
+    cx - s * 0.22, cy + s * 0.08, [1, 1], "S"
+  );
+  doc.setFillColor(...c);
+  doc.circle(cx, cy - s * 0.12, s * 0.1, "F");
+};
+
+/** Reloj de línea (círculo + manecillas), para "Vigencia de la cotización". */
+const iconRelojLinea: Icono = (doc, cx, cy, s, c) => {
+  trazo(doc, c, 0.35);
+  doc.circle(cx, cy, s * 0.4, "S");
+  doc.line(cx, cy, cx, cy - s * 0.24);
+  doc.line(cx, cy, cx + s * 0.18, cy + s * 0.06);
+};
+
+/** Teléfono relleno (círculo + auricular en blanco), como el de la referencia. */
+const iconTelefonoRelleno: Icono = (doc, cx, cy, s, c) => {
+  doc.setFillColor(...c);
+  doc.circle(cx, cy, s * 0.46, "F");
+  doc.setDrawColor(255, 255, 255);
+  doc.setLineWidth(s * 0.13);
+  doc.line(cx - s * 0.15, cy + s * 0.17, cx + s * 0.15, cy - s * 0.17);
+  doc.setFillColor(255, 255, 255);
+  doc.circle(cx - s * 0.15, cy + s * 0.17, s * 0.1, "F");
+  doc.circle(cx + s * 0.15, cy - s * 0.17, s * 0.1, "F");
+};
+
 /** Círculo de red social con un glifo/inicial dentro. */
 function circuloRed(doc: Doc, cx: number, cy: number, r: number, glifo: string) {
   doc.setFillColor(...NEGRO);
@@ -443,6 +505,17 @@ export async function generarPdfCotizacionLibre(
 
   // ═══════════ COLUMNA IZQUIERDA ═══════════
 
+  // Foto de producto (src/assets/cotlibre.png) — ahora es el fondo de toda
+  // la columna izquierda (de arriba a abajo), por eso se dibuja PRIMERO;
+  // la cinta negra/dorada, el logo y el tagline van justo después para
+  // quedar por encima de ella y seguir siendo legibles.
+  // NOTA: se probó un difuminado en los bordes derecho/inferior a base de
+  // franjas rectangulares con opacidad decreciente, pero al renderizar se
+  // veía como líneas/bandas marcadas (efecto "persiana") en vez de un
+  // desvanecido suave — jsPDF no mezcla bien tantos rects semitransparentes
+  // superpuestos. Se quitó; la foto queda con borde limpio, sin difuminar.
+  imagenOEspacio(doc, fotoBase64, FOTO.x, FOTO.y, FOTO.w, FOTO.h);
+
   // Bloque negro diagonal (sangra por el borde izquierdo y superior)
   poligono(doc, [[0, 0], [50, 0], [50, 45], [0, 61], [0, 0]], NEGRO);
   poligono(doc, [[0, 62.5], [50, 46.5], [50, 49], [0, 65], [0, 62.5]], DORADO);
@@ -462,9 +535,6 @@ export async function generarPdfCotizacionLibre(
   doc.setDrawColor(...DORADO);
   doc.setLineWidth(0.4);
   doc.line(56, 47, 80, 47);
-
-  // Foto de producto (src/assets/cotlibre.png)
-  imagenOEspacio(doc, fotoBase64, FOTO.x, FOTO.y, FOTO.w, FOTO.h);
 
   // Rejilla de procesos
   texto(doc, "TODOS LOS PROCESOS DENTRO DE NUESTRA PLANTA", 6, 152, {
@@ -495,22 +565,22 @@ export async function generarPdfCotizacionLibre(
   });
 
   // ═══════════ ENCABEZADO DERECHO ═══════════
-  texto(doc, "PROPUESTA", HEAD_X, 20, { size: 27, font: ["helvetica", "bold"], color: NEGRO });
-  texto(doc, "PERSONALIZADA", HEAD_X, 33.5, { size: 27, font: ["helvetica", "bold"], color: DORADO });
+  texto(doc, "PROPUESTA", HEAD_X, 14, { size: 26, font: ["helvetica", "bold"], color: NEGRO });
+  texto(doc, "PERSONALIZADA", HEAD_X, 25.5, { size: 26, font: ["helvetica", "bold"], color: DORADO });
   doc.setDrawColor(...DORADO);
   doc.setLineWidth(0.6);
-  doc.line(HEAD_X, 39, HEAD_X + 17, 39);
+  doc.line(HEAD_X, 29.5, HEAD_X + 12, 29.5);
 
   // FOLIO
-  texto(doc, "FOLIO", DER - 31, 10, { size: 9.5, font: ["helvetica", "bold"], color: NEGRO, charSpace: 0.3 });
+  texto(doc, "FOLIO", DER - 31, 7.5, { size: 9.5, font: ["helvetica", "bold"], color: DORADO, charSpace: 0.3 });
   doc.setDrawColor(...NEGRO);
   doc.setLineWidth(0.4);
-  doc.roundedRect(DER - 32, 12.5, 32, 12, 2, 2, "S");
-  texto(doc, cotizacion.folio || "", DER - 16, 20.5, { size: 11, font: ["helvetica", "bold"], color: TINTA, align: "center" });
+  doc.roundedRect(DER - 32, 9.5, 32, 12.5, 2.5, 2.5, "S");
+  texto(doc, cotizacion.folio || "", DER - 16, 17.8, { size: 10.5, font: ["helvetica", "bold"], color: TINTA, align: "center" });
 
   // ── Cliente / Empresa / Fecha / Asesor ──
-  const BENEF_X = 248;                    // divisor vertical de la columna de beneficios
-  const datosX0 = 100;
+  const BENEF_X = 238.5;
+  const datosX0 = 86;
   const datosW = (BENEF_X - 4 - datosX0) / 4;
   const datos: [string, string, Icono][] = [
     ["CLIENTE", cotizacion.cliente || "", iconPersona],
@@ -522,23 +592,23 @@ export async function generarPdfCotizacionLibre(
   ];
   datos.forEach(([label, valor, icono], i) => {
     const cx = datosX0 + i * datosW + datosW / 2;
-    icono(doc, cx, 49, 11, NEGRO);
-    texto(doc, label, cx, 59, { size: 7.8, font: ["helvetica", "bold"], color: TINTA, align: "center", charSpace: 0.2 });
-    texto(doc, valor, cx, 67.5, { size: 8.5, font: ["helvetica", "normal"], color: TINTA, align: "center", maxWidth: datosW - 5 });
+    icono(doc, cx, 35, 9.5, NEGRO);
+    texto(doc, label, cx, 43.5, { size: 7.2, font: ["helvetica", "bold"], color: TINTA, align: "center", charSpace: 0.2 });
+    texto(doc, valor, cx, 51.5, { size: 7.7, font: ["helvetica", "normal"], color: TINTA, align: "center", maxWidth: datosW - 4 });
     doc.setDrawColor(...NEGRO);
     doc.setLineWidth(0.3);
-    doc.line(cx - datosW / 2 + 3, 70, cx + datosW / 2 - 3, 70);
+    doc.line(cx - datosW / 2 + 2, 53, cx + datosW / 2 - 2, 53);
     if (i < 3) {
       doc.setDrawColor(...GRIS_CLARO);
       doc.setLineWidth(0.25);
-      doc.line(datosX0 + (i + 1) * datosW, 44, datosX0 + (i + 1) * datosW, 70);
+      doc.line(datosX0 + (i + 1) * datosW, 31, datosX0 + (i + 1) * datosW, 53);
     }
   });
 
   // ── Beneficios ──
   doc.setDrawColor(...GRIS_CLARO);
   doc.setLineWidth(0.25);
-  doc.line(BENEF_X, 32, BENEF_X, 80);
+  doc.line(BENEF_X, 27, BENEF_X, 62);
 
   const beneficios: [string, string, Icono][] = [
     ["DESARROLLO", "DE RENDER", iconBolsa],
@@ -547,10 +617,15 @@ export async function generarPdfCotizacionLibre(
     ["ENTREGA", "PROGRAMADA", iconCamion],
   ];
   beneficios.forEach(([l1, l2, icono], i) => {
-    const cy = 38 + i * 13.2;
-    icono(doc, BENEF_X + 6, cy, 8, DORADO);
-    texto(doc, l1, BENEF_X + 12, cy - 0.6, { size: 7, font: ["helvetica", "bold"], color: TINTA, charSpace: 0.15 });
-    texto(doc, l2, BENEF_X + 12, cy + 3.4, { size: 7, font: ["helvetica", "bold"], color: TINTA, charSpace: 0.15 });
+    // Espaciado un poco más generoso (8.3 en vez de 8.0) para que se sientan
+    // organizados y no apretados, y el bloque de texto (2 líneas) recentrado
+    // respecto al ícono: antes (-0.5 / +3) dejaba el centro visual del texto
+    // ~1.2 mm por debajo del centro del ícono; con (-1.0 / +2.5) quedan
+    // alineados al mismo eje horizontal.
+    const cy = 31.5 + i * 8.3;
+    icono(doc, BENEF_X + 5.5, cy, 6.8, DORADO);
+    texto(doc, l1, BENEF_X + 11, cy - 1.0, { size: 6.1, font: ["helvetica", "bold"], color: TINTA, charSpace: 0.1 });
+    texto(doc, l2, BENEF_X + 11, cy + 2.5, { size: 6.1, font: ["helvetica", "bold"], color: TINTA, charSpace: 0.1 });
   });
 
   // ═══════════ TABLA DE COTIZACIÓN ═══════════
@@ -607,9 +682,9 @@ export async function generarPdfCotizacionLibre(
         { content: "Material\nCalibre", rowSpan: 2 },
         { content: "Tintas\nF/V", rowSpan: 2 },
         { content: "Acabados", colSpan: 7 },
-        { content: "Cantidad 1", rowSpan: 2 },
-        { content: "Cantidad 2", rowSpan: 2 },
-        { content: "Cantidad 3", rowSpan: 2 },
+        { content: "Cantidad /\nPrecio 1", rowSpan: 2 },
+        { content: "Cantidad /\nPrecio 2", rowSpan: 2 },
+        { content: "Cantidad /\nPrecio 3", rowSpan: 2 },
       ] as any,
       ["Laminación", "HS", "AR", "Textura", "UV", "Asa", "Otro /\nPigmento"],
     ],
@@ -624,7 +699,7 @@ export async function generarPdfCotizacionLibre(
       lineWidth: 0.2,
       valign: "middle",
       halign: "center",
-      minCellHeight: 7.4,
+      minCellHeight: 8.05, // 7.0 × 1.15 — tabla 15% más alta (empuja lo de abajo, que ya está anclado a finTabla)
       overflow: "linebreak",
     },
     headStyles: {
@@ -636,24 +711,27 @@ export async function generarPdfCotizacionLibre(
       fontSize: 6.2,
       lineColor: [255, 255, 255],
       lineWidth: 0.2,
-      minCellHeight: 6.4,
+      minCellHeight: 6.9, // 6.0 × 1.15 — mismo +15% en el encabezado
     },
     bodyStyles: { fillColor: [255, 255, 255] },
+    // Anchos de columna × 0.95 (mismo 5% que se le quitó a TABLE_W), para
+    // que la tabla completa (no solo su ancho total) se reduzca de forma
+    // pareja en vez de que autoTable reparta la diferencia como quiera.
     columnStyles: {
-      0:  { cellWidth: 31 },
-      1:  { cellWidth: 18.8 },
-      2:  { cellWidth: 17 },
-      3:  { cellWidth: 12.5, fontSize: 6.2 },
-      4:  { cellWidth: 16, fontSize: 6.4 },
-      5:  { cellWidth: 7.2, fontSize: 6.2 },
-      6:  { cellWidth: 7.5, fontSize: 6.4 },
-      7:  { cellWidth: 13, fontSize: 6.4 },
-      8:  { cellWidth: 6.8, fontSize: 6.4 },
-      9:  { cellWidth: 12.5, fontSize: 6.4 },
-      10: { cellWidth: 15, fontSize: 6 },
-      11: { cellWidth: 12.6, fontSize: 7 },
-      12: { cellWidth: 12.6, fontSize: 7 },
-      13: { cellWidth: 12, fontSize: 7 },
+      0:  { cellWidth: 29.45 },
+      1:  { cellWidth: 17.86 },
+      2:  { cellWidth: 16.15 },
+      3:  { cellWidth: 11.88, fontSize: 6.2 },
+      4:  { cellWidth: 15.2, fontSize: 6.4 },
+      5:  { cellWidth: 6.84, fontSize: 6.2 },
+      6:  { cellWidth: 7.13, fontSize: 6.4 },
+      7:  { cellWidth: 12.35, fontSize: 6.4 },
+      8:  { cellWidth: 6.46, fontSize: 6.4 },
+      9:  { cellWidth: 11.88, fontSize: 6.4 },
+      10: { cellWidth: 14.25, fontSize: 6 },
+      11: { cellWidth: 17.1, fontSize: 6.8 },
+      12: { cellWidth: 17.1, fontSize: 6.8 },
+      13: { cellWidth: 17.1, fontSize: 6.8 },
     },
     didParseCell: (data) => {
       if (data.section === "head" && data.row.index === 1) data.cell.styles.fontSize = 5.4;
@@ -662,107 +740,245 @@ export async function generarPdfCotizacionLibre(
 
   const finTabla = (doc as any).lastAutoTable.finalY as number;
 
-  // ── Comentarios (se adapta al espacio que dejó la tabla) ──
-  const comentY = Math.max(138, finTabla + 3);
-  const comentH = Math.min(COMENT_H_MAX, BANDA_Y - 3 - comentY);
+  // ── Comentarios ──
+  // Arranca justo debajo del final real de la tabla (que varía según el
+  // número de renglones y si el contenido de alguna celda hizo wrap a 2
+  // líneas). Su alto se limita para siempre dejar sitio a la fila de
+  // +35 años/QR/Planta que va después, sin salirse del filete dorado inferior.
+  const comentX = COL_X;
+  // Se reduce lo mismo que creció COL_X (DELTA_COL_X) para que el borde
+  // derecho del cuadro se quede fijo donde estaba (no se meta en el
+  // separador/recuadro de Condiciones de venta).
+  const comentW = 158 - DELTA_COL_X;
+  const comentY = finTabla + GAP_TABLA_COMENT;
+  // Se reserva el alto mínimo que necesita el contenido de la fila
+  // +35 años/QR/Planta (MIN_BLOQUE_INF_H) para que Comentarios nunca se la
+  // coma — pero esa fila luego se estira con lo que sobre hasta el filete
+  // dorado (ver "aniosH" más abajo), en vez de quedarse fija en ese mínimo.
+  const MIN_BLOQUE_INF_H = 46;
+  const espacioDisponibleComent =
+    LIMITE_INFERIOR - MIN_BLOQUE_INF_H - GAP_COMENT_BLOQUE - comentY;
+  const comentH = Math.max(10, Math.min(COMENT_H_MAX, espacioDisponibleComent));
   if (comentH >= 9) {
     doc.setDrawColor(...NEGRO);
     doc.setLineWidth(0.35);
-    doc.roundedRect(COL_X, comentY, TABLE_W, comentH, 2.5, 2.5, "S");
-    texto(doc, "Comentarios:", COL_X + 4, comentY + 5.5, { size: 8.5, font: ["helvetica", "bold"], color: TINTA });
+    doc.roundedRect(comentX, comentY, comentW, comentH, 2.5, 2.5, "S");
+    texto(doc, "Comentarios:", comentX + 4, comentY + 5.2, {
+      size: 8.2, font: ["helvetica", "bold"], color: TINTA
+    });
     if (cotizacion.comentarios) {
-      texto(doc, cotizacion.comentarios, COL_X + 27, comentY + 5.5, {
-        size: 8, font: ["helvetica", "normal"], color: [45, 45, 45], maxWidth: TABLE_W - 31,
+      texto(doc, cotizacion.comentarios, comentX + 29, comentY + 5.2, {
+        size: 7.7, font: ["helvetica", "normal"], color: [45, 45, 45], maxWidth: comentW - 33
       });
     }
+
     const notas = cotizacion.items
       .filter((it) => it.notas && it.notas.trim())
       .map((it) => `• ${campo(it.producto_id, it.producto_texto)}: ${it.notas}`);
+
     if (notas.length && comentH >= 14) {
-      texto(doc, notas.join("   "), COL_X + 4, comentY + 12, {
-        size: 6.6, font: ["helvetica", "normal"], color: [70, 70, 70], maxWidth: TABLE_W - 8,
+      texto(doc, notas.join("   "), comentX + 4, comentY + 11.5, {
+        size: 6.3, font: ["helvetica", "normal"], color: [70, 70, 70], maxWidth: comentW - 8
       });
     }
   }
 
-  // ═══════════ BANDA INFERIOR (derecha) ═══════════
-  const aniosX = COL_X + 3;
-  const aniosW = 28;
-  const aniosH = 48;
+  // ═══════════ BLOQUE INFERIOR ═══════════
+  // La referencia coloca estos módulos por encima del filete inferior,
+  // dejando el bloque de condiciones a la derecha del todo.
+  // "bloqueY" (antes fijo en 135) ahora arranca justo debajo del cuadro de
+  // Comentarios ya calculado, así nunca se encima con él aunque la tabla
+  // tenga más renglones de lo habitual.
+  const bloqueY = comentY + comentH + GAP_COMENT_BLOQUE;
+
+  // +35 AÑOS
+  const aniosX = COL_X - 1;
+  const aniosW = 25;
+  const aniosY = bloqueY;
+  // Antes fijo en 41 mm (dejaba un hueco en blanco grande antes del filete
+  // dorado). Ahora se estira hasta el límite inferior real, igual que en
+  // la maqueta de referencia, donde la caja negra llega casi hasta la banda.
+  const aniosH = Math.max(MIN_BLOQUE_INF_H, LIMITE_INFERIOR - aniosY);
   poligono(doc, [
-    [aniosX, BANDA_Y],
-    [aniosX + aniosW - 6, BANDA_Y],
-    [aniosX + aniosW, BANDA_Y + 6],
-    [aniosX + aniosW, BANDA_Y + aniosH],
-    [aniosX, BANDA_Y + aniosH],
-    [aniosX, BANDA_Y],
+    [aniosX, aniosY],
+    [aniosX + aniosW - 6, aniosY],
+    [aniosX + aniosW, aniosY + 6],
+    [aniosX + aniosW, aniosY + aniosH],
+    [aniosX, aniosY + aniosH],
+    [aniosX, aniosY],
   ], NEGRO);
-  texto(doc, "+35", aniosX + aniosW / 2, BANDA_Y + 22, { size: 30, font: ["helvetica", "bold"], color: DORADO_35, align: "center" });
-  texto(doc, "AÑOS", aniosX + aniosW / 2, BANDA_Y + 28.5, { size: 8, font: ["helvetica", "bold"], color: DORADO_35, align: "center", charSpace: 0.6 });
-  texto(doc, "CREANDO EMPAQUES", aniosX + aniosW / 2, BANDA_Y + 37, { size: 5.8, font: ["helvetica", "bold"], color: DORADO_35, align: "center" });
-  texto(doc, "QUE DESTACAN", aniosX + aniosW / 2, BANDA_Y + 42, { size: 5.8, font: ["helvetica", "bold"], color: DORADO_35, align: "center" });
+  texto(doc, "+35", aniosX + aniosW / 2, aniosY + 19, {
+    size: 28, font: ["helvetica", "bold"], color: DORADO_35, align: "center"
+  });
+  texto(doc, "AÑOS", aniosX + aniosW / 2, aniosY + 25.5, {
+    size: 7.6, font: ["helvetica", "bold"], color: DORADO_35, align: "center", charSpace: 0.5
+  });
+  texto(doc, "CREANDO EMPAQUES", aniosX + aniosW / 2, aniosY + 34, {
+    size: 5.4, font: ["helvetica", "bold"], color: DORADO_35, align: "center"
+  });
+  texto(doc, "QUE DESTACAN", aniosX + aniosW / 2, aniosY + 38.5, {
+    size: 5.4, font: ["helvetica", "bold"], color: DORADO_35, align: "center"
+  });
 
   // QRs
-  const qr1X = aniosX + aniosW + 10;
-  const qr2X = qr1X + 36;
-  texto(doc, "PAGINA WEB", qr1X + 11, BANDA_Y + 11, { size: 7.2, font: ["helvetica", "bold"], color: TINTA, align: "center", charSpace: 0.15 });
-  imagenOEspacio(doc, qrWebBase64, qr1X, BANDA_Y + 15, 22, 22);
+  // NOTA: antes el separador y el ícono de "Planta y Oficinas" caían
+  // literalmente ENCIMA del QR de WhatsApp (qr2 llegaba hasta x=169.5,
+  // pero pinX arrancaba en 166) — de ahí el círculo negro que tapaba
+  // la esquina del segundo QR. Se recalculan los anchos dejando un
+  // respiro (gap) real de al menos 4 mm entre cada bloque.
+  const QR_W = 22;
+  const GAP = 6;
+  const qr1X = aniosX + aniosW + GAP + 4;      // 113.5
+  const qr1CX = qr1X + QR_W / 2;
+  const sep1X = qr1X + QR_W + GAP / 2;         // separador tras QR1
+  const qr2X = sep1X + GAP / 2 + 2;            // 143.5
+  const qr2CX = qr2X + QR_W / 2;
+  const sep2X = qr2X + QR_W + GAP / 2;         // separador tras QR2 (~174.5)
 
-  texto(doc, "CONTÁCTANOS", qr2X + 11, BANDA_Y + 7, { size: 7.2, font: ["helvetica", "bold"], color: TINTA, align: "center", charSpace: 0.15 });
-  texto(doc, "POR WHATSAPP", qr2X + 11, BANDA_Y + 11, { size: 7.2, font: ["helvetica", "bold"], color: TINTA, align: "center", charSpace: 0.15 });
-  imagenOEspacio(doc, qrWaBase64, qr2X, BANDA_Y + 15, 22, 22);
+  // Los QR y el bloque de "Planta y Oficinas" bajan un poco más que el
+  // texto "+35 AÑOS" (que se queda donde estaba) — de ahí este desfase
+  // aparte, sumado solo a este grupo de elementos.
+  const QR_PLANTA_OFFSET = 4;
 
-  // Divisores verticales de la banda — el bloque de "Condiciones de venta"
-  // se ensanchó 20% (42.5mm → 51mm) recortando ese tanto del bloque de redes.
-  const infoX = qr2X + 33;
-  const infoW = 51;
-  const infoRightX = infoX + infoW;
+  texto(doc, "PAGINA WEB", qr1CX, aniosY + QR_PLANTA_OFFSET + 8, {
+    size: 6.9, font: ["helvetica", "bold"], color: TINTA, align: "center", charSpace: 0.1
+  });
+  imagenOEspacio(doc, qrWebBase64, qr1X, aniosY + QR_PLANTA_OFFSET + 12, QR_W, QR_W);
+
+  texto(doc, "CONTÁCTANOS", qr2CX, aniosY + QR_PLANTA_OFFSET + 4, {
+    size: 6.9, font: ["helvetica", "bold"], color: TINTA, align: "center", charSpace: 0.1
+  });
+  texto(doc, "POR WHATSAPP", qr2CX, aniosY + QR_PLANTA_OFFSET + 8, {
+    size: 6.9, font: ["helvetica", "bold"], color: TINTA, align: "center", charSpace: 0.1
+  });
+  imagenOEspacio(doc, qrWaBase64, qr2X, aniosY + QR_PLANTA_OFFSET + 12, QR_W, QR_W);
+  texto(doc, "grupoeb.com.mx", qr1CX, aniosY + QR_PLANTA_OFFSET + 38, {
+    size: 6.2, font: ["helvetica", "bold"], color: TINTA, align: "center"
+  });
+  texto(doc, "33 3954-0924", qr2CX, aniosY + QR_PLANTA_OFFSET + 38, {
+    size: 6.2, font: ["helvetica", "bold"], color: TINTA, align: "center"
+  });
+
+  // Separadores del bloque inferior
   doc.setDrawColor(...GRIS_CLARO);
   doc.setLineWidth(0.25);
-  doc.line(qr2X - 6, BANDA_Y + 4, qr2X - 6, BANDA_Y + 40);
-  doc.line(infoX - 4, BANDA_Y + 4, infoX - 4, BANDA_Y + 40);
-  doc.line(infoRightX, BANDA_Y + 4, infoRightX, BANDA_Y + 40);
+  doc.line(sep1X, aniosY + QR_PLANTA_OFFSET + 4, sep1X, aniosY + QR_PLANTA_OFFSET + 39);
+  doc.line(sep2X, aniosY + QR_PLANTA_OFFSET + 4, sep2X, aniosY + QR_PLANTA_OFFSET + 39);
+  // El separador vertical (239, …) que cierra el bloque de Planta/Condiciones
+  // se dibuja más abajo, una vez calculados infoY/infoH.
 
-  // Condiciones de venta (antes iba aquí el texto genérico de "GRUPO EB")
-  texto(doc, "CONDICIONES DE VENTA", infoX, BANDA_Y + 8, { size: 8.2, font: ["helvetica", "bold"], color: NEGRO });
+  // Planta y oficinas — arranca DESPUÉS del segundo separador para no
+  // volver a pisar el QR de WhatsApp.
+  const plantaX = sep2X + GAP / 2;   // ~177.5
+  const pinX = plantaX + 5;          // ~182.5
+  const plantaTextX = pinX + 8;      // ~190.5
+  texto(doc, "Planta y Oficinas", plantaTextX, aniosY + QR_PLANTA_OFFSET + 8, {
+    size: 7.5, font: ["helvetica", "bold"], color: TINTA
+  });
+
+  // Ícono de ubicación (pin relleno, no el "globo" hueco de antes)
+  iconPinRelleno(doc, pinX, aniosY + QR_PLANTA_OFFSET + 15.5, 9, NEGRO);
+  texto(doc, "Rogelio Ledesma #102", plantaTextX, aniosY + QR_PLANTA_OFFSET + 13.5, { size: 6.5, color: TINTA });
+  texto(doc, "Col. Cruz Vieja", plantaTextX, aniosY + QR_PLANTA_OFFSET + 18, { size: 6.5, color: TINTA });
+  texto(doc, "Tlajomulco de Zúñiga, Jalisco", plantaTextX, aniosY + QR_PLANTA_OFFSET + 22.5, { size: 6.5, color: TINTA });
+  texto(doc, "C.P. 45644", plantaTextX, aniosY + QR_PLANTA_OFFSET + 27, { size: 6.5, color: TINTA });
+
+  // Ícono de teléfono (auricular real, antes era un círculo negro sin dibujo
+  // porque el glifo "⌕" no se ve en Helvetica)
+  iconTelefonoRelleno(doc, pinX, aniosY + QR_PLANTA_OFFSET + 34, 9, NEGRO);
+  texto(doc, "33 3125-9595", plantaTextX, aniosY + QR_PLANTA_OFFSET + 33, { size: 6.5, font: ["helvetica", "bold"], color: TINTA });
+  texto(doc, "33 3180-1460", plantaTextX, aniosY + QR_PLANTA_OFFSET + 37, { size: 6.5, font: ["helvetica", "bold"], color: TINTA });
+  texto(doc, "33 3180-3373", plantaTextX + 29, aniosY + QR_PLANTA_OFFSET + 37, { size: 6.5, font: ["helvetica", "bold"], color: TINTA });
+
+  // Condiciones de venta — caja independiente como en la referencia.
+  // Antes la nota en cursiva (agregada en el ajuste anterior) quedaba
+  // pegada/encimada con el círculo "50%" de la fila siguiente porque las
+  // filas usaban un salto fijo de ~9-10 mm sin contar el espacio extra que
+  // ocupa esa nota de 2 líneas. Ahora cada fila tiene una posición Y fija,
+  // calculada para dejar aire real entre el contenido de una fila y el
+  // círculo/ícono de la siguiente.
+  const infoX = 242.5;
+  const infoW = 47;
+  // El marco de Condiciones arranca a la misma altura que el cuadro de
+  // Comentarios (igual que en la referencia) y se estira hasta el límite
+  // inferior real — en la maqueta original este marco llega prácticamente
+  // hasta el filete dorado, no se queda corto a la mitad de la hoja.
+  const infoY = comentY;
+  const infoH = LIMITE_INFERIOR - infoY;
+
+  doc.setDrawColor(...GRIS_CLARO);
+  doc.setLineWidth(0.25);
+  doc.line(239, infoY, 239, infoY + infoH);
+
   doc.setDrawColor(...DORADO);
-  doc.setLineWidth(0.3);
-  doc.line(infoX, BANDA_Y + 10, infoX + infoW - 5, BANDA_Y + 10);
+  doc.setLineWidth(0.7);
+  doc.roundedRect(infoX, infoY, infoW, infoH, 4, 4, "S");
 
-  const condiciones: string[] = [
-    "Fabricación: 25 días hábiles desde anticipo y arte aprobado (±20% en cantidad final).",
-    "50% de anticipo y 50% antes del envío.",
-    "Precios más IVA.",
-    "LAB Guadalajara.",
-    "Vigencia de la cotización: 15 días naturales.",
-  ];
-  let condY = BANDA_Y + 15;
-  condiciones.forEach((c) => {
-    const lineas = doc.splitTextToSize(`•  ${c}`, infoW - 5);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(6.2);
-    doc.setTextColor(...TINTA);
-    doc.text(lineas, infoX, condY);
-    condY += lineas.length * 3.1 + 1.4;
+  texto(doc, "CONDICIONES DE VENTA", infoX + infoW / 2, infoY + 5.2, {
+    size: 6.8, font: ["helvetica", "bold"], color: TINTA, align: "center"
   });
+  doc.setDrawColor(...DORADO);
+  doc.setLineWidth(0.4);
+  doc.line(infoX + 5, infoY + 7.8, infoX + infoW - 5, infoY + 7.8);
 
-  // Redes sociales
-  const redesX = infoRightX + 6;
-  const redes: [string, string][] = [
-    ["W", "grupoeb.com.mx"],
-    ["IG", "eurobolsa.mx"],
-    ["f", "Grupo EB"],
-    ["in", "grupo eb europack"],
-  ];
-  redes.forEach(([glifo, handle], i) => {
-    const cy = BANDA_Y + 8 + i * 10.3;
-    circuloRed(doc, redesX, cy, 3.2, glifo);
-    texto(doc, handle, redesX + 6, cy + 1.1, { size: 7, font: ["helvetica", "normal"], color: TINTA });
-  });
+  // Antes cada círculo mostraba un glifo unicode (▣, ⌂, ◷) que Helvetica no
+  // sabe dibujar y se veía como basura ("%£", "#", "%+"). Ahora, cuando el
+  // "icon" es una función Icono, se dibuja un ícono vectorial real dentro
+  // del círculo; "50%" y "$" siguen siendo texto porque esos sí se ven bien.
+  const condRow = (y: number, icon: string | Icono, lines: string[], nota?: string) => {
+    doc.setDrawColor(...DORADO);
+    doc.setLineWidth(0.45);
+    doc.circle(infoX + 5.3, y, 3.0, "S");
+    if (typeof icon === "string") {
+      texto(doc, icon, infoX + 5.3, y + 1.2, {
+        size: 4.8, font: ["helvetica", "bold"], color: DORADO, align: "center"
+      });
+    } else {
+      icon(doc, infoX + 5.3, y, 3.6, DORADO);
+    }
+    lines.forEach((line, idx) => texto(doc, line, infoX + 11, y - 1.4 + idx * 2.8, {
+      size: 5.4, font: ["helvetica", idx === 0 ? "bold" : "normal"], color: TINTA
+    }));
+    // Nota aclaratoria en cursiva dorada, con su propio espacio reservado
+    // (ya no se calcula pegada al final de "lines", así deja de encimarse
+    // con la fila de abajo).
+    if (nota) {
+      texto(doc, nota, infoX + 11, y - 1.4 + lines.length * 2.8 + 2.2, {
+        size: 4.6, font: ["helvetica", "italic"], color: DORADO, maxWidth: infoW - 15, lineHeight: 1.2
+      });
+    }
+  };
 
-  // Filete dorado inferior
-  doc.setFillColor(...DORADO);
-  doc.rect(0, PH - 2.2, PW, 2.2, "F");
+  // Posiciones proporcionales al alto real de la caja (infoH) — antes eran
+  // offsets fijos pensados para una caja de 70 mm; si la caja ahora es más
+  // alta (porque hay más espacio libre), las 5 filas se reparten en todo el
+  // alto disponible en vez de quedar apelmazadas arriba con un hueco vacío
+  // debajo (igual que se reparten en la maqueta de referencia).
+  const condRowY = (frac: number) => infoY + frac * infoH;
+  condRow(
+    condRowY(0.1714), iconCalendario,
+    ["Tiempo de fabricación: 25 días", "hábiles a partir de la recepción del", "anticipo y la aprobación final del arte."],
+    "*La fabricación puede variar ± 20% en la cantidad final fabricada"
+  );
+  condRow(condRowY(0.5), "50%", ["50% de anticipo y", "50% antes del envío."]);
+  condRow(condRowY(0.6429), "$", ["Precios más IVA."]);
+  condRow(condRowY(0.7571), iconPinLinea, ["LAB Guadalajara"]);
+  condRow(condRowY(0.8714), iconRelojLinea, ["Vigencia de la cotización:", "15 días naturales"]);
+
+
+  // Filete dorado inferior con transición tonal para aproximar la banda de la referencia.
+  const segmentos = 40;
+  const yBanda = PH - 6.5;
+  const hBanda = 6.5;
+  for (let i = 0; i < segmentos; i++) {
+    const t = i / (segmentos - 1);
+    const wave = Math.abs(t - 0.5) * 2;
+    const r = Math.round(218 - 45 * wave);
+    const g = Math.round(164 - 48 * wave);
+    const b = Math.round(61 - 22 * wave);
+    doc.setFillColor(r, g, b);
+    doc.rect((PW / segmentos) * i, yBanda, PW / segmentos + 0.2, hBanda, "F");
+  }
 
   const nombre = `PropuestaLibre_${cotizacion.folio}.pdf`;
   const blob = doc.output("blob");

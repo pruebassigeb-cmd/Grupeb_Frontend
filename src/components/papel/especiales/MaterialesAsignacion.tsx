@@ -37,12 +37,145 @@ import SelConAlta from "../SelConAlta";
 export const etiquetaComponente = (comp: ComponentePapel, componentes: ComponentePapel[]): string => {
   if (comp.tipo === "unica") return "MISMA OP";
   if (comp.tipo === "union") return "OP DE UNIÓN";
+  // 🔁 FASE 4: OPC (Orden de Producción Complementaria) -- nivel intermedio,
+  // numerada entre sí igual que las de inicio (por posición en el arreglo).
+  if (comp.tipo === "complementaria") {
+    const opcs = componentes.filter(c => c.tipo === "complementaria");
+    return `OPC ${opcs.findIndex(c => c.id === comp.id) + 1}`;
+  }
   const inicios = componentes.filter(c => c.tipo === "inicio");
   return `OP INICIO ${inicios.findIndex(c => c.id === comp.id) + 1}`;
 };
 
 export const indiceInicio = (comp: ComponentePapel, componentes: ComponentePapel[]): number =>
   componentes.filter(c => c.tipo === "inicio").findIndex(c => c.id === comp.id);
+
+export const indiceComplementaria = (comp: ComponentePapel, componentes: ComponentePapel[]): number =>
+  componentes.filter(c => c.tipo === "complementaria").findIndex(c => c.id === comp.id);
+
+// Índice a usar para colorear (paletaOP) según el tipo del componente.
+export const indicePaleta = (comp: ComponentePapel, componentes: ComponentePapel[]): number =>
+  comp.tipo === "complementaria" ? indiceComplementaria(comp, componentes) : indiceInicio(comp, componentes);
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ÁRBOL (FASE 4, Jose 2026-09-07): a qué componente alimenta cada 'inicio'/
+// 'complementaria', y a qué destinos puede alimentar válidamente cada uno
+// sin formar un ciclo. Espejo, en el frontend, de lo que ya valida el
+// trigger componente_papel_validar_padre_trg en BD -- aquí es solo para no
+// dejar ni siquiera ELEGIR una opción inválida en el desplegable.
+// ═══════════════════════════════════════════════════════════════════════════
+export const descendientesDe = (id: number, componentes: ComponentePapel[]): Set<number> => {
+  const hijos = componentes.filter(c => c.idComponentePadre === id);
+  const set = new Set<number>();
+  for (const hijo of hijos) {
+    set.add(hijo.id);
+    for (const nieto of descendientesDe(hijo.id, componentes)) set.add(nieto);
+  }
+  return set;
+};
+
+// Destinos válidos para que ESTE componente alimente: cualquier
+// 'complementaria' o 'union' del producto, excepto él mismo y sus propios
+// descendientes (alimentar a un descendiente formaría un ciclo).
+export const destinosValidosPara = (comp: ComponentePapel, componentes: ComponentePapel[]): ComponentePapel[] => {
+  const descendientes = descendientesDe(comp.id, componentes);
+  return componentes.filter(c =>
+    (c.tipo === "complementaria" || c.tipo === "union") &&
+    c.id !== comp.id &&
+    !descendientes.has(c.id)
+  );
+};
+
+// ── OPC: Orden de Producción Complementaria (Jose, 2026-09-07) ─────────────
+// Nivel intermedio del árbol -- estructuralmente igual a la unión (junta
+// insumos), solo que su resultado no es el producto terminado: alimenta a
+// otro nivel (otra OPC o ya la unión). Exportadas a nivel de módulo (no
+// closures del componente de abajo) para que tanto "Estructura del árbol"
+// (aquí) como la conexión visual en RutaProcesos.tsx compartan exactamente
+// la misma lógica sin duplicarla (Jose, 2026-09-08: "cada OPC va tener sus
+// procesos asignados" + pidió poder conectar visualmente desde la ruta).
+export const construirNuevaOPC = (
+  componentes: ComponentePapel[]
+): { nuevo: ComponentePapel; lista: ComponentePapel[] } => {
+  // CORREGIDO (2026-09-08, "viola la restricción check
+  // componente_papel_tipo_padre_check"): el backend EXIGE que toda
+  // 'complementaria' tenga padre no nulo. El único llamador de hoy
+  // (agregarOPCAqui en RutaProcesos.tsx) ya está protegido con `union &&`,
+  // pero esta función es de módulo y se puede volver a usar desde otro
+  // lado más adelante -- mejor que sea imposible construir una OPC
+  // huérfana desde aquí, en vez de confiar en que quien la llame recuerde
+  // el guard.
+  let union = componentes.find(c => c.tipo === "union") ?? null;
+  let base = componentes;
+  if (!union) {
+    union = { ...newComponente(), tipo: "union", nombre: "", orden: 0, esUnion: true, procesos: [] };
+    base = [...componentes, union];
+  }
+  const nuevo: ComponentePapel = {
+    ...newComponente(),
+    tipo: "complementaria",
+    nombre: "",
+    orden: base.length + 1,
+    esUnion: false,
+    // Por default alimenta directo a la unión final -- el usuario puede
+    // anidarla bajo otra OPC después, desde "Estructura del árbol" o
+    // conectándola visualmente en Ruta de procesos.
+    idComponentePadre: union.id,
+  };
+  // Va justo antes de la unión, después de todo lo demás -- mismo criterio
+  // que construirNuevoInicio.
+  const sinUnion = base.filter(c => c.tipo !== "union");
+  const union2 = base.filter(c => c.tipo === "union");
+  return { nuevo, lista: [...sinUnion, nuevo, ...union2] };
+};
+
+export const agregarOPC = (
+  componentes: ComponentePapel[],
+  onUpdateComponentes: (componentes: ComponentePapel[]) => void,
+) => {
+  const { lista } = construirNuevaOPC(componentes);
+  onUpdateComponentes(lista);
+};
+
+// Quitar una OPC no puede dejar huérfano a nadie: todo lo que la
+// alimentaba pasa a alimentar a lo que ELLA alimentaba (se "salta" ese
+// nivel), y cualquier material que tuviera asignado directo se queda sin
+// asignar (no hay a dónde reasignarlo solo, lo decide el usuario).
+export const eliminarOPC = (
+  id: number,
+  componentes: ComponentePapel[],
+  materiales: MaterialEntry[],
+  onUpdateComponentes: (componentes: ComponentePapel[]) => void,
+  onUpdateMateriales: (materiales: MaterialEntry[]) => void,
+) => {
+  const opc = componentes.find(c => c.id === id);
+  if (!opc) return;
+  const union = componentes.find(c => c.tipo === "union") ?? null;
+  const padreDeRespaldo = opc.idComponentePadre ?? union?.id ?? null;
+
+  const componentesActualizados = componentes
+    .filter(c => c.id !== id)
+    .map(c => (c.idComponentePadre === id ? { ...c, idComponentePadre: padreDeRespaldo } : c));
+  const materialesActualizados = materiales.map(m =>
+    m.idComponenteAsignado === id ? { ...m, idComponenteAsignado: null } : m
+  );
+
+  onUpdateComponentes(componentesActualizados);
+  onUpdateMateriales(materialesActualizados);
+};
+
+// A qué componente alimenta un 'inicio'/'complementaria' -- editable desde
+// "Estructura del árbol" o desde Ruta de procesos. No se ofrece "sin
+// asignar": el backend exige padre en estos dos tipos
+// (componente_papel_tipo_padre_check).
+export const cambiarPadre = (
+  id: number,
+  idPadre: number | null,
+  componentes: ComponentePapel[],
+  onUpdateComponentes: (componentes: ComponentePapel[]) => void,
+) => {
+  onUpdateComponentes(componentes.map(c => (c.id === id ? { ...c, idComponentePadre: idPadre } : c)));
+};
 
 export const nombreComponente = (comp: ComponentePapel, componentes: ComponentePapel[]): string =>
   comp.nombre.trim() || etiquetaComponente(comp, componentes);
@@ -197,17 +330,33 @@ export default function MaterialesAsignacion({
     // independientes" ya significa, por definición, que cada material va por
     // su lado "y después se unirán" — así que la orden de unión no es una
     // tercera opción que haya que elegir aparte, viene incluida en el modo.
+    //
+    // 🔁 FASE 4: la unión se crea PRIMERO (para tener su id) porque cada
+    // inicio necesita declarar de una vez a quién alimenta
+    // (idComponentePadre) -- por default, directo a la unión final; el
+    // usuario puede redirigir cualquiera hacia una OPC después, desde
+    // "Estructura del árbol" más abajo.
+    const union: ComponentePapel = {
+      ...newComponente(),
+      id: Date.now(),
+      tipo: "union",
+      nombre: "",
+      orden: 1, // se corrige abajo, una vez que se sabe cuántos inicios hay
+      esUnion: true,
+      procesos: [],
+    };
     const inicios: ComponentePapel[] = materiales.map((m, i) => ({
       ...newComponente(),
-      id: Date.now() + i,
+      id: Date.now() + i + 1,
       tipo: "inicio",
       nombre: nombreMaterial(m),
       orden: i + 1,
       esUnion: false,
+      idComponentePadre: union.id,
     }));
     const lista: ComponentePapel[] = inicios.length > 0
       ? inicios
-      : [{ ...newComponente(), tipo: "inicio", orden: 1 }];
+      : [{ ...newComponente(), tipo: "inicio", orden: 1, idComponentePadre: union.id }];
     // La orden de unión arranca SIN ningún proceso predeterminado (Jose,
     // 2026-09-02): antes se sembraba sola con Litolaminado, pero eso solo
     // tiene sentido cuando la unión de verdad fusiona material propio —
@@ -218,27 +367,36 @@ export default function MaterialesAsignacion({
     // la ruta a mano -- RutaProcesos ya avisa en su panel "Reglas" si más
     // adelante le asignan material y falta Litolaminado, o si lo agregan
     // sin haberle asignado material.
-    const union: ComponentePapel = {
-      ...newComponente(),
-      id: Date.now() + lista.length + 1,
-      tipo: "union",
-      nombre: "",
-      orden: lista.length + 1,
-      esUnion: true,
-      procesos: [],
-    };
+    union.orden = lista.length + 1;
     onUpdateComponentes([...lista, union]);
     onUpdateMateriales(materiales.map((m, i) => ({ ...m, idComponenteAsignado: lista[i]?.id ?? null })));
   };
 
   const construirNuevoInicio = (nombre: string = ""): { nuevo: ComponentePapel; lista: ComponentePapel[] } => {
+    // Por default alimenta directo a la unión final -- si el producto ya
+    // tiene OPC, el usuario puede redirigirlo desde "Estructura del árbol".
+    //
+    // CORREGIDO (2026-09-08, "viola la restricción check
+    // componente_papel_tipo_padre_check"): el backend EXIGE que toda OP de
+    // inicio tenga padre no nulo. El único llamador de hoy (el dropdown
+    // "＋ Nueva OP de inicio", que solo aparece en modo "independientes",
+    // donde ya siempre existe una unión) no debería disparar el caso sin
+    // unión, pero si por lo que sea llega a pasar, es mejor crear la unión
+    // que falta en el momento que dejar nacer un inicio huérfano.
+    let union = componentes.find(c => c.tipo === "union") ?? null;
+    let base = componentes;
+    if (!union) {
+      union = { ...newComponente(), tipo: "union", nombre: "", orden: 0, esUnion: true, procesos: [] };
+      base = [...componentes, union];
+    }
     const nuevo: ComponentePapel = {
-      ...newComponente(), tipo: "inicio", nombre, orden: componentes.length + 1, esUnion: false,
+      ...newComponente(), tipo: "inicio", nombre, orden: base.length + 1, esUnion: false,
+      idComponentePadre: union.id,
     };
     // La OP de unión siempre va al final de la lista.
-    const sinUnion = componentes.filter(c => c.tipo !== "union");
-    const union = componentes.filter(c => c.tipo === "union");
-    return { nuevo, lista: [...sinUnion, nuevo, ...union] };
+    const sinUnion = base.filter(c => c.tipo !== "union");
+    const union2 = base.filter(c => c.tipo === "union");
+    return { nuevo, lista: [...sinUnion, nuevo, ...union2] };
   };
 
   // Reasignar un material a otra OP puede dejar huérfana la OP de la que
@@ -295,9 +453,10 @@ export default function MaterialesAsignacion({
   const chipDe = (m: MaterialEntry) => {
     const comp = componentes.find(c => c.id === m.idComponenteAsignado);
     if (!comp) return <span style={{ color: T.muted, fontWeight: 500, fontSize: 12 }}>Sin asignar</span>;
-    const p = paletaOP(comp.tipo, indiceInicio(comp, componentes));
+    const p = paletaOP(comp.tipo, indicePaleta(comp, componentes));
     return <Chip texto={etiquetaComponente(comp, componentes)} bg={p.chipBg} color={p.chipText} />;
   };
+
 
   return (
     <div style={{ display: "grid", gridTemplateColumns: "1.95fr 1fr", gap: 16, alignItems: "start" }}>
@@ -510,6 +669,8 @@ export default function MaterialesAsignacion({
         {modo === "independientes" && (
           <p style={{ margin: "14px 0 0", fontSize: 12, color: T.muted, fontWeight: 400, lineHeight: 1.6 }}>
             Asigna cada material a su orden en la columna «Asignación» de la tabla. Desde ahí también puedes crear una nueva OP de inicio.
+            {" "}Las Órdenes de Producción Complementarias (OPC) -- niveles intermedios que juntan varias OP antes de la unión final -- se agregan
+            y se conectan visualmente desde «Ruta de procesos».
           </p>
         )}
       </Tarjeta>

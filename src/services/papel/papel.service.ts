@@ -257,6 +257,42 @@ export const eliminarArchivoProducto = async (idArchivo: number): Promise<void> 
   if (!res.ok) return leerError(res, "No se pudo eliminar la imagen");
 };
 
+// Baja los BYTES de un archivo servidos por la propia API, no por S3
+// (Jose, 2026-09-04).
+//
+// Por qué no se usa la URL firmada: para meter la foto dentro del diagrama SVG
+// hay que LEER sus bytes, y contra S3 eso lo bloquea CORS -- el bucket no
+// publica Access-Control-Allow-Origin para el dominio de la app. Mostrarla en
+// un <img> sí funciona (por eso se ve en pantalla); leerla, no.
+//
+// Este endpoint YA EXISTÍA: obtenerContenidoArchivo en archivo.controller.ts,
+// creado en su momento por exactamente el mismo motivo (el visor de PDF
+// necesitaba los bytes). Baja el objeto de S3 del lado del servidor -- donde
+// CORS no aplica, porque es el SDK y no el navegador -- y lo reenvía desde el
+// origen de la API, que sí tiene su CORS configurado.
+//
+// De paso es la opción más segura: la URL firmada nunca sale del servidor, y
+// el acceso queda sujeto al token del usuario en vez de a una liga que sirve
+// una hora para quien la tenga.
+//
+// Devuelve null en vez de tronar: si falla, el diagrama cae al dibujo
+// predeterminado, que es justo lo que hace la pantalla cuando no hay imagen.
+//
+// OJO: la ruta se infirió del nombre del controlador. Si en archivo.routes.ts
+// está registrada con otra ruta, hay que corregirla AQUÍ y en ningún otro lado.
+export const fetchContenidoArchivo = async (idArchivo: number): Promise<Blob | null> => {
+  try {
+    const res = await fetch(`${BASE}/archivos/${idArchivo}/contenido`, {
+      headers: { Authorization: `Bearer ${localStorage.getItem("token") ?? ""}` },
+    });
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    return blob.size > 0 ? blob : null;
+  } catch {
+    return null;
+  }
+};
+
 // ═══════════════════════════════════════════════════════════════════════════
 // NOTAS DEL PRODUCTO (Fase 6: productos especiales)
 // ═══════════════════════════════════════════════════════════════════════════
@@ -413,6 +449,7 @@ const mapMaquinariaToApi = (maquinaria: Maquinaria) => ({
   hojeado_guillotina: maquinaria.hojeado_guillotina,
   impresora: maquinaria.impresora,
   hs_ar: maquinaria.hs_ar,
+  alto_relieve_maquina: maquinaria.alto_relieve_maquina,
   suaje_maquina: maquinaria.suaje_maquina,
   uv: maquinaria.uv,
   laminado_maquina: maquinaria.laminado_maquina,
@@ -484,6 +521,14 @@ const mapComponenteToApi = (comp: ComponentePapel) => ({
   orden: comp.orden,
   nombre: comp.nombre || null,
   es_union: comp.esUnion,
+  // 🔁 FASE 4: a qué componente de nivel superior alimenta este (otra
+  // 'complementaria' o la 'union' raíz). Se manda SIEMPRE por client_key,
+  // nunca por id real -- upsertComponentesShell en el backend resuelve
+  // padre_client_key contra el mapa client_key→id que arma en su Paso 1
+  // para TODOS los componentes de la petición (nuevos y ya existentes por
+  // igual), así que no hace falta distinguir aquí entre padre nuevo o
+  // preexistente. null en 'union'/'unica' (ver ComponentePapel.idComponentePadre).
+  padre_client_key: comp.idComponentePadre != null ? String(comp.idComponentePadre) : null,
   procesos: comp.procesos.map(mapComponenteProcesoToApi),
   suaje: mapSuajeToApi(comp.suaje),
   acabados: mapAcabadosToApi(comp.acabados),

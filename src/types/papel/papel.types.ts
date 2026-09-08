@@ -168,6 +168,11 @@ export interface Maquinaria {
   impresora_nombres: string[];
   hs_ar: number[];
   hs_ar_nombres: string[];
+  // Alto Relieve elige de la MISMA lista que Hot Stamping (cat_hs_ar) pero
+  // guarda aparte (Jose, 2026-09-04): compartían casilla y cambiar la máquina
+  // en uno la cambiaba en el otro.
+  alto_relieve_maquina: number[];
+  alto_relieve_maquina_nombres: string[];
   suaje_maquina: number[];
   suaje_maquina_nombres: string[];
   uv: number[];
@@ -226,10 +231,21 @@ export interface ComponenteProceso {
 export interface ComponentePapel {
   id: number;
   idcomponente_papel?: number | null;
-  tipo: "unica" | "inicio" | "union";
+  // 🔁 FASE 4 (Jose, 2026-09-07): 'complementaria' = Orden de Producción
+  // Complementaria (OPC), nivel intermedio del árbol -- estructuralmente
+  // igual a 'union' (junta insumos), solo que su resultado no es el
+  // producto terminado: alimenta a otro nivel (otra OPC o ya la union).
+  tipo: "unica" | "inicio" | "union" | "complementaria";
   orden: number | null;
   nombre: string;
   esUnion: boolean;
+  // A qué componente de nivel superior alimenta el resultado de ESTE
+  // (id LOCAL de otro ComponentePapel.id -- 'complementaria' o 'union' del
+  // mismo producto). null en 'union' (raíz) y en 'unica' (no participa del
+  // árbol). Se resuelve a padre_client_key al mandar al backend (ver
+  // mapComponenteToApi) y de vuelta desde idcomponente_papel_padre al leer
+  // (ver ProductoEspecial.tsx).
+  idComponentePadre: number | null;
   procesos: ComponenteProceso[];
   suaje: Suaje;
   acabados: Acabados;
@@ -389,6 +405,8 @@ export const newMaquinaria = (): Maquinaria => ({
   impresora_nombres: [],
   hs_ar: [],
   hs_ar_nombres: [],
+  alto_relieve_maquina: [],
+  alto_relieve_maquina_nombres: [],
   suaje_maquina: [],
   suaje_maquina_nombres: [],
   uv: [],
@@ -425,6 +443,7 @@ export const newComponente = (): ComponentePapel => ({
   orden: 1,
   nombre: "",
   esUnion: false,
+  idComponentePadre: null,
   procesos: [],
   suaje: newSuaje(),
   acabados: newAcabados(),

@@ -138,8 +138,11 @@ export interface DatosClientePdf {
 }
 
 export interface Cotizacion extends DatosClientePdf {
+  idsolicitud?: number;
   no_cotizacion: string;
   no_pedido?: string | null;
+  // Solo tiene valor cuando tipo_documento === "pedido".
+  orden_compra_folio?: string | null;
   tipo_documento: "cotizacion" | "pedido";
   fecha: string;
   estado_id: number;
@@ -161,9 +164,14 @@ export interface Cotizacion extends DatosClientePdf {
 }
 
 export interface Pedido extends DatosClientePdf {
+  idsolicitud: number;
   no_pedido: string;
   no_cotizacion?: string | null;
   es_directo: boolean;
+  // Folio de la orden de compra del cliente, ligado al pedido (no al
+  // producto). El archivo/imagen de la OC se maneja aparte, ver
+  // pedidosService.getArchivosOrdenCompra / subirArchivoOrdenCompra.
+  orden_compra_folio?: string | null;
   origen_cotizador_libre?: boolean;
   fecha: string;
   estado_id: number;

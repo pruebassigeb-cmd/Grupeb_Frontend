@@ -172,6 +172,10 @@ export interface OpcionesEncabezado {
   estado_cliente?: string | null;
   cliente_id?:     number | null;
   identificar?:    string | null;
+  /** Folio de la Orden de Compra del cliente — se imprime justo debajo del
+   *  recuadro de folio/fecha, en esa misma franja (queda libre porque las
+   *  filas de datos del cliente solo usan el ancho [margin, cotBoxX]). */
+  ordenCompraFolio?: string | null;
   /** Moneda del documento — si es USD se marca junto al folio. Default MXN. */
   moneda?:         Moneda;
   /** Ancho de página en mm. Por defecto la carta landscape (279.4mm). */
@@ -192,7 +196,7 @@ export async function dibujarEncabezado(opts: OpcionesEncabezado): Promise<numbe
     fecha, empresa, impresion, cliente, telefono, correo,
     celular, razon_social, rfc,
     domicilio, numero, colonia, codigo_postal, poblacion, estado_cliente,
-    cliente_id, identificar, moneda,
+    cliente_id, identificar, moneda, ordenCompraFolio,
     pageWidth, margin, mostrarLogo,
   } = opts;
 
@@ -286,6 +290,18 @@ export async function dibujarEncabezado(opts: OpcionesEncabezado): Promise<numbe
   doc.text(val(formatFecha(fecha)), cotBoxX + halfBox + halfBox / 2, dataY + dataH / 2 + 3.5, { align: "center" });
 
   y += row1H;
+
+  // ── Orden de Compra del cliente ──────────────────────────────────────────
+  // Va justo debajo del recuadro de folio/fecha, centrada en su mismo ancho.
+  // Esa franja (x entre cotBoxX y cotBoxX+cotBoxW) queda libre en las filas
+  // de abajo, porque esas filas de datos del cliente solo usan el ancho
+  // [M, cotBoxX] — por eso no hace falta reservar espacio extra ni tocar `y`.
+  if (ordenCompraFolio) {
+    doc.setFont("helvetica", "bold"); doc.setFontSize(6.5); doc.setTextColor(...GRAY_DARK);
+    doc.text("ORDEN DE COMPRA", cotBoxX + cotBoxW / 2, y + 4, { align: "center" });
+    doc.setFont("helvetica", "bold"); doc.setFontSize(9); doc.setTextColor(...BLACK);
+    doc.text(String(ordenCompraFolio), cotBoxX + cotBoxW / 2, y + 9, { align: "center" });
+  }
 
   const mid = (h: number) => h / 2 + 2;
   const fs  = 8.5;
