@@ -237,13 +237,13 @@ export default function Dashboard({ children }: DashboardProps) {
     // acceso_total sin ese rol, vería el ítem pero la pantalla la mandaría
     // a /sin-acceso — no es un hueco de seguridad, solo un ítem de menú de
     // más en un caso que hoy no existe en tu base de usuarios.
-    // {
-    //   name: "Administración de redes",
-    //   icon: "🌐",
-    //   path: "/admin/redes",
-    //   accesoTotal: true,
-    //   subItems: [],
-    // },
+    {
+      name: "Administración de redes",
+      icon: "🌐",
+      path: "/admin/redes",
+      accesoTotal: true,
+      subItems: [],
+    },
     {
       name: "Gestor proveedores",
       icon: "🤝",

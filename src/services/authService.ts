@@ -35,6 +35,7 @@ export interface CollageUsuario {
   id: number;
   nombre: string;
   apellido: string;
+  rol: string | null;
   foto_url: string | null;
 }
 
