@@ -541,7 +541,7 @@ function PantallaKiosco({
       )}
 
       <main className="flex-1 min-h-0 overflow-y-auto scroll-oculto px-3 sm:px-8 py-3 sm:py-6">
-        <div className="max-w-6xl w-full mx-auto">
+        <div className="w-full">
         {!usuarioSeleccionado ? (
           <>
             {/* Barra de contexto de red */}
@@ -557,7 +557,7 @@ function PantallaKiosco({
 
             {/* Cuadrícula de usuarios — fotos 50% más grandes (120px vs 80px) */}
             {usuarios.length > 0 ? (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-5">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-5">
                 {usuariosOrdenados.map((u) => (
                   <button
                     key={u.id}
@@ -601,7 +601,7 @@ function PantallaKiosco({
           /* ── Pantalla de código, tras elegir usuario ── */
           <div>
             {/* Barra superior: volver / ayuda */}
-            <div className="flex items-center justify-between mb-2 sm:mb-6">
+            <div className="max-w-5xl mx-auto flex items-center justify-between mb-2 sm:mb-6">
               <button
                 type="button"
                 onClick={onVolver}
@@ -621,7 +621,7 @@ function PantallaKiosco({
               </button>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 sm:gap-6 items-stretch">
+            <div className="max-w-5xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-2 sm:gap-6 items-stretch">
               {/* ── Panel izquierdo: usuario — fila compacta en móvil, columna centrada desde sm ── */}
               <div className="bg-white rounded-2xl shadow-sm p-3 sm:p-8 h-full flex flex-row sm:flex-col items-center justify-center sm:justify-center text-left sm:text-center gap-3 sm:gap-0">
                 <div className="w-14 h-14 sm:w-48 sm:h-48 lg:w-56 lg:h-56 rounded-full overflow-hidden bg-slate-100 border-2 sm:border-4 border-white shadow-md flex items-center justify-center flex-shrink-0 sm:mb-5">
