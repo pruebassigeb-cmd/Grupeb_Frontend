@@ -11,6 +11,40 @@ import logo from "../assets/grupeblanco.png";
 import bolsas from "../assets/bolsas.png";
 
 // ==========================
+// Recientes por dispositivo/navegador — para que en la pantalla COLLAGE, la
+// gente que ya inició sesión antes en esta pantalla aparezca primero, en
+// vez de ir bajando en el alfabeto. Vive solo en localStorage de este
+// navegador; no se guarda en el servidor ni se comparte entre dispositivos.
+// ==========================
+const CLAVE_RECIENTES_COLLAGE = "sigeb_collage_recientes";
+const MAX_RECIENTES_COLLAGE = 6;
+
+function obtenerRecientesCollage(): number[] {
+  try {
+    const raw = localStorage.getItem(CLAVE_RECIENTES_COLLAGE);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((x) => typeof x === "number") : [];
+  } catch {
+    return [];
+  }
+}
+
+function registrarRecienteCollage(id: number) {
+  try {
+    const actuales = obtenerRecientesCollage().filter((x) => x !== id);
+    actuales.unshift(id);
+    localStorage.setItem(
+      CLAVE_RECIENTES_COLLAGE,
+      JSON.stringify(actuales.slice(0, MAX_RECIENTES_COLLAGE))
+    );
+  } catch {
+    // localStorage puede fallar (modo privado, cuota llena, etc.) — no es
+    // grave, solo se pierde el orden personalizado, el login sigue normal.
+  }
+}
+
+// ==========================
 // Iconos SVG (sin librerías externas) — reemplazan los emojis en el kiosco
 // ==========================
 type IconProps = { className?: string };
@@ -254,6 +288,7 @@ export default function Login() {
     setLoading(true);
     try {
       await loginConId(usuarioSeleccionado.id, codigo);
+      registrarRecienteCollage(usuarioSeleccionado.id);
       navigate(destino, { replace: true });
     } catch (err: any) {
       showAlert(err.response?.data?.error || "Código incorrecto");
@@ -421,6 +456,20 @@ function PantallaKiosco({
 
   const [mostrarCodigo, setMostrarCodigo] = useState(false);
 
+  // Recientes de este navegador primero (más reciente arriba), el resto se
+  // queda en el orden alfabético que ya trae del backend. sort() es estable
+  // en JS moderno, así que los empates (dos usuarios sin login reciente)
+  // conservan su orden original.
+  const recientes = obtenerRecientesCollage();
+  const usuariosOrdenados = [...usuarios].sort((a, b) => {
+    const ia = recientes.indexOf(a.id);
+    const ib = recientes.indexOf(b.id);
+    if (ia === -1 && ib === -1) return 0;
+    if (ia === -1) return 1;
+    if (ib === -1) return -1;
+    return ia - ib;
+  });
+
   // Soporte de teclado físico: además del teclado táctil en pantalla, si hay
   // un teclado real conectado (o el navegador de escritorio para pruebas),
   // los dígitos 0-9, Backspace y Enter funcionan igual. Solo se activa
@@ -509,7 +558,7 @@ function PantallaKiosco({
             {/* Cuadrícula de usuarios — fotos 50% más grandes (120px vs 80px) */}
             {usuarios.length > 0 ? (
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-5">
-                {usuarios.map((u) => (
+                {usuariosOrdenados.map((u) => (
                   <button
                     key={u.id}
                     type="button"
