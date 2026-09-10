@@ -116,6 +116,12 @@ export default function BitacoraPaqueteria() {
     editando !== null
   );
 
+  // Cancelar = descartar: se tira el borrador junto con el formulario.
+  const cancelarEdicion = () => {
+    if (editando) limpiarBorrador(`bitacora-paqueteria-editar-${editando.envio.idenvio}`);
+    setEditando(null);
+  };
+
   const handleGuardar = async (data: UpdateBitacoraRequest & { numero_guia?: string }, foto?: File | null, fotosAEliminar?: string[]) => {
     if (!editando) return;
     setGuardando(true);
@@ -270,7 +276,7 @@ export default function BitacoraPaqueteria() {
         </div>
       </div>
 
-      {editando && <ModalEditarBitacora registro={editando} onClose={() => setEditando(null)} onGuardar={handleGuardar} guardando={guardando} form={formEdit} setForm={setFormEdit} modo={modoModal} />}
+      {editando && <ModalEditarBitacora registro={editando} onClose={cancelarEdicion} onGuardar={handleGuardar} guardando={guardando} form={formEdit} setForm={setFormEdit} modo={modoModal} />}
       {modalFotoPaq && <ModalFotoEnvio modo="paqueteria" envio={modalFotoPaq} onClose={() => setModalFotoPaq(null)} onCompletado={cargar} />}
     </div>
   );

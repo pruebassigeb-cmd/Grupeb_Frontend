@@ -236,6 +236,9 @@ export default function EditarCotizacion({
   );
   useAutoguardarBorrador(claveBorrador, productos, true);
 
+  // Cerrar sin aprobar = descartar: se tira el borrador.
+  const cerrar = () => { limpiarBorrador(claveBorrador); onCancel(); };
+
   const [guardando, setGuardando] = useState(false);
   const [loadingDetalle, setLoadingDetalle] = useState<number | null>(null);
   const [loadingHerramental, setLoadingHerramental] = useState<number | null>(
@@ -1128,7 +1131,7 @@ export default function EditarCotizacion({
         )}
 
         <button
-          onClick={onCancel}
+          onClick={cerrar}
           className="w-full px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium transition-colors"
         >
           Cerrar

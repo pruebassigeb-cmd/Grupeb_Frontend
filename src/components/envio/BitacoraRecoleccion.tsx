@@ -77,6 +77,8 @@ function ModalEditarRecoleccion({ recoleccion, onClose, onGuardar, guardando }: 
   const [borradorInicial] = useState(() => leerBorrador<FormEditarRecoleccion>(claveBorrador));
   const [form, setForm] = useState<FormEditarRecoleccion>(borradorInicial ?? { nombre_quien_recogio: d?.nombre_quien_recogio || "", empresa: d?.empresa || "", unidad_marca: d?.unidad_marca || "", unidad_modelo: d?.unidad_modelo || "", unidad_placas: d?.unidad_placas || "", observacion_extra: d?.observacion_extra || "" });
   useAutoguardarBorrador(claveBorrador, form, true);
+  // Cancelar = descartar: se tira el borrador junto con el formulario.
+  const cancelar = () => { limpiarBorrador(claveBorrador); onClose(); };
   const [foto, setFoto] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [fotoActual, setFotoActual] = useState<Archivo | null>(null);
@@ -105,7 +107,7 @@ function ModalEditarRecoleccion({ recoleccion, onClose, onGuardar, guardando }: 
   };
 
   return (
-    <Modal isOpen onClose={onClose} title="Editar Entrega de Recolección">
+    <Modal isOpen onClose={cancelar} title="Editar Entrega de Recolección">
       <div className="space-y-4">
         <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 text-sm">
           <p className="font-semibold text-purple-800">{recoleccion.no_pedido} - {recoleccion.cliente}</p>
@@ -144,7 +146,7 @@ function ModalEditarRecoleccion({ recoleccion, onClose, onGuardar, guardando }: 
           )}
         </div>
         <div className="flex justify-end gap-3 pt-2 border-t border-gray-100">
-          <button onClick={onClose} disabled={guardando} className="px-5 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50">Cancelar</button>
+          <button onClick={cancelar} disabled={guardando} className="px-5 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50">Cancelar</button>
           <button onClick={() => onGuardar({ nombre_quien_recogio: form.nombre_quien_recogio.trim(), empresa: form.empresa.trim() || undefined, unidad_marca: form.unidad_marca.trim() || undefined, unidad_modelo: form.unidad_modelo.trim() || undefined, unidad_placas: form.unidad_placas.trim() || undefined, observacion_extra: form.observacion_extra.trim() || undefined }, foto, fotosAEliminar)}
             disabled={guardando || !form.nombre_quien_recogio.trim()} className="px-5 py-2 bg-purple-600 text-white rounded-lg font-semibold hover:bg-purple-700 disabled:opacity-50">
             {guardando ? "Guardando..." : "Guardar Cambios"}

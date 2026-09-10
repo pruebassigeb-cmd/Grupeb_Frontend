@@ -25,6 +25,9 @@ export default function TabUnidades() {
   const claveBorrador = editando ? `unidad-editar-${editando.idunidad}` : "unidad-nueva";
   useAutoguardarBorrador(claveBorrador, form, modalOpen);
 
+  // Cancelar (o cerrar con la ✕) = descartar: se tira el borrador.
+  const cancelar = () => { limpiarBorrador(claveBorrador); setModalOpen(false); };
+
   useEffect(() => { cargar(); }, []);
 
   const cargar = async () => {
@@ -140,7 +143,7 @@ export default function TabUnidades() {
         </table>
       </div>
 
-      <Modal isOpen={modalOpen} onClose={() => setModalOpen(false)}
+      <Modal isOpen={modalOpen} onClose={cancelar}
         title={editando ? "Editar Unidad" : "Nueva Unidad"}>
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
@@ -200,7 +203,7 @@ export default function TabUnidades() {
             </div>
           </div>
           <div className="flex justify-end gap-3 pt-2">
-            <button onClick={() => setModalOpen(false)} disabled={guardando}
+            <button onClick={cancelar} disabled={guardando}
               className="px-5 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50">
               Cancelar
             </button>

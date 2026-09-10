@@ -47,6 +47,9 @@ export default function ModalFotoEnvio(props: Props) {
 
   useAutoguardarBorrador(claveBorrador, { numeroGuia }, true);
 
+  // Cancelar (o cerrar con la ✕) = descartar: se tira el borrador.
+  const cancelar = () => { limpiarBorrador(claveBorrador); props.onClose(); };
+
   // Cargar fotos existentes del envío al abrir
   useEffect(() => {
     getFotosEnvio(idenvio)
@@ -133,7 +136,7 @@ export default function ModalFotoEnvio(props: Props) {
             </p>
           </div>
           {paso !== "subiendo" && (
-            <button onClick={props.onClose}
+            <button onClick={cancelar}
               className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/>
@@ -344,7 +347,7 @@ export default function ModalFotoEnvio(props: Props) {
         {/* Footer */}
         {paso === "formulario" && (
           <div className="px-6 pb-5 flex gap-3">
-            <button onClick={props.onClose}
+            <button onClick={cancelar}
               className="flex-1 py-2.5 border border-gray-300 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors">
               Cancelar
             </button>

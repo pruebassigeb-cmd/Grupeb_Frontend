@@ -1289,7 +1289,7 @@ export default function EditarCotizacionCompleta() {
         </div>
 
         <div className="flex items-center justify-between gap-3 pb-4">
-          <button onClick={volverAlOrigen}
+          <button onClick={() => { limpiarBorrador(claveBorrador); volverAlOrigen(); }}
             className="px-5 py-2.5 border border-gray-300 text-gray-600 rounded-xl text-sm font-medium hover:bg-gray-50 transition">
             Cancelar
           </button>

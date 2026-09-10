@@ -68,6 +68,9 @@ export default function ModalCostoBase({ idProducto, nombreProducto, onClose, on
     return () => { cancelado = true; };
   }, [idProducto, claveBorrador]);
 
+  // Cancelar (o cerrar con la ✕) = descartar: se tira el borrador.
+  const cancelar = () => { limpiarBorrador(claveBorrador); onClose(); };
+
   const actualizarPrecio = (idgrupo_papel: number, valor: string) => {
     // Mismo criterio que el input de "Costo" en GrupoBlock: solo dígitos y un punto.
     const limpio = valor.replace(/[^0-9.]/g, "");
@@ -180,7 +183,7 @@ export default function ModalCostoBase({ idProducto, nombreProducto, onClose, on
 
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
           <button
-            onClick={onClose}
+            onClick={cancelar}
             disabled={saving}
             style={{ height: 34, padding: "0 14px", border: "1px solid #E5E7EB", borderRadius: 6, background: "#fff", color: "#6B7280", fontSize: 12, cursor: "pointer" }}
           >

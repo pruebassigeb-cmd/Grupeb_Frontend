@@ -71,6 +71,8 @@ function FoilFormModal({ initial, proveedores, productosSat, onSave, onCancel, s
     } : newFoilForm())
   );
   useAutoguardarBorrador(claveBorrador, form, true);
+  // Cancelar (o cerrar con la ✕) = descartar: se tira el borrador.
+  const cancelar = () => { limpiarBorrador(claveBorrador); onCancel(); };
   const [nuevaPresentacion, setNuevaPresentacion] = useState("");
 
   const upd = (patch: Partial<FoilForm>) => setForm(prev => ({ ...prev, ...patch }));
@@ -127,7 +129,7 @@ function FoilFormModal({ initial, proveedores, productosSat, onSave, onCancel, s
               <p className="text-xs text-gray-400">Se guardará en el catálogo de foils</p>
             </div>
           </div>
-          <button onClick={onCancel} className="text-gray-400 hover:text-gray-600 transition-colors">
+          <button onClick={cancelar} className="text-gray-400 hover:text-gray-600 transition-colors">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
@@ -288,7 +290,7 @@ function FoilFormModal({ initial, proveedores, productosSat, onSave, onCancel, s
               <span className="text-xs text-gray-400">Imagen (opcional)</span>
             </div>
           )}
-          <button onClick={onCancel}
+          <button onClick={cancelar}
             className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
             Cancelar
           </button>

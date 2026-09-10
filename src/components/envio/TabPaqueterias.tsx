@@ -42,6 +42,9 @@ export default function TabPaqueterias() {
   const claveBorrador = editando ? `paqueteria-editar-${editando.idpaqueteria}` : "paqueteria-nueva";
   useAutoguardarBorrador(claveBorrador, form, modalOpen);
 
+  // Cancelar (o cerrar con la ✕) = descartar: se tira el borrador.
+  const cancelar = () => { limpiarBorrador(claveBorrador); setModalOpen(false); };
+
   useEffect(() => { cargar(); }, []);
 
   const cargar = async () => {
@@ -299,7 +302,7 @@ export default function TabPaqueterias() {
         </table>
       </div>
 
-      <Modal isOpen={modalOpen} onClose={() => setModalOpen(false)}
+      <Modal isOpen={modalOpen} onClose={cancelar}
         title={editando ? "Editar Paquetería" : "Nueva Paquetería"}>
         <div className="space-y-4">
 
@@ -417,7 +420,7 @@ export default function TabPaqueterias() {
           </div>
 
           <div className="flex justify-end gap-3 pt-2 border-t border-gray-100">
-            <button onClick={() => setModalOpen(false)} disabled={guardando}
+            <button onClick={cancelar} disabled={guardando}
               className="px-5 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50">
               Cancelar
             </button>

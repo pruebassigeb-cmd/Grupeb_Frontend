@@ -11,6 +11,7 @@ import ModalFormatoTresGuerras from "./ModalFormatoTresGuerras";
 import ModalGuiaPaqueteriaGeneral from "./ModalGuiaPaqueteriaGeneral";
 import { showAlert } from './../CustomAlert';
 import { leerBorrador, useAutoguardarBorrador, limpiarBorrador } from "../../hooks/useBorradorFormulario";
+import { claveBorradorProcesarCarrito } from "../../utils/clavesBorrador";
 
 interface Props {
   carrito: CarritoPedido[];
@@ -42,7 +43,7 @@ interface BorradorProcesarCarrito {
 export default function FormularioProcesarCarrito({ carrito, onSuccess, onCancel }: Props) {
   // Misma convención que FormularioNotaRemisionMulti: la clave depende del
   // contenido exacto del carrito que se está procesando.
-  const claveBorrador = `procesar-carrito-${carrito.map(p => p.idsolicitud).sort().join(",")}`;
+  const claveBorrador = claveBorradorProcesarCarrito(carrito.map(p => p.idsolicitud));
   const [borradorInicial] = useState(() => leerBorrador<BorradorProcesarCarrito>(claveBorrador));
 
   const [conductores, setConductores] = useState<Conductor[]>([]);
@@ -76,6 +77,9 @@ export default function FormularioProcesarCarrito({ carrito, onSuccess, onCancel
     form,
     seleccion: Array.from(seleccion.entries()).map(([id, bultos]) => [id, Array.from(bultos)]),
   }, true);
+
+  // Cancelar = descartar: se tira el borrador junto con el formulario.
+  const cancelar = () => { limpiarBorrador(claveBorrador); onCancel(); };
 
   useEffect(() => {
     const cargarCatalogos = async () => {
@@ -357,7 +361,7 @@ export default function FormularioProcesarCarrito({ carrito, onSuccess, onCancel
         )}
 
       <div className="flex justify-end gap-3 pt-2 border-t border-gray-100">
-        <button onClick={onCancel} disabled={loading}
+        <button onClick={cancelar} disabled={loading}
           className="px-5 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50">
           Cancelar
         </button>

@@ -28,6 +28,7 @@ import { inputClass, labelClass } from "./../enviosConstants";
 import BotonAuditoria from "../auditoria/BotonAuditoria";
 import AuditoriaDesplegable from "../auditoria/AuditoriaDesplegable";
 import { leerBorrador, useAutoguardarBorrador, limpiarBorrador } from "../../hooks/useBorradorFormulario";
+import { claveBorradorEnvioIndividual, claveBorradorMarcarCompletado } from "../../utils/clavesBorrador";
 
 import { fmtFechaCorta, fmtFechaHora } from "../../utils/fecha";
 // ─────────────────────────────────────────────────────────────────────────────
@@ -606,7 +607,7 @@ function FormularioMarcarCompletado({
       costo_flete: string; observaciones: string; nombre_quien_recogio: string;
     };
   }
-  const claveBorrador = `envio-marcar-completado-${idsolicitud}`;
+  const claveBorrador = claveBorradorMarcarCompletado(idsolicitud);
   const [borradorInicial] = useState(() => leerBorrador<BorradorMarcarCompletado>(claveBorrador));
 
   const [tipo, setTipo] = useState<"local" | "paqueteria" | "recoleccion">(borradorInicial?.tipo ?? "local");
@@ -627,6 +628,9 @@ function FormularioMarcarCompletado({
   });
 
   useAutoguardarBorrador<BorradorMarcarCompletado>(claveBorrador, { tipo, form }, true);
+
+  // Cancelar = descartar: se tira el borrador junto con el formulario.
+  const cancelar = () => { limpiarBorrador(claveBorrador); onCancel(); };
 
   useEffect(() => {
     const cargar = async () => {
@@ -758,7 +762,7 @@ function FormularioMarcarCompletado({
       </div>
 
       <div className="flex justify-end gap-3 pt-2">
-        <button type="button" onClick={onCancel} disabled={guardando}
+        <button type="button" onClick={cancelar} disabled={guardando}
           className="px-5 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50">
           Cancelar
         </button>
@@ -848,6 +852,17 @@ export default function ModalEnvioSeguimiento({ pedido, onClose, onActualizar }:
   useEffect(() => { cargar(); }, [cargar]);
 
   // ── Handlers ──
+  // Cerrar estos dos modales (con la ✕ o con "Cancelar") es cancelar el
+  // formulario que llevan dentro, así que también tira su borrador.
+  const cerrarCrearEnvio = () => {
+    limpiarBorrador(claveBorradorEnvioIndividual(pedido.idsolicitud));
+    setModalCrearEnvio(false);
+  };
+  const cerrarMarcarCompletado = () => {
+    limpiarBorrador(claveBorradorMarcarCompletado(pedido.idsolicitud));
+    setModalMarcarCompletado(false);
+  };
+
   const handleCambiarEstado = async (idenvio: number, estado: string) => {
     try {
       await updateEstadoEnvio(idenvio, estado);
@@ -1136,7 +1151,7 @@ export default function ModalEnvioSeguimiento({ pedido, onClose, onActualizar }:
 
       {/* ── Modal de crear envío ── */}
       {modalCrearEnvio && (
-        <Modal isOpen onClose={() => setModalCrearEnvio(false)} title="Registrar Envío">
+        <Modal isOpen onClose={cerrarCrearEnvio} title="Registrar Envío">
           <FormularioEnvioIndividual
             pedido={pedidoParaFormulario as any}
             bultosIds={seleccionados}
@@ -1152,14 +1167,14 @@ export default function ModalEnvioSeguimiento({ pedido, onClose, onActualizar }:
                 } catch { /* silencioso */ }
               }
             }}
-            onCancel={() => setModalCrearEnvio(false)}
+            onCancel={cerrarCrearEnvio}
           />
         </Modal>
       )}
 
       {/* ── Modal de marcar envío completado (atajo) ── */}
       {modalMarcarCompletado && pedido.idproduccion && (
-        <Modal isOpen onClose={() => setModalMarcarCompletado(false)} title="Marcar envío completado">
+        <Modal isOpen onClose={cerrarMarcarCompletado} title="Marcar envío completado">
           <FormularioMarcarCompletado
             idsolicitud={pedido.idsolicitud}
             idproduccion={pedido.idproduccion}
@@ -1168,7 +1183,7 @@ export default function ModalEnvioSeguimiento({ pedido, onClose, onActualizar }:
               await cargar();
               onActualizar();
             }}
-            onCancel={() => setModalMarcarCompletado(false)}
+            onCancel={cerrarMarcarCompletado}
           />
         </Modal>
       )}

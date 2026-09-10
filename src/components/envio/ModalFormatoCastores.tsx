@@ -71,6 +71,9 @@ export default function ModalFormatoCastores({ idenvio, onClose }: Props) {
     requiereFactura, formaPago, metodoPago, pagado, cobrarOrigen, cobrarDestino, observaciones, noConvenio,
   }, true);
 
+  // Cancelar = descartar: se tira el borrador junto con el formulario.
+  const cancelar = () => { limpiarBorrador(claveBorrador); onClose(); };
+
   const [bultosForms, setBultosForms] = useState<BultoForm[]>([]);
 
   useEffect(() => {
@@ -138,7 +141,7 @@ export default function ModalFormatoCastores({ idenvio, onClose }: Props) {
   };
 
   if (loading) return (
-    <Modal isOpen onClose={onClose} title="Formato Castores">
+    <Modal isOpen onClose={cancelar} title="Formato Castores">
       <div className="flex justify-center py-12">
         <div className="w-6 h-6 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
       </div>
@@ -146,7 +149,7 @@ export default function ModalFormatoCastores({ idenvio, onClose }: Props) {
   );
 
   return (
-    <Modal isOpen onClose={onClose} title={`Solicitud de Servicio Castores — ${datos?.no_pedido}`}>
+    <Modal isOpen onClose={cancelar} title={`Solicitud de Servicio Castores — ${datos?.no_pedido}`}>
       <div className="space-y-5 max-h-[75vh] overflow-y-auto pr-1">
 
         <div className="grid grid-cols-2 gap-3">
@@ -300,7 +303,7 @@ export default function ModalFormatoCastores({ idenvio, onClose }: Props) {
         </div>
 
         <div className="flex justify-end gap-3 pt-2 border-t border-gray-100">
-          <button onClick={onClose} disabled={generando}
+          <button onClick={cancelar} disabled={generando}
             className="px-5 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50">
             Cancelar
           </button>

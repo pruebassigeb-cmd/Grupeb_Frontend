@@ -79,6 +79,8 @@ function FormularioAltaConMedida({
   const [saving, setSaving] = useState(false);
 
   useAutoguardarBorrador(claveBorrador, { medida, codigo, seleccionados }, true);
+  // Cancelar = descartar: se tira el borrador junto con el formulario.
+  const cancelar = () => { limpiarBorrador(claveBorrador); onCancelar(); };
 
   const toggleProveedor = (id: number) =>
     setSeleccionados((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
@@ -134,7 +136,7 @@ function FormularioAltaConMedida({
         </div>
       </div>
       <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-        <Btn variant="ghost" onClick={onCancelar}>Cancelar</Btn>
+        <Btn variant="ghost" onClick={cancelar}>Cancelar</Btn>
         <Btn variant="primary" onClick={handleGuardar} disabled={saving}>{saving ? "Guardando..." : "+ Agregar"}</Btn>
       </div>
     </div>

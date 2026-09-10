@@ -39,6 +39,12 @@ export default function SubirRender({
 
   useAutoguardarBorrador(claveBorrador, { observaciones }, true);
 
+  // Cancelar = descartar: se tira el borrador junto con el formulario.
+  const cancelar = () => {
+    limpiarBorrador(claveBorrador);
+    onCancel();
+  };
+
   const labelTipo = tipo === "render" ? "Render" : "Feedback del cliente";
 
   const handleArchivos = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -289,7 +295,7 @@ export default function SubirRender({
       {/* Botones */}
       <div className="flex gap-2 pt-1">
         <button
-          onClick={onCancel}
+          onClick={cancelar}
           disabled={subiendo}
           className="flex-1 py-2 border border-gray-300 text-gray-700 rounded-lg text-sm hover:bg-gray-50 disabled:opacity-50"
         >

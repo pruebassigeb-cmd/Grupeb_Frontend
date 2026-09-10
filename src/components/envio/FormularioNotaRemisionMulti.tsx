@@ -8,6 +8,7 @@ import type { CarritoPedido, Conductor, Unidad, TipoEnvioCarrito } from "../../t
 import { inputClass, labelClass } from "./../enviosConstants";
 import { showAlert } from ".././CustomAlert";
 import { leerBorrador, useAutoguardarBorrador, limpiarBorrador } from "../../hooks/useBorradorFormulario";
+import { claveBorradorNotaRemisionMulti } from "../../utils/clavesBorrador";
 
 interface Props {
   carrito:   CarritoPedido[];
@@ -27,7 +28,7 @@ interface BorradorNotaRemisionMulti {
 export default function FormularioNotaRemisionMulti({ carrito, onSuccess, onCancel }: Props) {
   // Clave derivada del contenido exacto del carrito: si cambia qué pedidos
   // se están agrupando, es en la práctica un lote distinto.
-  const claveBorrador = `nota-remision-multi-${carrito.map(p => p.idsolicitud).sort().join(",")}`;
+  const claveBorrador = claveBorradorNotaRemisionMulti(carrito.map(p => p.idsolicitud));
   const [borradorInicial] = useState(() => leerBorrador<BorradorNotaRemisionMulti>(claveBorrador));
 
   const [conductores,    setConductores]    = useState<Conductor[]>([]);
@@ -45,6 +46,9 @@ export default function FormularioNotaRemisionMulti({ carrito, onSuccess, onCanc
   useAutoguardarBorrador<BorradorNotaRemisionMulti>(claveBorrador, {
     tipoEntrega, choferSeleccionado, unidadSeleccionada, costoFlete, fechaEntregaEstimada, observaciones,
   }, true);
+
+  // Cancelar = descartar: se tira el borrador junto con el formulario.
+  const cancelar = () => { limpiarBorrador(claveBorrador); onCancel(); };
 
   useEffect(() => {
     const cargarCatalogos = async () => {
@@ -277,7 +281,7 @@ export default function FormularioNotaRemisionMulti({ carrito, onSuccess, onCanc
       {/* Botones */}
       <div className="flex justify-end gap-3 pt-2 border-t border-gray-100">
         <button
-          onClick={onCancel}
+          onClick={cancelar}
           disabled={procesando}
           className="px-5 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50"
         >

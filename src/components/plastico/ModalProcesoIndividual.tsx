@@ -2257,7 +2257,7 @@ export default function ModalProcesoIndividual({ pedido, nombreProceso, onClose,
                       placeholder="Escribe aqui cualquier novedad..." />
                   </div>
                   <div className="flex gap-2 pt-1">
-                    <button onClick={() => { setAccion(null); setFormDatos({}); setObservaciones(""); }}
+                    <button onClick={() => { limpiarBorrador(claveBorradorFinalizar); setAccion(null); setFormDatos({}); setObservaciones(""); }}
                       className="flex-1 py-2 border border-gray-300 text-gray-600 text-sm rounded-lg hover:bg-gray-50">Cancelar</button>
                     <button onClick={handleFinalizar} disabled={guardando}
                       className="flex-1 py-2 bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white text-sm font-semibold rounded-lg flex items-center justify-center gap-2">

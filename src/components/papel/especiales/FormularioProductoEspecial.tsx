@@ -28,7 +28,7 @@ import {
   CATEGORIA_IMAGEN_PRODUCTO_ESPECIAL, eliminarArchivoProducto, fetchProcesosCat,
   fetchProductoPapelById, subirImagenProducto, type ProcesoCatOpcion,
 } from "../../../services/papel/papel.service";
-import { leerBorrador, useAutoguardarBorrador } from "../../../hooks/useBorradorFormulario";
+import { leerBorrador, useAutoguardarBorrador, limpiarBorrador } from "../../../hooks/useBorradorFormulario";
 import { claveBorradorProductoPapel } from "../../../utils/clavesBorrador";
 import { showConfirm } from "../../CustomConfirm";
 import MaterialesAsignacion from "./MaterialesAsignacion";
@@ -233,6 +233,8 @@ export default function FormularioProductoEspecial({ initial, onSave, onCancel, 
   const [imagenActual, setImagenActual] = useState<ImagenProductoExistente | null>(initial?.imagenExistente ?? null);
   const [notasPendientes, setNotasPendientes] = useState<string[]>([]);
   useAutoguardarBorrador(claveBorrador, form, true);
+  // Cancelar = descartar: se tira el borrador junto con el formulario.
+  const cancelar = () => { limpiarBorrador(claveBorrador); onCancel(); };
 
   // Preview local del archivo todavía no subido (alta nueva, antes de que
   // exista idproducto_papel) -- mismo patrón que usa ImagenProducto para su
@@ -456,7 +458,7 @@ export default function FormularioProductoEspecial({ initial, onSave, onCancel, 
       {/* ─────────── breadcrumb ─────────── */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 0 14px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14, fontWeight: 600 }}>
-          <span onClick={onCancel} style={{ color: T.primary, cursor: "pointer" }}>Productos especiales</span>
+          <span onClick={cancelar} style={{ color: T.primary, cursor: "pointer" }}>Productos especiales</span>
           <span style={{ color: "#A8B6D4", fontWeight: 400 }}>›</span>
           <span style={{ color: T.inkStrong, fontWeight: 700 }}>
             {esEdicion ? "Editar producto" : "Nuevo producto"}
@@ -487,7 +489,7 @@ export default function FormularioProductoEspecial({ initial, onSave, onCancel, 
               border: "1px solid #FECACA", borderRadius: 8,
             }}>{errorGuardar}</span>
           )}
-          <Boton onClick={onCancel} disabled={saving}>Cancelar</Boton>
+          <Boton onClick={cancelar} disabled={saving}>Cancelar</Boton>
           <Boton variante="primario" onClick={guardar} disabled={saving}>
             <IcoCheckCirculo /> {saving ? "Guardando..." : esEdicion ? "Guardar cambios" : "Guardar producto"}
           </Boton>
@@ -613,7 +615,7 @@ export default function FormularioProductoEspecial({ initial, onSave, onCancel, 
 
       {/* ─────────── acciones al pie (como en el diseño) ─────────── */}
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 18 }}>
-        <Boton onClick={onCancel} disabled={saving}>Cancelar</Boton>
+        <Boton onClick={cancelar} disabled={saving}>Cancelar</Boton>
         <Boton variante="primario" onClick={guardar} disabled={saving}>
           <IcoCheckCirculo /> {saving ? "Guardando..." : esEdicion ? "Guardar cambios" : "Guardar producto"}
         </Boton>

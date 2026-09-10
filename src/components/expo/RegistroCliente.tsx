@@ -146,6 +146,9 @@ function FormEdicion({ inicial, onGuardar, onCancelar, guardando }: FormEdicionP
 
   useAutoguardarBorrador(claveBorrador, form, true);
 
+  // Cancelar = descartar: se tira el borrador junto con el formulario.
+  const cancelar = () => { limpiarBorrador(claveBorrador); onCancelar(); };
+
   const setF = (k: keyof ClienteExpo, v: unknown) => setForm(p => ({ ...p, [k]: v }));
   const toggleInteres = (i: ClienteExpo["intereses"][number]) =>
     setForm(p => ({
@@ -231,7 +234,7 @@ function FormEdicion({ inicial, onGuardar, onCancelar, guardando }: FormEdicionP
           value={form.observaciones} onChange={e => setF("observaciones", e.target.value)} />
       </div>
       <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-        <button onClick={onCancelar} style={{ background: "transparent", border: "1px solid #444", color: "#888", fontSize: 11, fontWeight: 600, padding: "6px 14px", borderRadius: 6, cursor: "pointer" }}>
+        <button onClick={cancelar} style={{ background: "transparent", border: "1px solid #444", color: "#888", fontSize: 11, fontWeight: 600, padding: "6px 14px", borderRadius: 6, cursor: "pointer" }}>
           Cancelar
         </button>
         <button onClick={() => onGuardar(form)} disabled={!form.nombre.trim() || guardando}

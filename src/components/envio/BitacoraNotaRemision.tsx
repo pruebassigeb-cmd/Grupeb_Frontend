@@ -93,6 +93,8 @@ function ModalMarcarLlegadaNota({ nota, onClose, onSuccess }: { nota: NotaRemisi
   const inputFotoRef = useRef<HTMLInputElement>(null);
 
   useAutoguardarBorrador(claveBorrador, form, true);
+  // Cancelar = descartar: se tira el borrador junto con el formulario.
+  const cancelar = () => { limpiarBorrador(claveBorrador); onClose(); };
 
   useEffect(() => {
     getFotosNota(nota.idnota)
@@ -117,7 +119,7 @@ function ModalMarcarLlegadaNota({ nota, onClose, onSuccess }: { nota: NotaRemisi
   };
 
   return (
-    <Modal isOpen onClose={onClose} title="Registrar Llegada / Entrega">
+    <Modal isOpen onClose={cancelar} title="Registrar Llegada / Entrega">
       <div className="space-y-4">
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm">
           <p className="font-semibold text-blue-800">{nota.no_nota}</p>
@@ -151,7 +153,7 @@ function ModalMarcarLlegadaNota({ nota, onClose, onSuccess }: { nota: NotaRemisi
           )}
         </div>
         <div className="flex justify-end gap-3 pt-2 border-t border-gray-100">
-          <button onClick={onClose} disabled={guardando} className="px-5 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50">Cancelar</button>
+          <button onClick={cancelar} disabled={guardando} className="px-5 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50">Cancelar</button>
           <button onClick={handleSubmit} disabled={guardando} className="px-5 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50">{guardando ? "Registrando..." : "✓ Confirmar Llegada"}</button>
         </div>
       </div>
@@ -187,6 +189,8 @@ function ModalMarcarRecoleccionNota({ nota, onClose, onSuccess }: { nota: NotaRe
   const inputFotoRef = useRef<HTMLInputElement>(null);
 
   useAutoguardarBorrador(claveBorrador, form, true);
+  // Cancelar = descartar: se tira el borrador junto con el formulario.
+  const cancelar = () => { limpiarBorrador(claveBorrador); onClose(); };
 
   useEffect(() => {
     getFotosNota(nota.idnota)
@@ -217,7 +221,7 @@ function ModalMarcarRecoleccionNota({ nota, onClose, onSuccess }: { nota: NotaRe
   };
 
   return (
-    <Modal isOpen onClose={onClose} title="Registrar Entrega de Nota">
+    <Modal isOpen onClose={cancelar} title="Registrar Entrega de Nota">
       <div className="space-y-4">
         <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-sm">
           <p className="font-semibold text-emerald-800">{nota.no_nota}</p>
@@ -252,7 +256,7 @@ function ModalMarcarRecoleccionNota({ nota, onClose, onSuccess }: { nota: NotaRe
           )}
         </div>
         <div className="flex justify-end gap-3 pt-2 border-t border-gray-100">
-          <button onClick={onClose} disabled={guardando} className="px-5 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50">Cancelar</button>
+          <button onClick={cancelar} disabled={guardando} className="px-5 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50">Cancelar</button>
           <button onClick={handleSubmit} disabled={guardando || !form.nombre_quien_recogio.trim()} className="px-5 py-2 bg-emerald-600 text-white rounded-lg font-semibold hover:bg-emerald-700 disabled:opacity-50">{guardando ? "Registrando..." : "✓ Confirmar Entrega"}</button>
         </div>
       </div>

@@ -17,11 +17,15 @@ const DEBOUNCE_MS = 600;
  * el id del registro, ej. `pedido-editar-${id}` — si no, el borrador de un
  * registro se podría restaurar encima de otro registro distinto.
  *
- * No se borra solo al cerrar el formulario sin guardar (cerrar el modal por
- * error deja el progreso disponible la próxima vez que se abra) — hay que
- * llamar a `limpiarBorrador(clave)` explícitamente tras un guardado exitoso,
- * para que la próxima vez que se abra ese mismo formulario no aparezcan
- * datos viejos ya guardados.
+ * No se borra solo: hay que llamar a `limpiarBorrador(clave)` explícitamente
+ * en los dos finales del formulario, para que la próxima vez que se abra no
+ * aparezcan datos viejos:
+ *   1. tras un guardado exitoso, y
+ *   2. al CANCELAR (botón "Cancelar", la ✕ del modal, o cualquier otro
+ *      control que abandone el formulario) — cancelar significa "descarta
+ *      lo que llevaba", así que el borrador se tira junto con el formulario.
+ * El borrador solo sobrevive a lo que NO es una decisión del usuario: una
+ * recarga de la pestaña (típicamente la actualización automática de la PWA).
  */
 
 // ── Lectura síncrona, para inicializar useState sin parpadeo ───────────────

@@ -4,7 +4,7 @@ import type { RegimenFiscal, MetodoPago, FormaPago } from "../types/clientes.typ
 import type { CreateClienteRequest, UpdateClienteRequest, Cliente } from "../types/clientes.types";
 import { showAlert } from './CustomAlert';
 import { buscarCodigoPostal } from "../services/codigoPostalService";
-import { leerBorrador, useAutoguardarBorrador } from "../hooks/useBorradorFormulario";
+import { leerBorrador, useAutoguardarBorrador, limpiarBorrador } from "../hooks/useBorradorFormulario";
 import { claveBorradorCliente } from "../utils/clavesBorrador";
 const MONEDAS = [
   { codigo: "MXN", nombre: "Peso mexicano (MXN)" },
@@ -117,6 +117,9 @@ export default function FormularioCliente({ onSubmit, onCancel, clienteEditar }:
   });
 
   useAutoguardarBorrador<BorradorCliente>(claveBorrador, { datos, paso }, true);
+
+  // Cancelar = descartar: se tira el borrador junto con el formulario.
+  const cancelar = () => { limpiarBorrador(claveBorrador); onCancel(); };
 
   useEffect(() => { cargarDatos(); }, []);
 
@@ -442,7 +445,7 @@ export default function FormularioCliente({ onSubmit, onCancel, clienteEditar }:
         </div>
 
         <div className="flex justify-end gap-3 mt-6">
-          <button type="button" onClick={onCancel}
+          <button type="button" onClick={cancelar}
             className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">
             Cancelar
           </button>

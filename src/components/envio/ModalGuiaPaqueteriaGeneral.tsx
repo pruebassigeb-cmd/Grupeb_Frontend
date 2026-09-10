@@ -58,6 +58,9 @@ export default function ModalGuiaPaqueteriaGeneral({ idenvio, onClose }: Props) 
     tipoCobro, asegurado, requiereFactura, tipoEntrega,
   }, true);
 
+  // Cancelar = descartar: se tira el borrador junto con el formulario.
+  const cancelar = () => { limpiarBorrador(claveBorrador); onClose(); };
+
   useEffect(() => {
     const cargar = async () => {
       try {
@@ -125,7 +128,7 @@ export default function ModalGuiaPaqueteriaGeneral({ idenvio, onClose }: Props) 
   };
 
   return (
-    <Modal isOpen onClose={onClose} title="Guía de Envío">
+    <Modal isOpen onClose={cancelar} title="Guía de Envío">
 
       {paso === "cargando" && (
         <div className="flex justify-center items-center py-16">
@@ -291,7 +294,7 @@ export default function ModalGuiaPaqueteriaGeneral({ idenvio, onClose }: Props) 
           })}
 
           <div className="flex justify-end gap-3 pt-2 border-t border-gray-100">
-            <button onClick={onClose} disabled={paso === "guardando"}
+            <button onClick={cancelar} disabled={paso === "guardando"}
               className="px-5 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm disabled:opacity-50">
               Cancelar
             </button>

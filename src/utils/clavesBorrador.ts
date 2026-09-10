@@ -29,3 +29,24 @@ export function claveBorradorUsuario(usuarioEditar?: Usuario | null): string {
 export function claveBorradorProductoPapel(idExistente?: number | null): string {
   return idExistente ? `papel-producto-editar-${idExistente}` : "papel-producto-nueva";
 }
+
+// ── Formularios de envío ───────────────────────────────────────────────────
+// Estos cuatro viven dentro de un <Modal> que monta la pantalla de arriba, y
+// esa pantalla es la dueña de la ✕ del modal. Como cerrar con la ✕ es
+// cancelar igual que el botón "Cancelar", la pantalla necesita la misma
+// clave que usa el formulario por dentro — de ahí que estén aquí.
+export function claveBorradorEnvioIndividual(idsolicitud: number): string {
+  return `envio-individual-${idsolicitud}`;
+}
+
+export function claveBorradorMarcarCompletado(idsolicitud: number): string {
+  return `envio-marcar-completado-${idsolicitud}`;
+}
+
+export function claveBorradorProcesarCarrito(idsolicitudes: number[]): string {
+  return `procesar-carrito-${[...idsolicitudes].sort().join(",")}`;
+}
+
+export function claveBorradorNotaRemisionMulti(idsolicitudes: number[]): string {
+  return `nota-remision-multi-${[...idsolicitudes].sort().join(",")}`;
+}

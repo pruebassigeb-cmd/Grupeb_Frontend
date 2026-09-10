@@ -118,6 +118,12 @@ export default function BitacoraLocal() {
     editando !== null
   );
 
+  // Cancelar = descartar: se tira el borrador junto con el formulario.
+  const cancelarEdicion = () => {
+    if (editando) limpiarBorrador(`bitacora-local-editar-${editando.envio.idenvio}`);
+    setEditando(null);
+  };
+
   const handleGuardar = async (data: UpdateBitacoraRequest & { numero_guia?: string }, foto?: File | null, fotosAEliminar?: string[]) => {
     if (!editando) return;
     setGuardando(true);
@@ -296,7 +302,7 @@ export default function BitacoraLocal() {
         </div>
       </div>
 
-      {editando && <ModalEditarBitacora registro={editando} onClose={() => setEditando(null)} onGuardar={handleGuardar} guardando={guardando} form={formEdit} setForm={setFormEdit} modo="normal" />}
+      {editando && <ModalEditarBitacora registro={editando} onClose={cancelarEdicion} onGuardar={handleGuardar} guardando={guardando} form={formEdit} setForm={setFormEdit} modo="normal" />}
       {modalFotoLocal && <ModalFotoEnvio modo="local" registro={modalFotoLocal} onClose={() => setModalFotoLocal(null)} onCompletado={cargar} />}
     </div>
   );

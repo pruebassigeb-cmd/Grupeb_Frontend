@@ -7,7 +7,7 @@ import type { CreateUsuarioRequest, UpdateUsuarioRequest, Usuario } from "../typ
 import { showAlert } from './CustomAlert';
 import api from '../services/api';
 import { buscarCodigoPostal } from "../services/codigoPostalService";
-import { leerBorrador, useAutoguardarBorrador } from "../hooks/useBorradorFormulario";
+import { leerBorrador, useAutoguardarBorrador, limpiarBorrador } from "../hooks/useBorradorFormulario";
 import { claveBorradorUsuario } from "../utils/clavesBorrador";
 import SelectorPrivilegios from "./privilegios/SelectorPrivilegios";
 
@@ -116,6 +116,9 @@ export default function FormularioUsuario({ onSubmit, onCancel, usuarioEditar }:
     { ...datosSinSensibles, paso, ineAEliminar },
     true
   );
+
+  // Cancelar = descartar: se tira el borrador junto con el formulario.
+  const cancelar = () => { limpiarBorrador(claveBorrador); onCancel(); };
 
   useEffect(() => {
     (async () => {
@@ -664,7 +667,7 @@ else if (!/^\d{4,8}$/.test(datos.codigo)) e.codigo = "El código debe tener entr
         </div>
 
         <div className="flex justify-end gap-3 mt-6">
-          <button type="button" onClick={onCancel}
+          <button type="button" onClick={cancelar}
             className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">Cancelar</button>
           <button type="button" onClick={() => { if (validarPaso1()) setPaso(2); }}
             className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Siguiente</button>

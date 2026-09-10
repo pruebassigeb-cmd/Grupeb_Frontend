@@ -290,6 +290,9 @@ export default function ModalMaquinariaPedidoPapel({
     setSelecciones(seleccionesIniciales);
   }, [productosPapel, claveBorrador]);
 
+  // Cancelar = descartar: se tira el borrador junto con el formulario.
+  const cancelar = () => { limpiarBorrador(claveBorrador); onCancel(); };
+
   useEffect(() => {
     let activo = true;
     setCargando(true);
@@ -591,7 +594,7 @@ export default function ModalMaquinariaPedidoPapel({
         <div className="grid grid-cols-2 gap-3 border-t border-gray-200 p-4">
           <button
             type="button"
-            onClick={onCancel}
+            onClick={cancelar}
             className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
           >
             Cancelar

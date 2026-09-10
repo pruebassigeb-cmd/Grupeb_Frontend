@@ -12,6 +12,8 @@ import TabHistorialReportes from "../../components/envio/TabHistorialReportes";
 import VistaCarrito from "../../components/envio/VistaCarrito";
 import FormularioProcesarCarrito from "../../components/envio/FormularioProcesarCarrito";
 import FormularioNotaRemisionMulti from "../../components/envio/FormularioNotaRemisionMulti";
+import { limpiarBorrador } from "../../hooks/useBorradorFormulario";
+import { claveBorradorProcesarCarrito, claveBorradorNotaRemisionMulti } from "../../utils/clavesBorrador";
 
 type Tab = "envios" | "bitacora" | "unidades" | "paqueterias" | "historial";
 
@@ -32,6 +34,17 @@ export default function Envios() {
   const [modalNotaRemision, setModalNotaRemision] = useState(false);
   const [animarCarrito, setAnimarCarrito] = useState(false);
   const [refreshEnviosKey, setRefreshEnviosKey] = useState(0);
+
+  // Cerrar estos dos modales (✕ o "Cancelar") cancela el formulario que
+  // llevan dentro, así que también tira su borrador.
+  const cancelarProcesar = () => {
+    limpiarBorrador(claveBorradorProcesarCarrito(carrito.map(p => p.idsolicitud)));
+    setModalProcesar(false);
+  };
+  const cancelarNotaRemision = () => {
+    limpiarBorrador(claveBorradorNotaRemisionMulti(carrito.map(p => p.idsolicitud)));
+    setModalNotaRemision(false);
+  };
 
   const totalBultosCarrito = carrito.reduce(
     (sum, p) => sum + p.bultos.length,
@@ -202,7 +215,7 @@ export default function Envios() {
       {modalProcesar && (
         <Modal
           isOpen={modalProcesar}
-          onClose={() => setModalProcesar(false)}
+          onClose={cancelarProcesar}
           title="Procesar Envío"
         >
           <FormularioProcesarCarrito
@@ -211,7 +224,7 @@ export default function Envios() {
               setModalProcesar(false);
               await refrescarModuloEnvios();
             }}
-            onCancel={() => setModalProcesar(false)}
+            onCancel={cancelarProcesar}
           />
         </Modal>
       )}
@@ -219,7 +232,7 @@ export default function Envios() {
       {modalNotaRemision && (
         <Modal
           isOpen={modalNotaRemision}
-          onClose={() => setModalNotaRemision(false)}
+          onClose={cancelarNotaRemision}
           title="Nota de Remisión conjunta"
         >
           <FormularioNotaRemisionMulti
@@ -228,7 +241,7 @@ export default function Envios() {
               setModalNotaRemision(false);
               await refrescarModuloEnvios();
             }}
-            onCancel={() => setModalNotaRemision(false)}
+            onCancel={cancelarNotaRemision}
           />
         </Modal>
       )}

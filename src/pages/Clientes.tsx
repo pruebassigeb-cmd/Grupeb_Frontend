@@ -113,6 +113,8 @@ export default function Clientes() {
   };
 
   const handleCancelar = () => {
+    // Cancelar (o cerrar con la ✕) = descartar lo capturado.
+    limpiarBorrador(claveBorradorCliente(clienteEditar));
     setModalOpen(false);
     setClienteEditar(null);
   };

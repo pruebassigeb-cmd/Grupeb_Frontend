@@ -13,7 +13,7 @@ import { usePermisos } from "../../hooks/usePermiso";
 import { PERMISO_EDITAR_DISENO, PERMISO_ORDEN_DISENO } from "../../utils/permisosUsuario";
 import { showAlert } from '../../components/CustomAlert';
 import { showConfirm } from '../../components/CustomConfirm';
-import { leerBorrador, useAutoguardarBorrador } from "../../hooks/useBorradorFormulario";
+import { leerBorrador, useAutoguardarBorrador, limpiarBorrador } from "../../hooks/useBorradorFormulario";
 
 
 
@@ -138,6 +138,12 @@ export function EditarDisenoReal({
   const claveBorrador = `diseno-obs-${pedido.no_pedido}`;
   const borradorYaAplicado = useRef(false);
   useAutoguardarBorrador(claveBorrador, obsMap, true);
+
+  // Cerrar el panel = descartar: se tira el borrador de observaciones.
+  const cerrar = () => {
+    limpiarBorrador(claveBorrador);
+    onClose();
+  };
 
   useEffect(() => { cargar(); }, []);
 
@@ -573,7 +579,7 @@ export function EditarDisenoReal({
 
       <div className="flex justify-end pt-2 border-t border-gray-100">
         <button
-          onClick={onClose}
+          onClick={cerrar}
           className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm font-medium"
         >
           Cerrar

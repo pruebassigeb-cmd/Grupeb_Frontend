@@ -14,6 +14,8 @@ import {
   buildMapsUrl, copiarLink,
 } from "./../enviosConstants";
 import FormularioEnvioIndividual from "./FormularioEnvioIndividual";
+import { limpiarBorrador } from "../../hooks/useBorradorFormulario";
+import { claveBorradorEnvioIndividual } from "../../utils/clavesBorrador";
 import type { PedidoDisponible, BultoPedido, Envio, CarritoPedido } from "../../types/envio/envios.types";
 import { showAlert } from "./../CustomAlert";
 import { showConfirm } from "./../CustomConfirm";
@@ -47,6 +49,13 @@ export default function TabEnvios({ carrito, onCarritoChange, refreshKey = 0 }: 
   const [busqueda, setBusqueda] = useState("");
 
   const bultosEnCarrito = new Set(carrito.flatMap(p => p.bultos.map(b => b.idbulto)));
+
+  // Cerrar el modal de crear envío (✕ o "Cancelar") cancela el formulario
+  // que lleva dentro, así que también tira su borrador.
+  const cancelarCrearEnvio = () => {
+    if (modalCrearEnvio) limpiarBorrador(claveBorradorEnvioIndividual(modalCrearEnvio.idsolicitud));
+    setModalCrearEnvio(null);
+  };
 
   const pedidosFiltrados = pedidos.filter(p => {
     if (!busqueda.trim()) return true;
@@ -608,7 +617,7 @@ export default function TabEnvios({ carrito, onCarritoChange, refreshKey = 0 }: 
       {modalCrearEnvio && (
         <Modal
           isOpen={!!modalCrearEnvio}
-          onClose={() => setModalCrearEnvio(null)}
+          onClose={cancelarCrearEnvio}
           title="Registrar Envío"
         >
           <FormularioEnvioIndividual
@@ -629,7 +638,7 @@ export default function TabEnvios({ carrito, onCarritoChange, refreshKey = 0 }: 
                 }
               }
             }}
-            onCancel={() => setModalCrearEnvio(null)}
+            onCancel={cancelarCrearEnvio}
           />
         </Modal>
       )}

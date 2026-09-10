@@ -39,6 +39,9 @@ export default function ModalMarcarRecoleccion({
 
   useAutoguardarBorrador(claveBorrador, form, true);
 
+  // Cancelar = descartar: se tira el borrador junto con el formulario.
+  const cancelar = () => { limpiarBorrador(claveBorrador); onClose(); };
+
   const handleFoto = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -87,7 +90,7 @@ export default function ModalMarcarRecoleccion({
   };
 
   return (
-    <Modal isOpen onClose={onClose} title="Registrar Entrega de Recolección">
+    <Modal isOpen onClose={cancelar} title="Registrar Entrega de Recolección">
       <div className="space-y-4">
         <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 text-sm">
           <p className="font-semibold text-purple-800">
@@ -244,7 +247,7 @@ export default function ModalMarcarRecoleccion({
 
         <div className="flex justify-end gap-3 pt-2 border-t border-gray-100">
           <button
-            onClick={onClose}
+            onClick={cancelar}
             disabled={guardando}
             className="px-5 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50"
           >

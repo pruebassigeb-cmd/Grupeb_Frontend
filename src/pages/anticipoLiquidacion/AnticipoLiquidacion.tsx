@@ -471,6 +471,8 @@ function SeccionEstadoCuenta({
 // ─────────────────────────────────────────────────────────────────────────────
 // MODAL DETALLE / PAGOS
 // ─────────────────────────────────────────────────────────────────────────────
+const claveBorradorPago = (idventas: number) => `anticipo-pago-${idventas}`;
+
 export function EditarAntLiqReal({
   venta: ventaInicial,
   metodos,
@@ -491,7 +493,7 @@ export function EditarAntLiqReal({
     fechaPago: string;
     monedaPago: Moneda;
   }
-  const claveBorrador = `anticipo-pago-${ventaInicial.idventas}`;
+  const claveBorrador = claveBorradorPago(ventaInicial.idventas);
   const [borradorInicial] = useState(() => leerBorrador<BorradorPago>(claveBorrador));
 
   const [venta,           setVenta]           = useState<Venta>(ventaInicial);
@@ -530,6 +532,8 @@ export function EditarAntLiqReal({
   useAutoguardarBorrador<BorradorPago>(claveBorrador, {
     monto, metodoPagoId, esAnticipo, montoEsAnticipo, observacion, fechaPago, monedaPago,
   }, true);
+  // Cerrar sin registrar el pago = descartar: se tira el borrador.
+  const cerrar = () => { limpiarBorrador(claveBorrador); onClose(); };
   const { tipoCambio: tipoCambioActual } = useTipoCambioActual();
   const requiereConversionPago = monedaPago !== monedaVenta;
   const tipoCambioAplicadoNum = requiereConversionPago ? (tipoCambioActual?.valor ?? null) : null;
@@ -1112,7 +1116,7 @@ export function EditarAntLiqReal({
       )}
 
       <div className="flex justify-end pt-2 border-t border-gray-100">
-        <button onClick={onClose}
+        <button onClick={cerrar}
           className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm font-medium">
           Cerrar
         </button>
@@ -1242,6 +1246,8 @@ export default function AnticipoLiquidacion() {
   };
 
   const handleCerrar = () => {
+    // La ✕ del modal también es cancelar: descarta el pago a medio capturar.
+    if (ventaEditando) limpiarBorrador(claveBorradorPago(ventaEditando.idventas));
     setModalEditarOpen(false);
     setVentaEditando(null);
   };

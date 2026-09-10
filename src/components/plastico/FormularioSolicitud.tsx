@@ -255,6 +255,14 @@ export default function FormularioSolicitud({
     ordenCompraFolio,
   }, true);
 
+  // Cancelar = descartar: se tiran tanto el borrador de la solicitud como el
+  // del formulario de cliente nuevo que vive dentro del paso 1.
+  const cancelar = () => {
+    limpiarBorrador(claveBorrador);
+    limpiarBorrador(claveBorradorCliente(null));
+    onCancel();
+  };
+
   const tintasPlastico = useMemo(
     () =>
       tintas
@@ -1218,7 +1226,7 @@ const cargarProductos = async (query?: string) => {
               </div>
             </div>
             <div className="flex justify-end gap-3 mt-4">
-              <button type="button" onClick={onCancel} className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">Cancelar</button>
+              <button type="button" onClick={cancelar} className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">Cancelar</button>
               <button type="button" onClick={handleAvanzarConClienteExistente} className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Siguiente</button>
             </div>
           </div>
@@ -1234,7 +1242,7 @@ const cargarProductos = async (query?: string) => {
                 Cliente Existente
               </button>
             </div>
-            <FormularioCliente onSubmit={handleSubmitClienteNuevo} onCancel={onCancel} />
+            <FormularioCliente onSubmit={handleSubmitClienteNuevo} onCancel={cancelar} />
           </div>
         )}
       </div>

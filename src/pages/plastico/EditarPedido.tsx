@@ -1668,7 +1668,7 @@ export default function EditarPedido() {
 
         {/* Botones */}
         <div className="flex items-center justify-between gap-3 pb-4">
-          <button onClick={() => navigate("/pedido")}
+          <button onClick={() => { limpiarBorrador(claveBorrador); navigate("/pedido"); }}
             className="px-5 py-2.5 border border-gray-300 text-gray-600 rounded-xl text-sm font-medium hover:bg-gray-50 transition">
             Cancelar
           </button>

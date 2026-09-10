@@ -85,6 +85,8 @@ export default function FormularioProveedor({ proveedor, onGuardado, onCancel }:
 
   const esEdicion = !!proveedor;
   useAutoguardarBorrador<BorradorProveedor>(claveBorrador, { form, domicilio, facturaciones, pestaña }, true);
+  // Cancelar = descartar: se tira el borrador junto con el formulario.
+  const cancelar = () => { limpiarBorrador(claveBorrador); onCancel(); };
   const { buscarCP, cargandoCP, errorCP, setErrorCP } = useCodigoPostal();
   const pasoNumero: Record<Pestaña, number> = { general: 1, domicilio: 2, facturacion: 3 };
 
@@ -389,7 +391,7 @@ export default function FormularioProveedor({ proveedor, onGuardado, onCancel }:
           </div>
 
           <div className="flex justify-end gap-3 pt-2">
-            <button type="button" onClick={onCancel}
+            <button type="button" onClick={cancelar}
               className="px-5 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm font-medium">
               Cancelar
             </button>

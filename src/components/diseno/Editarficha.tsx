@@ -234,6 +234,12 @@ export default function EditarFicha({ ficha, onGuardado, onCancel }: Props) {
   useAutoguardarBorrador<BorradorFicha>(claveBorrador, {
     compromiso, conclusion, comentarios, pantones, filas, escalaPin,
   }, true);
+
+  // Cancelar = descartar: se tira el borrador junto con el formulario.
+  const cancelar = () => {
+    limpiarBorrador(claveBorrador);
+    onCancel();
+  };
   const [armado, setArmado] = useState<number | null>(null);
   const [aviso, setAviso] = useState(false);
   const [guardando, setGuardando] = useState(false);
@@ -879,7 +885,7 @@ export default function EditarFicha({ ficha, onGuardado, onCancel }: Props) {
       {/* ── Botones ── */}
       <div className="flex gap-2 pt-3 border-t border-gray-200">
         <button
-          onClick={onCancel}
+          onClick={cancelar}
           disabled={guardando}
           className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg text-sm hover:bg-gray-50 disabled:opacity-50"
         >

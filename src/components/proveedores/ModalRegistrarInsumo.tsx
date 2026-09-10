@@ -100,6 +100,9 @@ export default function ModalRegistrarInsumo({
     CLAVE_BORRADOR_INSUMO, { form, proveedoresSeleccionados }, true
   );
 
+  // Cancelar (o cerrar con la ✕) = descartar: se tira el borrador.
+  const cancelar = () => { limpiarBorrador(CLAVE_BORRADOR_INSUMO); onCancelar(); };
+
   useEffect(() => {
     const cargar = async () => {
       try {
@@ -319,7 +322,7 @@ export default function ModalRegistrarInsumo({
 
           <button
             type="button"
-            onClick={onCancelar}
+            onClick={cancelar}
             className="text-gray-400 hover:text-gray-600 transition-colors"
             aria-label="Cerrar modal"
           >
@@ -653,7 +656,7 @@ export default function ModalRegistrarInsumo({
 
           <button
             type="button"
-            onClick={onCancelar}
+            onClick={cancelar}
             className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
           >
             Cancelar

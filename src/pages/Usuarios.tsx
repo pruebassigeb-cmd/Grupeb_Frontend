@@ -116,6 +116,8 @@ export default function Usuarios() {
   };
 
   const handleCancelar = () => {
+    // Cancelar (o cerrar con la ✕) = descartar lo capturado.
+    limpiarBorrador(claveBorradorUsuario(usuarioEditar));
     setModalOpen(false);
     setUsuarioEditar(null);
   };

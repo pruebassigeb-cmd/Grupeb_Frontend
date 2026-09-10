@@ -568,6 +568,9 @@ export default function ListaCotizaciones({
   // (no se llamó a onAprobar), así que es un "rollback" real: no queda
   // ningún rastro de la operación.
   const cancelarTodoElFlujo = () => {
+    // Cancelar el flujo (botón "Cancelar", la ✕ o el fondo del panel de
+    // datos del cliente) también descarta el borrador de ese formulario.
+    limpiarBorrador(claveBorradorCliente(clienteParaEditar));
     setCotEnProceso(null);
     setClienteIdPendiente(null);
     setClienteParaEditar(null);

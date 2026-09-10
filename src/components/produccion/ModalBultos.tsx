@@ -35,6 +35,9 @@ export default function ModalBultos({
 
   useAutoguardarBorrador(claveBorrador, { nuevaCantidad, repetir }, true);
 
+  // Cerrar sin registrar = descartar: se tira el borrador.
+  const cerrar = () => { limpiarBorrador(claveBorrador); onClose(); };
+
   useEffect(() => { cargar(); }, []);
 
   const cargar = async () => {
@@ -258,7 +261,7 @@ export default function ModalBultos({
 
       <div className="flex justify-end pt-2 border-t border-gray-100">
         <button
-          onClick={onClose}
+          onClick={cerrar}
           className="px-5 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm"
         >
           Cerrar

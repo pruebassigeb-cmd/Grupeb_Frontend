@@ -7,6 +7,7 @@ import ModalFormatoTresGuerras    from "./ModalFormatoTresGuerras";
 import ModalGuiaPaqueteriaGeneral from "./ModalGuiaPaqueteriaGeneral";
 import { showAlert } from './../CustomAlert';
 import { leerBorrador, useAutoguardarBorrador, limpiarBorrador } from "../../hooks/useBorradorFormulario";
+import { claveBorradorEnvioIndividual } from "../../utils/clavesBorrador";
 
 
 interface Props {
@@ -31,7 +32,7 @@ interface BorradorEnvioIndividual {
 }
 
 export default function FormularioEnvioIndividual({ pedido, bultosIds, onSuccess, onCancel }: Props) {
-  const claveBorrador = `envio-individual-${pedido.idsolicitud}`;
+  const claveBorrador = claveBorradorEnvioIndividual(pedido.idsolicitud);
   const [borradorInicial] = useState(() => leerBorrador<BorradorEnvioIndividual>(claveBorrador));
 
   const [tipo,              setTipo]              = useState<TipoEnvio>(borradorInicial?.tipo ?? "local");
@@ -53,6 +54,9 @@ export default function FormularioEnvioIndividual({ pedido, bultosIds, onSuccess
   });
 
   useAutoguardarBorrador<BorradorEnvioIndividual>(claveBorrador, { tipo, form }, true);
+
+  // Cancelar = descartar: se tira el borrador junto con el formulario.
+  const cancelar = () => { limpiarBorrador(claveBorrador); onCancel(); };
 
   useEffect(() => {
     const cargar = async () => {
@@ -295,7 +299,7 @@ export default function FormularioEnvioIndividual({ pedido, bultosIds, onSuccess
       </div>
 
       <div className="flex justify-end gap-3 pt-2">
-        <button type="button" onClick={onCancel} disabled={loading}
+        <button type="button" onClick={cancelar} disabled={loading}
           className="px-5 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50">
           Cancelar
         </button>

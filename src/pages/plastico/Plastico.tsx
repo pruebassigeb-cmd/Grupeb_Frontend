@@ -328,6 +328,9 @@ function FormularioProductoPlastico({
 
   useAutoguardarBorrador(claveBorrador, datosProducto, true);
 
+  // Volver al listado sin guardar = cancelar: se tira el borrador.
+  const cancelar = () => { limpiarBorrador(claveBorrador); onCancelar(); };
+
   useEffect(() => {
     getTarifas().then((tarifas) => {
       const map: Record<number, { precio: number; merma: number }> = {};
@@ -447,7 +450,7 @@ function FormularioProductoPlastico({
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">{isEdit ? "Editar producto" : "Dar de alta producto"}</h1>
-        <button onClick={onCancelar} className="text-sm text-gray-500 hover:text-gray-700 underline">
+        <button onClick={cancelar} className="text-sm text-gray-500 hover:text-gray-700 underline">
           ← Volver al listado
         </button>
       </div>

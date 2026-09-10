@@ -124,6 +124,8 @@ export default function ProductosProveedor({ proveedor, onVolver }: Props) {
     };
 
     const cerrarForm = () => {
+        // Cerrar el formulario con "Cancelar" descarta lo capturado.
+        limpiarBorrador(claveBorradorNuevo);
         setMostrarForm(false);
         setEditando(null);
         setForm(FORM_VACIO);

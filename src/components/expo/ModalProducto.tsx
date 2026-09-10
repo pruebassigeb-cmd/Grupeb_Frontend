@@ -862,6 +862,8 @@ export default function ModalProducto({ editando, catInicial="papel", saving, on
   };
 
   const cerrarSinGuardar = () => {
+    // Cancelar (o cerrar con la ✕) = descartar: se tira el borrador.
+    limpiarBorrador(claveBorrador);
     onClose();
   };
 

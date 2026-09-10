@@ -23,7 +23,7 @@ import {
 } from "../../utils/papel/costoLaminado.utils";
 import SelConAlta from "./SelConAlta";
 import GrupoBlock from "./GrupoBlock";
-import { leerBorrador, useAutoguardarBorrador } from "../../hooks/useBorradorFormulario";
+import { leerBorrador, useAutoguardarBorrador, limpiarBorrador } from "../../hooks/useBorradorFormulario";
 import { claveBorradorProductoPapel } from "../../utils/clavesBorrador";
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -651,6 +651,8 @@ export default function FormularioProductoPapelAlta({ initial, onSave, onCancel,
   }, []);
   const [form, setForm] = useState<ProductoPapelForm>(borradorInicial ?? initial ?? newProductoForm());
   useAutoguardarBorrador(claveBorrador, form, true);
+  // Cancelar = descartar: se tira el borrador junto con el formulario.
+  const cancelar = () => { limpiarBorrador(claveBorrador); onCancel(); };
   const [expandedGrupoId, setExpandedGrupoId] = useState<number | null>(form.grupos[0]?.id ?? null);
   const [costoMetroLaminado, setCostoMetroLaminado] = useState<number | null>(null);
   const [cargandoCostoMetro, setCargandoCostoMetro] = useState(true);
@@ -860,7 +862,7 @@ export default function FormularioProductoPapelAlta({ initial, onSave, onCancel,
         boxShadow: "0 2px 4px rgba(0,0,0,0.04)",
       }}>
 
-        <button onClick={onCancel} disabled={saving} style={{ height: 36, padding: "0 18px", border: "1px solid #D1D5DB", borderRadius: 7, background: "#fff", color: "#374151", fontSize: 13, fontWeight: 600, cursor: saving ? "not-allowed" : "pointer" }}>
+        <button onClick={cancelar} disabled={saving} style={{ height: 36, padding: "0 18px", border: "1px solid #D1D5DB", borderRadius: 7, background: "#fff", color: "#374151", fontSize: 13, fontWeight: 600, cursor: saving ? "not-allowed" : "pointer" }}>
           ← Regresar
         </button>
         <button onClick={handleSubmit} disabled={saving} style={{ height: 36, padding: "0 20px", border: "none", borderRadius: 7, background: saving ? "#93C5FD" : "#1D4ED8", color: "#fff", fontSize: 13, fontWeight: 600, cursor: saving ? "wait" : "pointer" }}>
