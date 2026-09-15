@@ -134,6 +134,16 @@ const NOMBRE_PROCESO_CORTO: Record<string, string> = {
 const nombreCortoProceso = (tabla: string | undefined | null, fallback: string): string =>
   (tabla && NOMBRE_PROCESO_CORTO[tabla]) || fallback;
 
+// Jose (2026-09-15): Empaque es un proceso aparte y SIEMPRE el final del
+// proceso -- la caja y las piezas por caja se capturan en su tarjeta. En la OP
+// que entrega el producto terminado (unión o única) va fijo en último lugar:
+// no se puede quitar ni mover (el backend igual lo agrega si una ruta guardada
+// no lo trae, ver rutaComponentePapel.service.ts). En una OP de inicio o
+// complementaria sigue siendo opcional.
+function esEmpaqueFijoDeRuta(tipoComponente: string, tablaProceso: string | undefined): boolean {
+  return (tipoComponente === "union" || tipoComponente === "unica") && tablaProceso === "empaque_papel";
+}
+
 // Numera las ocurrencias repetidas del mismo proceso dentro de UNA ruta
 // (Jose, 2026-09-04): si Impresión va tres veces, sus tarjetas se leen
 // "Impresión (1ª)", "(2ª)", "(3ª)" -- ese número es la `pasada` con la que
@@ -2139,10 +2149,12 @@ function TarjetaOP({
                       onMaterial={parcharMaterial}
                       addItem={addItem}
                     />
-                    <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
-                      <button type="button" onClick={() => quitarProceso(comp, proceso.id)}
-                        style={{ ...miniBtn(false), marginLeft: "auto", color: T.danger, borderColor: "#F5C2C2" }}>Quitar</button>
-                    </div>
+                    {!esEmpaqueFijoDeRuta(comp.tipo, cat?.tabla) && (
+                      <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
+                        <button type="button" onClick={() => quitarProceso(comp, proceso.id)}
+                          style={{ ...miniBtn(false), marginLeft: "auto", color: T.danger, borderColor: "#F5C2C2" }}>Quitar</button>
+                      </div>
+                    )}
                   </>
                 )}
               </div>
@@ -2451,10 +2463,12 @@ function VistaMismaOrden({
                           onMaterial={parcharMaterial}
                           addItem={addItem}
                         />
-                        <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
-                          <button type="button" onClick={() => quitarProceso(comp, proceso.id)}
-                            style={{ ...miniBtn(false), marginLeft: "auto", color: T.danger, borderColor: "#F5C2C2" }}>Quitar</button>
-                        </div>
+                        {!esEmpaqueFijoDeRuta(comp.tipo, cat?.tabla) && (
+                          <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
+                            <button type="button" onClick={() => quitarProceso(comp, proceso.id)}
+                              style={{ ...miniBtn(false), marginLeft: "auto", color: T.danger, borderColor: "#F5C2C2" }}>Quitar</button>
+                          </div>
+                        )}
                       </>
                     )}
                   </div>
@@ -2810,6 +2824,43 @@ export default function RutaProcesos({
   const renumerar = (lista: ComponenteProceso[]): ComponenteProceso[] =>
     lista.map((p, i) => ({ ...p, orden: i + 1 }));
 
+  // ── Empaque fijo al final de la OP terminal (ver esEmpaqueFijoDeRuta) ──
+  const catEmpaque = procesosCat.find(p => p.tabla === "empaque_papel") ?? null;
+
+  // Devuelve la ruta ya renumerada. En unión/única deja Empaque al final (lo
+  // crea si falta); en cualquier otra OP solo renumera.
+  const fijarEmpaqueFinal = (comp: ComponentePapel, lista: ComponenteProceso[]): ComponenteProceso[] => {
+    if (!catEmpaque || !esEmpaqueFijoDeRuta(comp.tipo, "empaque_papel")) return renumerar(lista);
+    const empaques = lista.filter(p => tablaDe(p) === "empaque_papel");
+    const resto = lista.filter(p => tablaDe(p) !== "empaque_papel");
+    if (empaques.length === 0) {
+      const nuevo = newComponenteProceso();
+      nuevo.idproceso_cat = catEmpaque.idproceso_cat;
+      nuevo.procesoNombre = nombreCortoProceso(catEmpaque.tabla, catEmpaque.nombre_proceso);
+      const refs = refsDeComponente(materiales, comp.id);
+      if (refs.length === 1) nuevo.materiales = [refs[0].id];
+      empaques.push(nuevo);
+    }
+    return renumerar([...resto, ...empaques]);
+  };
+
+  // Productos dados de alta sin Empaque (el selector lo escondía entre el
+  // 2026-09-05 y el 09-15), o una OP que se acaba de volver unión/única: se
+  // les agrega o se recorre al final en cuanto se abren.
+  useEffect(() => {
+    if (!catEmpaque) return;
+    let huboCambio = false;
+    const ajustados = componentes.map(c => {
+      const fijada = fijarEmpaqueFinal(c, c.procesos);
+      const igual = fijada.length === c.procesos.length && fijada.every((p, i) => p.id === c.procesos[i].id);
+      if (igual) return c;
+      huboCambio = true;
+      return { ...c, procesos: fijada };
+    });
+    if (huboCambio) onUpdateComponentes(ajustados);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [componentes, catEmpaque]);
+
   const unica = componentes.find(c => c.tipo === "unica") ?? null;
   const inicios = componentes.filter(c => c.tipo === "inicio");
   const union = componentes.find(c => c.tipo === "union") ?? null;
@@ -3003,15 +3054,10 @@ export default function RutaProcesos({
     [...lista].sort((a, b) => indiceCanonico(a.tabla) - indiceCanonico(b.tabla));
 
   const filtrarPorPreparacion = (comp: ComponentePapel, lista: ProcesoCatOpcion[]): ProcesoCatOpcion[] => {
-    // ✅ NUEVO (Jose, 2026-09-05): "Empaquetado" siempre va en la OP de
-    // unión -- es la orden principal, la última por la que pasa todo el
-    // producto -- así que ahí ya no se puede elegir a mano: se engancha
-    // solo al último proceso real de esa ruta (ver asegurarAnclaEmpaquePapel
-    // en bultos.controller.ts y esUltimoProceso en
-    // ModalProcesoIndividualEspecial.tsx). Una OP "única" (sin unión
-    // separada) es igual de terminal que la unión, así que se trata igual.
-    // Solo una OP de inicio puede seguir agregándolo a mano, para los casos
-    // que sí necesitan empaquetarse por separado antes de llegar a unión.
+    // En la unión/única Empaque no se ofrece en la lista: ya va fijo al
+    // final de la ruta (ver fijarEmpaqueFinal, Jose 2026-09-15) y ahí no se
+    // repite. Una OP de inicio o complementaria puede seguir agregándolo a
+    // mano, para los casos que sí necesitan empaquetarse por separado.
     const listaBase = (comp.tipo === "union" || comp.tipo === "unica")
       ? lista.filter(p => p.tabla !== "empaque_papel")
       : lista;
@@ -3277,7 +3323,7 @@ export default function RutaProcesos({
     if (refs.length === 1) nuevo.materiales = [refs[0].id];
     const campoLleva = TABLA_A_LLEVA[cat.tabla];
     parcharComp(comp.id, {
-      procesos: renumerar([...comp.procesos, nuevo]),
+      procesos: fijarEmpaqueFinal(comp, [...comp.procesos, nuevo]),
       ...(campoLleva ? { acabados: { ...comp.acabados, [campoLleva]: true } } : {}),
     });
     setEligiendoEn(null);
@@ -3287,6 +3333,7 @@ export default function RutaProcesos({
   const quitarProceso = (comp: ComponentePapel, procesoId: number) => {
     const proceso = comp.procesos.find(p => p.id === procesoId);
     const tabla = proceso?.idproceso_cat != null ? catPorId.get(proceso.idproceso_cat)?.tabla : undefined;
+    if (esEmpaqueFijoDeRuta(comp.tipo, tabla)) return;
     const campoLleva = tabla ? TABLA_A_LLEVA[tabla] : undefined;
     const restantes = comp.procesos.filter(p => p.id !== procesoId);
     // Con procesos repetidos, el acabado solo se apaga cuando se va la ÚLTIMA
@@ -3315,20 +3362,20 @@ export default function RutaProcesos({
     const copia = [...comp.procesos];
     const [item] = copia.splice(iOrigen, 1);
     copia.splice(iDestino, 0, item);
-    parcharComp(comp.id, { procesos: renumerar(copia) });
+    parcharComp(comp.id, { procesos: fijarEmpaqueFinal(comp, copia) });
   };
 
   // Acomoda UNA ruta al orden canónico, a petición del usuario (botón
   // "Acomodar"). Es lo que antes pasaba solo en cada alta de proceso.
   const acomodarRuta = (comp: ComponentePapel) => {
-    parcharComp(comp.id, { procesos: renumerar(ordenarCanonico(comp.procesos)) });
+    parcharComp(comp.id, { procesos: fijarEmpaqueFinal(comp, ordenarCanonico(comp.procesos)) });
   };
 
   // ¿Esta ruta ya está en orden canónico? Sirve para no ofrecer "Acomodar"
   // cuando no cambiaría nada.
   const rutaYaAcomodada = (comp: ComponentePapel): boolean => {
     const actual = comp.procesos.map(p => p.id).join(",");
-    const ordenada = ordenarCanonico(comp.procesos).map(p => p.id).join(",");
+    const ordenada = fijarEmpaqueFinal(comp, ordenarCanonico(comp.procesos)).map(p => p.id).join(",");
     return actual === ordenada;
   };
 

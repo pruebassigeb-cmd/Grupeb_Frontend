@@ -731,28 +731,29 @@ export default function ModalProcesoIndividualEspecial({
   const nombreProcesoAnterior = procAnterior ? (NOMBRES_PROCESO_PAPEL[procAnterior.tabla] ?? null) : null;
   const observacionesAnteriores = paso?.observaciones_proceso_anterior;
 
-  // ✅ NUEVO (Jose, 2026-09-05): "Empaquetado" siempre va en la OP de
-  // unión -- es la orden principal, la última por la que pasa todo el
-  // producto -- así que ahí el apartado de empaquetado (mismos campos de
-  // bultos que en papel normal, ver SeccionBultosPapel) se engancha SOLO
-  // al proceso que de verdad resulte último en la ruta de esa OP,
-  // cualquiera que sea (Litolaminado, Suaje, etc.) -- igual que
-  // esUltimoProceso en ModalProcesoIndividualPapel.tsx. Una OP "única"
-  // (sin unión separada) es igual de terminal, así que se trata igual.
-  // Si esa ruta YA incluye "Empaquetado" como proceso explícito (dato de
-  // antes de este cambio, o una OP de inicio que sí lo necesitó), no se
-  // duplica aquí -- ese paso se sigue registrando normal, como cualquier
-  // otro proceso de la ruta.
+  // Jose (2026-09-15): Empaque es su propio paso y SIEMPRE cierra la ruta de
+  // la OP que entrega el producto terminado (unión o única) -- el backend lo
+  // agrega solo si la ruta guardada no lo trae (rutaComponentePapel.service.ts).
+  // Los bultos se registran dentro de esa tarjeta, igual que en papel normal;
+  // ya no cuelgan del último proceso visible como se hizo el 2026-09-05. En
+  // una OP de inicio o complementaria un Empaque agregado a mano se registra
+  // como cualquier proceso, sin bultos: esas OP no entregan producto terminado.
   const componenteTipo = (pedido as any).componente_tipo as string | null;
   const esUnionOUnica = componenteTipo === "union" || componenteTipo === "unica";
-  const procesosVisiblesEspecial = (datos?.procesos ?? []).filter((p) => p.tabla !== "empaque_papel");
-  const tieneEmpaqueEnRuta = (datos?.procesos ?? []).some((p) => p.tabla === "empaque_papel");
-  const esUltimoProcesoReal =
-    !tieneEmpaqueEnRuta &&
-    procesosVisiblesEspecial.length > 0 &&
-    procesosVisiblesEspecial[procesosVisiblesEspecial.length - 1].tabla === nombreProceso &&
-    (procesosVisiblesEspecial[procesosVisiblesEspecial.length - 1].pasada ?? 1) === pasada;
-  const mostrarEmpaquetado = esUnionOUnica && esUltimoProcesoReal;
+  //
+  // DESACTIVADO (2026-09-15) -- así se colgaban los bultos del último proceso
+  // real de la ruta (Litolaminado, Suaje, etc.) cuando la unión/única no traía
+  // Empaque. Ya no aplica: Empaque se agrega como proceso extra y es el que
+  // finaliza la orden.
+  // const procesosVisiblesEspecial = (datos?.procesos ?? []).filter((p) => p.tabla !== "empaque_papel");
+  // const tieneEmpaqueEnRuta = (datos?.procesos ?? []).some((p) => p.tabla === "empaque_papel");
+  // const esUltimoProcesoReal =
+  //   !tieneEmpaqueEnRuta &&
+  //   procesosVisiblesEspecial.length > 0 &&
+  //   procesosVisiblesEspecial[procesosVisiblesEspecial.length - 1].tabla === nombreProceso &&
+  //   (procesosVisiblesEspecial[procesosVisiblesEspecial.length - 1].pasada ?? 1) === pasada;
+  // const mostrarEmpaquetado = esUnionOUnica && esUltimoProcesoReal;
+  const mostrarEmpaquetado = esUnionOUnica && nombreProceso === "empaque_papel";
 
   return (
     <div className="space-y-4 min-w-[480px] max-w-2xl">
@@ -1060,7 +1061,11 @@ export default function ModalProcesoIndividualEspecial({
               <div className="border-t border-gray-200 pt-4">
                 <p className="text-xs font-semibold text-indigo-700 uppercase tracking-wide mb-3">📦 Empaquetado</p>
               </div>
-              <SeccionBultosPapel pedido={pedido} cantidadReal={null} limiteEnCurso={null} />
+              <SeccionBultosPapel
+                pedido={pedido}
+                cantidadReal={paso?.registro?.bolsas_entregadas_final != null ? Number(paso.registro.bolsas_entregadas_final) : null}
+                limiteEnCurso={null}
+              />
             </>
           )}
 

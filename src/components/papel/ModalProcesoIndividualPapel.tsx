@@ -1158,6 +1158,12 @@ function FilaEnvioParcialPapel({
 // mismo endpoint de bultos (ya funciona igual para especiales, ver
 // bultos.controller.ts).
 // ─────────────────────────────────────────────
+// Jose (2026-09-15): cada empaque tiene que caber en la caja elegida al dar de
+// alta el producto (piezas por caja), con hasta 10 piezas de tolerancia. Sin
+// piezas por caja capturadas no se limita. Mismo valor que MARGEN_PIEZAS_CAJA
+// en bultos.controller.ts, que es el que de verdad bloquea.
+const MARGEN_PIEZAS_POR_CAJA = 10;
+
 export function SeccionBultosPapel({
   pedido, cantidadReal, limiteEnCurso,
 }: {
@@ -1186,6 +1192,15 @@ export function SeccionBultosPapel({
   useAutoguardarBorrador(claveBorradorBulto, { form, repetir }, true);
 
   const esParcialidad = Boolean((pedido as any).es_parcialidad);
+
+  const piezasPorCaja = pedido.cantidad_por_caja != null && Number(pedido.cantidad_por_caja) > 0
+    ? Number(pedido.cantidad_por_caja)
+    : null;
+  const maxPorEmpaque = piezasPorCaja != null ? piezasPorCaja + MARGEN_PIEZAS_POR_CAJA : null;
+  const excedeCaja = (cantidad: number) => maxPorEmpaque != null && cantidad > maxPorEmpaque;
+  const mensajeExcedeCaja = maxPorEmpaque != null
+    ? `Un empaque no puede llevar más de ${maxPorEmpaque.toLocaleString("es-MX")} bolsas: la caja es de ${piezasPorCaja!.toLocaleString("es-MX")} y se permiten hasta ${MARGEN_PIEZAS_POR_CAJA} de más.`
+    : "";
 
   useEffect(() => { cargarBultos(); }, []);
 
@@ -1217,6 +1232,7 @@ export function SeccionBultosPapel({
 
   const handleGuardarEdicion = async () => {
     if (!editandoBulto || !pedido.idproduccion) return;
+    if (excedeCaja(parseInt(formEditar.cantidad_unidades) || 0)) { showAlert(mensajeExcedeCaja); return; }
     setGuardandoEdicion(true);
     try {
       const payload: NuevoBultoPayload = {
@@ -1242,6 +1258,7 @@ export function SeccionBultosPapel({
   const validarFormulario = (): string | null => {
     const cant = parseInt(form.cantidad_unidades);
     if (!cant || cant <= 0) return "Ingresa una cantidad válida mayor a 0.";
+    if (excedeCaja(cant)) return mensajeExcedeCaja;
     if (!form.peso.trim() || parseFloat(form.peso) <= 0)
       return "El peso empaquetado es obligatorio.";
     if (!form.alto.trim() || !form.largo.trim() || !form.ancho.trim() ||
@@ -1258,6 +1275,7 @@ export function SeccionBultosPapel({
   const limiteEfectivo = cantidadReal ?? limiteEnCurso ?? null;
   const totalActual = totalUnidades;
   const valorIngresado = cantidadIngresada;
+  const excedeCajaNuevo = excedeCaja(valorIngresado);
 
   const repeticionesNum = Math.max(1, Math.min(50, parseInt(repetir) || 1));
   const esBatch = repeticionesNum > 1 && valorIngresado > 0;
@@ -1466,12 +1484,17 @@ export function SeccionBultosPapel({
                     (máx. {disponibleBultos.toLocaleString("es-MX")} bolsas disponibles)
                   </span>
                 )}
+                {maxPorEmpaque != null && (
+                  <span className="block text-[10px] text-indigo-500 font-normal">
+                    Caja de {piezasPorCaja!.toLocaleString("es-MX")} · máx. {maxPorEmpaque.toLocaleString("es-MX")} por empaque
+                  </span>
+                )}
               </label>
               <input type="text" inputMode="numeric" value={form.cantidad_unidades}
                 onChange={e => updateForm("cantidad_unidades", e.target.value.replace(/[^0-9]/g, ""))}
                 onKeyDown={e => e.key === "Enter" && handleAgregar()}
                 placeholder="Ej: 3000"
-                className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 bg-white ${excedeLimiteBulto ? "border-red-400 focus:ring-red-300" : "border-gray-300 focus:ring-blue-400"}`}
+                className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 bg-white ${excedeLimiteBulto || excedeCajaNuevo ? "border-red-400 focus:ring-red-300" : "border-gray-300 focus:ring-blue-400"}`}
               />
             </div>
 
@@ -1508,6 +1531,19 @@ export function SeccionBultosPapel({
               </p>
             </div>
           )}
+          {excedeCajaNuevo && (
+            <div className="mt-1.5 flex items-start gap-1.5 bg-red-50 border border-red-200 rounded px-3 py-2">
+              <span className="text-red-500 text-sm flex-shrink-0">⚠️</span>
+              <p className="text-[10px] text-red-600">
+                <strong>No cabe en la caja.</strong> {mensajeExcedeCaja}
+              </p>
+            </div>
+          )}
+          {piezasPorCaja == null && (
+            <p className="text-[10px] mt-1 text-gray-400">
+              Este producto no tiene capturadas las piezas por caja, así que no se limita la cantidad por empaque.
+            </p>
+          )}
           {!excedeLimiteBulto && valorIngresado > 0 && (
             <p className={`text-[10px] mt-1 font-medium ${completaLimite ? "text-green-600" : "text-orange-600"}`}>
               {completaLimite
@@ -1542,7 +1578,7 @@ export function SeccionBultosPapel({
             </div>
           </div>
 
-          <button onClick={handleAgregar} disabled={guardando || !formularioCompleto || excedeLimiteBulto}
+          <button onClick={handleAgregar} disabled={guardando || !formularioCompleto || excedeLimiteBulto || excedeCajaNuevo}
             className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-lg transition-colors flex items-center justify-center gap-2">
             {guardando
               ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -1657,8 +1693,13 @@ export function SeccionBultosPapel({
               </label>
               <input type="text" inputMode="numeric" value={formEditar.cantidad_unidades}
                 onChange={e => setFormEditar(p => ({ ...p, cantidad_unidades: e.target.value.replace(/[^0-9]/g, "") }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 ${excedeCaja(parseInt(formEditar.cantidad_unidades) || 0) ? "border-red-400 focus:ring-red-300" : "border-gray-300 focus:ring-blue-400"}`}
                 placeholder="Ej: 3000" />
+              {maxPorEmpaque != null && (
+                <p className={`text-[10px] mt-1 ${excedeCaja(parseInt(formEditar.cantidad_unidades) || 0) ? "text-red-600" : "text-indigo-500"}`}>
+                  Caja de {piezasPorCaja!.toLocaleString("es-MX")} · máx. {maxPorEmpaque.toLocaleString("es-MX")} por empaque
+                </p>
+              )}
             </div>
 
             <div>
@@ -2030,18 +2071,19 @@ export default function ModalProcesoIndividualPapel({ pedido, nombreProceso, onC
   const nombreProcesoAnterior = procAnterior ? (NOMBRES_PROCESO_PAPEL[procAnterior.tabla] ?? null) : null;
   const observacionesAnteriores = proc?.observaciones_proceso_anterior;
 
-  // ✅ NUEVO (Jose, 2026-09-05): "Empaquetado" deja de ser su propio
-  // proceso/columna -- el apartado de empaquetado (antes solo visible
-  // dentro de la tarjeta de Empaque) ahora cuelga de la tarjeta del
-  // proceso que de verdad resulte ser el ÚLTIMO de la ruta de esta orden
-  // (Armado o Suaje en papel normal), sea cual sea. Empaque sigue
-  // existiendo por dentro -- el motor de avances/finalización no cambió,
-  // ver getProcesosDeOrdenPapel y asegurarAnclaEmpaquePapel -- pero ya no
-  // cuenta como "visible" para decidir cuál tarjeta es la última.
-  const procesosVisiblesOrden = (datos?.procesos ?? []).filter((p) => p.tabla !== "empaque_papel");
-  const esUltimoProceso =
-    procesosVisiblesOrden.length > 0 &&
-    procesosVisiblesOrden[procesosVisiblesOrden.length - 1].tabla === nombreProceso;
+  // Jose (2026-09-15): Empaque vuelve a ser su propio proceso y SIEMPRE es el
+  // final de la ruta (getProcesosDeOrdenPapel lo agrega sin condición), así
+  // que el apartado de empaquetado (bultos) vive en la tarjeta de Empaque --
+  // ya no cuelga del último proceso visible como se hizo el 2026-09-05.
+  //
+  // DESACTIVADO (2026-09-15) -- así se colgaban los bultos del último proceso
+  // visible de la ruta (Armado o Suaje), con Empaque escondido. Ya no aplica:
+  // Empaque se agrega como proceso extra y es el que finaliza la orden.
+  // const procesosVisiblesOrden = (datos?.procesos ?? []).filter((p) => p.tabla !== "empaque_papel");
+  // const esUltimoProceso =
+  //   procesosVisiblesOrden.length > 0 &&
+  //   procesosVisiblesOrden[procesosVisiblesOrden.length - 1].tabla === nombreProceso;
+  const esUltimoProceso = nombreProceso === "empaque_papel";
 
   const cantidadRealBultos = esUltimoProceso && proc?.estado === "terminado"
     ? (proc?.registro?.bolsas_entregadas_final != null ? Number(proc.registro.bolsas_entregadas_final) : null)

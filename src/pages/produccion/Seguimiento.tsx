@@ -781,13 +781,11 @@ function RenderOrdenProduccion({
 // NO se agrega: se quitó como proceso seleccionable (era lo mismo que
 // Empaque, ver RutaProcesos.tsx).
 //
-// ✅ NUEVO (Jose, 2026-09-05): "empaque_papel" YA NO tiene columna aquí --
-// dejó de ser un proceso más para pasar a ser el apartado "Empaquetado"
-// que cuelga de la tarjeta del proceso que de verdad resulte último en la
-// ruta de cada orden (ver esUltimoProceso en ModalProcesoIndividualPapel.tsx
-// y ModalProcesoIndividualEspecial.tsx). Por dentro el motor de
-// avances/finalización lo sigue usando igual (ver ULTIMO_PROCESO_PAPEL en
-// seguimientoPapel.types.ts) -- solo se quitó de esta tabla.
+// Jose (2026-09-15): "empaque_papel" vuelve a tener su columna -- Empaque es
+// un proceso aparte y SIEMPRE el final de la ruta, en papel normal y en la OP
+// terminal (unión/única) de un especial. Revierte el 2026-09-05, cuando se
+// había escondido y el apartado de bultos colgaba del último proceso visible
+// (con eso la orden se quedaba esperando un Empaque que nadie veía).
 const PROCESOS_PAPEL: { key: NombreProcesoPapel; encabezado: string; titulo: string }[] = [
   { key: "hojeado_papel", encabezado: "Hoj", titulo: "Hojeado" },
   { key: "guillotina_papel", encabezado: "Gui", titulo: "Guillotina" },
@@ -802,6 +800,7 @@ const PROCESOS_PAPEL: { key: NombreProcesoPapel; encabezado: string; titulo: str
   { key: "desbarbe_papel", encabezado: "Desb", titulo: "Desbarbe" },
   { key: "armado_papel", encabezado: "Arm", titulo: "Armado" },
   { key: "especial_papel", encabezado: "Esp", titulo: "Especial" },
+  { key: "empaque_papel", encabezado: "Emp", titulo: "Empaque" },
 ];
 
 const COLUMNAS_PAPEL = PROCESOS_PAPEL.map(({ encabezado }) => encabezado);
